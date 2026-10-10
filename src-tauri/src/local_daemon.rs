@@ -28,11 +28,12 @@ use serde::Serialize;
 use sha2::{Digest, Sha256};
 
 use super::{app_root, ensure_private_dir, write_private_atomic};
+use super::local_daemon_packages::{
+    ANET_PACKAGE, AGENT_NODE_PACKAGE, require_success, validate_cli_probe,
+    validate_agent_node_manifest,
+};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
-const ANET_PACKAGE: &str = "@sleep2agi/agent-network@latest";
-/// 与 anet@latest 配对的 agent-node 通道;装进同一个私有 prefix,成为 anet 的 sibling(#1813 sibling-first)。
-const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@latest";
 const NPM_MIRROR: &str = "https://registry.npmmirror.com";
 /// 私有 Node 运行时:缺 Node 或版本太低时从 nodejs.org 下 v22 最新 LTS 到 ~/.anet/app/local-daemon/node,
 /// 不动系统、不动 nvm、不要 sudo(Vincent 2026-09-06「node 也自动安装一下?」)。
@@ -259,6 +260,32 @@ fn node_id_from_profile(name: &str) -> Option<String> {
     json.get("node_id")?.as_str().map(str::to_string)
 }
 
+// Child launch deliberately uses a fixed PATH, not the installer's login-shell
+// PATH. Explicitly opt the validated private pair into the existing daemon
+// configuration contract; never copy arbitrary environment PATH entries.
+fn profile_with_private_bin(raw: &str, bin: &Path, node_id: &str) -> Result<Vec<u8>, String> {
+    let bin = bin.to_str().ok_or("private package bin is not UTF-8")?;
+    let valid = |s: &str| s.starts_with('/') && s.trim() == s
+        && !s.chars().any(|c| matches!(c, ':' | '\0' | '\r' | '\n'));
+    if !valid(bin) {
+        return Err("private package bin must be one absolute Unix PATH entry".into());
+    }
+    let mut profile: serde_json::Value = serde_json::from_str(raw).map_err(|e| e.to_string())?;
+    let object = profile.as_object_mut().ok_or("daemon profile must be an object")?;
+    if object.get("node_id").and_then(|v| v.as_str()) != Some(node_id) {
+        return Err("initialized daemon profile node_id mismatch".into());
+    }
+    let paths = object.entry("daemonExtraPath").or_insert_with(|| serde_json::json!([]))
+        .as_array_mut().ok_or("daemonExtraPath must be an array")?;
+    if !paths.iter().all(|v| v.as_str().is_some_and(valid)) {
+        return Err("daemonExtraPath contains an invalid absolute path".into());
+    }
+    if !paths.iter().any(|v| v.as_str().unwrap().trim_end_matches('/') == bin.trim_end_matches('/')) {
+        paths.push(serde_json::Value::String(bin.into()));
+    }
+    serde_json::to_vec_pretty(&profile).map_err(|e| e.to_string())
+}
+
 /// npm 报错里像注册表/网络问题的信号(与 docs-site/public/install.sh 同一份清单)。
 pub fn looks_like_registry_failure(text: &str) -> bool {
     let lower = text.to_ascii_lowercase();
@@ -295,6 +322,30 @@ fn probe_private_agent_node() -> Option<ToolInfo> {
     let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let version = json.get("version")?.as_str()?.to_string();
     Some(ToolInfo { path: pkg.parent()?.display().to_string(), version: Some(version) })
+}
+
+// Distinguish missing packages from broken symlinks or inaccessible installs:
+// only truly absent paths may trigger an npm install.
+fn private_path_present(path: &Path) -> Result<bool, String> {
+    match fs::symlink_metadata(path) {
+        Ok(_) => Ok(true),
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => Ok(false),
+        Err(error) => Err(format!("cannot inspect private package {}: {error}", path.display())),
+    }
+}
+
+fn checked_private_agent_node(node: &Path) -> Result<ToolInfo, String> {
+    let root = private_agent_node_package()?;
+    let raw = fs::read_to_string(root.join("package.json")).map_err(|e| format!("cannot read private agent-node: {e}"))?;
+    let pkg: serde_json::Value = serde_json::from_str(&raw).map_err(|e| format!("invalid private agent-node package.json: {e}"))?;
+    let entry = root.join("dist/cli.js");
+    validate_agent_node_manifest(pkg["name"].as_str(), pkg["version"].as_str(), pkg["bin"]["agent-node"].as_str(), entry.is_file())?;
+    let probe = run_shell(&format!("{} {} --help", shell_quote(&node.display().to_string()), shell_quote(&entry.display().to_string())), None, &[], Duration::from_secs(30))?;
+    require_success(probe.code, probe.timed_out)?;
+    if !probe.output.contains("opencode-cli") {
+        return Err("private agent-node does not advertise opencode-cli; existing installation was not replaced".into());
+    }
+    Ok(ToolInfo { path: root.display().to_string(), version: pkg["version"].as_str().map(str::to_string) })
 }
 
 fn probe_private_node() -> Option<ToolInfo> {
@@ -522,11 +573,34 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     let anet_bin = anet_prefix.join("bin").join("anet");
     let path_prefix = format!("{}:{}", node_bin_dir.display(), anet_prefix.join("bin").display());
     let with_path = |cmd: &str| format!("export PATH={}:\"$PATH\"; {cmd}", shell_quote(&path_prefix));
-    let anet = if anet_bin.is_file() {
+    let check_cli = || -> Result<ToolInfo, String> {
         let probe = run_shell(&with_path(&format!("{} --version", shell_quote(&anet_bin.display().to_string()))), None, &[], Duration::from_secs(30))?;
-        let version = strip_ansi(&probe.output).lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("?").to_string();
-        steps.push(StepReport { name: "anet CLI".into(), ok: true, output: format!("已在私有目录:{} ({version})", anet_bin.display()) });
-        ToolInfo { path: anet_bin.display().to_string(), version: Some(version) }
+        let version = validate_cli_probe(probe.code, probe.timed_out, &strip_ansi(&probe.output))?;
+        Ok(ToolInfo { path: anet_bin.display().to_string(), version: Some(version) })
+    };
+    // Validate BOTH existing components before installing either missing one,
+    // writing Hub credentials or starting the daemon. Never overwrite an old
+    // or partial private install as a side effect of the install button.
+    let preflight = || -> Result<(Option<ToolInfo>, Option<ToolInfo>), String> {
+        let cli_package = anet_prefix.join("lib/node_modules/@sleep2agi/agent-network");
+        let cli = if private_path_present(&anet_bin)? || private_path_present(&cli_package)? {
+            Some(check_cli()?)
+        } else { None };
+        let agent = if private_path_present(&private_agent_node_package()?)? {
+            Some(checked_private_agent_node(&node_bin_dir.join("node"))?)
+        } else { None };
+        Ok((cli, agent))
+    };
+    let (existing_cli, existing_agent_node) = match preflight() {
+        Ok(pair) => pair,
+        Err(error) => {
+            steps.push(StepReport { name: "私有组件配对检查".into(), ok: false, output: error.clone() });
+            return fail(steps, format!("{error}。请先修复私有组件为 {ANET_PACKAGE} 与 {AGENT_NODE_PACKAGE} 后重试；本次未覆盖已有组件或启动 daemon。"));
+        }
+    };
+    let anet = if let Some(info) = existing_cli {
+        steps.push(StepReport { name: "anet CLI".into(), ok: true, output: format!("已验证私有组件:{} ({})", info.path, info.version.as_deref().unwrap_or("?")) });
+        info
     } else {
         let install_cmd = |registry: Option<&str>| with_path(&format!(
             "{} install -g --prefix {} {ANET_PACKAGE}{}",
@@ -550,13 +624,16 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         if !anet_bin.is_file() {
             return fail(steps, format!("npm 装完了但 {} 不存在", anet_bin.display()));
         }
-        ToolInfo { path: anet_bin.display().to_string(), version: None }
+        match check_cli() {
+            Ok(info) => info,
+            Err(error) => return fail(steps, error),
+        }
     };
 
     // 2b. agent-node 也装进同一个私有 prefix(anet 的 sibling,#1813 sibling-first)。
     //    Vincent 2026-09-07 的日志:私有 anet 起 daemon 时从 PATH 捡到了 nvm v20 里的旧 agent-node,
     //    以普通节点身份注册,快照没有 role → 永远进不了 host_supervisor 列表。
-    let agent_node = match probe_private_agent_node() {
+    let agent_node = match existing_agent_node {
         Some(info) => {
             steps.push(StepReport { name: "agent-node(私有,与 anet 同目录)".into(), ok: true, output: format!("已安装 {} ({})", info.version.as_deref().unwrap_or("?"), info.path) });
             info
@@ -581,9 +658,9 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
             if !ok {
                 return fail(steps, if primary.timed_out { "agent-node 安装超时(10 分钟)。".into() } else { "agent-node 安装失败,见上面的输出。".into() });
             }
-            match probe_private_agent_node() {
-                Some(info) => info,
-                None => return fail(steps, "npm 装完了但私有目录里没有 agent-node 包".into()),
+            match checked_private_agent_node(&node_bin_dir.join("node")) {
+                Ok(info) => info,
+                Err(error) => return fail(steps, error),
             }
         }
     };
@@ -619,6 +696,20 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     let Some(node_id) = node_id else {
         return fail(steps, "daemon 初始化成功但没拿到 node_id".into());
     };
+
+    // Persist before any stop/start: the child-process allowlist does not inherit
+    // with_path(). Failure must not launch a daemon with an unusable private pair.
+    let configure_child_path = || -> Result<(), String> {
+        let path = daemon_profile_path(LOCAL_DAEMON_NAME)?;
+        let raw = fs::read_to_string(&path).map_err(|e| e.to_string())?;
+        let bytes = profile_with_private_bin(&raw, &anet_prefix.join("bin"), &node_id)?;
+        write_private_atomic(&path, &bytes)
+    };
+    if let Err(error) = configure_child_path() {
+        return fail(steps, format!("无法配置 daemon 子节点私有 PATH: {error}"));
+    }
+    steps.push(StepReport { name: "配置 daemon 子节点私有 PATH".into(), ok: true,
+        output: format!("daemonExtraPath: {}", anet_prefix.join("bin").display()) });
 
     // 3b. 先停掉旧的 daemon 进程:anet 对同 alias「已经在跑的节点不起第二个」(#1130),旧进程(可能还是旧
     //     agent-node)不停,新的永远起不来。停不掉不算错(可能本来就没在跑)。
@@ -754,6 +845,26 @@ mod tests {
     use super::*;
 
     #[test]
+    fn partial_private_install_is_present_not_a_fresh_install() {
+        let dir = tempfile::tempdir().unwrap();
+        let package = dir.path().join("agent-network");
+        assert!(!private_path_present(&package).unwrap());
+        fs::create_dir(&package).unwrap();
+        assert!(private_path_present(&package).unwrap());
+        assert!(!package.join("dist/bin/anet.cjs").exists());
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn dangling_private_bin_is_present_not_a_fresh_install() {
+        let dir = tempfile::tempdir().unwrap();
+        let bin = dir.path().join("anet");
+        std::os::unix::fs::symlink(dir.path().join("missing"), &bin).unwrap();
+        assert!(!bin.is_file());
+        assert!(private_path_present(&bin).unwrap());
+    }
+
+    #[test]
     fn probe_skips_nvm_noise_and_ansi() {
         let noisy = "\u{1b}[32mNow using node v20.12.2 (npm v10.5.0)\u{1b}[0m\r\n/Users/v/.nvm/versions/node/v20.12.2/bin/node\r\nv20.12.2\r\n";
         let info = parse_tool_probe(noisy).unwrap();
@@ -788,6 +899,45 @@ mod tests {
         let output = "[anet daemon] ✓ created host_supervisor daemon \"local-daemon\"\n              config:     .anet/nodes/local-daemon/config.json\n              node_id:    node_daemon_0a1b2c3d4e5f\n";
         assert_eq!(parse_daemon_node_id(output).as_deref(), Some("node_daemon_0a1b2c3d4e5f"));
         assert_eq!(parse_daemon_node_id("nothing here"), None);
+    }
+
+    #[test]
+    fn private_child_path_preserves_profile_and_is_idempotent() {
+        let original = serde_json::json!({"node_id":"daemon_test", "token":"fixture-only",
+            "network_id":"net_test", "role":"host_supervisor", "custom":{"keep":true},
+            "daemonExtraPath":["/opt/tools/bin"]});
+        let bin = Path::new("/home/test/.anet/app/local-daemon/anet/bin");
+        let once = profile_with_private_bin(&original.to_string(), bin, "daemon_test").unwrap();
+        let text = std::str::from_utf8(&once).unwrap();
+        assert_eq!(profile_with_private_bin(text, bin, "daemon_test").unwrap(), once);
+        let mut actual: serde_json::Value = serde_json::from_slice(&once).unwrap();
+        assert_eq!(actual["daemonExtraPath"], serde_json::json!(["/opt/tools/bin",bin.to_str().unwrap()]));
+        actual["daemonExtraPath"] = original["daemonExtraPath"].clone();
+        assert_eq!(actual, original);
+    }
+
+    #[test]
+    fn private_child_path_creates_missing_list_and_deduplicates_trailing_slash() {
+        for raw in [r#"{"node_id":"d"}"#, r#"{"node_id":"d","daemonExtraPath":["/private/bin/"]}"#] {
+            let out = profile_with_private_bin(raw, Path::new("/private/bin"), "d").unwrap();
+            let value: serde_json::Value = serde_json::from_slice(&out).unwrap();
+            assert_eq!(value["daemonExtraPath"].as_array().unwrap().len(), 1);
+        }
+    }
+
+    #[test]
+    fn private_child_path_rejects_corrupt_identity_or_path_without_overwrite() {
+        for raw in ["broken", "[]", r#"{"node_id":"other"}"#,
+            r#"{"node_id":"d","daemonExtraPath":null}"#,
+            r#"{"node_id":"d","daemonExtraPath":"/bin"}"#,
+            r#"{"node_id":"d","daemonExtraPath":[42]}"#,
+            r#"{"node_id":"d","daemonExtraPath":["relative"]}"#,
+            r#"{"node_id":"d","daemonExtraPath":["/one:/two"]}"#] {
+            assert!(profile_with_private_bin(raw, Path::new("/private/bin"), "d").is_err());
+        }
+        for bin in ["relative", "/one:/two", "/bad\npath", "/bad\0path", " /space"] {
+            assert!(profile_with_private_bin(r#"{"node_id":"d"}"#, Path::new(bin), "d").is_err());
+        }
     }
 
     #[test]
