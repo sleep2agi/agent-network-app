@@ -23,3 +23,11 @@ export const statusChoices = (abandonedOk: boolean): ReqColumn[] =>
 
 /** 关闭态(完成 / 废弃):标题划线、不逾期、不算开着。 */
 export const isClosedColumn = (column: ReqColumn | string | null | undefined): boolean => column === 'done' || column === 'abandoned';
+
+/**
+ * 状态胶囊上的字。「废弃」是灰 + 删除线;其它状态只上调用方给的颜色(完成是绿,不划线)。
+ * color 由 STATUS_TONE 给(废弃 = textMuted)。
+ */
+export function statusCapsuleText(column: ReqColumn | string | null | undefined, color: string): { color: string; textDecorationLine: 'line-through' | 'none' } {
+  return column === 'abandoned' ? { color, textDecorationLine: 'line-through' } : { color, textDecorationLine: 'none' };
+}
