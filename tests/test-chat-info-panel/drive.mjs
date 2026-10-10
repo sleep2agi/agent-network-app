@@ -10,7 +10,7 @@
 // clicked (navigates or toggles), Esc / outside click (drawer), history back / ‹ (page), Ctrl+F.
 // Exit 1 when any check fails.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { serveExport, initScript, findChromium, paintedText } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, paintedText, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -110,7 +110,7 @@ const tables = { header: [], rows: [] };
 for (const L of LAYOUTS) {
   for (const scheme of ['light', 'dark']) {
     const tag = `${L.name}-${L.w}x${L.h}-${scheme}`;
-    const ctx = await browser.newContext({ viewport: { width: L.w, height: L.h }, userAgent: L.ua, colorScheme: scheme, deviceScaleFactor: 1 });
+    const ctx = await browser.newContext({ viewport: { width: L.w, height: L.h }, userAgent: L.ua, colorScheme: scheme, deviceScaleFactor: 1, locale: TEST_LOCALE });
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message.split('\n')[0]));
