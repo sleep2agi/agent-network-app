@@ -31,6 +31,16 @@ export type DaemonMgmtLayout = 'stack' | 'split';
 export const daemonMgmtLayout = (width: number): DaemonMgmtLayout =>
   width < DAEMON_MGMT_COMPACT_WIDTH ? 'stack' : 'split';
 
+/**
+ * Phone (stack) layout: the settings menu and one opened section never share the screen.
+ * Before this the menu (8 rows) sat above the section and pushed it below the fold, so tapping
+ * SKILLS / 令牌 / Provider looked like nothing happened.
+ */
+export const stackShowsMenu = (layout: DaemonMgmtLayout, menuOpen: boolean): boolean =>
+  layout === 'stack' && menuOpen;
+export const stackShowsSection = (layout: DaemonMgmtLayout, menuOpen: boolean): boolean =>
+  !stackShowsMenu(layout, menuOpen);
+
 export type KnownNodeType = 'daemon' | 'agent' | 'worker' | 'skillsProvider';
 
 export interface NodeTypeView {

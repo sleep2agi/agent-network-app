@@ -8,6 +8,8 @@ import {
   actionReason,
   createAction,
   daemonMgmtLayout,
+  stackShowsMenu,
+  stackShowsSection,
   DAEMON_MGMT_COMPACT_WIDTH,
   lifecycleErrorMessage,
   lifecycleTool,
@@ -35,6 +37,10 @@ const ck = (name: string, condition: boolean) => {
 setLanguagePreference('en');
 
 ck('phone width stacks; wide pane splits', daemonMgmtLayout(390) === 'stack' && daemonMgmtLayout(DAEMON_MGMT_COMPACT_WIDTH) === 'split' && daemonMgmtLayout(1200) === 'split');
+ck('phone shows the menu OR a section, never both; wide pane always shows the section',
+  stackShowsMenu('stack', true) && !stackShowsSection('stack', true)
+  && !stackShowsMenu('stack', false) && stackShowsSection('stack', false)
+  && !stackShowsMenu('split', true) && stackShowsSection('split', true));
 ck('SKILLS Provider tokens normalize', typeToken('SKILLS Provider') === 'skills_provider' && typeToken('skills-provider') === 'skills_provider');
 
 const skills = nodeTypeView('skills_provider');

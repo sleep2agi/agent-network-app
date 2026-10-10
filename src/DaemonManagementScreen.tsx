@@ -43,6 +43,8 @@ import {
   nodeTypeLabel,
   probeAction,
   runtimeLabel,
+  stackShowsMenu,
+  stackShowsSection,
   statusLabel,
   statusView,
   type MgmtAction,
@@ -129,7 +131,10 @@ export default function DaemonManagementScreen({
   const [confirmAlias, setConfirmAlias] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [section, setSection] = useState<DaemonSection>(initialSection);
+  const [section, setSectionRaw] = useState<DaemonSection>(initialSection);
+  // Phone only: start on the menu unless the caller deep-linked a section.
+  const [menuOpen, setMenuOpen] = useState(initialSection === 'overview');
+  const setSection = useCallback((next: DaemonSection) => { setSectionRaw(next); setMenuOpen(false); }, []);
   const [refreshTick, setRefreshTick] = useState(0);
 
   const load = useCallback(async () => {
@@ -176,7 +181,7 @@ export default function DaemonManagementScreen({
     daemon?.hostname?.trim() || (lookup.kind === 'ready' ? lookup.daemon?.hostname?.trim() : '') || '',
   ].filter(Boolean).join(' · ');
 
-  const openDomainSettings = useCallback(() => setSection('skills'), []);
+  const openDomainSettings = useCallback(() => setSection('skills'), [setSection]);
   const domainSettingsActive = section !== 'nodes';
 
   const run = async (id: NodeActionId) => {
@@ -488,10 +493,26 @@ export default function DaemonManagementScreen({
   return (
     <View testID="daemon-management" style={{ flex: 1, backgroundColor: colors.bg }} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
       {header}
-      <View style={[screenStyles.body, layout === 'stack' && screenStyles.bodyStack]}>
-        {sectionNav}
-        {section === 'overview' ? overviewPage : section === 'nodes' ? nodesPage : integrationPage}
-      </View>
+      {stackShowsMenu(layout, menuOpen) ? (
+        <ScrollView testID="daemon-section-menu" style={{ flex: 1 }}>{sectionNav}</ScrollView>
+      ) : (
+        <View style={[screenStyles.body, layout === 'stack' && screenStyles.bodyStack]}>
+          {layout === 'stack' ? (
+            <Pressable
+              testID="daemon-section-menu-back"
+              accessibilityRole="button"
+              accessibilityLabel={t('daemon.mgmt.backToMenu')}
+              onPress={() => setMenuOpen(true)}
+              hitSlop={8}
+              style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }, pressed && { opacity: 0.6 }]}
+            >
+              <Ionicons name="chevron-back" size={16} color={colors.accent} />
+              <Text style={{ color: colors.accent, fontSize: type.body }}>{t('daemon.mgmt.backToMenu')}</Text>
+            </Pressable>
+          ) : sectionNav}
+          {stackShowsSection(layout, menuOpen) ? (section === 'overview' ? overviewPage : section === 'nodes' ? nodesPage : integrationPage) : null}
+        </View>
+      )}
       {pending ? (
         <DialogFrame
           testID="daemon-mgmt-confirm-dialog"
