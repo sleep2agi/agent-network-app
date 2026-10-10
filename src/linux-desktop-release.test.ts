@@ -49,6 +49,17 @@ check('release commit gate does not use the macOS bash 3.2 compound test',
   && workflow.includes('[[ "$resolved" == "$requested" ]]')
   && !workflow.includes('[[ "$requested" =~ ^[0-9a-f]{40}$ && "$resolved" == "$requested" ]]'));
 check('deb is inside the 55 MiB ceiling', workflow.includes("-name '*.deb'"));
+const linuxAudit = workflow.slice(workflow.indexOf('- name: Audit Linux deb removal and reinstall data retention'), workflow.indexOf('- name: Enforce desktop distribution size ceiling'));
+check('linux retention audit installs the absolute built .deb',
+  linuxAudit.includes('deb_dir="$GITHUB_WORKSPACE/src-tauri/target/release/bundle/deb"')
+  && linuxAudit.includes('test -f "$deb"')
+  && linuxAudit.includes('case "$deb" in')
+  && (linuxAudit.match(/apt-get install -y --no-install-recommends "\$deb"/g) || []).length === 2
+  && linuxAudit.includes('sudo dpkg -r "$pkg"')
+  && linuxAudit.includes('test ! -e "$binary"')
+  && linuxAudit.includes('test -s "$retention_root/local-hub/data/commhub.db"')
+  && linuxAudit.includes('test -s "$retention_root/profiles/index.json"')
+  && !linuxAudit.includes('find src-tauri/target/release/bundle/deb'));
 check('publish defaults to creating the draft and can be turned off',
   /publish:[\s\S]*default: true[\s\S]*type: boolean/.test(workflow)
   && workflow.includes('inputs.publish == true')

@@ -1399,9 +1399,19 @@ jobs:
             export ANET_LINUX_KEYRING_ACTIVE=1 ANET_ISOLATED_KEYRING_TEST=1
             exec sh "$GITHUB_WORKSPACE/scripts/with-linux-test-keyring.sh" xvfb-run -a bash "$0"
           fi
-          deb="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
-          test -n "$deb"
+          # apt 2.8 treats a relative path with slashes as package/suite, so
+          # src-tauri/.../ANet_0.2.228_amd64.deb becomes "unable to locate
+          # package src-tauri/target/release/bundle/deb". An absolute file is a .deb.
+          deb_dir="$GITHUB_WORKSPACE/src-tauri/target/release/bundle/deb"
+          deb="$(find "$deb_dir" -type f -name '*.deb' -print -quit)"
+          test -f "$deb"
+          case "$deb" in
+            *.deb) ;;
+            *) echo "::error::deb audit expected a .deb file, got ${deb:-<empty>}"; exit 1 ;;
+          esac
+          echo "Linux retention audit package: $deb"
           pkg="$(dpkg-deb --field "$deb" Package)"
+          test -n "$pkg"
           sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$deb"
           test "$(dpkg-query -W -f='${Status}' "$pkg")" = 'install ok installed'
           binary="$(command -v agent-network-desktop)"
