@@ -161,6 +161,9 @@ jobs:
           releaseBody: |-
             Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).
 
+            What's new in 0.2.228:
+            - 桌面版新增 Ubuntu 24.04（amd64）安装包，已安装的 Linux 客户端可通过应用内更新安装新版本。
+
             What's new in 0.2.227:
             - 桌面应用和安装包名称统一为 ANet，保留原有账号和数据存储标识。
             - Windows 升级沿用原安装身份和安装路径；旧名称的下载链接继续兼容。
