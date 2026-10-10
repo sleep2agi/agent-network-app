@@ -322,6 +322,13 @@ for (const layout of ['desktop', 'phone']) {
       ck(`${tag}: Daemon 侧栏集成分组「Daemon 域集成」`, daemonInt === 'Daemon 域集成', String(daemonInt));
       const intro = await page.locator('[data-testid="daemon-management"]').textContent({ timeout: 3000 }).catch(() => '');
       ck(`${tag}: 管理页不再写「不能对话」`, !intro.includes('不能对话'), intro.slice(0, 120));
+      await page.locator('[data-testid="daemon-mgmt-settings-card"]').waitFor({ timeout: 8000 });
+      const settingsCard = await page.locator('[data-testid="daemon-mgmt-settings-card"]').textContent();
+      ck(`${tag}: Hub 进 Daemon 后设置卡含节点与虚拟机域`, settingsCard.includes('Daemon 节点设置') && settingsCard.includes('虚拟机域') && settingsCard.includes('SKILLS'), settingsCard?.slice(0, 80));
+      await page.locator('[data-testid="daemon-mgmt-settings-domain"]').click({ timeout: 5000 });
+      await page.locator('[data-testid="daemon-pending-skills"]').waitFor({ timeout: 8000 });
+      if (OUT) await page.screenshot({ path: `${OUT}/${tag}-hub-daemon-domain-settings.png`, fullPage: false });
+      await page.locator('[data-testid="daemon-section-nodes"]').click({ timeout: 3000 }).catch(() => {});
       await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click({ timeout: 3000 }).catch(() => {});
       const chatPane = await page.locator('[data-testid="chat-pane"]').count();
       ck(`${tag}: 点托管节点行进会话页`, chatPane >= 1, String(chatPane));

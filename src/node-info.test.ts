@@ -61,10 +61,10 @@ const root = process.cwd();
 const app = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
 const chat = fs.readFileSync(path.join(root, 'src/ChatScreen.tsx'), 'utf8');
 const detail = fs.readFileSync(path.join(root, 'src/NodeDetailScreen.tsx'), 'utf8');
-check('mobile chat opens exact-alias nodeInfo', app.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}"));
-check('detached chat opens exact-alias nodeInfo', app.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}"));
-check('nodeInfo Back restores the same chat', app.includes("onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly"));
-check('Android hardware Back restores the same chat', app.includes("if (screen.name === 'nodeInfo')") && app.includes("setScreen({ name: 'chat', alias: screen.alias })"));
+check('mobile chat opens exact-alias nodeInfo', app.includes('onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}'));
+check('detached chat opens exact-alias nodeInfo', app.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias, daemonMgmt: screen.daemonMgmt })}"));
+check('nodeInfo Back restores the same chat', app.includes('onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly'));
+check('Android hardware Back restores the same chat', app.includes("if (screen.name === 'nodeInfo')") && app.includes('setScreen(chatBackFromNodeInfo(screen))'));
 // Since 聊天信息 the header's 「设置」 is gone: node settings are the panel's avatar row + section rows.
 check('聊天信息 rows open node settings (with the section they name)', chat.includes('canOpenNode: !!onOpenNodeSettings') && /requestNodeSection\(nodeInfoSectionKey\(cfg\.profileId \?\? cfg\.serverUrl, alias\), row\.section\);\s*onOpenNodeSettings\?\.\(\);/.test(chat));
 check('node info page honours the requested section (read-only page only)', detail.includes('const requested = readOnly ? takeNodeSectionRequest(sectionHandoffKey) : undefined;'));

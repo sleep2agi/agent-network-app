@@ -30,15 +30,15 @@ check(
   /railBrandMark:\s*\{[^}]*width:\s*ds\(54\)[^}]*height:\s*ds\(54\)/.test(source) &&
     /railBrand:\s*\{[^}]*width:\s*ds\(36\)[^}]*height:\s*ds\(36\)/.test(source),
 );
-check('chat header settings opens read-only info for the current node', source.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}"));
+check('chat header settings opens read-only info for the current node', source.includes('onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}'));
 const detachedStart = source.indexOf('if (dedicatedChatWindow && cfg');
 const workspaceStart = source.indexOf("if (desktop && cfg && screen.name !== 'login')");
 const detachedBlock = source.slice(detachedStart, workspaceStart);
 check('detached chat is selected before the full desktop workspace', detachedStart > 0 && detachedStart < workspaceStart);
 check('detached window never mounts the full workspace', detachedBlock.includes('<ChatScreen') && !detachedBlock.includes('<DesktopWorkspace'));
-check('detached chat exposes settings for its exact alias', detachedBlock.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}"));
+check('detached chat exposes settings for its exact alias', detachedBlock.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias, daemonMgmt: screen.daemonMgmt })}"));
 check('detached settings reuses the node detail screen', detachedBlock.includes('<NodeDetailScreen') && detachedBlock.includes('alias={detachedAlias}'));
-check('detached settings returns to the same chat', detachedBlock.includes("onBack={() => setScreen({ name: 'chat', alias: detachedAlias })}"));
+check('detached settings returns to the same chat', detachedBlock.includes('onBack={() => setScreen(chatBackFromNodeInfo(screen))}'));
 // 0.2.75 rail 重做(Vincent「这边还是偏丑」):激活态是淡 accent 圆角底,不是灰方块;悬停出提示条;角标是小圆标。
 const src = source.replace(/\r\n?/g, '\n');
 check('rail active state is an accent-tinted pill token', src.includes('railButtonActive: { backgroundColor: colors.railActiveBg }'));

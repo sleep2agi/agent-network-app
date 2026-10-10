@@ -92,7 +92,7 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 {
-  ck('ChatScreen picks the page by role', /composerKind = chatComposerKind\(isHostSupervisorAlias\(alias\)\)/.test(chat));
+  ck('ChatScreen picks the page by role or Hub daemon route', /composerKind = chatComposerKind\(isHostSupervisorAlias\(alias\) \|\| daemonMgmt\)/.test(chat));
   ck('daemon branch returns the management page before the chat composer', /if \(composerKind === 'daemon'\) \{\s*return \(\s*<DaemonManagementScreen/.test(chat));
   ck('the chat composer stays on the normal-node path', chat.includes('testID="desktop-composer-card"') && !chat.includes('DaemonComposerNotice'));
   ck('run-logs entry opens the node page on the logs section', /requestNodeSection\(nodeInfoSectionKey\([^)]*\), 'logs'\);\s*onOpenNodeSettings\(\)/.test(chat));

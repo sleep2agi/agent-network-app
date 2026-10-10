@@ -58,6 +58,10 @@ for (const { locale, lang, hubLabel, daemonLabel, hubFile, daemonFile } of [
   await page.screenshot({ path: `${OUT}/${hubFile}`, fullPage: false });
   await page.locator('[data-testid="server-hostrow-host-a"]').click();
   await page.locator('[data-testid="daemon-management"]').waitFor({ timeout: 12000 });
+  if (lang === 'zh') {
+    await page.locator('[data-testid="daemon-mgmt-settings-card"]').waitFor({ timeout: 8000 });
+    await page.screenshot({ path: `${OUT}/hub-to-daemon-settings-zh.png`, fullPage: false });
+  }
   const daemonText = await page.locator('[data-testid="daemon-integrations-label"]').textContent();
   ck(`${lang}: Daemon 侧栏分组标题`, daemonText === daemonLabel, String(daemonText));
   await page.screenshot({ path: `${OUT}/${daemonFile}`, fullPage: false });
