@@ -37,6 +37,17 @@ check('release build does not apply the test updater overlay or --no-sign',
 check('linux smoke runs the ELF, not the Windows exe',
   workflow.includes("binary='src-tauri/target/release/agent-network-desktop'")
   && workflow.includes('ANET_ISOLATED_KEYRING_TEST=1'));
+check('linux keyring helper is read by sh, not executed as a file',
+  (workflow.match(/exec sh "\$GITHUB_WORKSPACE\/scripts\/with-linux-test-keyring\.sh"/g) || []).length === 4
+  && !workflow.includes('exec "$GITHUB_WORKSPACE/scripts/with-linux-test-keyring.sh"'));
+check('macOS npm test uses a bash that rejects a short SHA',
+  workflow.indexOf('Use Bash 4+ for macOS release tests') < workflow.indexOf('run: npm test')
+  && workflow.includes('BASH_VERSINFO[0]} -ge 4')
+  && workflow.includes('still accepts a short SHA'));
+check('release commit gate does not use the macOS bash 3.2 compound test',
+  workflow.includes('[[ "$requested" =~ ^[0-9a-f]{40}$ ]]')
+  && workflow.includes('[[ "$resolved" == "$requested" ]]')
+  && !workflow.includes('[[ "$requested" =~ ^[0-9a-f]{40}$ && "$resolved" == "$requested" ]]'));
 check('deb is inside the 55 MiB ceiling', workflow.includes("-name '*.deb'"));
 check('publish defaults to creating the draft and can be turned off',
   /publish:[\s\S]*default: true[\s\S]*type: boolean/.test(workflow)
