@@ -41,6 +41,7 @@ migrated.push('src/NodeAdoptionControls.tsx');
 migrated.push('src/NodeControlCard.tsx');
 migrated.push('src/CodexProviderFields.tsx');
 migrated.push('src/OpenCodeProviderNote.tsx');
+migrated.push('src/DaemonRuntimeProviders.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

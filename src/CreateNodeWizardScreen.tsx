@@ -15,7 +15,10 @@ import { buttonStyle, buttonTextStyle, elevated } from './elevation';
 import { readinessFor, readinessSelectable } from './runtime-readiness';
 import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
 import CodexProviderFields from './CodexProviderFields';
+import DaemonRuntimeProviders from './DaemonRuntimeProviders';
 import OpenCodeProviderNote from './OpenCodeProviderNote';
+import { readListProviders } from './daemon-provider-read';
+import type { TaggedProvider } from './daemon-runtime-providers';
 import { useTranslation } from './i18n-react';
 import './i18n-provider';
 import {
@@ -135,6 +138,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [opencodeUnsafeTools, setOpenCodeUnsafeTools] = useState(false);
   const [providerForm, setProviderForm] = useState<ProviderFormValue>(EMPTY_PROVIDER_FORM);
   const [providerResetHint, setProviderResetHint] = useState('');
+  const [daemonProviderRows, setDaemonProviderRows] = useState<TaggedProvider[]>([]);
+  const [daemonProviderRead, setDaemonProviderRead] = useState<'pending' | 'ok' | 'unsupported' | 'error'>('pending');
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
@@ -153,6 +158,17 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [requestId, setRequestId] = useState<string | null>(null);
   const submittedSpec = useRef<CreateNodeRequest['node_spec'] | null>(null);
   const pollAlive = useRef(true);
+
+  // #906 —— list_providers 只补 daemon 没带上的、且标了 runtime 的行。响应体不进日志。
+  useEffect(() => {
+    let alive = true;
+    readListProviders({ serverUrl: cfg.serverUrl, token: cfg.token, networkId: cfg.networkId }).then(result => {
+      if (!alive) return;
+      setDaemonProviderRead(result.kind);
+      if (result.kind === 'ok') setDaemonProviderRows(result.rows);
+    });
+    return () => { alive = false; };
+  }, [cfg.serverUrl, cfg.token, cfg.networkId]);
 
   // Stop polling on unmount + on screen exit
   useEffect(() => {
@@ -623,6 +639,13 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 onChange={next => { setProviderForm(next); setProviderResetHint(''); }}
               />
             ) : null}
+            <DaemonRuntimeProviders
+              daemon={daemon}
+              rows={daemonProviderRows}
+              read={daemonProviderRead}
+              runtimeId={runtimeId}
+              opencodeGeneration={opencodeGeneration}
+            />
           </View>
         )}
 
