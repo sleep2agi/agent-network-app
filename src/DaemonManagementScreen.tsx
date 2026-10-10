@@ -5,7 +5,7 @@
 // Unconnected provider, skills, key, and env entries stay a local demo on this page.
 // That panel does not replace create, start, stop, restart, delete, or the disabled Probe button.
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, RefreshControl, ScrollView, View } from 'react-native';
+import { ActivityIndicator, Pressable, RefreshControl, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { t } from './i18n';
@@ -13,7 +13,8 @@ import { useTranslation } from './i18n-react';
 import './i18n-chat';
 import './i18n-daemon';
 import './i18n-backend-pending';
-import { DaemonPendingDemos } from './BackendPendingDemo';
+import { BackendPendingIntegration } from './BackendPendingDemo';
+import { PendingPanelCard, PendingSegmentedTabs, type PendingTab } from './backend-pending-ui';
 import {
   fetchHostSupervisors,
   fetchHubNodes,
@@ -43,7 +44,7 @@ import {
   type MgmtAction,
   type NodeActionId,
 } from './daemon-management';
-import { colors, radius, spacing, statusColor, type, weight } from './theme';
+import { colors, onThemeChange, radius, spacing, statusColor, type, weight } from './theme';
 import { buttonStyle, buttonTextStyle } from './elevation';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
 import { usePoll } from './usePoll';
@@ -74,11 +75,20 @@ const NODE_TONE: Record<NodeActionId, NodeActionTone> = {
   delete: 'danger',
 };
 
+type DaemonSection = 'nodes' | PendingTab;
+
+const INTEGRATION_TITLE: Record<PendingTab, string> = {
+  skills: 'server.pendingTitle.skills',
+  tokens: 'server.pendingTitle.tokens',
+  provider: 'server.pendingTitle.provider',
+};
+
 export default function DaemonManagementScreen({
   cfg,
   alias,
   desktop = false,
   hideBack = false,
+  initialSection = 'nodes',
   onBack,
   onOpenLogs,
   onCreate,
@@ -87,6 +97,7 @@ export default function DaemonManagementScreen({
   alias: string;
   desktop?: boolean;
   hideBack?: boolean;
+  initialSection?: DaemonSection;
   onBack: () => void;
   onOpenLogs?: () => void;
   onCreate?: (daemon: HostSupervisorDaemon) => void;
@@ -106,6 +117,7 @@ export default function DaemonManagementScreen({
   const [confirmAlias, setConfirmAlias] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [section, setSection] = useState<DaemonSection>(initialSection);
 
   const load = useCallback(async () => {
     try {
@@ -231,7 +243,6 @@ export default function DaemonManagementScreen({
         <MgmtButton testID="daemon-mgmt-probe" action={probe} busy={busy} onPress={() => {}} />
       </View>
       <ActionNotes actions={[create, probe]} />
-      <DaemonPendingDemos />
       {!onOpenLogs ? <Text testID="daemon-mgmt-reason-logs" style={{ color: colors.textMuted, fontSize: type.small, lineHeight: 18 }}>{t('daemon.mgmt.logsUnavailable')}</Text> : null}
       {failed ? <Text style={{ color: colors.blocked, fontSize: type.small }}>{t('daemon.mgmt.loadFailed')}</Text> : null}
       {statusUnread ? <Text testID="daemon-mgmt-status-unread" style={{ color: colors.textMuted, fontSize: type.small, lineHeight: 18 }}>{t('daemon.mgmt.statusUnread')}</Text> : null}
@@ -251,63 +262,91 @@ export default function DaemonManagementScreen({
       ) : (
         <Text style={{ color: colors.textMuted, fontSize: type.body }}>{rows.length ? t('daemon.mgmt.selectNode') : t('daemon.mgmt.empty')}</Text>
       )}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        {actions.filter(action => action.visible).map(action => (
-          <MgmtButton
-            key={action.id}
-            testID={`daemon-mgmt-${action.id}`}
-            action={action}
-            busy={busy}
-            tone={NODE_TONE[action.id as NodeActionId]}
-            onPress={() => { setMessage(''); setConfirmAlias(''); setPending(action.id as NodeActionId); }}
-          />
-        ))}
-      </View>
-      <ActionNotes actions={actions.filter(action => action.visible)} />
+      {selected ? (
+        <>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+            {actions.filter(action => action.visible).map(action => (
+              <MgmtButton
+                key={action.id}
+                testID={`daemon-mgmt-${action.id}`}
+                action={action}
+                busy={busy}
+                tone={NODE_TONE[action.id as NodeActionId]}
+                onPress={() => { setMessage(''); setConfirmAlias(''); setPending(action.id as NodeActionId); }}
+              />
+            ))}
+          </View>
+          <ActionNotes actions={actions.filter(action => action.visible)} />
+        </>
+      ) : null}
       {message ? <Text testID="daemon-mgmt-message" style={{ color: messageTone(message), fontSize: type.small, lineHeight: 18 }}>{message}</Text> : null}
     </View>
   );
 
   const list = rows.length === 0 ? (
     <Text testID="daemon-mgmt-empty" style={{ color: colors.textMuted, fontSize: type.body, padding: spacing.lg }}>{t('daemon.mgmt.empty')}</Text>
-  ) : layout === 'split' ? (
-    rows.map(row => (
-      <Row key={row.nodeId} row={row} selected={row.nodeId === selected?.nodeId} compact onPress={() => setSelectedId(row.nodeId)} />
-    ))
   ) : (
     rows.map(row => (
-      <View key={row.nodeId} style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.sm }}>
-        <Row row={row} selected={row.nodeId === selected?.nodeId} onPress={() => setSelectedId(row.nodeId)} />
-      </View>
+      <Row key={row.nodeId} row={row} selected={row.nodeId === selected?.nodeId} compact={layout === 'split'} onPress={() => setSelectedId(row.nodeId)} />
     ))
   );
+
+  const pendingSection = section === 'nodes' ? null : section;
+  const sectionNav = (
+    <View style={[screenStyles.sectionNav, layout === 'stack' && screenStyles.sectionNavStack]}>
+      <Text style={screenStyles.sectionLabel}>{t('daemon.mgmt.kicker')}</Text>
+      <Pressable
+        testID="daemon-section-nodes"
+        accessibilityRole="tab"
+        accessibilityState={{ selected: section === 'nodes' }}
+        onPress={() => setSection('nodes')}
+        style={({ pressed }) => [screenStyles.sectionItem, section === 'nodes' && screenStyles.sectionItemActive, pressed && { opacity: 0.65 }]}
+      >
+        <Ionicons name="git-network-outline" size={18} color={section === 'nodes' ? colors.accent : colors.textSecondary} />
+        <Text style={[screenStyles.sectionItemText, section === 'nodes' && screenStyles.sectionItemTextActive]} numberOfLines={1}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
+      </Pressable>
+      <Text style={screenStyles.sectionLabel}>{t('server.integrations')}</Text>
+      <PendingSegmentedTabs
+        stacked
+        value={pendingSection}
+        onChange={setSection}
+        testID="daemon-section-tabs"
+        t={t}
+      />
+    </View>
+  );
+
+  const nodesPage = (
+    <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}>
+      <View style={screenStyles.pageHeading}>
+        <Text style={screenStyles.pageTitle}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
+        {daemonActions}
+      </View>
+      <View style={[screenStyles.nodeGrid, layout === 'stack' && screenStyles.nodeGridStack]}>
+        <PendingPanelCard testID="daemon-managed-list" style={screenStyles.nodeList}>
+          {list}
+        </PendingPanelCard>
+        <PendingPanelCard testID="daemon-managed-detail" style={screenStyles.nodeDetail}>
+          {detail}
+        </PendingPanelCard>
+      </View>
+    </ScrollView>
+  );
+
+  const integrationPage = pendingSection ? (
+    <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
+      <Text style={screenStyles.pageTitle}>{t(INTEGRATION_TITLE[pendingSection])}</Text>
+      <BackendPendingIntegration layer="daemon" tab={pendingSection} showTabs={false} testIDPrefix="daemon-pending" />
+    </ScrollView>
+  ) : null;
 
   return (
     <View testID="daemon-management" style={{ flex: 1, backgroundColor: colors.bg }} onLayout={event => setWidth(event.nativeEvent.layout.width)}>
       {header}
-      {layout === 'split' ? (
-        <View style={{ flex: 1, flexDirection: 'row', minHeight: 0 }}>
-          <ScrollView style={{ flex: 1, borderRightWidth: 1, borderRightColor: colors.border }} contentContainerStyle={{ paddingBottom: spacing.xl }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}>
-            <View style={{ padding: spacing.lg, gap: spacing.md }}>
-              {daemonActions}
-              <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong }}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
-            </View>
-            {list}
-          </ScrollView>
-          <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.md }}>
-            {detail}
-          </ScrollView>
-        </View>
-      ) : (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl, gap: spacing.md }} refreshControl={<RefreshControl refreshing={refreshing} onRefresh={refresh} />}>
-          <View style={{ padding: spacing.lg, gap: spacing.md }}>
-            {daemonActions}
-            <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong }}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
-          </View>
-          <View style={{ paddingHorizontal: spacing.lg }}>{detail}</View>
-          {list}
-        </ScrollView>
-      )}
+      <View style={[screenStyles.body, layout === 'stack' && screenStyles.bodyStack]}>
+        {sectionNav}
+        {section === 'nodes' ? nodesPage : integrationPage}
+      </View>
       {pending ? (
         <DialogFrame
           testID="daemon-mgmt-confirm-dialog"
@@ -377,13 +416,12 @@ function Fact({ label, value, dot, testID }: { label: string; value: string; dot
 }
 
 function ActionNotes({ actions }: { actions: MgmtAction[] }) {
+  const notes = [...new Set(actions.map(action => actionReason(action)).filter(Boolean))];
   return (
     <View style={{ gap: spacing.xs }}>
-      {actions.map(action => {
-        const reason = actionReason(action);
-        if (!reason || (action.enabled && !action.hintKey)) return null;
+      {notes.map(reason => {
         return (
-          <Text key={action.id} testID={`daemon-mgmt-reason-${action.id}`} style={{ color: colors.textMuted, fontSize: type.small, lineHeight: 18 }}>
+          <Text key={reason} style={{ color: colors.textMuted, fontSize: type.small, lineHeight: 18 }}>
             {reason}
           </Text>
         );
@@ -469,3 +507,56 @@ function Row({ row, selected, compact, onPress }: {
     </Pressable>
   );
 }
+
+const makeScreenStyles = () =>
+  StyleSheet.create({
+    body: { flex: 1, minHeight: 0, flexDirection: 'row' },
+    bodyStack: { flexDirection: 'column' },
+    sectionNav: {
+      width: 248,
+      flexShrink: 0,
+      paddingVertical: spacing.sm,
+      borderRightWidth: 1,
+      borderRightColor: colors.border,
+      backgroundColor: colors.bg,
+    },
+    sectionNavStack: {
+      width: '100%',
+      borderRightWidth: 0,
+      borderBottomWidth: 1,
+      borderBottomColor: colors.border,
+      paddingBottom: spacing.md,
+    },
+    sectionLabel: {
+      color: colors.textMuted,
+      fontSize: type.caption,
+      paddingHorizontal: spacing.lg,
+      paddingTop: spacing.md,
+      paddingBottom: spacing.sm,
+    },
+    sectionItem: {
+      minHeight: 42,
+      marginHorizontal: spacing.sm,
+      paddingHorizontal: spacing.md,
+      borderRadius: radius.item,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+    },
+    sectionItemActive: { backgroundColor: colors.rowActive },
+    sectionItemText: { color: colors.textSecondary, fontSize: 13, fontWeight: weight.medium, flex: 1 },
+    sectionItemTextActive: { color: colors.text, fontWeight: weight.strong },
+    content: { flex: 1, minWidth: 0 },
+    contentInner: { width: '100%', padding: spacing.xl, paddingBottom: spacing.xl * 2, gap: spacing.lg },
+    pageHeading: { gap: spacing.md },
+    pageTitle: { color: colors.text, fontSize: type.title, fontWeight: weight.strong },
+    nodeGrid: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+    nodeGridStack: { flexDirection: 'column' },
+    nodeList: { flexGrow: 1, flexShrink: 1, flexBasis: 420, minWidth: 0, paddingHorizontal: 0, overflow: 'hidden' },
+    nodeDetail: { flexGrow: 2, flexShrink: 1, flexBasis: 520, minWidth: 0 },
+  });
+
+let screenStyles = makeScreenStyles();
+onThemeChange(() => {
+  screenStyles = makeScreenStyles();
+});

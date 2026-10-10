@@ -41,7 +41,7 @@ const makeStyles = () =>
     },
     title: { color: colors.text, fontSize: type.title, fontWeight: weight.strong },
     scroll: { flex: 1 },
-    scrollInner: { padding: spacing.xl, paddingBottom: spacing.xl * 2, maxWidth: 760, width: '100%', alignSelf: 'center' },
+    scrollInner: { padding: spacing.xl, paddingBottom: spacing.xl * 2, width: '100%' },
   });
 
 let styles = makeStyles();

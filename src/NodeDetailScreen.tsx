@@ -82,7 +82,7 @@ import NodeModelSection from './NodeModelSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
-import NodeIntegrationsSection from './NodeIntegrationsSection';
+import { NodeSecretPendingSection } from './BackendPendingDemo';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
 import NodeLogsSection from './NodeLogsSection';
@@ -608,10 +608,10 @@ export default function NodeDetailScreen({
         ) : null}
       </View>
     );
-    if (section === 'integrations') return (
+    if (section === 'secrets') return (
       <View>
-        <SectionTitle title="SKILLS · 令牌 · Provider" />
-        <NodeIntegrationsSection cfg={cfg} alias={alias} node={node} session={s} skillsCapable={skillsCapable} readOnly={readOnly} />
+        <SectionTitle title="密钥" />
+        <NodeSecretPendingSection />
       </View>
     );
     if (section === 'rules') return (

@@ -112,7 +112,6 @@ const ui = readFileSync(new URL('./BackendPendingDemo.tsx', import.meta.url), 'u
 const page = readFileSync(new URL('./DaemonManagementScreen.tsx', import.meta.url), 'utf8');
 const sidebar = readFileSync(new URL('./ServerSidebar.tsx', import.meta.url), 'utf8');
 const hub = readFileSync(new URL('./HubPendingScreen.tsx', import.meta.url), 'utf8');
-const nodeSection = readFileSync(new URL('./NodeIntegrationsSection.tsx', import.meta.url), 'utf8');
 const nodeDetail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
 const pendingUi = readFileSync(new URL('./backend-pending-ui.tsx', import.meta.url), 'utf8');
 const fields = readFileSync(new URL('./CodexProviderFields.tsx', import.meta.url), 'utf8');
@@ -122,13 +121,14 @@ const adopt = readFileSync(new URL('./NodeAdoptionControls.tsx', import.meta.url
 const forbidden = /from '\.\/api'|from '\.\/app-fetch'|appFetch|createNode\(|fetch\(|XMLHttpRequest|WebSocket|readListProviders|runNodeLifecycleAction|localStorage|SecureStore/;
 ck('demo logic does not touch the hub client', !forbidden.test(logic) && !logic.includes('set_network_secret(') && !logic.includes('probe_provider_model('));
 ck('demo view does not touch the hub client', !forbidden.test(ui) && !ui.includes('console.'));
-ck('daemon demo is mounted on the management page with no hub props', page.includes('<DaemonPendingDemos />') && !page.includes('<DaemonPendingDemos cfg') && !page.includes('daemon-open-pending-demos'));
-ck('daemon management uses tabbed pending IA', ui.includes('PendingSegmentedTabs') && ui.includes('testID={`${testIDPrefix}-tabs`}') && page.includes('<DaemonPendingDemos />'));
+ck('daemon management uses a settings sidebar and full pending content pane', page.includes('testID="daemon-section-tabs"') && page.includes('<BackendPendingIntegration layer="daemon"') && page.includes('showTabs={false}'));
+ck('daemon node action notes are deduplicated and hidden until selection', page.includes('new Set(actions.map(action => actionReason(action)).filter(Boolean))') && page.includes('{selected ? ('));
 ck('hub sidebar exposes SKILLS / 令牌 / Provider tabs', sidebar.includes('testID="server-pending-tabs"') && sidebar.includes('PendingSegmentedTabs'));
 ck('hub pending screen renders tab panels', hub.includes('HubPendingScreen') && hub.includes('BackendPendingIntegration'));
-ck('node page mounts integrations section', nodeDetail.includes('<NodeIntegrationsSection') && nodeSection.includes('layer="node"'));
+ck('node keeps its section IA and adds only the key demo', nodeDetail.includes("section === 'secrets'") && nodeDetail.includes('<NodeSecretPendingSection') && !nodeDetail.includes('NodeIntegrationsSection'));
 ck('pending chrome reuses theme tokens (buttons + settings-style segments)', pendingUi.includes('buttonStyle') === false && pendingUi.includes('segmentSelected') && ui.includes('buttonStyle('));
 ck('pending forms use responsive field grids and compact catalog rows', ui.includes('demoStyles.fieldGrid') && ui.includes('<ProviderCatalogRow') && ui.includes('flexBasis: 220'));
+ck('probe panel sizes to its content instead of stretching', ui.includes("alignSelf: 'flex-start'"));
 ck('management probe stays the disabled shell; the demo probe stays local', page.includes('testID="daemon-mgmt-probe"') && page.includes('action={probe}') && page.includes('onPress={() => {}}') && !page.includes('simulateProviderProbe') && ui.includes('simulateProviderProbe('));
 ck('provider form keeps the shell and adds the demo save', fields.includes('<ProviderConfigDemo') && fields.includes("onClearKey={() => onChange({ ...value, apiKey: '' })}"));
 ck('secret inputs stay masked', ui.includes('testID={`${testIDPrefix}-secret-value`}') && ui.includes('secureTextEntry') && ui.includes('testID={`${testIDPrefix}-provider-key`}'));

@@ -436,6 +436,49 @@ function TokensPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; sta
   );
 }
 
+/** Node detail keeps its previous section IA and adds one simple key-only entry. */
+export function NodeSecretPendingSection() {
+  const { t } = useTranslation();
+  const state = usePendingTokensState();
+  const inputStyle = pendingFieldStyle();
+  const secretLine = (() => {
+    if (!state.secretResult) return null;
+    if (!state.secretResult.ok) {
+      return { ok: false, text: state.secretResult.reason === 'name' ? t('backendPending.secretNeedName') : t('backendPending.secretNeedValue') };
+    }
+    return { ok: true, text: t('backendPending.secretSaved', { name: state.secretResult.name }) };
+  })();
+  return (
+    <View testID="node-secret-demo" style={{ gap: spacing.md }}>
+      <PendingDemoBanner t={t} />
+      <PendingPanelCard testID="node-secret-card">
+        <PendingCardTitle title={t('backendPending.section.secrets')} />
+        <View style={demoStyles.fieldGrid}>
+          <DemoField label={t('backendPending.secretName')} compact>
+            <TextInput testID="node-secret-name" value={state.secretName} onChangeText={state.setSecretName} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.secretName')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretName')} style={inputStyle} />
+          </DemoField>
+          <DemoField label={t('backendPending.secretValue')} compact>
+            <TextInput testID="node-secret-value" value={state.secretValue} onChangeText={state.setSecretValue} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.secretValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretValueA11y')} style={inputStyle} />
+          </DemoField>
+        </View>
+        <View style={demoStyles.actionRow}>
+          <DemoButton
+            testID="node-secret-save"
+            label={t('backendPending.secretSave')}
+            primary
+            onPress={() => {
+              const result = simulateSecretSave({ name: state.secretName, value: state.secretValue });
+              state.setSecretResult(result);
+              if (result.ok) state.setSecretValue('');
+            }}
+          />
+          {secretLine ? <ResultLine testID="node-secret-result" ok={secretLine.ok} text={secretLine.text} /> : null}
+        </View>
+      </PendingPanelCard>
+    </View>
+  );
+}
+
 /** Tab body only — Hub 主栏 / 集成壳内层。 */
 export function BackendPendingTabPanels({
   tab,
@@ -492,15 +535,6 @@ export function BackendPendingIntegration({
   );
 }
 
-export function DaemonPendingDemos() {
-  const [tab, setTab] = useState<PendingTab>('provider');
-  return (
-    <View testID="daemon-pending-demos" style={{ paddingTop: spacing.sm }}>
-      <BackendPendingIntegration layer="daemon" tab={tab} onTabChange={setTab} showTabs testIDPrefix="daemon-pending" />
-    </View>
-  );
-}
-
 const makeDemoStyles = () =>
   StyleSheet.create({
     panelGrid: {
@@ -510,7 +544,7 @@ const makeDemoStyles = () =>
       gap: spacing.md,
     },
     panelPrimary: { flexGrow: 2, flexShrink: 1, flexBasis: 380, minWidth: 0 },
-    panelSecondary: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0 },
+    panelSecondary: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0, alignSelf: 'flex-start' },
     equalPanel: { flexGrow: 1, flexShrink: 1, flexBasis: 300, minWidth: 0 },
     fieldGrid: {
       flexDirection: 'row',

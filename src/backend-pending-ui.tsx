@@ -2,6 +2,7 @@
 import type { ReactNode } from 'react';
 import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing, type, weight } from './theme';
 import { ds } from './ui-scale';
 
@@ -13,6 +14,12 @@ const TAB_ITEMS: readonly { key: PendingTab; labelKey: string }[] = [
   { key: 'tokens', labelKey: 'backendPending.tab.tokens' },
   { key: 'provider', labelKey: 'backendPending.tab.provider' },
 ];
+
+const TAB_ICONS: Record<PendingTab, keyof typeof Ionicons.glyphMap> = {
+  skills: 'extension-puzzle-outline',
+  tokens: 'key-outline',
+  provider: 'cube-outline',
+};
 
 /** 与 WeakPasswordBanner / 设置说明条同款 token。 */
 export function PendingDemoBanner({ t }: { t: (key: string) => string }) {
@@ -74,6 +81,7 @@ export function PendingSegmentedTabs({
               testID={`${testID}-${item.key}`}
               style={({ pressed }) => [styles.stackedItem, on && styles.stackedItemOn, pressed && { opacity: 0.65 }]}
             >
+              <Ionicons name={TAB_ICONS[item.key]} size={18} color={on ? colors.accent : colors.textSecondary} />
               <Text style={[styles.stackedText, on && styles.stackedTextOn]} numberOfLines={1}>{t(item.labelKey)}</Text>
             </Pressable>
           );
@@ -212,7 +220,10 @@ const makeStyles = () =>
       minHeight: 42,
       borderRadius: radius.item,
       paddingHorizontal: spacing.md,
-      justifyContent: 'center',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      justifyContent: 'flex-start',
     },
     stackedItemOn: { backgroundColor: colors.rowActive },
     stackedText: { color: colors.textSecondary, fontSize: 13, fontWeight: '500' },

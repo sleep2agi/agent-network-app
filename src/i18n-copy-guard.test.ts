@@ -48,7 +48,6 @@ migrated.push('src/DaemonRuntimeProviders.tsx');
 migrated.push('src/DaemonManagementScreen.tsx');
 migrated.push('src/BackendPendingDemo.tsx');
 migrated.push('src/HubPendingScreen.tsx');
-migrated.push('src/NodeIntegrationsSection.tsx');
 migrated.push('src/backend-pending-ui.tsx');
 migrated.push('src/AgentOrgScreen.tsx');
 function untranslated(file: string, raw: string): string[] {
