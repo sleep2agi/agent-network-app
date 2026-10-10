@@ -1,6 +1,6 @@
 // @ts-nocheck -- repository test scripts run directly under Bun; the app
 // tsconfig intentionally excludes Node ambient types.
-// 看板 #692 —— 守护节点(host_supervisor)没有 AI 对话:会话页输入框换成说明条,列表不画红点。
+// 看板 #692 / #908 —— 守护节点(host_supervisor)没有 AI 对话:会话页换成管理页,列表不画红点。
 import { readFileSync } from 'node:fs';
 import {
   agentRowBadge,
@@ -42,8 +42,8 @@ ck('config_snapshot.role=host_supervisor is a daemon too', isHostSupervisorNode(
 ck('an agent node is not a daemon', !isHostSupervisorNode(nodes[1]) && !isHostSupervisorNode(nodes[2]));
 ck('unknown node (not loaded yet) is not a daemon', !isHostSupervisorNode(undefined) && !isHostSupervisorNode({}));
 
-// ── 会话页:按角色换输入框 ─────────────────────────────────────────────────────────────────
-ck('daemon → composer kind is the notice', chatComposerKind(true) === 'daemon');
+// ── 会话页:按角色换成管理页 ───────────────────────────────────────────────────────────────
+ck('daemon → composer kind is the management page', chatComposerKind(true) === 'daemon');
 ck('normal node → composer kind is the chat input', chatComposerKind(false) === 'chat');
 
 resetNodeRoles();
@@ -53,14 +53,14 @@ const off = subscribeNodeRoles(() => { notified++; });
 const v0 = nodeRolesVersion();
 hydrateNodeRoles(nodes);
 ck('hydrate marks the daemons by alias', isHostSupervisorAlias('daemon-a') && isHostSupervisorAlias('daemon-b') && !isHostSupervisorAlias('worker-1'));
-ck('hydrate swaps the composer for the daemon and only the daemon', chatComposerKind(isHostSupervisorAlias('daemon-a')) === 'daemon' && chatComposerKind(isHostSupervisorAlias('worker-1')) === 'chat');
+ck('hydrate swaps the page for the daemon and only the daemon', chatComposerKind(isHostSupervisorAlias('daemon-a')) === 'daemon' && chatComposerKind(isHostSupervisorAlias('worker-1')) === 'chat');
 ck('hydrate notifies subscribers and bumps the version', notified === 1 && nodeRolesVersion() !== v0);
 hydrateNodeRoles(nodes.map(n => ({ ...n })));
 ck('same content again does not re-notify (cheap to call every poll)', notified === 1);
 hydrateNodeRoles(undefined);
 ck('a failed read (undefined) keeps the last snapshot', isHostSupervisorAlias('daemon-a'));
 hydrateNodeRoles(nodes.filter(n => n.alias !== 'daemon-a'));
-ck('a node that stops being a daemon gets its composer back', !isHostSupervisorAlias('daemon-a') && notified === 2);
+ck('a node that stops being a daemon gets the chat page back', !isHostSupervisorAlias('daemon-a') && notified === 2);
 off();
 
 // ── 托管的节点入口 ─────────────────────────────────────────────────────────────────────────
@@ -87,26 +87,19 @@ ck('store exposes managed aliases + hostname per daemon', managedAliasesOf('daem
   ck('normal row: badge unchanged', agentRowBadge(badge, false) === badge);
 }
 
-// ── 接线(源码):两种布局都换掉、历史照常、列表用 agentRowBadge ─────────────────────────────
+// ── 接线(源码):守护节点进管理页,普通节点仍是对话,列表用 agentRowBadge ─────────────────────
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-const notice = readFileSync(new URL('./DaemonComposerNotice.tsx', import.meta.url), 'utf8');
 {
-  const swap = chat.indexOf("{composerKind === 'daemon' ? (");
-  const desktopBranch = chat.indexOf(') : desktop ? (', swap);
-  const desktopInput = chat.indexOf('testID="desktop-composer-card"', swap);
-  const phoneInput = chat.indexOf('styles.inputRow', swap);
-  ck('ChatScreen picks the composer by role', /composerKind = chatComposerKind\(isHostSupervisorAlias\(alias\)\)/.test(chat));
-  ck('daemon branch wraps BOTH the desktop card and the phone input row', swap > 0 && desktopBranch > swap && desktopInput > desktopBranch && phoneInput > desktopBranch);
-  ck('daemon branch renders DaemonComposerNotice', /composerKind === 'daemon' \? \(\s*<DaemonComposerNotice/.test(chat));
-  ck('run-logs entry opens the node page on the logs section', /requestNodeSection\(nodeInfoSectionKey\([^)]*\), 'logs'\); onOpenNodeSettings\(\)/.test(chat));
-  ck('history list is not gated by role', !/composerKind[^\n]*FlatList|composerKind[^\n]*InvertedList/.test(chat) && (chat.match(/composerKind/g) ?? []).length === 3);
+  ck('ChatScreen picks the page by role', /composerKind = chatComposerKind\(isHostSupervisorAlias\(alias\)\)/.test(chat));
+  ck('daemon branch returns the management page before the chat composer', /if \(composerKind === 'daemon'\) \{\s*return \(\s*<DaemonManagementScreen/.test(chat));
+  ck('the chat composer stays on the normal-node path', chat.includes('testID="desktop-composer-card"') && !chat.includes('DaemonComposerNotice'));
+  ck('run-logs entry opens the node page on the logs section', /requestNodeSection\(nodeInfoSectionKey\([^)]*\), 'logs'\);\s*onOpenNodeSettings\(\)/.test(chat));
   ck('ChatScreen re-renders when roles change', /useSyncExternalStore\(subscribeNodeRoles, nodeRolesVersion/.test(chat));
   ck('agent list rows go through agentRowBadge(…, isHostSupervisorAlias(alias))', /agentRowBadge\(rowBadgeWithManual\([^\n]*isHostSupervisorAlias\(alias\)\)/.test(agents));
   ck('App feeds the same /api/nodes poll into the role store', (app.match(/hydrateNodeRoles\(r\.nodes\)/g) ?? []).length === 2);
   ck('App wires the managed-nodes entry on phone and desktop', /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'mobile'\)/.test(app) && /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'desktop'\)/.test(app));
-  ck('notice uses the i18n key for the one-line copy', notice.includes("t('chat.daemon.notice')"));
 }
 ck('notice copy is the agreed sentence (zh) and has an English column', chatTranslations['chat.daemon.notice'][0] === '守护节点只执行创建 / 停止 / 重启 / 删除等结构化命令，不能对话' && !!chatTranslations['chat.daemon.notice'][1] && !!chatTranslations['chat.daemon.managed'][1]);
 

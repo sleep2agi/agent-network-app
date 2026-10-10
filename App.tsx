@@ -124,7 +124,7 @@ type Screen =
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — 会话行菜单「节点详情」(以前是直接长按); back returns to agents
   | { name: 'logs' }                        // row 6 — network event stream leaf reached from Server tab; back returns to server
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
-  | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
+  | { name: 'wizard'; daemon: HostSupervisorDaemon; back?: Screen };  // back: 从某台 daemon 的管理页进来时,返回回到那一页
 
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
 // Desktop keeps operational modules together and pins Settings to the bottom.
@@ -692,6 +692,10 @@ function AppRoot() {
         setScreen(screen.back);
         return true;
       }
+      if (screen.name === 'wizard' && screen.back) {
+        setScreen(screen.back);
+        return true;
+      }
       if (screen.name !== 'agents' && screen.name !== 'login') {
         setScreen({ name: 'agents' });
         return true;
@@ -928,7 +932,7 @@ function AppRoot() {
                         hideBack
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
-                        onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
+                        onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId } })}
                         onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                         focusTaskId={screen.focusTaskId}
                         pinned={mobilePins.includes(screen.alias)}
@@ -963,7 +967,7 @@ function AppRoot() {
                   onBack={() => setScreen({ name: 'agents' })}
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
-                  onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
+                  onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId } })}
                   onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                   focusTaskId={screen.focusTaskId}
                   pinned={mobilePins.includes(screen.alias)}
@@ -1006,8 +1010,8 @@ function AppRoot() {
                 <CreateNodeWizardScreen
                   cfg={cfg}
                   daemon={screen.daemon}
-                  onBack={() => setScreen({ name: 'picker' })}
-                  onExit={() => setScreen({ name: 'agents' })}
+                  onBack={() => setScreen(screen.back ?? { name: 'picker' })}
+                  onExit={() => setScreen(screen.back ?? { name: 'agents' })}
                 />
               ) : screen.name === 'taskDetail' ? (
                 // Task detail — full-screen (no tab bar), matches the mobile
@@ -1255,7 +1259,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       networkId={screen.networkId}
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
-      onOpenAgents={filter => setScreen(agentListScreen(filter, 'desktop') as Screen)}
+      onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId } })}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
       focusTaskId={screen.focusTaskId}
@@ -1294,7 +1298,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
-  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'serverNodes' })} desktop />
+  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen(screen.back ?? { name: 'picker' })} onExit={() => setScreen(screen.back ?? { name: 'serverNodes' })} desktop />
   : (
     <View style={desktopStyles.empty}>
       <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
