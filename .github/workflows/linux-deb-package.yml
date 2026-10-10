@@ -17,6 +17,12 @@ on:
       - 'tests/linux-native-daemon/**'
       - 'tests/linux-native-daemon-ui/**'
       - 'tests/linux-native-opencode/**'
+      - 'tests/linux-native-opencode-v1/**'
+      - 'tests/linux-native-v1-registration/**'
+      - 'tests/linux-native-v1-model/**'
+      - 'tests/linux-native-v1-candidate-runtime/**'
+      - 'tests/linux-native-v1-lifecycle/**'
+      - 'tests/linux-native-v1-ci/**'
       - 'tests/local-daemon-packages/**'
       - 'scripts/seed-previous-local-hub.mjs'
       - 'scripts/with-linux-test-keyring.sh'
@@ -27,9 +33,19 @@ on:
 permissions:
   contents: read
 jobs:
-  linux-deb:
+  v1-ci-contract:
     runs-on: ubuntu-latest
-    timeout-minutes: 60
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - run: docker build -t anet-v1-ci-contract:test -f tests/linux-native-v1-ci/Dockerfile .
+      - run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-v1-ci-contract:test
+  linux-deb:
+    needs: v1-ci-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
     steps:
       - uses: actions/checkout@v4
         with:
@@ -269,6 +285,83 @@ jobs:
               docker rm "$name"
             fi
           done
+      - name: Checkout exact V1 backend candidate (TEST ONLY)
+        uses: actions/checkout@v4
+        with:
+          repository: sleep2agi/agent-network
+          ref: ded59ce7417ed8b0d22290d9c6fcb6e5c3fb324a
+          path: v1-backend-source
+          persist-credentials: false
+      - name: Build source-bound V1 model and lifecycle fixtures (not registry acceptance)
+        shell: bash
+        run: |
+          set -euo pipefail
+          backend_sha=ded59ce7417ed8b0d22290d9c6fcb6e5c3fb324a
+          test "$(git -C v1-backend-source rev-parse HEAD)" = "$backend_sha"
+          source_sha=$(git rev-parse HEAD)
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg SOURCE_COMMIT="$backend_sha" -t anet-v1-runtime-build:test -f v1-backend-source/tests/test894-v1-runtime/Dockerfile v1-backend-source
+          docker build --build-arg V1_IMAGE=anet-v1-runtime-build:test --build-arg NATIVE_IMAGE=anet-native-daemon-ui:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-native-v1:test -f tests/linux-native-opencode-v1/Dockerfile .
+          docker build --network none --build-arg V1_NATIVE_IMAGE=anet-native-v1:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-v1-registration:test -f tests/linux-native-v1-registration/Dockerfile .
+          docker build --build-arg V1_NATIVE_IMAGE=anet-v1-registration:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-v1-model:test -f tests/linux-native-v1-model/Dockerfile .
+          docker build --build-arg RUNTIME_BUILD_IMAGE=anet-v1-runtime-build:test --build-arg NATIVE_MODEL_IMAGE=anet-v1-model:test -t anet-v1-candidate:test -f tests/linux-native-v1-candidate-runtime/Dockerfile .
+          docker build --network none --build-arg V1_CANDIDATE_IMAGE=anet-v1-candidate:test -t anet-v1-lifecycle:test -f tests/linux-native-v1-lifecycle/Dockerfile .
+          printf 'TEST ONLY source candidate; reused private prefix, NOT registry clean install or release.\nApp tested merge: %s\nDeb SHA256: %s\nBackend source: %s\n' "$source_sha" "$deb_sha" "$backend_sha" >out/v1-candidate-inputs.txt
+          docker image inspect --format '{{.Id}}' anet-v1-runtime-build:test anet-v1-candidate:test anet-v1-lifecycle:test >>out/v1-candidate-inputs.txt
+      - name: V1 environment authentication and session prerequisite
+        run: docker run --name native-v1-atomic --network none --cap-drop ALL --security-opt no-new-privileges anet-v1-candidate:test python3 /fixture/v1-atomic.py
+      - name: Native V1 actual selected-model response (TEST ONLY candidate)
+        run: docker run --name native-v1-model --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-v1-candidate:test
+      - name: Native V1 unavailable model refuses fallback and leaves no ACP child
+        run: docker run --name native-v1-unavailable --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_SELECTED_MODEL=openai/not-in-fixture -e TEST_EXPECT_MODEL_REJECTION=1 anet-v1-candidate:test
+      - name: Native V1 wrong model oracle must reject an actual response
+        shell: bash
+        run: |
+          set +e
+          docker run --name native-v1-wrong-model --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_WRONG_MODEL=1 anet-v1-candidate:test >out/native-v1-wrong-model.log 2>&1
+          result=$?
+          set -e
+          test "$result" -eq 1
+          grep -F 'PASS: native-created V1 consumes fixture-only model response with safe ACP child' out/native-v1-wrong-model.log
+          grep -F 'AssertionError: native V1 provider model mismatch' out/native-v1-wrong-model.log
+      - name: Native V1 lifecycle and cancellation with fresh ACP replies
+        run: docker run --name native-v1-lifecycle --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-v1-lifecycle:test
+      - name: Native V1 cancel oracle rejects actual stop confirmation
+        shell: bash
+        run: |
+          set +e
+          docker run --name native-v1-cancel-wrong --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_V1_CANCEL_SUBMIT=1 anet-v1-lifecycle:test >out/native-v1-cancel-wrong.log 2>&1
+          result=$?
+          set -e
+          test "$result" -eq 1
+          grep -F 'PASS: V1 lifecycle baseline bound to actual candidate worker/model reply' out/native-v1-cancel-wrong.log
+          grep -F 'AssertionError: native V1 cancellation mutated lifecycle state' out/native-v1-cancel-wrong.log
+      - name: Native V1 missed start remains stopped
+        shell: bash
+        run: |
+          set +e
+          docker run --name native-v1-start-missed --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_V1_START_MISS_CLICK=1 anet-v1-lifecycle:test >out/native-v1-start-missed.log 2>&1
+          result=$?
+          set -e
+          test "$result" -eq 1
+          grep -F 'PASS: missed native V1 start preserved stopped identity/config/requests and absent worker' out/native-v1-start-missed.log
+          grep -F 'AssertionError: native V1 start confirmation did not apply' out/native-v1-start-missed.log
+      - name: Preserve V1 candidate evidence and remove only owned test containers
+        if: always()
+        shell: bash
+        run: |
+          set -euo pipefail
+          cleanup_failed=0
+          for name in native-v1-atomic native-v1-model native-v1-unavailable native-v1-wrong-model native-v1-lifecycle native-v1-cancel-wrong native-v1-start-missed; do
+            if docker container inspect "$name" >/dev/null 2>&1; then
+              mkdir -p "out/$name"
+              docker inspect --format '{{.State.Status}} exit={{.State.ExitCode}} image={{.Image}} started={{.State.StartedAt}} finished={{.State.FinishedAt}}' "$name" >"out/$name/container-state.txt" || cleanup_failed=1
+              docker logs "$name" >"out/$name/container.log" 2>&1 || cleanup_failed=1
+              docker cp "$name:/evidence/." "out/$name/" || cleanup_failed=1
+              docker rm -f "$name" || cleanup_failed=1
+            fi
+          done
+          test "$cleanup_failed" -eq 0
       - uses: actions/upload-artifact@v4
         if: always()
         with:

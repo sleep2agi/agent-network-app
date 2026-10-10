@@ -77,5 +77,8 @@ Model provider/catalogue responses are loopback fixtures, not an external
 provider reliability/model-quality test. Safety assertions observe PURE and
 wildcard deny, not arbitrary tool-execution isolation. Full candidate success
 still does not close main-only runtime publication, exact installer pairing or
-clean-install/upgrade/rollback gates. This new fixture is not wired into required
-CI until its own precise positive and negative runs have been reviewed.
+clean-install/upgrade/rollback gates. The reviewed local positive and exact
+negative runs are recorded in `../../docs/tests/report-test894-v1-native-lifecycle.txt`.
+The Linux package workflow now invokes this fixture after its prerequisites;
+see `../linux-native-v1-ci/`. New CI success and branch-protection requirements
+must be established separately, not inferred from local success or wiring.

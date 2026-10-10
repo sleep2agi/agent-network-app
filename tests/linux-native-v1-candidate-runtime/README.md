@@ -53,7 +53,10 @@ The first two require exit0, with exact task/model/refusal evidence. The third
 must exit1 at the specific model mismatch AFTER actual response consumption.
 Earlier failures are not passing negatives. Inspect screenshots and retain only
 redacted `/evidence`, then remove exact stopped containers. Do not export keys.
-The gate is not required CI until this wrapper's own actual runs pass.
+The reviewed local runs are recorded in
+`../../docs/tests/report-test894-v1-source-candidate.txt`. CI wiring is described
+in `../linux-native-v1-ci/`; adding that job is not a claim of a successful new
+workflow run or a change to GitHub branch protection.
 
 No production service, port mapping, secret source, database, backup or rollback
 procedure changes. The source scripts are the recovery authority for this
