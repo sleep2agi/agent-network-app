@@ -132,8 +132,15 @@ try {
     await page.getByText('✓ v2-fixture 已上线', { exact: true }).waitFor({ timeout: 7000 });
     await open(page); await chooseV2(page);
     await page.getByTestId('runtime-row-codex-app-server').click(); await next(page);
-    const codex = await submit(page); assert.deepEqual(codex.flags, { copresence: true });
-    console.log(`PASS ${tag}: V1 completion and Codex payload unchanged; consent does not leak`);
+    const codex = await submit(page);
+    assert.deepEqual(codex.flags, {
+      copresence: true,
+      approvalPolicy: 'never',
+      sandboxMode: 'danger-full-access',
+      skipGitRepoCheck: true,
+      copresenceFullAccess: true,
+    });
+    console.log(`PASS ${tag}: V1 completion; OpenCode consent does not leak; Codex carries copresence + yolo defaults`);
     assert.deepEqual(errors, []); await ctx.close();
   }
   console.log('PASS rendered V2 creation UI; fixture Hub only, no native app or production acceptance');

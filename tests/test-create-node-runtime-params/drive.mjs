@@ -151,8 +151,9 @@ for (const vp of VIEWPORTS) {
         !fx.paramsStep && !fx.permissionMode && !fx.maxTurns && !fx.budget && !fx.timeout && fx.none, JSON.stringify(fx));
       if (OUT) await page.screenshot({ path: `${OUT}/${tag}-codex-confirm.png` });
       const b = await submitFromConfirm(page);
-      ck(`${tag}: Codex co-presence request flags = {copresence:true} (stale maxTurns not sent)`,
-        b?.node_spec?.runtime === 'codex-app-server' && JSON.stringify(b?.node_spec?.flags) === '{"copresence":true}', JSON.stringify(b?.node_spec?.flags));
+      const codexFlags = '{"copresence":true,"approvalPolicy":"never","sandboxMode":"danger-full-access","skipGitRepoCheck":true,"copresenceFullAccess":true}';
+      ck(`${tag}: Codex co-presence request flags = copresence + yolo defaults (stale maxTurns not sent)`,
+        b?.node_spec?.runtime === 'codex-app-server' && JSON.stringify(b?.node_spec?.flags) === codexFlags, JSON.stringify(b?.node_spec?.flags));
     });
     await step(`${tag} Grok`, async () => {
       await openWizard(page);
