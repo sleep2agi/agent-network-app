@@ -23,7 +23,7 @@ const MANAGEMENT: Array<{ key: 'overview' | 'nodes' | 'create' | 'logs'; label: 
   { key: 'logs', label: 'server.logs', icon: 'pulse-outline' },
 ];
 
-const PENDING_TABS: PendingTab[] = ['skills', 'tokens', 'provider'];
+const PENDING_TABS: PendingTab[] = ['skills', 'tokens', 'provider', 'runtime'];
 
 export function isHubPendingSection(section: ServerSection): section is PendingTab {
   return (PENDING_TABS as readonly string[]).includes(section);

@@ -28,7 +28,7 @@ import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
 import { maskedHubHost, maskUrlsInText } from './src/mask-hub-address';
 import { agentListScreen, type AgentListFilter } from './src/server-stats';
-import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
+import ServerSidebar, { isHubPendingSection, type ServerSection } from './src/ServerSidebar';
 import HubPendingScreen from './src/HubPendingScreen';
 import type { PendingTab } from './src/backend-pending-ui';
 import HubScopeScreen from './src/HubScopeScreen';
@@ -1405,7 +1405,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             else if (section === 'nodes') setScreen({ name: 'serverNodes' });
             else if (section === 'create') setScreen({ name: 'picker' });
             else if (section === 'logs') setScreen({ name: 'logs' });
-            else if (section === 'skills' || section === 'tokens' || section === 'provider') setScreen({ name: 'serverPending', tab: section });
+            else if (isHubPendingSection(section)) setScreen({ name: 'serverPending', tab: section });
             else {
               const hub = hubSectionForScreen(section);
               if (hub) openHubSection(hub, setScreen);

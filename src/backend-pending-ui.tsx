@@ -6,19 +6,21 @@ import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing, type, weight } from './theme';
 import { ds } from './ui-scale';
 
-export type PendingTab = 'skills' | 'tokens' | 'provider';
+export type PendingTab = 'skills' | 'tokens' | 'provider' | 'runtime';
 export type PendingLayer = 'hub' | 'daemon' | 'node';
 
 const TAB_ITEMS: readonly { key: PendingTab; labelKey: string }[] = [
   { key: 'skills', labelKey: 'backendPending.tab.skills' },
   { key: 'tokens', labelKey: 'backendPending.tab.tokens' },
   { key: 'provider', labelKey: 'backendPending.tab.provider' },
+  { key: 'runtime', labelKey: 'backendPending.tab.runtime' },
 ];
 
 const TAB_ICONS: Record<PendingTab, keyof typeof Ionicons.glyphMap> = {
   skills: 'extension-puzzle-outline',
   tokens: 'key-outline',
   provider: 'cube-outline',
+  runtime: 'layers-outline',
 };
 
 /** 与 WeakPasswordBanner / 设置说明条同款 token。 */

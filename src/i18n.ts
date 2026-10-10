@@ -41,6 +41,7 @@ const tables: TranslationTable = {
   'server.pendingTitle.skills': ['SKILLS', 'SKILLS'],
   'server.pendingTitle.tokens': ['令牌', 'Tokens'],
   'server.pendingTitle.provider': ['Provider', 'Provider'],
+  'server.pendingTitle.runtime': ['Runtime 支持', 'Runtime support'],
 };
 export function registerTranslations(table: TranslationTable): void { Object.assign(tables, table); }
 export function parseLanguagePreference(raw: unknown): LanguagePreference {
