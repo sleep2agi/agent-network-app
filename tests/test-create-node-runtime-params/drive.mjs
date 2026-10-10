@@ -11,7 +11,7 @@
 //   (2) Codex（TUI 共存）、Grok:三项都没有 ⇒ #614 起整个「参数」步不出现(Runtime 之后下一步直接是确认页),
 //       确认页上一行「参数：这个 runtime 没有额外参数」,页面上没有 permissionMode / maxTurns / budget / timeout
 //   (3) 请求体:Claude → flags {permissionMode, maxTurns, budget};先在 Claude 下填了值再切到 Codex 共存 →
-//       flags 恰为 {copresence:true};Grok → 没有 flags 键
+//       flags 为 copresence + 默认 yolo(自动执行开);取消「自动执行」后仅 {copresence:true};Grok → 没有 flags 键
 // 任一断言失败或页面打不开 → exit 1。先对改动前的 export 跑:必须红。
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium, ANDROID_UA, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
@@ -26,6 +26,8 @@ const DAEMON = { daemon_node_id: 'd_sweep_1', alias: '示例-守护', hostname: 
 const VIEWPORTS = [{ name: 'desktop-1200x800', w: 1200, h: 800 }, { name: 'phone-390x844', w: 390, h: 844, mobile: true }];
 const THEMES = ['light', 'dark'];
 const NONE = '参数：这个 runtime 没有额外参数';
+const CODEX_YOLO_FLAGS_JSON = '{"copresence":true,"approvalPolicy":"never","sandboxMode":"danger-full-access","skipGitRepoCheck":true,"copresenceFullAccess":true}';
+const CODEX_COPRESENCE_ONLY_JSON = '{"copresence":true}';
 
 let fails = 0;
 const ck = (name, ok, extra = '') => { if (!ok) fails++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${extra ? ` (${extra})` : ''}`); };
@@ -151,9 +153,24 @@ for (const vp of VIEWPORTS) {
         !fx.paramsStep && !fx.permissionMode && !fx.maxTurns && !fx.budget && !fx.timeout && fx.none, JSON.stringify(fx));
       if (OUT) await page.screenshot({ path: `${OUT}/${tag}-codex-confirm.png` });
       const b = await submitFromConfirm(page);
-      ck(`${tag}: Codex co-presence request flags = {copresence:true} (stale maxTurns not sent)`,
-        b?.node_spec?.runtime === 'codex-app-server' && JSON.stringify(b?.node_spec?.flags) === '{"copresence":true}', JSON.stringify(b?.node_spec?.flags));
+      ck(`${tag}: Codex co-presence request flags = copresence + yolo defaults (stale maxTurns not sent)`,
+        b?.node_spec?.runtime === 'codex-app-server' && JSON.stringify(b?.node_spec?.flags) === CODEX_YOLO_FLAGS_JSON, JSON.stringify(b?.node_spec?.flags));
     });
+    if (tag === 'desktop-1200x800-light') {
+      await step(`${tag} Codex auto-exec off`, async () => {
+        await openWizard(page);
+        await page.getByText('Codex（TUI 共存）', { exact: true }).first().click();
+        const consent = page.getByTestId('codex-auto-execute-consent');
+        await consent.waitFor({ timeout: 5000 });
+        if (await consent.getAttribute('aria-checked') === 'true') await consent.click();
+        ck(`${tag}: auto-exec checkbox off before submit`, await consent.getAttribute('aria-checked') === 'false');
+        await next(page);
+        await page.locator('[data-testid="create-node-submit"]').waitFor({ timeout: 5000 });
+        const c = await submitFromConfirm(page);
+        ck(`${tag}: Codex with auto-exec off → flags only {copresence:true}`,
+          c?.node_spec?.runtime === 'codex-app-server' && JSON.stringify(c?.node_spec?.flags) === CODEX_COPRESENCE_ONLY_JSON, JSON.stringify(c?.node_spec?.flags));
+      });
+    }
     await step(`${tag} Grok`, async () => {
       await openWizard(page);
       await toConfirmSkippingParams(page, 'Grok');

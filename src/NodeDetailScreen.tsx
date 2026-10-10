@@ -79,6 +79,8 @@ import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
+import NodeCodexExecutionSection from './NodeCodexExecutionSection';
+import NodeCodexReasoningSection from './NodeCodexReasoningSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
@@ -590,7 +592,7 @@ export default function NodeDetailScreen({
     );
     if (section === 'model') return (
       <View>
-        <SectionTitle title="模型与运行时" hint={readOnly ? '只读视图:在节点详情里可以直接改模型。' : '改模型会让节点重启一次,不经过大模型。'} />
+        <SectionTitle title="模型与运行时" hint={readOnly ? '可改模型与 Codex 思考程度,会经 Hub 下发到节点。' : '改模型会让节点重启一次;思考程度热更新,不经过大模型。'} />
         <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
           {runtimeFacts.map(fact => <FactCell key={fact.label} fact={fact} columns={factColumns} />)}
         </View>
@@ -602,7 +604,13 @@ export default function NodeDetailScreen({
           </Pressable>
         ) : null}
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
-        {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
+        {node ? <NodeModelSection cfg={cfg} node={node} /> : null}
+        {node && (node.runtime === 'codex-app-server' || node.runtime === 'codex-sdk') ? (
+          <>
+            <NodeCodexExecutionSection cfg={cfg} node={node} />
+            <NodeCodexReasoningSection cfg={cfg} node={node} />
+          </>
+        ) : null}
         {!readOnly && node && isCodexRuntime(node.runtime) ? (
           <NodeCodexProviderSection runtimeId={node.runtime} serverUrl={cfg.serverUrl} />
         ) : null}

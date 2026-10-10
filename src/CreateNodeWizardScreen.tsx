@@ -137,6 +137,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [budget, setBudget] = useState('');
   const [opencodeGeneration, setOpenCodeGeneration] = useState<OpenCodeGeneration>('v1');
   const [opencodeUnsafeTools, setOpenCodeUnsafeTools] = useState(false);
+  const [codexAutoExecute, setCodexAutoExecute] = useState(true);
   const [providerForm, setProviderForm] = useState<ProviderFormValue>(EMPTY_PROVIDER_FORM);
   const [providerResetHint, setProviderResetHint] = useState('');
   const [daemonProviderRows, setDaemonProviderRows] = useState<TaggedProvider[]>([]);
@@ -405,6 +406,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       name, runtimeId, model, runtimeModels: runtime.models,
       permissionMode, maxTurns, budget,
       opencodeGeneration, opencodeUnsafeTools,
+      codexAutoExecute,
       workdirField: workdirForRequest(workdirRoot, workdir),
     });
     submittedSpec.current = node_spec;
@@ -631,14 +633,34 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             ) : null}
             {providerResetHint ? <Text testID="provider-reset-hint" style={styles.hint}>{providerResetHint}</Text> : null}
             {surface.kind === 'codex' ? (
-              <CodexProviderFields
-                runtimeId={runtimeId}
-                value={providerForm}
-                issues={providerIssues}
-                transportOk={transportOk}
-                hubBlocked={providerForm.choice !== 'none' && providerIssues.length === 0}
-                onChange={next => { setProviderForm(next); setProviderResetHint(''); }}
-              />
+              <>
+                <View testID="codex-auto-execute-options" style={styles.section}>
+                  <Pressable
+                    testID="codex-auto-execute-consent"
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: codexAutoExecute }}
+                    aria-checked={codexAutoExecute}
+                    onPress={() => setCodexAutoExecute(v => !v)}
+                    style={styles.choiceRow}
+                  >
+                    <Ionicons name={codexAutoExecute ? 'checkbox' : 'square-outline'} size={20} color={colors.accent} />
+                    <Text style={[styles.choiceText, { flex: 1 }]}>
+                      自动执行（不弹确认）— 与本地 Codex 默认最高权限一致
+                    </Text>
+                  </Pressable>
+                  {!codexAutoExecute ? (
+                    <Text style={styles.hint}>关闭后创建节点不会下发 approvalPolicy / sandboxMode;行为接近 `anet node create --no-yolo`。</Text>
+                  ) : null}
+                </View>
+                <CodexProviderFields
+                  runtimeId={runtimeId}
+                  value={providerForm}
+                  issues={providerIssues}
+                  transportOk={transportOk}
+                  hubBlocked={providerForm.choice !== 'none' && providerIssues.length === 0}
+                  onChange={next => { setProviderForm(next); setProviderResetHint(''); }}
+                />
+              </>
             ) : null}
             <DaemonRuntimeProviders
               daemon={daemon}

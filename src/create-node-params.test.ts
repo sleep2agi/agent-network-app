@@ -33,9 +33,11 @@ check('🔴 claude-agent-sdk sends permissionMode / maxTurns / budget it shows',
 check('claude-agent-sdk blank limits are omitted, permissionMode kept',
   JSON.stringify(buildCreateNodeSpec({ ...typed, maxTurns: ' ', budget: '', runtimeId: 'claude-agent-sdk', runtimeModels: ['m'] }).flags) === '{"permissionMode":"plan"}');
 const codexCo = buildCreateNodeSpec({ ...typed, runtimeId: 'codex-app-server', runtimeModels: [] });
-check('🔴 Codex（TUI 共存）: flags is exactly {copresence:true} even if stale values were typed under Claude',
-  JSON.stringify(codexCo.flags) === '{"copresence":true}' && !('model' in codexCo));
-for (const rt of ['codex-sdk', 'grok-build-acp', 'claude-code-cli', 'grok-build-cli', 'opencode-cli']) {
+check('🔴 Codex（TUI 共存）: copresence + yolo defaults even if stale Claude params were typed',
+  JSON.stringify(codexCo.flags) === '{"copresence":true,"approvalPolicy":"never","sandboxMode":"danger-full-access","skipGitRepoCheck":true,"copresenceFullAccess":true}' && !('model' in codexCo));
+const codexSdk = buildCreateNodeSpec({ ...typed, runtimeId: 'codex-sdk', runtimeModels: ['gpt-5.5'] });
+check('🔴 codex-sdk sends yolo flags by default', JSON.stringify(codexSdk.flags) === '{"approvalPolicy":"never","sandboxMode":"danger-full-access","skipGitRepoCheck":true}');
+for (const rt of ['grok-build-acp', 'claude-code-cli', 'grok-build-cli', 'opencode-cli']) {
   const s = buildCreateNodeSpec({ ...typed, runtimeId: rt, runtimeModels: ['m1'] });
   check(`🔴 ${rt}: no flags key at all (nothing applicable, hub flags are optional)`, !('flags' in s) && s.runtime === rt);
 }

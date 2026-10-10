@@ -13,6 +13,10 @@
       "kind": "stub",
       "secs": 115
     },
+    "codex-reasoning-effort/drive.mjs": {
+      "kind": "stub",
+      "secs": 45
+    },
     "opencode-v2-create/drive.mjs": {
       "kind": "stub",
       "secs": 90
