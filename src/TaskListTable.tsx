@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { isClosedColumn } from './requirement-columns';
+import { isClosedColumn, statusCapsuleText } from './requirement-columns';
 import { TaskTagChips } from './TaskTags';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -218,7 +218,7 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
       case 'issues': return issueCount(item) ? <TaskIssueCount item={item} /> : <Text style={s.metaMuted}>—</Text>;
       case 'tags': return item.tags?.length ? <TaskTagChips tags={item.tags} /> : <Text style={s.metaMuted}>—</Text>;
       case 'seq': return <Text testID={`task-seq-${item.id}`} style={[s.metaMuted, { fontVariant: ['tabular-nums'] }]} numberOfLines={1}>{shortIdLabel(item) ?? '—'}</Text>;
-      case 'status': return <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}><View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} /><Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text></View>;
+      case 'status': return <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]} testID={`task-status-${item.id}`}><View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} /><Text style={[s.statusPillText, statusCapsuleText(item.column, STATUS_TONE[item.column]())]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text></View>;
     }
   };
   return <View style={{ flex: 1 }}>

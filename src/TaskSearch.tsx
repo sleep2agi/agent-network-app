@@ -8,6 +8,7 @@ import { Modal, Pressable, View, useWindowDimensions, type TextInput as RNTextIn
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { t as tr } from './i18n';
+import './i18n-tasks';
 import { useTranslation } from './i18n-react';
 import { colors, radius, spacing, themeMode } from './theme';
 import { elevated } from './elevation';
@@ -204,21 +205,30 @@ export function SearchEmpty({ q, s, onClear, filtered, partial }: { q: string; s
  * 搜索时结果上方的一行:「找到 N 个」+(筛选挡住了一些时)「另有 M 个被筛选隐藏 · 清除筛选」+(服务端还有下一页时)「加载更多」。
  * 以前只有一个结果都没剩时才提一句筛选,剩下几个时被挡住的那些就悄悄没了。
  */
-export function SearchStatusBar({ shown, hidden, more, loading, onClearFilters, onLoadMore, phone }: {
+export function SearchStatusBar({ shown, hidden, more, loading, onClearFilters, onLoadMore, phone, abandonedHidden = 0, onShowAbandoned }: {
   shown: number; hidden: number; more: boolean; loading: boolean; onClearFilters: () => void; onLoadMore: () => void; phone: boolean;
+  /** 被「全部」默认藏起来的废弃命中。和 hidden 一样多时,「清除筛选」清不出来,改成「显示已废弃」。 */
+  abandonedHidden?: number;
+  onShowAbandoned?: () => void;
 }) {
   useTranslation();
   const link = { color: colors.accent, fontSize: 12, fontWeight: '600' as const };
+  const onlyAbandoned = !!onShowAbandoned && abandonedHidden > 0 && hidden > 0 && hidden === abandonedHidden;
   return (
     <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', columnGap: spacing.md, rowGap: 2, minHeight: 28, paddingHorizontal: phone ? spacing.lg : spacing.xl, paddingVertical: 4 }} accessibilityLiveRegion="polite" testID="task-search-status">
       <Text style={{ color: colors.textSecondary, fontSize: 12 }} testID="task-search-count">{tr('taskSearch.count', { n: more ? `${shown}+` : shown })}</Text>
-      {hidden > 0 ? (
+      {hidden > 0 && !onlyAbandoned ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
           <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="task-search-hidden">{tr('taskSearch.hiddenByFilter', { n: hidden })}</Text>
           <Pressable accessibilityRole="button" onPress={onClearFilters} hitSlop={8} testID="task-search-clear-filters">
             <Text style={link}>{tr('taskSearch.clearFilters')}</Text>
           </Pressable>
         </View>
+      ) : null}
+      {onShowAbandoned && abandonedHidden > 0 ? (
+        <Pressable accessibilityRole="button" onPress={onShowAbandoned} hitSlop={8} testID="task-search-show-abandoned">
+          <Text style={link}>{tr('abandoned.showList', { n: abandonedHidden })}</Text>
+        </Pressable>
       ) : null}
       {loading ? <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="task-search-loading">{tr('taskSearch.loadingMore')}</Text>
         : more ? (

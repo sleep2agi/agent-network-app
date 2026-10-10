@@ -78,7 +78,7 @@ const boardFor = (cfg: HubConfig) => {
 function markFromBoard(cfg: HubConfig): void {
   const board = boardFor(cfg);
   if (!board) return;
-  if (board.capabilities.length) caps = board.capabilities;
+  caps = board.capabilities;
   const next = seenMark(board.items, null, state.lastSeen);
   if (next && next !== state.lastSeen) {
     setState(markUnreadSeen(state, next));
@@ -127,12 +127,12 @@ export function useTaskUnreadDriver(cfg: HubConfig | null, onTasksNow: boolean):
         if (plan.kind === 'changes') {
           const delta = await listRequirementChanges(cfg, plan.since);
           if (!alive || state !== at) return;
-          if (delta.capabilities.length) caps = delta.capabilities;
+          if (delta.capabilitiesKnown) caps = delta.capabilities;
           setState(applyUnreadDelta(state, delta, Date.now()));
         } else {
           const list = await listRequirementsFull(cfg, { summary: caps.includes('list_summary') });
           if (!alive || state !== at) return;
-          if (list.capabilities.length) caps = list.capabilities;
+          caps = list.capabilities;
           setState(applyUnreadList(state, list.rows, Date.now()));
         }
       } catch {
