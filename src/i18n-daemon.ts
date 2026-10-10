@@ -72,6 +72,7 @@ export const daemonTranslations = {
   'daemon.mgmt.startError.denied': ['你没有权限启动这个节点。', 'You do not have permission to start this node.'],
 
   'daemon.settings': ['设置', 'Settings'],
+  'daemon.mgmt.backToMenu': ['设置列表', 'Settings list'],
   'daemon.overview.nav': ['全览', 'Overview'],
   'daemon.overview.title': ['全览', 'Overview'],
   'daemon.overview.lead': ['探测这台 Daemon 的资源、系统、anet / npm 工具链，以及每个 Agent runtime 是否装好、能否就绪。缺的给出安装或修复命令。', 'Probe this daemon’s resources, OS, anet / npm toolchain, and whether each agent runtime is installed and ready. Gaps get an install or fix command.'],
