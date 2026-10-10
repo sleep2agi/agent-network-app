@@ -17,6 +17,7 @@ import {
   heartbeatMs,
   HOST_DEAD_MS,
   HOST_STALE_MS,
+  hostDaemonAlias,
   hostDisplayName,
   hostLevels,
   isDeadNode,
@@ -204,9 +205,11 @@ ck('null / NaN → none', levelTone(null) === 'none' && levelTone(NaN) === 'none
   ck('没有 daemon 的云主机 ⇒ 缩短', hostDisplayName(CLOUD, []) === 'iZab12cd…');
   ck('没有 daemon 的普通机器 ⇒ 原样', hostDisplayName('host-plain', daemons) === 'host-plain');
   ck('daemon 没报 hostname 不匹配任何机器', hostDisplayName('host-x', [{ alias: 'daemon-x', hostname: null }]) === 'host-x');
+  ck('hostDaemonAlias 与 displayName 同一套匹配规则', hostDaemonAlias('host-alpha', daemons) === 'daemon-alpha' && hostDaemonAlias(CLOUD, daemons) === 'daemon-cloud' && hostDaemonAlias('host-plain', daemons) === null);
   const r = hostLevels([row('d1', 'idle', 1, full('host-alpha')), row('c1', 'idle', 1, full(CLOUD)), row('p1', 'idle', 1, full('host-plain'))], NOW, daemons);
   const by = Object.fromEntries(r.hosts.map(h => [h.hostname, h]));
   ck('hostLevels 带出 displayName', by['host-alpha'].displayName === 'alpha' && by[CLOUD].displayName === 'cloud' && by['host-plain'].displayName === 'host-plain');
+  ck('hostLevels 带出 daemonAlias', by['host-alpha'].daemonAlias === 'daemon-alpha' && by[CLOUD].daemonAlias === 'daemon-cloud' && by['host-plain'].daemonAlias === null);
   ck('renamed 只在显示名 ≠ hostname 时为真', by['host-alpha'].renamed && by[CLOUD].renamed && !by['host-plain'].renamed);
   ck('完整 hostname 保留在 hostname 上(筛选键不变)', by[CLOUD].hostname === CLOUD);
 }
@@ -277,10 +280,12 @@ ck('null / NaN → none', levelTone(null) === 'none' && levelTone(NaN) === 'none
 {
   const root = path.join(import.meta.dir ?? path.dirname(new URL(import.meta.url).pathname), '..');
   const server = fs.readFileSync(path.join(root, 'src/ServerScreen.tsx'), 'utf8');
+  const app = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
   const agents = fs.readFileSync(path.join(root, 'src/AgentsScreen.tsx'), 'utf8');
   ck('服务器页用 hostLevels 算机器分区', server.includes('hostLevels(hostRows'));
   ck('服务器页读全量投影(light 没有 host 字段)', server.includes('fetchNodeStatus(cfg)'));
-  ck('点机器行 → onOpenAgents 带 host + aliases + 显示名', server.includes('onOpenAgents?.({ host: h.hostname, aliases: h.aliases, hostLabel: h.displayName })'));
+  ck('点机器行 → 有 daemon 时 onOpenDaemon(alias),否则 onOpenAgents 筛节点', server.includes('h.daemonAlias') && server.includes('onOpenDaemon?.(h.daemonAlias)') && server.includes('onOpenAgents?.({ host: h.hostname, aliases: h.aliases, hostLabel: h.displayName })'));
+  ck('App 把 Hub 概览机器行接到 chat(daemon 管理页)', app.includes('onOpenDaemon={alias => setScreen({ name: \'chat\', alias })}'));
   ck('主列表默认最多 HOSTS_COLLAPSED 台(只数在线机器)', server.includes('activeHosts.slice(0, HOSTS_COLLAPSED)'));
   ck('离线机器折叠在「离线机器 N 台」后面', server.includes('`离线机器 ${offlineHosts.length} 台`') && server.includes('showOfflineHosts'));
   ck('服务器页把 daemon 列表交给 hostLevels(起显示名)', server.includes('hostLevels(hostRows ?? [], Date.now(), daemons)') && server.includes('fetchHostSupervisors(cfg)'));

@@ -91,6 +91,8 @@ export default function DaemonManagementScreen({
   initialSection = 'nodes',
   onBack,
   onOpenLogs,
+  onOpenNodeSettings,
+  onOpenManagedChat,
   onCreate,
 }: {
   cfg: HubConfig;
@@ -100,6 +102,10 @@ export default function DaemonManagementScreen({
   initialSection?: DaemonSection;
   onBack: () => void;
   onOpenLogs?: () => void;
+  /** 打开本守护进程节点自身的节点设置页。 */
+  onOpenNodeSettings?: () => void;
+  /** 打开某个托管节点的会话。 */
+  onOpenManagedChat?: (alias: string) => void;
   onCreate?: (daemon: HostSupervisorDaemon) => void;
 }) {
   useTranslation();
@@ -191,6 +197,27 @@ export default function DaemonManagementScreen({
         <Text style={{ color: colors.textSecondary, fontSize: type.small }} numberOfLines={1}>{subtitle}</Text>
       </View>
       <Pressable
+        testID="daemon-mgmt-node-settings"
+        accessibilityRole="link"
+        disabled={!onOpenNodeSettings}
+        onPress={onOpenNodeSettings}
+        hitSlop={6}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, pressed && onOpenNodeSettings && { opacity: 0.6 }, !onOpenNodeSettings && { opacity: 0.45 }]}
+      >
+        <Ionicons name="settings-outline" size={16} color={colors.accent} />
+        <Text style={{ color: colors.accent, fontSize: type.body }}>{t('daemon.mgmt.nodeSettings')}</Text>
+      </Pressable>
+      <Pressable
+        testID="daemon-mgmt-domain-settings"
+        accessibilityRole="link"
+        onPress={() => setSection('skills')}
+        hitSlop={6}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, pressed && { opacity: 0.6 }]}
+      >
+        <Ionicons name="layers-outline" size={16} color={colors.accent} />
+        <Text style={{ color: colors.accent, fontSize: type.body }}>{t('daemon.mgmt.domainSettings')}</Text>
+      </Pressable>
+      <Pressable
         testID="daemon-mgmt-logs"
         accessibilityRole="link"
         disabled={!onOpenLogs}
@@ -264,6 +291,17 @@ export default function DaemonManagementScreen({
       )}
       {selected ? (
         <>
+          {onOpenManagedChat ? (
+            <Pressable
+              testID="daemon-mgmt-open-chat"
+              accessibilityRole="button"
+              accessibilityLabel={t('daemon.mgmt.openChat')}
+              onPress={() => onOpenManagedChat(selected.alias)}
+              style={({ pressed }) => [buttonStyle('primary'), { alignSelf: 'flex-start' }, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={buttonTextStyle('primary')}>{t('daemon.mgmt.openChat')}</Text>
+            </Pressable>
+          ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
             {actions.filter(action => action.visible).map(action => (
               <MgmtButton
@@ -305,7 +343,7 @@ export default function DaemonManagementScreen({
         <Ionicons name="git-network-outline" size={18} color={section === 'nodes' ? colors.accent : colors.textSecondary} />
         <Text style={[screenStyles.sectionItemText, section === 'nodes' && screenStyles.sectionItemTextActive]} numberOfLines={1}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
       </Pressable>
-      <Text style={screenStyles.sectionLabel}>{t('server.integrations')}</Text>
+      <Text style={screenStyles.sectionLabel}>{t('daemon.integrations')}</Text>
       <PendingSegmentedTabs
         stacked
         value={pendingSection}

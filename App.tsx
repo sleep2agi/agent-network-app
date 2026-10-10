@@ -782,6 +782,7 @@ function AppRoot() {
             alias={detachedAlias}
             onBack={() => {}}
             onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}
+            onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias })}
             desktop
             windowChrome={windowChrome}
           />
@@ -953,6 +954,7 @@ function AppRoot() {
                         onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                         onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId } })}
+                        onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
                         onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                         focusTaskId={screen.focusTaskId}
                         pinned={mobilePins.includes(screen.alias)}
@@ -988,6 +990,7 @@ function AppRoot() {
                   onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                   onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId } })}
+                  onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
                   onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                   focusTaskId={screen.focusTaskId}
                   pinned={mobilePins.includes(screen.alias)}
@@ -1069,6 +1072,7 @@ function AppRoot() {
                       cfg={cfg}
                       onOpenLogs={() => setScreen({ name: 'logs' })}
                       onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
+                      onOpenDaemon={alias => setScreen({ name: 'chat', alias })}
                       onOpenNodes={() => setScreen({ name: 'agents' })}
                       onCreateNode={() => setScreen({ name: 'picker' })}
                       onOpenScheduled={() => setScreen({ name: 'scheduled' })}
@@ -1280,6 +1284,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onBack={() => setScreen({ name: 'agents' })}
       onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
       onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId } })}
+      onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
       focusTaskId={screen.focusTaskId}
@@ -1303,6 +1308,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       cfg={cfg}
       onOpenLogs={() => setScreen({ name: 'logs' })}
       onOpenAgents={filter => setScreen(agentListScreen(filter, 'desktop') as Screen)}
+      onOpenDaemon={alias => setScreen({ name: 'chat', alias })}
       onOpenNodes={() => setScreen({ name: 'serverNodes' })}
       onCreateNode={() => setScreen({ name: 'picker' })}
       onOpenScheduled={() => setScreen({ name: 'scheduled' })}

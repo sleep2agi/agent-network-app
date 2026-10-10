@@ -2,7 +2,11 @@ import { registerTranslations } from './i18n';
 
 /** Board #908 — daemon management page. UI copy only. */
 export const daemonTranslations = {
+  'daemon.integrations': ['Daemon 域集成', 'Daemon integrations'],
   'daemon.mgmt.kicker': ['守护进程', 'Daemon'],
+  'daemon.mgmt.nodeSettings': ['Daemon 节点设置', 'Daemon node settings'],
+  'daemon.mgmt.domainSettings': ['虚拟机域设置', 'VM domain settings'],
+  'daemon.mgmt.openChat': ['对话', 'Chat'],
   'daemon.mgmt.intro': ['守护节点只执行创建 / 停止 / 重启 / 删除等结构化命令，不能对话。', 'Daemon nodes only run structured commands such as create, stop, restart, and delete. They cannot chat.'],
   'daemon.mgmt.logs': ['运行日志', 'Runtime logs'],
   'daemon.mgmt.logsUnavailable': ['这个窗口打不开运行日志。', 'Runtime logs cannot be opened from this window.'],
