@@ -16,7 +16,7 @@ import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import { sendFailureReason, type SendFailureReason } from './send-failure-reason';
-import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
@@ -61,9 +61,8 @@ import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
-import { chatComposerKind, daemonHostnameOf, isHostSupervisorAlias, managedAliasesOf, managedNodesFilter, nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
-import DaemonComposerNotice from './DaemonComposerNotice';
-import type { AgentListFilter } from './server-stats';
+import { chatComposerKind, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
+import DaemonManagementScreen from './DaemonManagementScreen';
 import { echoSupersededByFetched } from './chat-echo';
 import { messageMenuGroups, selectionBarActions, type MessageMenuKey } from './message-menu-model';
 import { agentStatusLabel, buildQuote, compactQuoteText, confirmedOutboxIds, copyTextOf, copiedToastVisible, COPIED_TOAST_MS, parseQuoted, quoteLabel, type QuoteRef, mergeMessagesNewestFirst, msgKey, removeMessage, shouldShowJumpPill, nextUnread, jumpPillLabel, canSend, shouldSendOnEnter, composerShortcutHint } from './chat-actions';
@@ -284,8 +283,8 @@ interface Props {
   windowChrome?: PopoutChrome;
   /** #499 负责 Agent 发的到期提醒:气泡下「查看任务 ›」打开那张任务(同顶部提示)。不传 = 不画(分离聊天窗没有任务页)。 */
   onOpenTask?: (requirementId: string, networkId: string | null) => void;
-  /** #692 守护节点会话页的「托管的节点」入口:打开按这些别名筛过的 Agent 列表。不传(分离聊天窗)= 不画这个入口。 */
-  onOpenAgents?: (filter: AgentListFilter) => void;
+  /** #908 守护进程管理页的「新建节点」:打开现有向导。不传(分离聊天窗)= 按钮置灰。 */
+  onCreateNode?: (daemon: HostSupervisorDaemon) => void;
   /** #769: 点开这个会话的那一行所在网络。发送 / 历史 / 已读 / 附件都打到它,不是账号当前网络。 */
   networkId?: string;
 }
@@ -298,7 +297,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onOpenAgents }: Props) {
+export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onCreateNode }: Props) {
   useTranslation();
   // #769: everything below is agent-scoped — use THIS agent's network, not the account's current one.
   const cfg = useMemo(() => cfgForAgent(accountCfg, alias, networkId), [accountCfg, alias, networkId]);
@@ -327,10 +326,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const { setDraft } = useComposerDraft(composerDraftKey, draft, setDraftState);
   // 设置 → 快捷键:Enter 发送(默认)还是 Ctrl/⌘+Enter 发送。
   const sendKey = useSyncExternalStore(subscribeShortcuts, sendKeyPref, sendKeyPref);
-  // #692 守护节点(host_supervisor):不能对话 —— 输入框换成说明条(DaemonComposerNotice),历史消息照常。
+  // #908 守护节点(host_supervisor):整页换成管理页,不进对话。角色还没到时仍先按普通会话画。
   useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
   const composerKind = chatComposerKind(isHostSupervisorAlias(alias));
-  const managedAliases = managedAliasesOf(alias);
   // Fold/unfold remounts this screen (phone stack ⇄ two-pane); carry the unsent
   // draft across that remount only. Ordinary back/leave still drops it, as before.
   const draftHandoffKey = `chatDraft:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
@@ -1976,6 +1974,20 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     }
   };
 
+  if (composerKind === 'daemon') {
+    return (
+      <DaemonManagementScreen
+        cfg={cfg}
+        alias={alias}
+        desktop={desktop}
+        hideBack={hideBack}
+        onBack={onBack}
+        onOpenLogs={onOpenNodeSettings ? () => { requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), 'logs'); onOpenNodeSettings(); } : undefined}
+        onCreate={onCreateNode}
+      />
+    );
+  }
+
   return (
     <KeyboardAvoidingView
       style={[styles.root, iosKeyboard.style]}
@@ -2582,14 +2594,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       />
 
 
-      {composerKind === 'daemon' ? (
-        <DaemonComposerNotice
-          managedCount={managedAliases.length}
-          onOpenManaged={onOpenAgents ? () => onOpenAgents(managedNodesFilter(alias, managedAliases, daemonHostnameOf(alias))) : undefined}
-          onOpenLogs={onOpenNodeSettings ? () => { requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), 'logs'); onOpenNodeSettings(); } : undefined}
-          bottomInset={desktop ? 0 : composerInset}
-        />
-      ) : desktop ? (
+      {desktop ? (
         <>
         <View
           {...composerPan.panHandlers}
