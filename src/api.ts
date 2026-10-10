@@ -1412,7 +1412,7 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
 export interface UpdateNodeConfigRequest {
   nodeId: string;
   baseRevision: number;
-  patch: { model: string };
+  patch: { model?: string; flags?: Record<string, unknown> };
 }
 
 export type UpdateNodeConfigResult =
@@ -1422,10 +1422,13 @@ export type UpdateNodeConfigResult =
 
 export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequest): Promise<UpdateNodeConfigResult> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const patch: Record<string, unknown> = {};
+  if (typeof req.patch.model === 'string') patch.model = req.patch.model;
+  if (req.patch.flags && typeof req.patch.flags === 'object') patch.flags = req.patch.flags;
   const args = {
     node_id: req.nodeId,
     base_revision: req.baseRevision,
-    patch: { model: req.patch.model },
+    patch,
     ...(networkId ? { network_id: networkId } : {}),
   };
   try {

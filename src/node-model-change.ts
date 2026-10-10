@@ -11,6 +11,7 @@
 export interface NodeConfigView {
   config_revision: number;
   model: string | null;
+  flags?: Record<string, unknown>;
   config_update_capable: boolean;
 }
 

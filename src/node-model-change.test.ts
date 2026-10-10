@@ -49,14 +49,14 @@ check('unknown runtime suggests nothing (custom id still allowed)', suggestedMod
 // wiring contracts
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 check('api reads GET /api/nodes/:id/config and treats 404 as no endpoint', api.includes('/api/nodes/${encodeURIComponent(nodeId)}/config') && api.includes('if (res.status === 404 || res.status === 501) return null;'));
-check('api calls update_node_config with base_revision and patch.model', api.includes("name: 'update_node_config'") && api.includes('base_revision: req.baseRevision') && api.includes('patch: { model: req.patch.model }'));
+check('api calls update_node_config with base_revision and patch fields', api.includes("name: 'update_node_config'") && api.includes('base_revision: req.baseRevision') && api.includes('req.patch.model') && api.includes('req.patch.flags'));
 check('api maps HTTP 409 to conflict', api.includes('if (res.status === 409) return { ok: false, conflict: true'));
 const section = readFileSync(new URL('./NodeModelSection.tsx', import.meta.url), 'utf8');
 check('section polls fetchNodeConfig while restarting and applies afterPoll', section.includes('fetchNodeConfig(cfg, node.node_id)') && section.includes('afterPoll('));
 check('section disables the control from modelControlAvailability and shows its hint', section.includes('modelControlAvailability(') && section.includes('availability.hint'));
 check('section offers suggested models plus a custom id input', section.includes('suggestedModels(') && section.includes('TextInput'));
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
-check('detail screen mounts the model section for editable nodes only', detail.includes('<NodeModelSection cfg={cfg} node={node} />') && detail.includes("!readOnly && node ? <NodeModelSection"));
+check('detail screen mounts the model section whenever node_id is known', detail.includes('<NodeModelSection cfg={cfg} node={node} />') && detail.includes('{node ? <NodeModelSection'));
 
 // stale-catalog resilience (2026-09-23: mimo-v2.5-free withdrawn from OpenCode Zen while still listed)
 check('catalog no longer lists the withdrawn opencode/mimo-v2.5-free', !Object.values(RUNTIME_MODEL_SUGGESTIONS).flat().includes('opencode/mimo-v2.5-free'));

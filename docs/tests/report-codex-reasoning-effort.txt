@@ -1,0 +1,22 @@
+Codex 思考程度 — dashboard / node detail (flags.modelReasoningEffort)
+Date: 2026-10-10
+
+Contract
+--------
+- App: GET /api/nodes/:id/config reads flags.modelReasoningEffort; POST MCP
+  update_node_config with patch.flags.modelReasoningEffort (hot tier).
+- Hub + agent-node: ALLOWED_FLAGS adds modelReasoningEffort (enum:
+  none/minimal/low/medium/high/xhigh).
+- codex-app-server: each turn/start carries `effort` from live fileConfig.flags.
+- codex-sdk: buildCodexSdkThreadOptions reads flags.modelReasoningEffort.
+
+UI
+--
+- Node detail + chat info (readOnly) 「模型与运行时」: segmented 思考程度 chips.
+- codex-app-server and codex-sdk only.
+
+Verification
+------------
+- src/node-codex-reasoning.test.ts 7/7
+- tests/codex-reasoning-effort/drive.mjs PASS (fixture Hub)
+- Screenshot: docs/tests/screenshots-codex-reasoning/codex-reasoning-effort-applied.png
