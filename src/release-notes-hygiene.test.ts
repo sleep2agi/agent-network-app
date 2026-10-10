@@ -59,6 +59,7 @@ const userFacingContent: Array<[string, RegExp]> = [
   ['names the update as signed', /\bsigned\b/i],
   ['names macOS', /\bmacOS\b/],
   ['names Windows', /\bWindows\b/],
+  ['names Ubuntu', /\bUbuntu\b/],
   ['describes an update', /\bupdates?\b/i],
 ];
 

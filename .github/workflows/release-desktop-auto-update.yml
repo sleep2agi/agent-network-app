@@ -7,6 +7,11 @@ on:
         description: Exact commit on main to release
         required: true
         type: string
+      publish:
+        description: Create the draft GitHub Release. False builds and smoke-tests only; it does not upload a Release.
+        required: false
+        default: true
+        type: boolean
 
 permissions:
   contents: write
@@ -26,6 +31,11 @@ jobs:
             args: --bundles app,dmg
           - platform: windows-latest
             args: --bundles nsis,msi
+          # Ubuntu 24.04 amd64 matches tests/linux-deb-package. Production
+          # tauri.conf.json is used, so updater endpoints stay in the binary
+          # and the .deb is minisign-signed. The test overlay is not applied.
+          - platform: ubuntu-24.04
+            args: --bundles deb
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -44,6 +54,21 @@ jobs:
           # SHA can legitimately precede the current tip while awaiting approval.
           git fetch origin main
           git merge-base --is-ancestor "$resolved" origin/main
+
+      - name: Install Linux desktop build dependencies
+        if: runner.os == 'Linux'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            build-essential pkg-config patchelf libssl-dev libdbus-1-dev \
+            libwebkit2gtk-4.1-dev libgtk-3-dev libayatana-appindicator3-dev \
+            librsvg2-dev libxdo-dev file \
+            gnome-keyring dbus-x11 xvfb
+          command -v dpkg-deb
+          command -v gnome-keyring-daemon
+          command -v dbus-run-session
+          command -v xvfb-run
 
       - uses: actions/setup-node@v4
         with:
@@ -71,10 +96,23 @@ jobs:
         run: cargo check --locked
       - name: Verify native credential-store persistence
         working-directory: src-tauri
-        run: cargo test --locked desktop_session_round_trip_uses_native_store -- --nocapture
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Linux" ] && [ "${ANET_LINUX_KEYRING_ACTIVE:-}" != "1" ]; then
+            export ANET_LINUX_KEYRING_ACTIVE=1 ANET_ISOLATED_KEYRING_TEST=1
+            exec "$GITHUB_WORKSPACE/scripts/with-linux-test-keyring.sh" bash "$0"
+          fi
+          cargo test --locked desktop_session_round_trip_uses_native_store -- --nocapture
       - name: Verify profile registry excludes secrets
         working-directory: src-tauri
+        shell: bash
         run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "Linux" ] && [ "${ANET_LINUX_KEYRING_ACTIVE:-}" != "1" ]; then
+            export ANET_LINUX_KEYRING_ACTIVE=1 ANET_ISOLATED_KEYRING_TEST=1
+            exec "$GITHUB_WORKSPACE/scripts/with-linux-test-keyring.sh" bash "$0"
+          fi
           cargo test --locked profile_registry_metadata_never_serializes_secrets -- --nocapture
           cargo test --locked corrupt_profile_registry_is_quarantined_without_data_loss -- --nocapture
           cargo test --locked revoked_profile_marker_is_isolated -- --nocapture
@@ -95,9 +133,10 @@ jobs:
           chmod 600 "$key_dir/AuthKey_${APPLE_API_KEY}.p8"
           echo "APPLE_API_KEY_PATH=$key_dir/AuthKey_${APPLE_API_KEY}.p8" >> "$GITHUB_ENV"
 
-      # One draft release receives both platform bundles, their mandatory
-      # updater signatures, and latest.json. Publishing the draft atomically
-      # makes it visible to installed clients via releases/latest.
+      # One draft release receives the macOS, Windows, and Linux bundles, their
+      # updater signatures, and latest.json. Publishing the draft makes it
+      # visible to installed clients. Linux signs ANet_<version>_amd64.deb;
+      # tauri-action merges linux-x86_64 and linux-x86_64-deb into latest.json.
       #
       # 🔴 `releaseBody` is USER-FACING, not a note to ourselves: tauri-action
       # copies it verbatim into latest.json `notes`, and the in-app updater
@@ -106,6 +145,7 @@ jobs:
       # afterwards) belongs in docs/desktop-release-sop.md — never in a string
       # that ships to users. src/release-notes-hygiene.test.ts enforces this.
       - uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
+        if: inputs.publish == true
         env:
           GITHUB_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
@@ -119,7 +159,7 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: ANet Desktop v__VERSION__
           releaseBody: |-
-            Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).
+            Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).
 
             What's new in 0.2.227:
             - 桌面应用和安装包名称统一为 ANet，保留原有账号和数据存储标识。
@@ -1114,14 +1154,66 @@ jobs:
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
+      # Same bundles and signing material as the release step. Nothing is uploaded
+      # to a GitHub Release. macOS still notarizes when this leg is approved.
+      - name: Build signed bundles without uploading a release
+        if: inputs.publish == false
+        shell: bash
+        env:
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+          APPLE_CERTIFICATE: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE || '' }}
+          APPLE_CERTIFICATE_PASSWORD: ${{ runner.os == 'macOS' && secrets.APPLE_CERTIFICATE_PASSWORD || '' }}
+          APPLE_SIGNING_IDENTITY: "${{ runner.os == 'macOS' && 'Developer ID Application: wenxing hu (446BLT75JZ)' || '' }}"
+          APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
+          APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
+        run: npx tauri build ${{ matrix.args }}
+
+      - name: Assert Linux release deb, signature, endpoints, and checksums
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          version="$(node -p "require('./src-tauri/tauri.conf.json').version")"
+          product="$(node -p "require('./src-tauri/tauri.conf.json').productName")"
+          mapfile -t debs < <(find src-tauri/target/release/bundle/deb -type f -name '*.deb' | sort)
+          mapfile -t sigs < <(find src-tauri/target/release/bundle/deb -type f -name '*.deb.sig' | sort)
+          test "${#debs[@]}" -eq 1
+          test "${#sigs[@]}" -eq 1
+          deb="${debs[0]}"
+          sig="${sigs[0]}"
+          test "$(basename "$deb")" = "${product}_${version}_amd64.deb"
+          test "$(basename "$sig")" = "${product}_${version}_amd64.deb.sig"
+          test "$(dpkg-deb --field "$deb" Architecture)" = amd64
+          test "$(dpkg-deb --field "$deb" Version)" = "$version"
+          binary='src-tauri/target/release/agent-network-desktop'
+          test -x "$binary"
+          grep -a -F 'https://anet.sh/desktop/update/latest.json' "$binary"
+          grep -a -F 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/desktop/latest/latest.json' "$binary"
+          {
+            echo "### Linux release .deb"
+            echo
+            echo 'Production updater endpoints are present. Checksums are sha256sum lines; the ModelScope mirror writes SHA256SUMS from the GitHub asset digests after publish.'
+            echo
+            echo '```'
+            sha256sum "$deb" "$sig"
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+
       - name: Smoke exact packaged app with bundled local Hub
         shell: bash
         run: |
           set -euo pipefail
+          if [ "$RUNNER_OS" = "Linux" ] && [ "${ANET_LINUX_KEYRING_ACTIVE:-}" != "1" ]; then
+            export ANET_LINUX_KEYRING_ACTIVE=1 ANET_ISOLATED_KEYRING_TEST=1
+            exec "$GITHUB_WORKSPACE/scripts/with-linux-test-keyring.sh" xvfb-run -a bash "$0"
+          fi
           smoke_root="$RUNNER_TEMP/packaged-local-hub-smoke"
           mkdir -p "$smoke_root/AppData/Roaming" "$smoke_root/AppData/Local"
           if [ "$RUNNER_OS" = "macOS" ]; then
             binary=$(find src-tauri/target/release/bundle/macos -path '*.app/Contents/MacOS/agent-network-desktop' -print -quit)
+          elif [ "$RUNNER_OS" = "Linux" ]; then
+            binary='src-tauri/target/release/agent-network-desktop'
           else
             binary='src-tauri/target/release/agent-network-desktop.exe'
           fi
@@ -1271,12 +1363,90 @@ jobs:
           if ($smoke.ExitCode -ne 0) { throw "reinstalled smoke failed: $($smoke.ExitCode)" }
           if (-not (Test-Path $database) -or (Get-Item $database).Length -eq 0) { throw 'reinstall lost retained database' }
 
+      - name: Audit Linux deb removal and reinstall data retention
+        if: runner.os == 'Linux'
+        shell: bash
+        run: |
+          set -euo pipefail
+          if [ "${ANET_LINUX_KEYRING_ACTIVE:-}" != "1" ]; then
+            export ANET_LINUX_KEYRING_ACTIVE=1 ANET_ISOLATED_KEYRING_TEST=1
+            exec "$GITHUB_WORKSPACE/scripts/with-linux-test-keyring.sh" xvfb-run -a bash "$0"
+          fi
+          deb="$(find src-tauri/target/release/bundle/deb -type f -name '*.deb' -print -quit)"
+          test -n "$deb"
+          pkg="$(dpkg-deb --field "$deb" Package)"
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$deb"
+          test "$(dpkg-query -W -f='${Status}' "$pkg")" = 'install ok installed'
+          binary="$(command -v agent-network-desktop)"
+          test -x "$binary"
+          retention_root="$RUNNER_TEMP/install-retention/.anet/app"
+          ANET_PACKAGED_SMOKE=1 ANET_PACKAGED_SMOKE_ROOT="$retention_root" \
+            "$binary" --smoke-local-hub
+          test -s "$retention_root/local-hub/data/commhub.db"
+          test -s "$retention_root/profiles/index.json"
+          sudo dpkg -r "$pkg"
+          test ! -e "$binary"
+          test -s "$retention_root/local-hub/data/commhub.db"
+          test -s "$retention_root/profiles/index.json"
+          sudo DEBIAN_FRONTEND=noninteractive apt-get install -y --no-install-recommends "$deb"
+          binary="$(command -v agent-network-desktop)"
+          test -x "$binary"
+          ANET_PACKAGED_SMOKE=1 ANET_PACKAGED_SMOKE_ROOT="$retention_root" \
+            "$binary" --smoke-local-hub
+          test -s "$retention_root/local-hub/data/commhub.db"
+
       - name: Enforce desktop distribution size ceiling
         shell: bash
         run: |
-          oversized="$(find src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' \) -size +55M -print)"
+          oversized="$(find src-tauri/target/release/bundle -type f \( -name '*.dmg' -o -name '*.exe' -o -name '*.msi' -o -name '*.deb' \) -size +55M -print)"
           if [ -n "$oversized" ]; then
             echo "::error::Desktop artifact exceeds the 55 MiB distribution ceiling"
             echo "$oversized"
             exit 1
           fi
+
+      - name: Stage dry-run bundles
+        if: inputs.publish == false
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/dry-run"
+          find src-tauri/target/release/bundle -type f \( -name '*.deb' -o -name '*.sig' -o -name '*.dmg' -o -name '*.exe' -o -name '*.msi' -o -name '*.tar.gz' \) > "$RUNNER_TEMP/dry-run-files.txt"
+          test -s "$RUNNER_TEMP/dry-run-files.txt"
+          while IFS= read -r file; do
+            cp "$file" "$RUNNER_TEMP/dry-run/"
+          done < "$RUNNER_TEMP/dry-run-files.txt"
+          find "$RUNNER_TEMP/dry-run" -type f -print
+          test -n "$(ls -A "$RUNNER_TEMP/dry-run")"
+          {
+            echo "### Dry run"
+            echo
+            echo 'No GitHub Release was created and nothing was uploaded to ModelScope.'
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: actions/upload-artifact@v4
+        if: inputs.publish == false
+        with:
+          name: dry-run-${{ matrix.platform }}-${{ github.sha }}
+          path: ${{ runner.temp }}/dry-run/
+          retention-days: 7
+          if-no-files-found: error
+
+  verify-draft:
+    needs: build-release
+    if: inputs.publish == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require draft assets, Linux updater entries, and checksums
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: node scripts/verify-desktop-release-draft.mjs

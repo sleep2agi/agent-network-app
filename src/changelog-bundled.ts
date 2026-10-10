@@ -3,7 +3,7 @@
 // 设置 → 关于 → 更新日志 shows these notes when the mirror / GitHub cannot be reached (src/changelog-source.ts).
 
 export const BUNDLED_RELEASE_BODY: string = [
-  "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64).",
+  "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
   "What's new in 0.2.227:",
   "- 桌面应用和安装包名称统一为 ANet，保留原有账号和数据存储标识。",
