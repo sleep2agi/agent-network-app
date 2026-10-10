@@ -85,7 +85,9 @@ jobs:
           set -euo pipefail
           requested="${REQUESTED_COMMIT:-$GITHUB_SHA}"
           resolved="$(git rev-parse HEAD)"
-          [[ "$requested" =~ ^[0-9a-f]{40}$ && "$resolved" == "$requested" ]]
+          # Separate tests. A combined `[[ =~ && == ]]` succeeds on macOS bash 3.2.
+          [[ "$requested" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$resolved" == "$requested" ]]
           # Full history from checkout; do not re-shallow main (the sha may
           # legitimately precede the current tip).
           git fetch origin main
