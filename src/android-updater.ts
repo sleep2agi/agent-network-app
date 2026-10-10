@@ -9,8 +9,10 @@
  *      安卓通道:android/agent-network-<ver>.apk.sha256(必需,缺了报错不装)+ HEAD APK。
  *      本版说明(可缺,永远不挡更新):两个通道都并行读 android/<ver>/notes.md 与 desktop/<ver>/latest.json,
  *      按通道定先后;都没有才按 tag 问一次 GitHub release 正文;还没有 → 空,更新页给「查看更新说明」链接。
- *   3. 只有两种情况才打 GitHub REST(未登录每 IP 每小时 60 次):镜像本身失败(网络/超时/非 2xx/格式不对),
- *      或镜像已推进到新版本但那一版的安卓包还没同步(SHA256SUMS 里没有 APK)。
+ *   3. desktop 通道 incomplete(VERSION 新、SHA256SUMS 无 APK)时先问安卓通道同一版;安卓通道有 sha
+ *      就给出可装的包(0.2.230+ APK 常只在 android/,不在 desktop/)。
+ *   4. 只有两种情况才打 GitHub REST(未登录每 IP 每小时 60 次):镜像本身失败(网络/超时/非 2xx/格式不对),
+ *      或两个通道都还没有可校验的安卓包。
  *   两个 VERSION 都读不到/认不出也算「镜像本身失败」。
  *   为了镜像滞后去让每次检查都打 GitHub,正是 0.2.100 用光配额的原因,所以不这么做;滞后靠安卓通道解决
  *   (发版时安卓包、sha、android/latest/VERSION 由 modelscope-android-publish 一次写入)。
@@ -213,7 +215,16 @@ async function checkMirror(fetchImpl: typeof fetch, currentVersion: string): Pro
   ]);
   if (!desktop && !android) throw new Error('mirror VERSION unavailable or unparseable on both channels');
   if (android && (!desktop || compareVersions(android, desktop) === 1)) return checkAndroidChannel(fetchImpl, android, currentVersion);
-  return checkDesktopChannel(fetchImpl, desktop!, currentVersion);
+  const desktopResult = await checkDesktopChannel(fetchImpl, desktop!, currentVersion);
+  // desktop/latest/VERSION 已前进、但 desktop/<ver>/SHA256SUMS 还没有 APK(0.2.230+ 起 APK 只走
+  // modelscope-android-publish → android/,不再挂到 GitHub release / desktop 镜像)。同版本 tie 走
+  // desktop 时会卡在 incomplete →「正在同步」红字。桌面通道 incomplete 时改问安卓通道同一版:
+  // sha 在就给出可装的包;sha 也不在才把 incomplete 交给 resolveUpdate 去问 GitHub。
+  if (desktopResult.kind === 'incomplete') {
+    const fromAndroid = await checkAndroidChannel(fetchImpl, desktopResult.version, currentVersion);
+    if (fromAndroid.kind === 'available') return fromAndroid;
+  }
+  return desktopResult;
 }
 
 /** 镜像上 android/<ver>/notes.md:只在它确实含这一版的段落时才用。 */

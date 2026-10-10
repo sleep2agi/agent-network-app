@@ -44,6 +44,9 @@ export const ANDROID_RELEASES_PAGE = `https://github.com/${ANDROID_RELEASES_REPO
  *
  * 检查时两个 VERSION 都读,取较高的;同版本走 desktop 通道(有 release 说明)。各通道从自己的路径下载、
  * 对自己的 sha 文件校验;安卓通道的 sha 文件缺失/认不出/写的是别的文件名 → 报错,绝不给出没法校验的包。
+ * 同版本时若 desktop 的 SHA256SUMS 还没有 APK(incomplete),检查逻辑会再问安卓通道同一版(见
+ * android-updater.ts checkMirror):0.2.230+ 起 APK 常只由 modelscope-android-publish 写入 android/,
+ * 不再挂到 GitHub release,desktop 镜像也就没有 APK 行。
  * 同一脚本写这三个文件,是一个 commit;VERSION 先于 sha 可见的窗口不存在,但仍按上面的规则防御。
  */
 export const MIRROR_BASE = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master';
