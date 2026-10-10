@@ -329,6 +329,8 @@ for (const layout of ['desktop', 'phone']) {
       await page.locator('[data-testid="daemon-mgmt-settings-domain"]').click({ timeout: 5000 });
       await page.locator('[data-testid="daemon-pending-skills"]').waitFor({ timeout: 8000 });
       if (OUT) await page.screenshot({ path: `${OUT}/${tag}-hub-daemon-domain-settings.png`, fullPage: false });
+      // 手机窄屏:设置列表和分区二选一,先点「‹ 设置列表」回到列表才有「托管的节点」入口(桌面分栏没有这个按钮)。
+      if (layout === 'phone') await page.locator('[data-testid="daemon-section-menu-back"]').click({ timeout: 5000 });
       await page.locator('[data-testid="daemon-section-nodes"]').click({ timeout: 3000 }).catch(() => {});
       await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click({ timeout: 3000 }).catch(() => {});
       const chatPane = await page.locator('[data-testid="chat-pane"]').count();
