@@ -15,6 +15,11 @@ created = json.loads(Path('/evidence/v1-registration-proof.json').read_text())
 assert created['network_id'] == network
 node = Path.home() / 'v1-native/.anet/nodes/v1-native'
 selected_model = os.getenv('TEST_SELECTED_MODEL', 'openai/gpt-4.1-selected')
+phase = os.getenv('TEST_V1_MODEL_PHASE', '')
+assert phase in ['', 'started', 'restarted']
+suffix = '-' + phase if phase else ''
+prompt = ('ANET_MODEL_BINDING_MAIN_PROMPT_' + phase + ': Return a short test reply.'
+          if phase else 'ANET_MODEL_BINDING_MAIN_PROMPT: Return a short test reply.')
 expect_rejected = os.getenv('TEST_EXPECT_MODEL_REJECTION') == '1'
 if expect_rejected:
     assert selected_model == 'openai/not-in-fixture'
@@ -77,7 +82,7 @@ if os.getenv('TEST_DAEMON_PREFIX_PREPARE'):
     candidate['verified_worker_pid'] = matching[0]
     print('PASS: actual native-created worker executes exact TEST-ONLY runtime CLI hash', flush=True)
 print('PASS: native UI persisted exact V1 safe model; no model reply claimed yet', flush=True)
-sent = api('/api/task', {'alias': 'v1-native', 'task': 'ANET_MODEL_BINDING_MAIN_PROMPT: Return a short test reply.', 'network_id': network})
+sent = api('/api/task', {'alias': 'v1-native', 'task': prompt, 'network_id': network})
 assert sent.get('ok') and sent.get('message_id')
 safe_children = []
 
@@ -98,7 +103,7 @@ def answered():
             runtime_config_path = Path(env[b'XDG_CONFIG_HOME'].decode()) / 'opencode/opencode.json'
             runtime_config = json.loads(runtime_config_path.read_text())
             # Redacted diagnostics only: never persist auth, argv or full env.
-            Path('/evidence/v1-acp-observation.json').write_text(json.dumps({
+            Path('/evidence/v1-acp-observation' + suffix + '.json').write_text(json.dumps({
                 'pid': int(proc.name), 'pure': True, 'wildcard_deny': True,
                 'node_selected_model': selected_model,
                 'runtime_config_model': runtime_config.get('model'),
@@ -142,11 +147,11 @@ else:
     print('PASS: native-created V1 consumes fixture-only model response with safe ACP child', flush=True)
     main = [r for r in turns if isinstance(r.get('input'), list)
             and any(p.get('role') == 'system' and str(p.get('content')).startswith('You are opencode,') for p in r['input'])
-            and 'ANET_MODEL_BINDING_MAIN_PROMPT' in json.dumps(r['input'])]
+            and prompt in json.dumps(r['input'])]
     assert len(main) == 1, 'exactly one real main task request'
     assert all(r['model'] == expected for r in main), 'native V1 provider model mismatch'
 assert all(r['path'] == '/v1/responses' and r['host'] == 'api.openai.com' for r in turns)
-Path('/evidence/v1-model-proof.json').write_text(json.dumps({
+Path('/evidence/v1-model-proof' + suffix + '.json').write_text(json.dumps({
     'source': created['source'], 'deb_sha256': created['deb_sha256'],
     'node_id': created['node_id'], 'network_id': network, 'mode': 'headless',
     'model': selected_model, 'revision': view['config_revision'], 'safe_acp_pids': sorted(set(safe_children)),
