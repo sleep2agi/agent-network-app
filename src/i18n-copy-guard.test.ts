@@ -18,6 +18,7 @@ import './i18n-fatal';
 import './node-adoption';
 import './node-control-access';
 import './i18n-provider';
+import './i18n-backend-pending';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
@@ -44,6 +45,7 @@ migrated.push('src/CodexProviderFields.tsx');
 migrated.push('src/OpenCodeProviderNote.tsx');
 migrated.push('src/DaemonRuntimeProviders.tsx');
 migrated.push('src/DaemonManagementScreen.tsx');
+migrated.push('src/BackendPendingDemo.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

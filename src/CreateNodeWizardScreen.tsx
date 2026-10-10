@@ -15,6 +15,7 @@ import { buttonStyle, buttonTextStyle, elevated } from './elevation';
 import { readinessFor, readinessSelectable } from './runtime-readiness';
 import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
 import CodexProviderFields from './CodexProviderFields';
+import { ProviderConfigDemo } from './BackendPendingDemo';
 import DaemonRuntimeProviders from './DaemonRuntimeProviders';
 import OpenCodeProviderNote from './OpenCodeProviderNote';
 import { readListProviders } from './daemon-provider-read';
@@ -835,6 +836,15 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             ) : null}
             {surface.kind === 'codex' && providerForm.choice !== 'none' && providerIssues.length === 0 ? (
               <Text testID="codex-provider-confirm-banner" style={styles.hint}>{t('provider.err.hub_not_ready')}</Text>
+            ) : null}
+            {surface.kind === 'codex' && providerForm.choice !== 'none' ? (
+              <ProviderConfigDemo
+                key={providerForm.choice}
+                runtimeId={runtimeId}
+                value={providerForm}
+                transportOk={transportOk}
+                onClearKey={() => setProviderForm(form => ({ ...form, apiKey: '' }))}
+              />
             ) : null}
           </View>
         )}
