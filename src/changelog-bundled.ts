@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.232:",
+  "- Codex 节点可编辑思考程度与自动执行权限，配置经 Hub 下发到节点。",
+  "- Daemon 设置新增「全览」：探测本机 CPU/内存/磁盘、工具链与各 Agent 运行时就绪状态，缺口提供可复制安装命令。",
+  "- Daemon / Hub 设置新增「Runtime 支持」页，按功能 × 运行时展示支持矩阵。",
+  "- 本机 Daemon 安装与升级更安全：固定 CLI / agent-node 版本，先确认旧进程退出再换包，避免误发新令牌。",
+  "",
   "What's new in 0.2.231:",
   "- Hub 概览里点一台机器，可直接进入该守护进程（Daemon）的管理页。",
   "- Hub 侧栏新增 SKILLS、令牌、环境变量、Provider 四个管理页（目前为演示数据，标明「演示数据 · 后端开发中」）。",
@@ -1019,6 +1025,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.231": "2026-10-10T16:26:18Z",
   "0.2.230": "2026-10-10T14:08:08Z",
   "0.2.229": "2026-10-10T10:52:24Z",
   "0.2.228": "2026-10-10T05:38:31Z",
