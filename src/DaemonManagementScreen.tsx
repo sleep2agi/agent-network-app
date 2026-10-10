@@ -106,7 +106,6 @@ export default function DaemonManagementScreen({
   const [confirmAlias, setConfirmAlias] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
-  const [demos, setDemos] = useState(false);
 
   const load = useCallback(async () => {
     try {
@@ -232,18 +231,7 @@ export default function DaemonManagementScreen({
         <MgmtButton testID="daemon-mgmt-probe" action={probe} busy={busy} onPress={() => {}} />
       </View>
       <ActionNotes actions={[create, probe]} />
-      <Pressable
-        testID="daemon-open-pending-demos"
-        accessibilityRole="button"
-        accessibilityLabel={demos ? t('backendPending.close') : t('backendPending.open')}
-        accessibilityState={{ expanded: demos }}
-        hitSlop={6}
-        onPress={() => setDemos(open => !open)}
-        style={({ pressed }) => [{ alignSelf: 'flex-start', paddingVertical: spacing.xs }, pressed && { opacity: 0.6 }]}
-      >
-        <Text style={{ color: colors.accent, fontSize: type.body }}>{demos ? t('backendPending.close') : t('backendPending.open')}</Text>
-      </Pressable>
-      {demos ? <DaemonPendingDemos /> : null}
+      <DaemonPendingDemos />
       {!onOpenLogs ? <Text testID="daemon-mgmt-reason-logs" style={{ color: colors.textMuted, fontSize: type.small, lineHeight: 18 }}>{t('daemon.mgmt.logsUnavailable')}</Text> : null}
       {failed ? <Text style={{ color: colors.blocked, fontSize: type.small }}>{t('daemon.mgmt.loadFailed')}</Text> : null}
       {statusUnread ? <Text testID="daemon-mgmt-status-unread" style={{ color: colors.textMuted, fontSize: type.small, lineHeight: 18 }}>{t('daemon.mgmt.statusUnread')}</Text> : null}

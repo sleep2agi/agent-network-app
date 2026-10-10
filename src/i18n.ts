@@ -32,6 +32,10 @@ const tables: TranslationTable = {
   'server.management': ['服务器管理', 'Server management'],
   'server.navLabel': ['服务器-{label}', 'Server: {label}'],
   'server.network': ['网络', 'Network'],
+  'server.integrations': ['SKILLS · 令牌 · Provider', 'SKILLS · Tokens · Provider'],
+  'server.pendingTitle.skills': ['SKILLS', 'SKILLS'],
+  'server.pendingTitle.tokens': ['令牌', 'Tokens'],
+  'server.pendingTitle.provider': ['Provider', 'Provider'],
 };
 export function registerTranslations(table: TranslationTable): void { Object.assign(tables, table); }
 export function parseLanguagePreference(raw: unknown): LanguagePreference {

@@ -29,6 +29,8 @@ import ServerScreen from './src/ServerScreen';
 import { maskedHubHost, maskUrlsInText } from './src/mask-hub-address';
 import { agentListScreen, type AgentListFilter } from './src/server-stats';
 import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
+import HubPendingScreen from './src/HubPendingScreen';
+import type { PendingTab } from './src/backend-pending-ui';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
@@ -113,6 +115,7 @@ type Screen =
   | { name: 'scheduled'; open?: ScheduleOpenRequest; back?: Screen }  // open/back: 从节点页「定时任务」分区来 —— 落点 + 返回回节点页
   | { name: 'messages' }
   | { name: 'server' }
+  | { name: 'serverPending'; tab: PendingTab }
   | { name: 'serverNodes'; filter?: AgentListFilter }
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
@@ -1205,7 +1208,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const notifyKey = notifyProfileKey(cfg);
   const mutedAliases = mutedAgents(notifySettings, notifyKey);
   const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
-  const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
+  const serverWorkspace = ['server', 'serverPending', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
   const taskWorkspace = screen.name === 'tasks' || screen.name === 'taskDetail';
   // 设置 → 快捷键(src/shortcuts-model.ts):主窗口的全局键盘快捷键。组合可改,读的是最新存储;
   // 设置页正在录入新组合时不执行。⌘K:列表栏是服务器侧栏时先切回 Agents,再请求聚焦搜索框。
@@ -1290,6 +1293,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onAddServer={onAddAccount}
     />
   )
+  : screen.name === 'serverPending' ? <HubPendingScreen cfg={cfg} tab={screen.tab} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} filter={screen.filter} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} onProfileEdited={onProfileEdited} />
@@ -1363,6 +1367,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             if (section === 'overview') setScreen({ name: 'server' });
             else if (section === 'nodes') setScreen({ name: 'serverNodes' });
             else if (section === 'create') setScreen({ name: 'picker' });
+            else if (section === 'skills' || section === 'tokens' || section === 'provider') setScreen({ name: 'serverPending', tab: section });
             else setScreen({ name: 'logs' });
           }} />
         ) : (
@@ -1429,6 +1434,7 @@ function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle
 }
 
 function serverSectionForScreen(screen: Screen): ServerSection {
+  if (screen.name === 'serverPending') return screen.tab;
   if (screen.name === 'serverNodes' || screen.name === 'serverNodeDetail') return 'nodes';
   if (screen.name === 'picker' || screen.name === 'wizard') return 'create';
   if (screen.name === 'logs') return 'logs';

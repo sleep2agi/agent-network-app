@@ -4,7 +4,7 @@
 // 纯逻辑,不 import react-native。
 import type { NodeInfoFact } from './node-info';
 
-export type NodeSectionKey = 'overview' | 'model' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'logs' | 'permissions' | 'danger';
+export type NodeSectionKey = 'overview' | 'model' | 'integrations' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'logs' | 'permissions' | 'danger';
 
 export interface NodeSection {
   readonly key: NodeSectionKey;
@@ -16,6 +16,7 @@ export interface NodeSection {
 export const NODE_SECTIONS: readonly NodeSection[] = [
   { key: 'overview', label: '概览', icon: 'grid-outline' },
   { key: 'model', label: '模型与运行时', icon: 'hardware-chip-outline' },
+  { key: 'integrations', label: 'SKILLS · 令牌 · Provider', icon: 'layers-outline' },
   { key: 'rules', label: '规则文件', icon: 'document-text-outline' },
   { key: 'skills', label: '技能', icon: 'extension-puzzle-outline' },
   // 项目文件夹(只读):始终出现 —— 节点没上报 files_capable 时分区里直接说要升级什么(node-files.ts filesSupport)。

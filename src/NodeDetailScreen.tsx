@@ -52,6 +52,7 @@ import NodeControlCard from './NodeControlCard';
 import { nodeControlView } from './node-control-access';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
+import './i18n-backend-pending';
 import { adoptionError, isAdopted } from './node-adoption';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { takeNodeSectionRequest } from './node-section-request';
@@ -81,6 +82,7 @@ import NodeModelSection from './NodeModelSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
+import NodeIntegrationsSection from './NodeIntegrationsSection';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
 import NodeLogsSection from './NodeLogsSection';
@@ -604,6 +606,12 @@ export default function NodeDetailScreen({
         {!readOnly && node && isCodexRuntime(node.runtime) ? (
           <NodeCodexProviderSection runtimeId={node.runtime} serverUrl={cfg.serverUrl} />
         ) : null}
+      </View>
+    );
+    if (section === 'integrations') return (
+      <View>
+        <SectionTitle title="SKILLS · 令牌 · Provider" />
+        <NodeIntegrationsSection cfg={cfg} alias={alias} node={node} session={s} skillsCapable={skillsCapable} readOnly={readOnly} />
       </View>
     );
     if (section === 'rules') return (
