@@ -24,6 +24,28 @@ Tokens and the generated bootstrap password are not written to these files.
 They remain in macOS Keychain or Windows Credential Manager. Logs rotate at
 2 MiB and retain one previous file.
 
+## Local daemon initialization
+
+The local daemon installer scans Node.js/npm and the desktop's private CLI/runtime
+under `~/.anet/app/local-daemon/anet`. It requires Node.js >= 22.13 and a compatible
+version set: CLI `2.3.0-preview.162`, agent-node `2.5.0-preview.128`, and the bundled
+Hub `0.9.0-preview.120`. Newer compatible packages may be reused. npm's `latest`
+tag is not used, and an existing package with an older or unknown version is
+upgraded. Global npm packages and other applications' daemons are unaffected.
+
+Repair first stops the existing local daemon and confirms its PID has exited.
+Only then does it replace packages and force initialization (which preserves
+the daemon's node ID but issues a new token). A failed stop retains the existing
+configuration and aborts. Concurrent repairs are rejected. Startup uses the
+private agent-node entry point and records the login shell's tool directories
+for child processes.
+
+Success requires this exact daemon to have a live local process and an online
+Hub record with `can_create_nodes: true`. Merely having a configuration file or
+an offline Hub record is insufficient. Claude/Codex availability and credentials
+are still assessed by the runtime; installing the daemon does not install or
+authenticate those tools.
+
 ## Shutdown and recovery
 
 The local Hub belongs to the desktop process. Closing the app stops it; an

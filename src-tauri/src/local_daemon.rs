@@ -4,7 +4,7 @@
 //! 「选服务器」空状态里那句「先在那台机器上跑 anet daemon up」在 Local workspace 场景下说的
 //! 就是这台机器。这里把它做成按钮:扫描本机有没有 Node / npm / anet CLI / 已注册的 daemon,
 //! 缺 anet 就 `npm install -g`,然后用本地 Hub 的凭据执行 `anet daemon init` + `anet daemon start`,
-//! 最后向 Hub 确认 host_supervisor 已注册。**不自己偷偷起**:每一步都由用户点按钮触发。
+//! 最后向 Hub 确认 host_supervisor 在线且可以创建节点。**不自己偷偷起**:每一步都由用户点按钮触发。
 //!
 //! 凭据隔离:`anet daemon init` 从 `$HOME/.anet/config.json` 读 hub/token/network_id 并往
 //! `$cwd/.anet/nodes/<name>/config.json` 写 daemon 配置。用户自己的 `~/.anet/config.json`
@@ -30,9 +30,11 @@ use sha2::{Digest, Sha256};
 use super::{app_root, ensure_private_dir, write_private_atomic};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
-const ANET_PACKAGE: &str = "@sleep2agi/agent-network@latest";
-/// 与 anet@latest 配对的 agent-node 通道;装进同一个私有 prefix,成为 anet 的 sibling(#1813 sibling-first)。
-const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@latest";
+const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.162";
+/// Desktop features require the preview runtime, not npm's older `latest` tag.
+const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@2.5.0-preview.128";
+const MIN_HUB_VERSION: &str = "0.9.0-preview.120";
+static INSTALL_LOCK: Mutex<()> = Mutex::new(());
 const NPM_MIRROR: &str = "https://registry.npmmirror.com";
 /// 私有 Node 运行时:缺 Node 或版本太低时从 nodejs.org 下 v22 最新 LTS 到 ~/.anet/app/local-daemon/node,
 /// 不动系统、不动 nvm、不要 sudo(Vincent 2026-09-06「node 也自动安装一下?」)。
@@ -55,6 +57,8 @@ pub struct DaemonScan {
     pub node: Option<ToolInfo>,
     pub npm: Option<ToolInfo>,
     pub anet: Option<ToolInfo>,
+    pub anet_compatible: bool,
+    pub agent_node_compatible: bool,
     /// ~/.anet/app/local-daemon/node 里已经下好的私有 Node(有则优先用它)。
     pub private_node: Option<ToolInfo>,
     /// 私有 prefix 里与 anet 同目录的 agent-node(daemon 真正用的运行时外壳)。
@@ -291,10 +295,98 @@ fn private_agent_node_package() -> Result<PathBuf, String> {
 
 fn probe_private_agent_node() -> Option<ToolInfo> {
     let pkg = private_agent_node_package().ok()?.join("package.json");
+    if !pkg.parent()?.join("dist/cli.js").is_file() { return None; }
     let raw = fs::read_to_string(&pkg).ok()?;
     let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
     let version = json.get("version")?.as_str()?.to_string();
     Some(ToolInfo { path: pkg.parent()?.display().to_string(), version: Some(version) })
+}
+
+fn probe_private_anet() -> Option<ToolInfo> {
+    let prefix = private_anet_prefix().ok()?;
+    let bin = prefix.join("bin").join("anet");
+    if !bin.is_file() { return None; }
+    let raw = fs::read_to_string(prefix.join("lib/node_modules/@sleep2agi/agent-network/package.json")).ok()?;
+    let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
+    Some(ToolInfo { path: bin.display().to_string(), version: Some(json.get("version")?.as_str()?.to_string()) })
+}
+
+fn version_key(version: &str) -> Option<(u32, u32, u32, u32)> {
+    let version = version.trim().trim_start_matches('v').split('+').next()?;
+    let (core, prerelease) = version.split_once('-').map_or((version, None), |(core, pre)| (core, Some(pre)));
+    let mut parts = core.split('.');
+    let major = parts.next()?.parse().ok()?;
+    let minor = parts.next()?.parse().ok()?;
+    let patch = parts.next()?.parse().ok()?;
+    if parts.next().is_some() { return None; }
+    let preview = match prerelease {
+        None => u32::MAX,
+        Some(pre) => pre.strip_prefix("preview.")?.parse().ok()?,
+    };
+    Some((major, minor, patch, preview))
+}
+
+fn package_compatible(info: Option<&ToolInfo>, package: &str) -> bool {
+    let required = package.rsplit('@').next().and_then(version_key);
+    let actual = info.and_then(|info| info.version.as_deref()).and_then(version_key);
+    matches!((actual, required), (Some(actual), Some(required)) if actual >= required)
+}
+
+fn configured_daemon_pid() -> Result<Option<i32>, String> {
+    let path = daemon_profile_path(LOCAL_DAEMON_NAME)?.with_file_name(".pid");
+    let raw = match fs::read_to_string(&path) {
+        Ok(raw) => raw,
+        Err(error) if error.kind() == std::io::ErrorKind::NotFound => return Ok(None),
+        Err(error) => return Err(format!("cannot read daemon PID: {error}")),
+    };
+    let pid = raw.trim().parse::<i32>().ok().filter(|pid| *pid > 1)
+        .ok_or_else(|| "invalid local-daemon PID; refusing to overwrite its configuration".to_string())?;
+    Ok(Some(pid))
+}
+
+fn pid_alive(pid: i32) -> Result<bool, String> {
+    #[cfg(unix)]
+    {
+        if unsafe { libc::kill(pid, 0) } == 0 { return Ok(true); }
+        let error = std::io::Error::last_os_error();
+        if error.raw_os_error() == Some(libc::ESRCH) { return Ok(false); }
+        return Err(format!("cannot verify daemon PID {pid}: {error}"));
+    }
+    #[cfg(not(unix))]
+    Err("local daemon requires POSIX process checks".into())
+}
+
+fn stop_existing_daemon(anet: &Path, daemon_dir: &Path, path_prefix: &str) -> Result<String, String> {
+    let Some(pid) = configured_daemon_pid()? else { return Ok("No previous daemon PID".into()); };
+    if !pid_alive(pid)? { return Ok(format!("Previous daemon PID {pid} has exited")); }
+    if !anet.is_file() || !daemon_profile_path(LOCAL_DAEMON_NAME)?.is_file() {
+        return Err("existing daemon is running but its launcher/configuration is missing".into());
+    }
+    let command = format!("export PATH={}:\"$PATH\"; {} node stop {}", shell_quote(path_prefix), shell_quote(&anet.display().to_string()), LOCAL_DAEMON_NAME);
+    let stop = run_shell(&command, Some(daemon_dir), &[], Duration::from_secs(30))?;
+    if stop.code != Some(0) || stop.timed_out {
+        return Err(format!("cannot stop previous daemon; configuration retained: {}", tail(&stop.output, 400)));
+    }
+    let deadline = Instant::now() + Duration::from_secs(5);
+    while pid_alive(pid)? {
+        if Instant::now() >= deadline {
+            return Err(format!("previous daemon PID {pid} is still alive; configuration retained"));
+        }
+        thread::sleep(Duration::from_millis(100));
+    }
+    Ok(format!("Previous daemon PID {pid} exited"))
+}
+
+fn require_compatible_hub(session: &LocalHubSession) -> Result<(), String> {
+    let body: serde_json::Value = reqwest::blocking::Client::new()
+        .get(format!("{}/health", session.endpoint))
+        .timeout(Duration::from_secs(10)).send().map_err(|e| e.to_string())?
+        .error_for_status().map_err(|e| e.to_string())?.json().map_err(|e| e.to_string())?;
+    let actual = body["version"].as_str().and_then(version_key);
+    if !matches!((actual, version_key(MIN_HUB_VERSION)), (Some(actual), Some(required)) if actual >= required) {
+        return Err(format!("local Hub {} is incompatible; desktop requires Hub >= {MIN_HUB_VERSION}", body["version"].as_str().unwrap_or("unknown")));
+    }
+    Ok(())
 }
 
 fn probe_private_node() -> Option<ToolInfo> {
@@ -408,6 +500,10 @@ pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
     let profile_exists = daemon_profile_path(LOCAL_DAEMON_NAME)?.is_file();
     let private_node = if supported { probe_private_node() } else { None };
     let agent_node = if supported { probe_private_agent_node() } else { None };
+    let private_anet = if supported { probe_private_anet() } else { None };
+    let anet_compatible = package_compatible(private_anet.as_ref(), ANET_PACKAGE);
+    let agent_node_compatible = package_compatible(agent_node.as_ref(), AGENT_NODE_PACKAGE);
+    let anet = private_anet.or(anet);
     let agent_node_on_path = if supported {
         run_shell("command -v agent-node", None, &[], Duration::from_secs(20)).ok()
             .filter(|o| o.code == Some(0))
@@ -420,6 +516,8 @@ pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
         node,
         npm,
         anet,
+        anet_compatible,
+        agent_node_compatible,
         private_node,
         agent_node,
         agent_node_on_path,
@@ -451,11 +549,22 @@ fn daemon_registered(session: &LocalHubSession, node_id: &str) -> Result<bool, S
         .timeout(Duration::from_secs(10))
         .send()
         .map_err(|error| error.to_string())?
+        .error_for_status()
+        .map_err(|error| error.to_string())?
         .json()
         .map_err(|error| error.to_string())?;
-    Ok(body["daemons"]
-        .as_array()
-        .is_some_and(|daemons| daemons.iter().any(|d| d["daemon_node_id"] == node_id)))
+    supervisor_ready(&body, node_id)
+}
+
+fn supervisor_ready(body: &serde_json::Value, node_id: &str) -> Result<bool, String> {
+    let Some(daemon) = body["daemons"].as_array()
+        .and_then(|daemons| daemons.iter().find(|d| d["daemon_node_id"] == node_id)) else { return Ok(false); };
+    if daemon["online"].as_bool() != Some(true) { return Ok(false); }
+    match daemon["can_create_nodes"].as_bool() {
+        Some(true) => Ok(true),
+        Some(false) => Err(format!("daemon cannot create nodes: {}", daemon["create_nodes_blocked_reason"].as_str().unwrap_or("unknown"))),
+        None => Err("daemon registered without reporting node-creation capability".into()),
+    }
 }
 
 pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String> {
@@ -468,8 +577,15 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
             error: Some(error),
         })
     };
+    let _install_guard = match INSTALL_LOCK.try_lock() {
+        Ok(guard) => guard,
+        Err(_) => return fail(steps, "本机 daemon 正在安装,请等待本次安装完成。".into()),
+    };
     if !cfg!(unix) {
         return fail(steps, "anet 的 host_supervisor daemon 只支持 macOS / Linux".into());
+    }
+    if let Err(error) = require_compatible_hub(session) {
+        return fail(steps, error);
     }
     let first = scan(Some(session))?;
     steps.push(StepReport {
@@ -522,12 +638,13 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     let anet_bin = anet_prefix.join("bin").join("anet");
     let path_prefix = format!("{}:{}", node_bin_dir.display(), anet_prefix.join("bin").display());
     let with_path = |cmd: &str| format!("export PATH={}:\"$PATH\"; {cmd}", shell_quote(&path_prefix));
-    let anet = if anet_bin.is_file() {
-        let probe = run_shell(&with_path(&format!("{} --version", shell_quote(&anet_bin.display().to_string()))), None, &[], Duration::from_secs(30))?;
-        let version = strip_ansi(&probe.output).lines().map(str::trim).find(|l| !l.is_empty()).unwrap_or("?").to_string();
-        steps.push(StepReport { name: "anet CLI".into(), ok: true, output: format!("已在私有目录:{} ({version})", anet_bin.display()) });
-        ToolInfo { path: anet_bin.display().to_string(), version: Some(version) }
-    } else {
+    // Stop before replacing packages or forcing init: the old process must
+    // still have its original configuration and launcher available to stop.
+    match stop_existing_daemon(&anet_bin, &daemon_dir, &path_prefix) {
+        Ok(output) => steps.push(StepReport { name: "停止并确认旧 daemon 已退出".into(), ok: true, output }),
+        Err(error) => return fail(steps, error),
+    }
+    if !package_compatible(probe_private_anet().as_ref(), ANET_PACKAGE) {
         let install_cmd = |registry: Option<&str>| with_path(&format!(
             "{} install -g --prefix {} {ANET_PACKAGE}{}",
             shell_quote(&npm_bin.display().to_string()),
@@ -550,13 +667,21 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         if !anet_bin.is_file() {
             return fail(steps, format!("npm 装完了但 {} 不存在", anet_bin.display()));
         }
-        ToolInfo { path: anet_bin.display().to_string(), version: None }
+    }
+    let anet = match probe_private_anet().filter(|info| package_compatible(Some(info), ANET_PACKAGE)) {
+        Some(info) => info,
+        None => return fail(steps, format!("私有 anet CLI 版本不兼容,需要 {ANET_PACKAGE}")),
     };
+    let probe = run_shell(&with_path(&format!("{} --version", shell_quote(&anet.path))), None, &[], Duration::from_secs(30))?;
+    if probe.code != Some(0) {
+        return fail(steps, format!("私有 anet CLI 无法执行: {}", tail(&probe.output, 400)));
+    }
+    steps.push(StepReport { name: "anet CLI 版本确认".into(), ok: true, output: describe(&Some(anet.clone())) });
 
     // 2b. agent-node 也装进同一个私有 prefix(anet 的 sibling,#1813 sibling-first)。
     //    Vincent 2026-09-07 的日志:私有 anet 起 daemon 时从 PATH 捡到了 nvm v20 里的旧 agent-node,
     //    以普通节点身份注册,快照没有 role → 永远进不了 host_supervisor 列表。
-    let agent_node = match probe_private_agent_node() {
+    let agent_node = match probe_private_agent_node().filter(|info| package_compatible(Some(info), AGENT_NODE_PACKAGE)) {
         Some(info) => {
             steps.push(StepReport { name: "agent-node(私有,与 anet 同目录)".into(), ok: true, output: format!("已安装 {} ({})", info.version.as_deref().unwrap_or("?"), info.path) });
             info
@@ -581,13 +706,12 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
             if !ok {
                 return fail(steps, if primary.timed_out { "agent-node 安装超时(10 分钟)。".into() } else { "agent-node 安装失败,见上面的输出。".into() });
             }
-            match probe_private_agent_node() {
+            match probe_private_agent_node().filter(|info| package_compatible(Some(info), AGENT_NODE_PACKAGE)) {
                 Some(info) => info,
-                None => return fail(steps, "npm 装完了但私有目录里没有 agent-node 包".into()),
+                None => return fail(steps, format!("私有 agent-node 版本不兼容,需要 {AGENT_NODE_PACKAGE}")),
             }
         }
     };
-    let _ = &agent_node;
 
     // 2. 私有 HOME 里写 anet 全局配置(只给 daemon init 用)
     let home = isolated_home()?;
@@ -620,15 +744,18 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         return fail(steps, "daemon 初始化成功但没拿到 node_id".into());
     };
 
-    // 3b. 先停掉旧的 daemon 进程:anet 对同 alias「已经在跑的节点不起第二个」(#1130),旧进程(可能还是旧
-    //     agent-node)不停,新的永远起不来。停不掉不算错(可能本来就没在跑)。
-    let stop = run_shell(
-        &with_path(&format!("{} node stop {}", shell_quote(&anet.path), LOCAL_DAEMON_NAME)),
-        Some(&daemon_dir),
-        &[],
-        Duration::from_secs(30),
-    )?;
-    steps.push(StepReport { name: format!("anet node stop {LOCAL_DAEMON_NAME}(停掉旧进程)"), ok: true, output: tail(&stop.output, 400) });
+    // Preserve the login shell's tool locations for minimalEnv child launches.
+    let path_probe = run_shell(&with_path("printf 'ANET_DAEMON_PATH=%s\\n' \"$PATH\""), None, &[], Duration::from_secs(20))?;
+    if path_probe.code != Some(0) { return fail(steps, "无法读取 daemon 的工具搜索路径。".into()); }
+    let extra_path = path_probe.output.lines().rev().find_map(|line| line.strip_prefix("ANET_DAEMON_PATH="))
+        .ok_or_else(|| "daemon PATH probe returned no path".to_string())?;
+    let cfg_path = daemon_profile_path(LOCAL_DAEMON_NAME)?;
+    let mut cfg: serde_json::Value = serde_json::from_slice(&fs::read(&cfg_path).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    if !cfg.is_object() || cfg["node_id"].as_str() != Some(&node_id) {
+        return fail(steps, "daemon 配置与初始化返回的 node_id 不一致,未启动。".into());
+    }
+    cfg["daemonExtraPath"] = serde_json::json!(extra_path.split(':').filter(|path| Path::new(path).is_absolute() && Path::new(path).is_dir()).collect::<Vec<_>>());
+    write_private_atomic(&cfg_path, &serde_json::to_vec_pretty(&cfg).map_err(|e| e.to_string())?)?;
 
     // 4. anet daemon start —— 🔴 它是**前台**命令,不会自己返回(DEV 对 0.9.0-preview.45 实测:60s 后被
     //    timeout 打死,daemon 随之 shutting down)。0.2.52 之前这里等满 60s 才开始问 Hub,而且靠 kill shell
@@ -637,7 +764,7 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     let start = run_shell(
         &with_path(&detached_start_command(&anet.path, LOCAL_DAEMON_NAME, &start_log)),
         Some(&daemon_dir),
-        &[],
+        &[("ANET_AGENT_NODE_BIN", Path::new(&agent_node.path).join("dist/cli.js").display().to_string())],
         Duration::from_secs(20),
     )?;
     steps.push(StepReport {
@@ -655,7 +782,13 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
     let mut last_error = String::new();
     while Instant::now() < deadline {
         match daemon_registered(session, &node_id) {
-            Ok(true) => { registered = true; break; }
+            Ok(true) => {
+                if configured_daemon_pid()?.is_some_and(|pid| pid_alive(pid).unwrap_or(false)) {
+                    registered = true;
+                    break;
+                }
+                last_error = "Hub 上有记录,但本机 daemon 进程未存活".into();
+            }
             Ok(false) => {}
             Err(error) => last_error = error,
         }
@@ -667,7 +800,7 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         let session_state = session_online(session, LOCAL_DAEMON_NAME);
         let start_tail = fs::read_to_string(&start_log).map(|t| tail(&t, 800)).unwrap_or_default();
         format!(
-            "90 秒内 Hub 的 /api/host-supervisors(network {}) 里没有出现 {node_id}。会话 {LOCAL_DAEMON_NAME} 在 /api/status 里:{}。{}\n--- start.log ---\n{}",
+            "90 秒内 daemon {node_id} 未达到在线且可创建节点的状态(network {})。会话 {LOCAL_DAEMON_NAME} 在 /api/status 里:{}。{}\n--- start.log ---\n{}",
             session.network_id.as_deref().unwrap_or("(none)"),
             session_state,
             if last_error.is_empty() { String::new() } else { format!("最后一次查询错误:{last_error}") },
@@ -675,7 +808,7 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         )
     };
     steps.push(StepReport {
-        name: "Hub 确认 host_supervisor 已注册".into(),
+        name: "Hub 确认 daemon 在线且可创建节点".into(),
         ok: registered,
         output: diagnosis,
     });
@@ -683,7 +816,7 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         ok: registered,
         node_id: Some(node_id),
         steps,
-        error: if registered { None } else { Some("daemon 已启动但 Hub 还没看到它;等 10 秒刷新列表,仍没有就点「打开日志」看 daemon 输出。".into()) },
+        error: if registered { None } else if !last_error.is_empty() { Some(last_error) } else { Some("daemon 未确认在线且可创建节点,见上面的状态和启动日志。".into()) },
     })
 }
 
@@ -752,6 +885,41 @@ fn shell_quote(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn registration_requires_the_exact_online_create_capable_daemon() {
+        let snapshot = |id: &str, online: bool, capability: Option<bool>| {
+            serde_json::json!({"daemons": [{"daemon_node_id": id, "online": online, "can_create_nodes": capability, "create_nodes_blocked_reason": "runtime unavailable"}]})
+        };
+        assert!(!supervisor_ready(&snapshot("old-id", true, Some(true)), "new-id").unwrap());
+        assert!(!supervisor_ready(&snapshot("new-id", false, Some(true)), "new-id").unwrap());
+        assert!(supervisor_ready(&snapshot("new-id", true, Some(false)), "new-id").unwrap_err().contains("runtime unavailable"));
+        assert!(supervisor_ready(&snapshot("new-id", true, None), "new-id").is_err());
+        assert!(supervisor_ready(&snapshot("new-id", true, Some(true)), "new-id").unwrap());
+    }
+
+    #[test]
+    fn duplicate_install_is_rejected_before_any_mutation() {
+        let _guard = INSTALL_LOCK.lock().unwrap();
+        let session = LocalHubSession { endpoint: "http://127.0.0.1:1".into(), token: String::new(), network_id: None };
+        let report = install(&session).unwrap();
+        assert!(!report.ok && report.steps.is_empty());
+        assert!(report.error.unwrap().contains("正在安装"));
+    }
+
+    #[test]
+    fn old_latest_packages_do_not_satisfy_desktop_contract() {
+        let info = |version: &str| ToolInfo { path: "/fixture/package".into(), version: Some(version.into()) };
+        assert!(!package_compatible(Some(&info("2.3.0-preview.76")), ANET_PACKAGE));
+        assert!(!package_compatible(Some(&info("2.5.0-preview.58")), AGENT_NODE_PACKAGE));
+        assert!(package_compatible(Some(&info("2.3.0-preview.162")), ANET_PACKAGE));
+        assert!(package_compatible(Some(&info("2.5.0-preview.128")), AGENT_NODE_PACKAGE));
+        assert!(package_compatible(Some(&info("2.5.0-preview.129")), AGENT_NODE_PACKAGE));
+        assert!(package_compatible(Some(&info("2.5.0")), AGENT_NODE_PACKAGE));
+        assert!(!package_compatible(Some(&info("2.5.0-preview.12")), AGENT_NODE_PACKAGE));
+        assert!(!package_compatible(Some(&info("2.5.0-preview.bad")), AGENT_NODE_PACKAGE));
+        assert!(!package_compatible(None, AGENT_NODE_PACKAGE));
+    }
 
     #[test]
     fn probe_skips_nvm_noise_and_ansi() {

@@ -1,10 +1,10 @@
 {
   "schemaVersion": 1,
-  "commhubVersion": "0.9.0-preview.31",
+  "commhubVersion": "0.9.0-preview.120",
   "apiVersion": "v3",
-  "target": "build-required",
+  "target": "aarch64-apple-darwin",
   "executable": "commhub",
-  "sourceIntegrity": null,
-  "preBundleSha256": "build-required",
-  "preBundleSize": 0
+  "sourceIntegrity": "sha512-lluvIp478F3UiFXC8v4Dy8x1uvb/UhgXPWvRi5R2ii3lB4nYEqFn4KUZBO6mH7WRoEQBaGnqKhNFWLekTxpsOw==",
+  "preBundleSha256": "8068a2f33ce6c33d3977ff8ca2669919d3ab549459b386dcc4d7e5cb480fa005",
+  "preBundleSize": 66071522
 }
