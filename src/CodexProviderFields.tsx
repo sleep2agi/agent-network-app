@@ -16,6 +16,7 @@ import {
   type ProviderIssue,
 } from './provider-create-options';
 import { colors, radius, spacing } from './theme';
+import { ProviderConfigDemo } from './BackendPendingDemo';
 
 function IssueLine({ issue }: { issue: ProviderIssue }) {
   const { t } = useTranslation();
@@ -154,6 +155,13 @@ export default function CodexProviderFields({
               {t('provider.err.hub_not_ready')}
             </Text>
           ) : null}
+          <ProviderConfigDemo
+            key={value.choice}
+            runtimeId={runtimeId}
+            value={value}
+            transportOk={transportOk}
+            onClearKey={() => onChange({ ...value, apiKey: '' })}
+          />
         </>
       ) : null}
     </View>
