@@ -33,6 +33,7 @@ import HubPendingScreen from './src/HubPendingScreen';
 import type { PendingTab } from './src/backend-pending-ui';
 import HubScopeScreen from './src/HubScopeScreen';
 import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
+import DaemonOverviewFixtureScreen, { readDaemonOverviewFixture } from './src/DaemonOverviewFixtureScreen';
 import { hubSectionForScreen, screenForHubSection, type HubSection } from './src/hub-scope-demo';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
@@ -267,6 +268,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <UpdatePromptFixtureScreen fixture={updateFixture} />
+      </SafeAreaProvider>
+    );
+  }
+
+  const daemonOverviewFixture = readDaemonOverviewFixture();
+  if (daemonOverviewFixture) {
+    if (themeMode() !== daemonOverviewFixture.theme) setThemeMode(daemonOverviewFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <DaemonOverviewFixtureScreen theme={daemonOverviewFixture.theme} mode={daemonOverviewFixture.mode} />
       </SafeAreaProvider>
     );
   }

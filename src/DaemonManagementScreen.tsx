@@ -17,6 +17,8 @@ import { BackendPendingIntegration } from './BackendPendingDemo';
 import { PendingPanelCard, PendingSegmentedTabs, type PendingTab } from './backend-pending-ui';
 import RuntimeSupportPane from './RuntimeSupportScreen';
 import type { RuntimeHostContext } from './runtime-support';
+import DaemonOverviewSection from './DaemonOverviewSection';
+import type { ListingKind } from './daemon-overview';
 import {
   fetchHostSupervisors,
   fetchHubNodes,
@@ -78,7 +80,7 @@ const NODE_TONE: Record<NodeActionId, NodeActionTone> = {
   delete: 'danger',
 };
 
-type DaemonSection = 'nodes' | PendingTab;
+type DaemonSection = 'overview' | 'nodes' | PendingTab;
 
 const INTEGRATION_TITLE: Record<PendingTab, string> = {
   skills: 'server.pendingTitle.skills',
@@ -92,7 +94,7 @@ export default function DaemonManagementScreen({
   alias,
   desktop = false,
   hideBack = false,
-  initialSection = 'nodes',
+  initialSection = 'overview',
   onBack,
   onOpenLogs,
   onOpenNodeSettings,
@@ -128,6 +130,7 @@ export default function DaemonManagementScreen({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [section, setSection] = useState<DaemonSection>(initialSection);
+  const [refreshTick, setRefreshTick] = useState(0);
 
   const load = useCallback(async () => {
     try {
@@ -150,7 +153,7 @@ export default function DaemonManagementScreen({
 
   usePoll(() => { void load(); }, 10000, [load]);
 
-  const refresh = () => { setRefreshing(true); void load(); };
+  const refresh = () => { setRefreshing(true); setRefreshTick(tick => tick + 1); void load(); };
   const showBack = !desktop && !hideBack;
   const daemon = daemonNodeOf(nodes, alias);
   const rows = managedRows(nodes, statusUnread ? null : sessions, alias);
@@ -366,9 +369,26 @@ export default function DaemonManagementScreen({
     ))
   );
 
-  const pendingSection = section === 'nodes' ? null : section;
+  const pendingSection = section === 'overview' || section === 'nodes' ? null : section;
+  const listing: ListingKind = lookup.kind === 'loading' ? 'loading'
+    : lookup.kind === 'unsupported' ? 'unsupported'
+    : lookup.kind === 'error' ? 'error'
+    : lookup.ambiguous ? 'ambiguous'
+    : lookup.daemon ? 'listed'
+    : 'missing';
   const sectionNav = (
     <View style={[screenStyles.sectionNav, layout === 'stack' && screenStyles.sectionNavStack]}>
+      <Text style={screenStyles.sectionLabel}>{t('daemon.settings')}</Text>
+      <Pressable
+        testID="daemon-section-overview"
+        accessibilityRole="tab"
+        accessibilityState={{ selected: section === 'overview' }}
+        onPress={() => setSection('overview')}
+        style={({ pressed }) => [screenStyles.sectionItem, section === 'overview' && screenStyles.sectionItemActive, pressed && { opacity: 0.65 }]}
+      >
+        <Ionicons name="speedometer-outline" size={18} color={section === 'overview' ? colors.accent : colors.textSecondary} />
+        <Text style={[screenStyles.sectionItemText, section === 'overview' && screenStyles.sectionItemTextActive]} numberOfLines={1}>{t('daemon.overview.nav')}</Text>
+      </Pressable>
       <Text style={screenStyles.sectionLabel}>{t('daemon.mgmt.kicker')}</Text>
       <Pressable
         testID="daemon-section-nodes"
@@ -409,6 +429,20 @@ export default function DaemonManagementScreen({
         t={t}
       />
     </View>
+  );
+
+  const overviewPage = (
+    <DaemonOverviewSection
+      cfg={cfg}
+      alias={alias}
+      nodeId={daemon?.node_id ?? (lookup.kind === 'ready' ? lookup.daemon?.daemon_node_id ?? null : null)}
+      nodeHostname={daemon?.hostname ?? (lookup.kind === 'ready' ? lookup.daemon?.hostname ?? null : null)}
+      supervisor={lookup.kind === 'ready' ? lookup.daemon : null}
+      listing={listing}
+      daemonVersion={daemonSession?.version ?? null}
+      refreshTick={refreshTick}
+      onRefresh={load}
+    />
   );
 
   const nodesPage = (
@@ -456,7 +490,7 @@ export default function DaemonManagementScreen({
       {header}
       <View style={[screenStyles.body, layout === 'stack' && screenStyles.bodyStack]}>
         {sectionNav}
-        {section === 'nodes' ? nodesPage : integrationPage}
+        {section === 'overview' ? overviewPage : section === 'nodes' ? nodesPage : integrationPage}
       </View>
       {pending ? (
         <DialogFrame
