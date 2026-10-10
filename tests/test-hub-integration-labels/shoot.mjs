@@ -74,7 +74,7 @@ for (const { locale, lang, hubLabel, daemonLabel, hubFile, daemonFile } of [
     ck(`${lang}: 设置卡含节点与虚拟机域`, settingsCard.includes('Daemon 节点设置') && settingsCard.includes('虚拟机域') && settingsCard.includes('SKILLS'));
     await page.screenshot({ path: `${OUT}/daemon-settings-entries-zh.png`, fullPage: false });
     await page.locator('[data-testid="daemon-mgmt-settings-domain"]').click();
-    await page.locator('[data-testid="daemon-pending-skills"]').waitFor({ timeout: 8000 }).catch(() => page.locator('[data-testid="daemon-section-tabs"]').waitFor({ timeout: 8000 }));
+    await page.locator('[data-testid="daemon-skills-real"], [data-testid="daemon-skills-empty"]').waitFor({ timeout: 8000 }).catch(() => page.locator('[data-testid="daemon-section-tabs"]').waitFor({ timeout: 8000 }));
     await page.screenshot({ path: `${OUT}/daemon-domain-settings-skills-zh.png`, fullPage: false });
     await page.locator('[data-testid="daemon-section-nodes"]').click();
     await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click();
