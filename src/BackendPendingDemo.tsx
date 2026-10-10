@@ -316,12 +316,14 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
       </PendingPanelCard>
       <PendingPanelCard testID={`${testIDPrefix}-probe`} style={demoStyles.panelSecondary}>
         <PendingCardTitle title={t('backendPending.section.probe')} />
-        <DemoField label={t('backendPending.probeProvider')} compact>
-          <TextInput testID={`${testIDPrefix}-probe-provider`} value={state.probeProvider} onChangeText={state.setProbeProvider} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeProvider')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeProvider')} style={inputStyle} />
-        </DemoField>
-        <DemoField label={t('backendPending.probeModel')} compact>
-          <TextInput testID={`${testIDPrefix}-probe-model`} value={state.probeModel} onChangeText={state.setProbeModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeModel')} style={inputStyle} />
-        </DemoField>
+        <View style={demoStyles.fieldGrid}>
+          <DemoField label={t('backendPending.probeProvider')} compact>
+            <TextInput testID={`${testIDPrefix}-probe-provider`} value={state.probeProvider} onChangeText={state.setProbeProvider} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeProvider')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeProvider')} style={inputStyle} />
+          </DemoField>
+          <DemoField label={t('backendPending.probeModel')} compact>
+            <TextInput testID={`${testIDPrefix}-probe-model`} value={state.probeModel} onChangeText={state.setProbeModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeModel')} style={inputStyle} />
+          </DemoField>
+        </View>
         <View style={demoStyles.actionRow}>
           <DemoButton testID={`${testIDPrefix}-probe-run`} label={t('backendPending.probe')} onPress={() => state.setProbed(simulateProviderProbe({ providerId: state.probeProvider, model: state.probeModel }))} />
           {probeLine ? <ResultLine testID={`${testIDPrefix}-probe-result`} ok={probeLine.ok} text={probeLine.text} /> : null}

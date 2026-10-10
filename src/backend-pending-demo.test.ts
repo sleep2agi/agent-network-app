@@ -128,7 +128,8 @@ ck('hub pending screen renders tab panels', hub.includes('HubPendingScreen') && 
 ck('node keeps its section IA and adds only the key demo', nodeDetail.includes("section === 'secrets'") && nodeDetail.includes('<NodeSecretPendingSection') && !nodeDetail.includes('NodeIntegrationsSection'));
 ck('pending chrome reuses theme tokens (buttons + settings-style segments)', pendingUi.includes('buttonStyle') === false && pendingUi.includes('segmentSelected') && ui.includes('buttonStyle('));
 ck('pending forms use responsive field grids and compact catalog rows', ui.includes('demoStyles.fieldGrid') && ui.includes('<ProviderCatalogRow') && ui.includes('flexBasis: 220'));
-ck('probe panel sizes to its content instead of stretching', ui.includes("alignSelf: 'flex-start'"));
+const probePanel = ui.slice(ui.indexOf('testID={`${testIDPrefix}-probe`}'), ui.indexOf('function SkillsPendingPanel'));
+ck('probe panel sizes to its content instead of stretching', ui.includes("alignSelf: 'flex-start'") && probePanel.includes('<View style={demoStyles.fieldGrid}>'));
 ck('management probe stays the disabled shell; the demo probe stays local', page.includes('testID="daemon-mgmt-probe"') && page.includes('action={probe}') && page.includes('onPress={() => {}}') && !page.includes('simulateProviderProbe') && ui.includes('simulateProviderProbe('));
 ck('provider form keeps the shell and adds the demo save', fields.includes('<ProviderConfigDemo') && fields.includes("onClearKey={() => onChange({ ...value, apiKey: '' })}"));
 ck('secret inputs stay masked', ui.includes('testID={`${testIDPrefix}-secret-value`}') && ui.includes('secureTextEntry') && ui.includes('testID={`${testIDPrefix}-provider-key`}'));
