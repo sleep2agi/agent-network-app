@@ -343,7 +343,7 @@ export default function DaemonManagementScreen({
         <Ionicons name="git-network-outline" size={18} color={section === 'nodes' ? colors.accent : colors.textSecondary} />
         <Text style={[screenStyles.sectionItemText, section === 'nodes' && screenStyles.sectionItemTextActive]} numberOfLines={1}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
       </Pressable>
-      <Text style={screenStyles.sectionLabel}>{t('daemon.integrations')}</Text>
+      <Text style={screenStyles.sectionLabel} testID="daemon-integrations-label">{t('daemon.integrations')}</Text>
       <PendingSegmentedTabs
         stacked
         value={pendingSection}

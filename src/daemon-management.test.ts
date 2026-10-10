@@ -124,7 +124,7 @@ ck('management screen does not invent a probe call', !/probe_provider_model|prob
 ck('logs entry is on the management page', screen.includes('testID="daemon-mgmt-logs"') && screen.includes('onOpenLogs'));
 ck('daemon node settings and VM domain settings are in the header', screen.includes('testID="daemon-mgmt-node-settings"') && screen.includes('testID="daemon-mgmt-domain-settings"') && screen.includes("t('daemon.mgmt.nodeSettings')") && screen.includes("t('daemon.mgmt.domainSettings')"));
 ck('managed nodes can open chat when a handler is passed', screen.includes('testID="daemon-mgmt-open-chat"') && screen.includes('onOpenManagedChat'));
-ck('daemon integration nav uses daemon.integrations label', screen.includes("t('daemon.integrations')") && !screen.includes("t('server.integrations')"));
+ck('daemon integration nav uses daemon.integrations label', screen.includes("t('daemon.integrations')") && screen.includes('testID="daemon-integrations-label"') && !screen.includes("t('server.integrations')"));
 ck('ChatScreen passes node settings and managed chat into the management page', /onOpenNodeSettings=\{onOpenNodeSettings\}/.test(chat) && /onOpenManagedChat=\{onOpenManagedChat\}/.test(chat));
 ck('App wires managed chat from the daemon page', (app.match(/onOpenManagedChat=\{managedAlias => setScreen\(\{ name: 'chat', alias: managedAlias/g) ?? []).length >= 3);
 ck('back affordance is hidden on desktop and in the two-pane', /const showBack = !desktop && !hideBack;/.test(screen) && screen.includes('testID={PANE_BACK_TEST_ID}'));

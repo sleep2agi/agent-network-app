@@ -109,7 +109,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
         </View>
 
         <View style={styles.pendingBlock}>
-          <Text style={styles.sectionLabel}>{t('server.integrations')}</Text>
+          <Text style={styles.sectionLabel} testID="server-integrations-label">{t('server.integrations')}</Text>
           <PendingSegmentedTabs
             stacked
             value={pendingActive}

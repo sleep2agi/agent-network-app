@@ -148,6 +148,10 @@ for (const layout of ['desktop', 'phone']) {
     if (BASELINE) { console.log(`baseline ${tag}: 机器分区 ${hasPanel ? '有' : '没有'}`); await ctx.close(); continue; }
 
     ck(`${tag}: 「机器」分区出现`, hasPanel);
+    if (layout === 'desktop' && theme === 'light') {
+      const hubInt = await page.locator('[data-testid="server-integrations-label"]').textContent({ timeout: 3000 }).catch(() => null);
+      ck(`${tag}: Hub 侧栏集成分组「Hub 域集成」`, hubInt === 'Hub 域集成', String(hubInt));
+    }
     const C = COLORS[theme];
     const CLOUD = 'iZab12cd34ef56gh78ijZ';
     const ROW = '[data-testid^="server-hostrow-"]';
@@ -314,6 +318,8 @@ for (const layout of ['desktop', 'phone']) {
       ck(`${tag}: 点 host-a → 守护进程管理页(daemon-alpha)`, daemonTitle >= 1, String(daemonTitle));
       const managedTab = await page.locator('[data-testid="daemon-section-nodes"]').textContent({ timeout: 3000 }).catch(() => null);
       ck(`${tag}: 左侧有托管的节点入口`, !!managedTab && managedTab.includes('托管的节点'), String(managedTab));
+      const daemonInt = await page.locator('[data-testid="daemon-integrations-label"]').textContent({ timeout: 3000 }).catch(() => null);
+      ck(`${tag}: Daemon 侧栏集成分组「Daemon 域集成」`, daemonInt === 'Daemon 域集成', String(daemonInt));
       await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click({ timeout: 3000 }).catch(() => {});
       await page.locator('[data-testid="daemon-mgmt-open-chat"]').click({ timeout: 3000 }).catch(() => {});
       const chatPane = await page.locator('[data-testid="chat-pane"]').count();

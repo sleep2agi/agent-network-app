@@ -286,6 +286,7 @@ ck('null / NaN → none', levelTone(null) === 'none' && levelTone(NaN) === 'none
   ck('服务器页读全量投影(light 没有 host 字段)', server.includes('fetchNodeStatus(cfg)'));
   ck('点机器行 → 有 daemon 时 onOpenDaemon(alias),否则 onOpenAgents 筛节点', server.includes('h.daemonAlias') && server.includes('onOpenDaemon?.(h.daemonAlias)') && server.includes('onOpenAgents?.({ host: h.hostname, aliases: h.aliases, hostLabel: h.displayName })'));
   ck('App 把 Hub 概览机器行接到 chat(daemon 管理页)', app.includes('onOpenDaemon={alias => setScreen({ name: \'chat\', alias })}'));
+  ck('Hub 侧栏集成分组标题走 server.integrations', fs.readFileSync(path.join(root, 'src/ServerSidebar.tsx'), 'utf8').includes('testID="server-integrations-label"') && fs.readFileSync(path.join(root, 'src/ServerSidebar.tsx'), 'utf8').includes("t('server.integrations')"));
   ck('主列表默认最多 HOSTS_COLLAPSED 台(只数在线机器)', server.includes('activeHosts.slice(0, HOSTS_COLLAPSED)'));
   ck('离线机器折叠在「离线机器 N 台」后面', server.includes('`离线机器 ${offlineHosts.length} 台`') && server.includes('showOfflineHosts'));
   ck('服务器页把 daemon 列表交给 hostLevels(起显示名)', server.includes('hostLevels(hostRows ?? [], Date.now(), daemons)') && server.includes('fetchHostSupervisors(cfg)'));
