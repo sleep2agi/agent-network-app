@@ -10,6 +10,7 @@ registerTranslations({
   'backendPending.hubHint': ['以下为 Hub 级能力的演示界面，不会向服务器发送请求，也不会写入配置。', 'Hub-level capability preview. Nothing here calls the server or writes config.'],
   'backendPending.daemonHint': ['以下为 Daemon 级能力的演示界面，不会向 Hub 或 Daemon 发请求，也不会写入配置。', 'Daemon-level capability preview. Nothing here calls the Hub or Daemon or writes config.'],
   'backendPending.nodeHint': ['以下为 Node 级能力的演示界面，不会向 Hub 或节点发请求，也不会写入配置。', 'Node-level capability preview. Nothing here calls the Hub or the node or writes config.'],
+  'backendPending.nodeSecretHint': ['为这个节点登记调用外部服务所需的密钥；演示值只保留在当前页面，不会发送或写入。', 'Register keys this node needs for external services. Demo values stay on this page and are never sent or written.'],
   'backendPending.skillsHint': ['点选一个演示技能查看说明。接通后会读取节点上的真实技能目录。', 'Pick a demo skill to read its note. A live build will list skills from the node.'],
   'backendPending.skillsLiveHint': ['节点已支持技能列表：以下为 Hub 拉取的只读目录。', 'This node reports skills — listing below is read-only from the Hub.'],
   'backendPending.providerCatalogHint': ['演示供应商目录仅存在本页内存中。', 'The demo provider catalog exists only in memory on this page.'],

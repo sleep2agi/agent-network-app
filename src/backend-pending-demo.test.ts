@@ -128,6 +128,9 @@ ck('hub pending screen renders tab panels', hub.includes('HubPendingScreen') && 
 ck('node keeps its section IA and adds only the key demo', nodeDetail.includes("section === 'secrets'") && nodeDetail.includes('<NodeSecretPendingSection') && !nodeDetail.includes('NodeIntegrationsSection'));
 ck('pending chrome reuses theme tokens (buttons + settings-style segments)', pendingUi.includes('buttonStyle') === false && pendingUi.includes('segmentSelected') && ui.includes('buttonStyle('));
 ck('pending forms use responsive field grids and compact catalog rows', ui.includes('demoStyles.fieldGrid') && ui.includes('<ProviderCatalogRow') && ui.includes('flexBasis: 220'));
+ck('provider catalog and fields use the compact treatment', ui.includes('demoStyles.providerCard') && ui.includes('demoStyles.providerFieldGrid') && ui.includes("minHeight: 50"));
+ck('node key demo explains its local-only scope', ui.includes("t('backendPending.nodeSecretHint')"));
+ck('pending integration surfaces contain no hard-coded hex or rgb colors', !/[\"'](?:#[0-9a-f]{3,8}|rgba?\()[^\"']*[\"']/i.test([ui, page, sidebar, hub, pendingUi].join('\n')));
 const probePanel = ui.slice(ui.indexOf('testID={`${testIDPrefix}-probe`}'), ui.indexOf('function SkillsPendingPanel'));
 ck('probe panel sizes to its content instead of stretching', ui.includes("alignSelf: 'flex-start'") && probePanel.includes('<View style={demoStyles.fieldGrid}>'));
 ck('management probe stays the disabled shell; the demo probe stays local', page.includes('testID="daemon-mgmt-probe"') && page.includes('action={probe}') && page.includes('onPress={() => {}}') && !page.includes('simulateProviderProbe') && ui.includes('simulateProviderProbe('));

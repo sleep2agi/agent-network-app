@@ -58,7 +58,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <View style={[styles.serverIcon, reachable === false && styles.serverIconFailed]}>
-            <Ionicons name="server" size={18} color="#fff" />
+            <Ionicons name="server" size={18} color={colors.onAccent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.title}>{t('server.current')}</Text>

@@ -278,7 +278,7 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
 
   return (
     <View testID={`${testIDPrefix}-provider`} style={demoStyles.panelGrid}>
-      <PendingPanelCard testID={`${testIDPrefix}-provider-catalog`} style={demoStyles.panelPrimary}>
+      <PendingPanelCard testID={`${testIDPrefix}-provider-catalog`} style={[demoStyles.panelPrimary, demoStyles.providerCard]}>
         <PendingCardTitle title={t('backendPending.section.providers')} subtitle={t('backendPending.providerCatalogHint')} />
         <View testID={`${testIDPrefix}-provider-list`} style={demoStyles.catalog}>
           {state.rows.map((row, index) => (
@@ -286,17 +286,17 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
           ))}
         </View>
         <View style={demoStyles.sectionDivider} />
-        <View style={demoStyles.fieldGrid}>
-          <DemoField label={t('backendPending.providerId')}>
+        <View style={[demoStyles.fieldGrid, demoStyles.providerFieldGrid]}>
+          <DemoField label={t('backendPending.providerId')} compact>
             <TextInput testID={`${testIDPrefix}-provider-id`} value={state.id} onChangeText={state.setId} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerId')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerId')} style={inputStyle} />
           </DemoField>
-          <DemoField label={t('backendPending.providerBaseUrl')}>
+          <DemoField label={t('backendPending.providerBaseUrl')} compact>
             <TextInput testID={`${testIDPrefix}-provider-base`} value={state.baseUrl} onChangeText={state.setBaseUrl} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerBaseUrl')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerBaseUrl')} style={inputStyle} />
           </DemoField>
-          <DemoField label={t('backendPending.providerModel')}>
+          <DemoField label={t('backendPending.providerModel')} compact>
             <TextInput testID={`${testIDPrefix}-provider-model`} value={state.model} onChangeText={state.setModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerModel')} style={inputStyle} />
           </DemoField>
-          <DemoField label={t('backendPending.providerKey')}>
+          <DemoField label={t('backendPending.providerKey')} compact>
             <TextInput testID={`${testIDPrefix}-provider-key`} value={state.apiKey} onChangeText={state.setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.providerKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerKeyA11y')} style={inputStyle} />
           </DemoField>
         </View>
@@ -314,7 +314,7 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
           {providerLine ? <ResultLine testID={`${testIDPrefix}-provider-result`} ok={providerLine.ok} text={providerLine.text} /> : null}
         </View>
       </PendingPanelCard>
-      <PendingPanelCard testID={`${testIDPrefix}-probe`} style={demoStyles.panelSecondary}>
+      <PendingPanelCard testID={`${testIDPrefix}-probe`} style={[demoStyles.panelSecondary, demoStyles.providerCard]}>
         <PendingCardTitle title={t('backendPending.section.probe')} />
         <View style={demoStyles.fieldGrid}>
           <DemoField label={t('backendPending.probeProvider')} compact>
@@ -455,6 +455,7 @@ export function NodeSecretPendingSection() {
       <PendingDemoBanner t={t} />
       <PendingPanelCard testID="node-secret-card">
         <PendingCardTitle title={t('backendPending.section.secrets')} />
+        <Text style={demoStyles.sectionHint}>{t('backendPending.nodeSecretHint')}</Text>
         <View style={demoStyles.fieldGrid}>
           <DemoField label={t('backendPending.secretName')} compact>
             <TextInput testID="node-secret-name" value={state.secretName} onChangeText={state.setSecretName} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.secretName')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretName')} style={inputStyle} />
@@ -547,6 +548,8 @@ const makeDemoStyles = () =>
     },
     panelPrimary: { flexGrow: 2, flexShrink: 1, flexBasis: 380, minWidth: 0 },
     panelSecondary: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0, alignSelf: 'flex-start' },
+    providerCard: { paddingVertical: spacing.sm + 2, gap: spacing.sm },
+    providerFieldGrid: { gap: spacing.sm },
     equalPanel: { flexGrow: 1, flexShrink: 1, flexBasis: 300, minWidth: 0 },
     fieldGrid: {
       flexDirection: 'row',
@@ -556,6 +559,7 @@ const makeDemoStyles = () =>
     },
     field: { flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 0, gap: spacing.xs + 2 },
     fieldCompact: { flexBasis: 160 },
+    sectionHint: { color: colors.textMuted, fontSize: type.small, lineHeight: 18 },
     actionRow: {
       minHeight: 36,
       flexDirection: 'row',
@@ -570,17 +574,17 @@ const makeDemoStyles = () =>
       overflow: 'hidden',
     },
     catalogRow: {
-      minHeight: 58,
+      minHeight: 50,
       flexDirection: 'row',
       alignItems: 'center',
       gap: spacing.md,
       paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
+      paddingVertical: spacing.xs,
     },
     catalogRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
     providerMark: {
-      width: 32,
-      height: 32,
+      width: 28,
+      height: 28,
       borderRadius: radius.item,
       alignItems: 'center',
       justifyContent: 'center',
