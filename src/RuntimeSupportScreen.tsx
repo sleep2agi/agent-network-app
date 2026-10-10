@@ -1,8 +1,9 @@
 // Daemon / Hub「Runtime 支持」：功能 × runtime 是主内容，本机探测和 Provider 在下面。
 import { useEffect, useState } from 'react';
-import { Linking, Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { useTranslation } from './i18n-react';
+import { openExternal } from './open-external';
 import './i18n-runtime-support';
 import './i18n-backend-pending';
 import './i18n-provider';
@@ -238,7 +239,7 @@ function RuntimeDetail({
         <Pressable
           testID="runtime-support-docs"
           accessibilityRole="link"
-          onPress={() => { void Linking.openURL(docs); }}
+          onPress={() => { void openExternal(docs).catch(() => {}); }}
           style={({ pressed }) => [pressed && { opacity: 0.7 }]}
         >
           <Text style={styles.link}>{t('runtimeSupport.docs')}</Text>
