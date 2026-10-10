@@ -13,7 +13,7 @@ registerTranslations({
   'backendPending.skillsHint': ['点选一个演示技能查看说明。接通后会读取节点上的真实技能目录。', 'Pick a demo skill to read its note. A live build will list skills from the node.'],
   'backendPending.skillsLiveHint': ['节点已支持技能列表：以下为 Hub 拉取的只读目录。', 'This node reports skills — listing below is read-only from the Hub.'],
   'backendPending.providerCatalogHint': ['演示供应商目录仅存在本页内存中。', 'The demo provider catalog exists only in memory on this page.'],
-  'backendPending.banner': ['演示数据 · 后端开发中，敬请期待', 'Demo data — backend in development, coming soon'],
+  'backendPending.banner': ['演示数据 · 后端开发中', 'Demo data · Backend in development'],
   'backendPending.open': ['供应商 / 技能 / 密钥 / 环境变量（演示）', 'Providers / skills / keys / env (demo)'],
   'backendPending.close': ['收起演示', 'Hide demo'],
   'backendPending.realCreate': ['这不会创建节点，也不会发送密钥。创建节点仍走原来的按钮。', 'This does not create a node and does not send the key. Creating a node still uses the existing button.'],

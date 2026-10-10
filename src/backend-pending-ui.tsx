@@ -1,6 +1,6 @@
 // Shared chrome for Hub / Daemon / Node backend-pending demo shells — 复用设置页分段控件与节点页卡片 token。
 import type { ReactNode } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, View, type StyleProp, type ViewStyle } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, radius, spacing, type, weight } from './theme';
 import { ds } from './ui-scale';
@@ -18,6 +18,7 @@ const TAB_ITEMS: readonly { key: PendingTab; labelKey: string }[] = [
 export function PendingDemoBanner({ t }: { t: (key: string) => string }) {
   return (
     <View testID="backend-pending-banner" accessibilityRole="text" style={styles.banner}>
+      <View style={styles.bannerDot} />
       <Text style={styles.bannerText}>{t('backendPending.banner')}</Text>
     </View>
   );
@@ -102,9 +103,9 @@ export function PendingSegmentedTabs({
 }
 
 /** 节点详情页 content 卡片同款(无描边,圆角 surface)。 */
-export function PendingPanelCard({ children, testID }: { children: ReactNode; testID?: string }) {
+export function PendingPanelCard({ children, testID, style }: { children: ReactNode; testID?: string; style?: StyleProp<ViewStyle> }) {
   return (
-    <View testID={testID} style={styles.card}>
+    <View testID={testID} style={[styles.card, style]}>
       {children}
     </View>
   );
@@ -130,10 +131,12 @@ export function PendingIntegrationFrame({
   return (
     <View testID={testID} style={styles.frame}>
       <View style={styles.frameHead}>
-        <PendingLayerBadge layer={layer} t={t} />
+        <View style={styles.frameMeta}>
+          <PendingLayerBadge layer={layer} t={t} />
+          {banner}
+        </View>
         <Text style={styles.frameHint}>{hint}</Text>
       </View>
-      {banner}
       {tabs}
       <View style={styles.frameBody}>{children}</View>
     </View>
@@ -157,13 +160,18 @@ export function pendingFieldStyle() {
 const makeStyles = () =>
   StyleSheet.create({
     banner: {
+      alignSelf: 'flex-start',
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.xs + 2,
       borderWidth: 1,
       borderColor: colors.accent,
       backgroundColor: colors.tonalBg,
-      borderRadius: radius.control,
-      paddingHorizontal: spacing.md,
-      paddingVertical: spacing.sm,
+      borderRadius: radius.pill,
+      paddingHorizontal: spacing.sm + 2,
+      paddingVertical: spacing.xs,
     },
+    bannerDot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.accent },
     bannerText: { color: colors.accent, fontSize: type.small, lineHeight: 18, fontWeight: weight.strong },
     layerBadge: {
       alignSelf: 'flex-start',
@@ -217,7 +225,8 @@ const makeStyles = () =>
       gap: spacing.md,
     },
     frame: { gap: spacing.md },
-    frameHead: { gap: spacing.sm },
+    frameHead: { gap: spacing.xs },
+    frameMeta: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
     frameHint: { color: colors.textMuted, fontSize: type.small, lineHeight: 18 },
     frameBody: { gap: spacing.md },
   });

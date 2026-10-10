@@ -20,7 +20,6 @@ export default function HubPendingScreen({ tab, cfg: _cfg }: { tab: PendingTab; 
     <View testID="hub-pending-screen" style={styles.root}>
       <View style={styles.header}>
         <Text style={styles.title}>{t(TITLE_KEY[tab])}</Text>
-        <Text style={styles.subtitle}>{t('backendPending.hubHint')}</Text>
       </View>
       <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollInner} keyboardShouldPersistTaps="handled">
         <BackendPendingIntegration layer="hub" tab={tab} showTabs={false} testIDPrefix="hub-pending" />
@@ -41,7 +40,6 @@ const makeStyles = () =>
       gap: spacing.xs,
     },
     title: { color: colors.text, fontSize: type.title, fontWeight: weight.strong },
-    subtitle: { color: colors.textSecondary, fontSize: type.body, lineHeight: 20 },
     scroll: { flex: 1 },
     scrollInner: { padding: spacing.xl, paddingBottom: spacing.xl * 2, maxWidth: 760, width: '100%', alignSelf: 'center' },
   });

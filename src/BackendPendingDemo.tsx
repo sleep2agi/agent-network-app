@@ -1,7 +1,8 @@
 // 未接通入口的可点击演示。只调用 backend-pending-demo.ts，不读 Hub / Daemon，不写配置。
 import { useState, type ReactNode } from 'react';
-import { Pressable, View } from 'react-native';
+import { Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
+import { Ionicons } from './icons';
 import { useTranslation } from './i18n-react';
 import './i18n-backend-pending';
 import './i18n-provider';
@@ -34,7 +35,7 @@ import {
   type PendingTab,
 } from './backend-pending-ui';
 import { buttonStyle, buttonTextStyle } from './elevation';
-import { colors, radius, spacing, weight } from './theme';
+import { colors, onThemeChange, radius, spacing, type, weight } from './theme';
 
 const LAYER_HINT: Record<PendingLayer, string> = {
   hub: 'backendPending.hubHint',
@@ -61,17 +62,63 @@ function ResultLine({ testID, ok, text }: { testID: string; ok: boolean; text: s
   return <Text testID={testID} accessibilityLiveRegion="polite" style={{ color: ok ? colors.running : colors.failed, fontSize: 12, lineHeight: 18 }}>{text}</Text>;
 }
 
-function SkillChip({ testID, label, onPress }: { testID: string; label: string; onPress: () => void }) {
+function DemoField({ label, children, compact }: { label: string; children: ReactNode; compact?: boolean }) {
+  return (
+    <View style={[demoStyles.field, compact && demoStyles.fieldCompact]}>
+      <PendingFieldLabel>{label}</PendingFieldLabel>
+      {children}
+    </View>
+  );
+}
+
+function SkillRow({
+  testID,
+  title,
+  description,
+  selected,
+  onPress,
+}: {
+  testID: string;
+  title: string;
+  description: string;
+  selected: boolean;
+  onPress: () => void;
+}) {
   return (
     <Pressable
       testID={testID}
       accessibilityRole="button"
-      accessibilityLabel={label}
+      accessibilityLabel={`${title}. ${description}`}
+      accessibilityState={{ selected }}
       onPress={onPress}
-      style={({ pressed }) => [buttonStyle('secondary'), pressed && { opacity: 0.85 }]}
+      style={({ pressed }) => [demoStyles.skillRow, selected && demoStyles.skillRowSelected, pressed && { backgroundColor: colors.rowHover }]}
     >
-      <Text style={buttonTextStyle('secondary')}>{label}</Text>
+      <View style={demoStyles.skillIcon}>
+        <Ionicons name="sparkles-outline" size={17} color={colors.accent} />
+      </View>
+      <View style={demoStyles.rowCopy}>
+        <Text style={demoStyles.rowTitle}>{title}</Text>
+        <Text style={demoStyles.rowDescription}>{description}</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
     </Pressable>
+  );
+}
+
+function ProviderCatalogRow({ row, last }: { row: DemoProviderRow; last: boolean }) {
+  return (
+    <View style={[demoStyles.catalogRow, !last && demoStyles.catalogRowDivider]}>
+      <View style={demoStyles.providerMark}>
+        <Ionicons name="cube-outline" size={16} color={colors.accent} />
+      </View>
+      <View style={demoStyles.rowCopy}>
+        <Text style={demoStyles.rowTitle}>{row.id}</Text>
+        <Text style={demoStyles.rowDescription} numberOfLines={1}>{row.baseUrl}</Text>
+      </View>
+      <View style={demoStyles.modelPill}>
+        <Text style={demoStyles.modelPillText} numberOfLines={1}>{row.model}</Text>
+      </View>
+    </View>
   );
 }
 
@@ -117,55 +164,63 @@ export function ProviderConfigDemo({
     <View testID="provider-config-demo" style={{ gap: spacing.md }}>
       <PendingDemoBanner t={t} />
       <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{t('backendPending.realCreate')}</Text>
-      <DemoButton
-        testID="provider-demo-save"
-        label={t('backendPending.save')}
-        primary
-        onPress={() => {
-          const result = simulateProviderSave({
-            runtimeId,
-            choice: value.choice,
-            baseUrl: value.baseUrl,
-            model: value.model,
-            apiKey: value.apiKey,
-          }, transportOk);
-          setSaved(result);
-          if (result.ok) onClearKey();
-        }}
-      />
-      {saveLine ? <ResultLine testID="provider-demo-save-result" ok={saveLine.ok} text={saveLine.text} /> : null}
+      <View style={demoStyles.actionRow}>
+        <DemoButton
+          testID="provider-demo-save"
+          label={t('backendPending.save')}
+          primary
+          onPress={() => {
+            const result = simulateProviderSave({
+              runtimeId,
+              choice: value.choice,
+              baseUrl: value.baseUrl,
+              model: value.model,
+              apiKey: value.apiKey,
+            }, transportOk);
+            setSaved(result);
+            if (result.ok) onClearKey();
+          }}
+        />
+        {saveLine ? <ResultLine testID="provider-demo-save-result" ok={saveLine.ok} text={saveLine.text} /> : null}
+      </View>
       <PendingPanelCard testID="provider-config-probe-card">
         <Text style={{ color: colors.text, fontSize: 13, fontWeight: '600' }}>{t('backendPending.section.probe')}</Text>
-        <PendingFieldLabel>{t('backendPending.probeProvider')}</PendingFieldLabel>
-        <TextInput
-          testID="provider-demo-probe-provider"
-          value={providerId}
-          onChangeText={setProviderId}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder={t('backendPending.probeProvider')}
-          placeholderTextColor={colors.textMuted}
-          accessibilityLabel={t('backendPending.probeProvider')}
-          style={inputStyle}
-        />
-        <PendingFieldLabel>{t('backendPending.probeModel')}</PendingFieldLabel>
-        <TextInput
-          testID="provider-demo-probe-model"
-          value={model}
-          onChangeText={setModel}
-          autoCapitalize="none"
-          autoCorrect={false}
-          placeholder={t('backendPending.probeModel')}
-          placeholderTextColor={colors.textMuted}
-          accessibilityLabel={t('backendPending.probeModel')}
-          style={inputStyle}
-        />
-        <DemoButton
-          testID="provider-demo-probe"
-          label={t('backendPending.probe')}
-          onPress={() => setProbed(simulateProviderProbe({ providerId, model }))}
-        />
-        {probeLine ? <ResultLine testID="provider-demo-probe-result" ok={probeLine.ok} text={probeLine.text} /> : null}
+        <View style={demoStyles.fieldGrid}>
+          <DemoField label={t('backendPending.probeProvider')} compact>
+            <TextInput
+              testID="provider-demo-probe-provider"
+              value={providerId}
+              onChangeText={setProviderId}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={t('backendPending.probeProvider')}
+              placeholderTextColor={colors.textMuted}
+              accessibilityLabel={t('backendPending.probeProvider')}
+              style={inputStyle}
+            />
+          </DemoField>
+          <DemoField label={t('backendPending.probeModel')} compact>
+            <TextInput
+              testID="provider-demo-probe-model"
+              value={model}
+              onChangeText={setModel}
+              autoCapitalize="none"
+              autoCorrect={false}
+              placeholder={t('backendPending.probeModel')}
+              placeholderTextColor={colors.textMuted}
+              accessibilityLabel={t('backendPending.probeModel')}
+              style={inputStyle}
+            />
+          </DemoField>
+        </View>
+        <View style={demoStyles.actionRow}>
+          <DemoButton
+            testID="provider-demo-probe"
+            label={t('backendPending.probe')}
+            onPress={() => setProbed(simulateProviderProbe({ providerId, model }))}
+          />
+          {probeLine ? <ResultLine testID="provider-demo-probe-result" ok={probeLine.ok} text={probeLine.text} /> : null}
+        </View>
       </PendingPanelCard>
     </View>
   );
@@ -222,42 +277,55 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
   })();
 
   return (
-    <View testID={`${testIDPrefix}-provider`} style={{ gap: spacing.md }}>
-      <PendingPanelCard testID={`${testIDPrefix}-provider-catalog`}>
+    <View testID={`${testIDPrefix}-provider`} style={demoStyles.panelGrid}>
+      <PendingPanelCard testID={`${testIDPrefix}-provider-catalog`} style={demoStyles.panelPrimary}>
         <PendingCardTitle title={t('backendPending.section.providers')} subtitle={t('backendPending.providerCatalogHint')} />
-        <View testID={`${testIDPrefix}-provider-list`} style={{ gap: spacing.xs }}>
-          {state.rows.map(row => (
-            <Text key={row.id} style={{ color: colors.textSecondary, fontSize: 13, lineHeight: 20 }}>{`${row.id} · ${row.model}`}</Text>
+        <View testID={`${testIDPrefix}-provider-list`} style={demoStyles.catalog}>
+          {state.rows.map((row, index) => (
+            <ProviderCatalogRow key={row.id} row={row} last={index === state.rows.length - 1} />
           ))}
         </View>
-        <PendingFieldLabel>{t('backendPending.providerId')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-provider-id`} value={state.id} onChangeText={state.setId} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerId')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerId')} style={inputStyle} />
-        <PendingFieldLabel>{t('backendPending.providerBaseUrl')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-provider-base`} value={state.baseUrl} onChangeText={state.setBaseUrl} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerBaseUrl')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerBaseUrl')} style={inputStyle} />
-        <PendingFieldLabel>{t('backendPending.providerModel')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-provider-model`} value={state.model} onChangeText={state.setModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerModel')} style={inputStyle} />
-        <PendingFieldLabel>{t('backendPending.providerKey')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-provider-key`} value={state.apiKey} onChangeText={state.setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.providerKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerKeyA11y')} style={inputStyle} />
-        <DemoButton
-          testID={`${testIDPrefix}-provider-save`}
-          label={t('backendPending.providerAdd')}
-          primary
-          onPress={() => {
-            const result = simulateProviderUpsert(state.rows, { id: state.id, baseUrl: state.baseUrl, model: state.model, apiKey: state.apiKey });
-            state.setProviderResult(result);
-            if (result.ok) { state.setRows(result.rows); state.setApiKey(''); }
-          }}
-        />
-        {providerLine ? <ResultLine testID={`${testIDPrefix}-provider-result`} ok={providerLine.ok} text={providerLine.text} /> : null}
+        <View style={demoStyles.sectionDivider} />
+        <View style={demoStyles.fieldGrid}>
+          <DemoField label={t('backendPending.providerId')}>
+            <TextInput testID={`${testIDPrefix}-provider-id`} value={state.id} onChangeText={state.setId} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerId')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerId')} style={inputStyle} />
+          </DemoField>
+          <DemoField label={t('backendPending.providerBaseUrl')}>
+            <TextInput testID={`${testIDPrefix}-provider-base`} value={state.baseUrl} onChangeText={state.setBaseUrl} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerBaseUrl')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerBaseUrl')} style={inputStyle} />
+          </DemoField>
+          <DemoField label={t('backendPending.providerModel')}>
+            <TextInput testID={`${testIDPrefix}-provider-model`} value={state.model} onChangeText={state.setModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerModel')} style={inputStyle} />
+          </DemoField>
+          <DemoField label={t('backendPending.providerKey')}>
+            <TextInput testID={`${testIDPrefix}-provider-key`} value={state.apiKey} onChangeText={state.setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.providerKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerKeyA11y')} style={inputStyle} />
+          </DemoField>
+        </View>
+        <View style={demoStyles.actionRow}>
+          <DemoButton
+            testID={`${testIDPrefix}-provider-save`}
+            label={t('backendPending.providerAdd')}
+            primary
+            onPress={() => {
+              const result = simulateProviderUpsert(state.rows, { id: state.id, baseUrl: state.baseUrl, model: state.model, apiKey: state.apiKey });
+              state.setProviderResult(result);
+              if (result.ok) { state.setRows(result.rows); state.setApiKey(''); }
+            }}
+          />
+          {providerLine ? <ResultLine testID={`${testIDPrefix}-provider-result`} ok={providerLine.ok} text={providerLine.text} /> : null}
+        </View>
       </PendingPanelCard>
-      <PendingPanelCard testID={`${testIDPrefix}-probe`}>
+      <PendingPanelCard testID={`${testIDPrefix}-probe`} style={demoStyles.panelSecondary}>
         <PendingCardTitle title={t('backendPending.section.probe')} />
-        <PendingFieldLabel>{t('backendPending.probeProvider')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-probe-provider`} value={state.probeProvider} onChangeText={state.setProbeProvider} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeProvider')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeProvider')} style={inputStyle} />
-        <PendingFieldLabel>{t('backendPending.probeModel')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-probe-model`} value={state.probeModel} onChangeText={state.setProbeModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeModel')} style={inputStyle} />
-        <DemoButton testID={`${testIDPrefix}-probe-run`} label={t('backendPending.probe')} onPress={() => state.setProbed(simulateProviderProbe({ providerId: state.probeProvider, model: state.probeModel }))} />
-        {probeLine ? <ResultLine testID={`${testIDPrefix}-probe-result`} ok={probeLine.ok} text={probeLine.text} /> : null}
+        <DemoField label={t('backendPending.probeProvider')} compact>
+          <TextInput testID={`${testIDPrefix}-probe-provider`} value={state.probeProvider} onChangeText={state.setProbeProvider} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeProvider')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeProvider')} style={inputStyle} />
+        </DemoField>
+        <DemoField label={t('backendPending.probeModel')} compact>
+          <TextInput testID={`${testIDPrefix}-probe-model`} value={state.probeModel} onChangeText={state.setProbeModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeModel')} style={inputStyle} />
+        </DemoField>
+        <View style={demoStyles.actionRow}>
+          <DemoButton testID={`${testIDPrefix}-probe-run`} label={t('backendPending.probe')} onPress={() => state.setProbed(simulateProviderProbe({ providerId: state.probeProvider, model: state.probeModel }))} />
+          {probeLine ? <ResultLine testID={`${testIDPrefix}-probe-result`} ok={probeLine.ok} text={probeLine.text} /> : null}
+        </View>
       </PendingPanelCard>
     </View>
   );
@@ -265,6 +333,7 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
 
 function SkillsPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; state: ReturnType<typeof usePendingSkillsState> }) {
   const { t } = useTranslation();
+  const selectedId = state.skill?.ok ? state.skill.id : null;
   const skillLine = (() => {
     if (!state.skill) return null;
     if (!state.skill.ok) return { ok: false, text: t('backendPending.skillMissing') };
@@ -275,9 +344,21 @@ function SkillsPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; sta
   return (
     <PendingPanelCard testID={`${testIDPrefix}-skills`}>
       <PendingCardTitle title={t('backendPending.section.skills')} subtitle={t('backendPending.skillsHint')} />
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        <SkillChip testID={`${testIDPrefix}-skill-summarize`} label={t('backendPending.skill.summarize.title')} onPress={() => state.setSkill(simulateSkillOpen('demo-summarize'))} />
-        <SkillChip testID={`${testIDPrefix}-skill-review`} label={t('backendPending.skill.review.title')} onPress={() => state.setSkill(simulateSkillOpen('demo-review'))} />
+      <View style={demoStyles.skillList}>
+        <SkillRow
+          testID={`${testIDPrefix}-skill-summarize`}
+          title={t('backendPending.skill.summarize.title')}
+          description={t('backendPending.skill.summarize.body')}
+          selected={selectedId === 'demo-summarize'}
+          onPress={() => state.setSkill(simulateSkillOpen('demo-summarize'))}
+        />
+        <SkillRow
+          testID={`${testIDPrefix}-skill-review`}
+          title={t('backendPending.skill.review.title')}
+          description={t('backendPending.skill.review.body')}
+          selected={selectedId === 'demo-review'}
+          onPress={() => state.setSkill(simulateSkillOpen('demo-review'))}
+        />
       </View>
       {skillLine ? <ResultLine testID={`${testIDPrefix}-skill-result`} ok={skillLine.ok} text={skillLine.text} /> : null}
     </PendingPanelCard>
@@ -302,42 +383,54 @@ function TokensPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; sta
     return { ok: true, text: t('backendPending.envSaved', { key: state.envResult.key }) };
   })();
   return (
-    <View testID={`${testIDPrefix}-tokens`} style={{ gap: spacing.md }}>
-      <PendingPanelCard testID={`${testIDPrefix}-secrets`}>
+    <View testID={`${testIDPrefix}-tokens`} style={demoStyles.panelGrid}>
+      <PendingPanelCard testID={`${testIDPrefix}-secrets`} style={demoStyles.equalPanel}>
         <PendingCardTitle title={t('backendPending.section.secrets')} />
-        <PendingFieldLabel>{t('backendPending.secretName')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-secret-name`} value={state.secretName} onChangeText={state.setSecretName} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.secretName')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretName')} style={inputStyle} />
-        <PendingFieldLabel>{t('backendPending.secretValue')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-secret-value`} value={state.secretValue} onChangeText={state.setSecretValue} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.secretValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretValueA11y')} style={inputStyle} />
-        <DemoButton
-          testID={`${testIDPrefix}-secret-save`}
-          label={t('backendPending.secretSave')}
-          primary
-          onPress={() => {
-            const result = simulateSecretSave({ name: state.secretName, value: state.secretValue });
-            state.setSecretResult(result);
-            if (result.ok) state.setSecretValue('');
-          }}
-        />
-        {secretLine ? <ResultLine testID={`${testIDPrefix}-secret-result`} ok={secretLine.ok} text={secretLine.text} /> : null}
+        <View style={demoStyles.fieldGrid}>
+          <DemoField label={t('backendPending.secretName')} compact>
+            <TextInput testID={`${testIDPrefix}-secret-name`} value={state.secretName} onChangeText={state.setSecretName} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.secretName')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretName')} style={inputStyle} />
+          </DemoField>
+          <DemoField label={t('backendPending.secretValue')} compact>
+            <TextInput testID={`${testIDPrefix}-secret-value`} value={state.secretValue} onChangeText={state.setSecretValue} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.secretValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretValueA11y')} style={inputStyle} />
+          </DemoField>
+        </View>
+        <View style={demoStyles.actionRow}>
+          <DemoButton
+            testID={`${testIDPrefix}-secret-save`}
+            label={t('backendPending.secretSave')}
+            primary
+            onPress={() => {
+              const result = simulateSecretSave({ name: state.secretName, value: state.secretValue });
+              state.setSecretResult(result);
+              if (result.ok) state.setSecretValue('');
+            }}
+          />
+          {secretLine ? <ResultLine testID={`${testIDPrefix}-secret-result`} ok={secretLine.ok} text={secretLine.text} /> : null}
+        </View>
       </PendingPanelCard>
-      <PendingPanelCard testID={`${testIDPrefix}-env`}>
+      <PendingPanelCard testID={`${testIDPrefix}-env`} style={demoStyles.equalPanel}>
         <PendingCardTitle title={t('backendPending.section.env')} />
-        <PendingFieldLabel>{t('backendPending.envKey')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-env-key`} value={state.envKey} onChangeText={state.setEnvKey} autoCapitalize="characters" autoCorrect={false} placeholder={t('backendPending.envKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envKey')} style={inputStyle} />
-        <PendingFieldLabel>{t('backendPending.envValue')}</PendingFieldLabel>
-        <TextInput testID={`${testIDPrefix}-env-value`} value={state.envValue} onChangeText={state.setEnvValue} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.envValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envValueA11y')} style={inputStyle} />
-        <DemoButton
-          testID={`${testIDPrefix}-env-save`}
-          label={t('backendPending.envSave')}
-          primary
-          onPress={() => {
-            const result = simulateEnvSave({ key: state.envKey, value: state.envValue });
-            state.setEnvResult(result);
-            if (result.ok) state.setEnvValue('');
-          }}
-        />
-        {envLine ? <ResultLine testID={`${testIDPrefix}-env-result`} ok={envLine.ok} text={envLine.text} /> : null}
+        <View style={demoStyles.fieldGrid}>
+          <DemoField label={t('backendPending.envKey')} compact>
+            <TextInput testID={`${testIDPrefix}-env-key`} value={state.envKey} onChangeText={state.setEnvKey} autoCapitalize="characters" autoCorrect={false} placeholder={t('backendPending.envKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envKey')} style={inputStyle} />
+          </DemoField>
+          <DemoField label={t('backendPending.envValue')} compact>
+            <TextInput testID={`${testIDPrefix}-env-value`} value={state.envValue} onChangeText={state.setEnvValue} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.envValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envValueA11y')} style={inputStyle} />
+          </DemoField>
+        </View>
+        <View style={demoStyles.actionRow}>
+          <DemoButton
+            testID={`${testIDPrefix}-env-save`}
+            label={t('backendPending.envSave')}
+            primary
+            onPress={() => {
+              const result = simulateEnvSave({ key: state.envKey, value: state.envValue });
+              state.setEnvResult(result);
+              if (result.ok) state.setEnvValue('');
+            }}
+          />
+          {envLine ? <ResultLine testID={`${testIDPrefix}-env-result`} ok={envLine.ok} text={envLine.text} /> : null}
+        </View>
       </PendingPanelCard>
     </View>
   );
@@ -407,3 +500,89 @@ export function DaemonPendingDemos() {
     </View>
   );
 }
+
+const makeDemoStyles = () =>
+  StyleSheet.create({
+    panelGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'flex-start',
+      gap: spacing.md,
+    },
+    panelPrimary: { flexGrow: 2, flexShrink: 1, flexBasis: 380, minWidth: 0 },
+    panelSecondary: { flexGrow: 1, flexShrink: 1, flexBasis: 240, minWidth: 0 },
+    equalPanel: { flexGrow: 1, flexShrink: 1, flexBasis: 300, minWidth: 0 },
+    fieldGrid: {
+      flexDirection: 'row',
+      flexWrap: 'wrap',
+      alignItems: 'flex-start',
+      gap: spacing.md,
+    },
+    field: { flexGrow: 1, flexShrink: 1, flexBasis: 220, minWidth: 0, gap: spacing.xs + 2 },
+    fieldCompact: { flexBasis: 160 },
+    actionRow: {
+      minHeight: 36,
+      flexDirection: 'row',
+      alignItems: 'center',
+      flexWrap: 'wrap',
+      gap: spacing.md,
+    },
+    sectionDivider: { height: 1, backgroundColor: colors.border },
+    catalog: {
+      borderRadius: radius.control,
+      backgroundColor: colors.inputBg,
+      overflow: 'hidden',
+    },
+    catalogRow: {
+      minHeight: 58,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+    },
+    catalogRowDivider: { borderBottomWidth: 1, borderBottomColor: colors.border },
+    providerMark: {
+      width: 32,
+      height: 32,
+      borderRadius: radius.item,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.tonalBg,
+    },
+    rowCopy: { flex: 1, minWidth: 0, gap: 2 },
+    rowTitle: { color: colors.text, fontSize: type.body, fontWeight: weight.strong },
+    rowDescription: { color: colors.textMuted, fontSize: type.small, lineHeight: 17 },
+    modelPill: {
+      maxWidth: '42%',
+      borderRadius: radius.pill,
+      backgroundColor: colors.subtleFill,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    modelPillText: { color: colors.textSecondary, fontSize: type.small },
+    skillList: { gap: spacing.xs },
+    skillRow: {
+      minHeight: 64,
+      flexDirection: 'row',
+      alignItems: 'center',
+      gap: spacing.md,
+      paddingHorizontal: spacing.md,
+      paddingVertical: spacing.sm,
+      borderRadius: radius.control,
+    },
+    skillRowSelected: { backgroundColor: colors.rowActive },
+    skillIcon: {
+      width: 34,
+      height: 34,
+      borderRadius: radius.item,
+      alignItems: 'center',
+      justifyContent: 'center',
+      backgroundColor: colors.tonalBg,
+    },
+  });
+
+let demoStyles = makeDemoStyles();
+onThemeChange(() => {
+  demoStyles = makeDemoStyles();
+});

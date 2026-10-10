@@ -26,9 +26,9 @@ const SECRET = 'sk-FAKE-demo-key-9f3a';
 const quiet = (value: unknown) => !JSON.stringify(value).includes(SECRET);
 
 setLanguagePreference('zh');
-ck('zh banner is the agreed sentence', t('backendPending.banner') === '演示数据 · 后端开发中，敬请期待');
+ck('zh banner is the agreed sentence', t('backendPending.banner') === '演示数据 · 后端开发中');
 setLanguagePreference('en');
-ck('en banner is the agreed sentence', t('backendPending.banner') === 'Demo data — backend in development, coming soon');
+ck('en banner is the agreed sentence', t('backendPending.banner') === 'Demo data · Backend in development');
 setLanguagePreference('system');
 
 let netCalls = 0;
@@ -128,6 +128,7 @@ ck('hub sidebar exposes SKILLS / 令牌 / Provider tabs', sidebar.includes('test
 ck('hub pending screen renders tab panels', hub.includes('HubPendingScreen') && hub.includes('BackendPendingIntegration'));
 ck('node page mounts integrations section', nodeDetail.includes('<NodeIntegrationsSection') && nodeSection.includes('layer="node"'));
 ck('pending chrome reuses theme tokens (buttons + settings-style segments)', pendingUi.includes('buttonStyle') === false && pendingUi.includes('segmentSelected') && ui.includes('buttonStyle('));
+ck('pending forms use responsive field grids and compact catalog rows', ui.includes('demoStyles.fieldGrid') && ui.includes('<ProviderCatalogRow') && ui.includes('flexBasis: 220'));
 ck('management probe stays the disabled shell; the demo probe stays local', page.includes('testID="daemon-mgmt-probe"') && page.includes('action={probe}') && page.includes('onPress={() => {}}') && !page.includes('simulateProviderProbe') && ui.includes('simulateProviderProbe('));
 ck('provider form keeps the shell and adds the demo save', fields.includes('<ProviderConfigDemo') && fields.includes("onClearKey={() => onChange({ ...value, apiKey: '' })}"));
 ck('secret inputs stay masked', ui.includes('testID={`${testIDPrefix}-secret-value`}') && ui.includes('secureTextEntry') && ui.includes('testID={`${testIDPrefix}-provider-key`}'));
