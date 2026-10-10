@@ -64,6 +64,14 @@ for (const { locale, lang, hubLabel, daemonLabel, hubFile, daemonFile } of [
   if (lang === 'zh') {
     const intro = await page.locator('[data-testid="daemon-management"]').textContent();
     ck(`${lang}: 管理页文案不含「不能对话」`, !intro.includes('不能对话'));
+    await page.locator('[data-testid="daemon-mgmt-settings-card"]').waitFor({ timeout: 8000 });
+    const settingsCard = await page.locator('[data-testid="daemon-mgmt-settings-card"]').textContent();
+    ck(`${lang}: 设置卡含节点与虚拟机域`, settingsCard.includes('Daemon 节点设置') && settingsCard.includes('虚拟机域') && settingsCard.includes('SKILLS'));
+    await page.screenshot({ path: `${OUT}/daemon-settings-entries-zh.png`, fullPage: false });
+    await page.locator('[data-testid="daemon-mgmt-settings-domain"]').click();
+    await page.locator('[data-testid="daemon-pending-skills"]').waitFor({ timeout: 8000 }).catch(() => page.locator('[data-testid="daemon-section-tabs"]').waitFor({ timeout: 8000 }));
+    await page.screenshot({ path: `${OUT}/daemon-domain-settings-skills-zh.png`, fullPage: false });
+    await page.locator('[data-testid="daemon-section-nodes"]').click();
     await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click();
     await page.locator('[data-testid="chat-pane"]').waitFor({ timeout: 12000 });
     await page.screenshot({ path: `${OUT}/daemon-managed-node-chat-zh.png`, fullPage: false });

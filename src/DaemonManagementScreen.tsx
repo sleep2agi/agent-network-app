@@ -51,6 +51,7 @@ import { usePoll } from './usePoll';
 import { PANE_BACK_TEST_ID } from './pane-header';
 import { pointerUi } from './pointer-ui';
 import DialogFrame from './DialogFrame';
+import { SettingsGroup, SettingsRow } from './settings-kit';
 
 const CONFIRM_TITLE: Record<NodeActionId, string> = {
   start: 'daemon.mgmt.confirmStart',
@@ -169,6 +170,9 @@ export default function DaemonManagementScreen({
     daemon?.hostname?.trim() || (lookup.kind === 'ready' ? lookup.daemon?.hostname?.trim() : '') || '',
   ].filter(Boolean).join(' · ');
 
+  const openDomainSettings = useCallback(() => setSection('skills'), []);
+  const domainSettingsActive = section !== 'nodes';
+
   const run = async (id: NodeActionId) => {
     if (!selected || busy) return;
     setBusy(true);
@@ -210,12 +214,13 @@ export default function DaemonManagementScreen({
       <Pressable
         testID="daemon-mgmt-domain-settings"
         accessibilityRole="link"
-        onPress={() => setSection('skills')}
+        accessibilityLabel={t('daemon.mgmt.domainSettings')}
+        onPress={openDomainSettings}
         hitSlop={6}
-        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, pressed && { opacity: 0.6 }]}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, pressed && { opacity: 0.6 }, domainSettingsActive && { backgroundColor: colors.rowActive, borderRadius: radius.item, paddingHorizontal: spacing.xs }]}
       >
         <Ionicons name="layers-outline" size={16} color={colors.accent} />
-        <Text style={{ color: colors.accent, fontSize: type.body }}>{t('daemon.mgmt.domainSettings')}</Text>
+        <Text style={{ color: colors.accent, fontSize: type.body }} numberOfLines={1}>{t('daemon.mgmt.domainSettings')}</Text>
       </Pressable>
       <Pressable
         testID="daemon-mgmt-logs"
@@ -264,6 +269,25 @@ export default function DaemonManagementScreen({
 
   const daemonActions = (
     <View style={{ gap: spacing.sm }}>
+      <SettingsGroup testID="daemon-mgmt-settings-card" title={t('daemon.mgmt.settingsSection')}>
+        <SettingsRow
+          testID="daemon-mgmt-settings-node"
+          icon="settings-outline"
+          label={t('daemon.mgmt.nodeSettings')}
+          subtitle={`${t('daemon.mgmt.levelNode')} · ${t('daemon.mgmt.nodeSettingsHint')}`}
+          value={t('daemon.mgmt.levelNode')}
+          onPress={onOpenNodeSettings}
+          disabled={!onOpenNodeSettings}
+        />
+        <SettingsRow
+          testID="daemon-mgmt-settings-domain"
+          icon="layers-outline"
+          label={t('daemon.mgmt.domainSettings')}
+          subtitle={`${t('daemon.mgmt.levelDomain')} · ${t('daemon.mgmt.domainSettingsHint')}`}
+          value={t('daemon.mgmt.levelDomain')}
+          onPress={openDomainSettings}
+        />
+      </SettingsGroup>
       <Text style={{ color: colors.textSecondary, fontSize: type.body, lineHeight: 20 }}>{t('daemon.mgmt.intro')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' }}>
         <MgmtButton testID="daemon-mgmt-create" action={create} busy={busy} onPress={() => { if (lookup.kind === 'ready' && lookup.daemon && onCreate) onCreate(lookup.daemon); }} />
@@ -353,6 +377,26 @@ export default function DaemonManagementScreen({
         <Ionicons name="git-network-outline" size={18} color={section === 'nodes' ? colors.accent : colors.textSecondary} />
         <Text style={[screenStyles.sectionItemText, section === 'nodes' && screenStyles.sectionItemTextActive]} numberOfLines={1}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
       </Pressable>
+      <Text style={screenStyles.sectionLabel}>{t('daemon.mgmt.settingsSection')}</Text>
+      <DaemonSettingsNavItem
+        testID="daemon-section-node-settings"
+        icon="settings-outline"
+        title={t('daemon.mgmt.nodeSettings')}
+        level={t('daemon.mgmt.levelNode')}
+        hint={t('daemon.mgmt.nodeSettingsHint')}
+        active={false}
+        disabled={!onOpenNodeSettings}
+        onPress={onOpenNodeSettings}
+      />
+      <DaemonSettingsNavItem
+        testID="daemon-section-domain-settings"
+        icon="layers-outline"
+        title={t('daemon.mgmt.domainSettings')}
+        level={t('daemon.mgmt.levelDomain')}
+        hint={t('daemon.mgmt.domainSettingsHint')}
+        active={domainSettingsActive}
+        onPress={openDomainSettings}
+      />
       <Text style={screenStyles.sectionLabel} testID="daemon-integrations-label">{t('daemon.integrations')}</Text>
       <PendingSegmentedTabs
         stacked
@@ -451,6 +495,44 @@ const DAEMON_NARROW = 390;
 function messageTone(message: string): string {
   const submitted = (['start', 'restart', 'stop', 'delete'] as const).some(id => message === t(`daemon.mgmt.submitted.${id}`));
   return submitted ? colors.running : colors.failed;
+}
+
+function DaemonSettingsNavItem({ testID, icon, title, level, hint, active, disabled, onPress }: {
+  testID: string;
+  icon: string;
+  title: string;
+  level: string;
+  hint: string;
+  active: boolean;
+  disabled?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      disabled={disabled || !onPress}
+      onPress={onPress}
+      style={({ pressed }) => [
+        screenStyles.sectionItem,
+        active && screenStyles.sectionItemActive,
+        (disabled || !onPress) && { opacity: 0.45 },
+        pressed && onPress && !disabled && { opacity: 0.65 },
+      ]}
+    >
+      <Ionicons name={icon as 'settings-outline'} size={18} color={active ? colors.accent : colors.textSecondary} />
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={[screenStyles.sectionItemText, active && screenStyles.sectionItemTextActive]} numberOfLines={2}>{title}</Text>
+        <Text style={screenStyles.sectionItemHint} numberOfLines={2}>
+          <Text style={screenStyles.sectionItemLevel}>{level}</Text>
+          {' · '}
+          {hint}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+    </Pressable>
+  );
 }
 
 function Fact({ label, value, dot, testID }: { label: string; value: string; dot?: string; testID?: string }) {
@@ -595,6 +677,8 @@ const makeScreenStyles = () =>
     sectionItemActive: { backgroundColor: colors.rowActive },
     sectionItemText: { color: colors.textSecondary, fontSize: 13, fontWeight: weight.medium, flex: 1 },
     sectionItemTextActive: { color: colors.text, fontWeight: weight.strong },
+    sectionItemHint: { color: colors.textMuted, fontSize: type.caption, lineHeight: 16 },
+    sectionItemLevel: { color: colors.accent, fontWeight: weight.strong },
     content: { flex: 1, minWidth: 0 },
     contentInner: { width: '100%', padding: spacing.xl, paddingBottom: spacing.xl * 2, gap: spacing.lg },
     pageHeading: { gap: spacing.md },
