@@ -26,6 +26,7 @@ const VIEWPORTS = [{ name: 'desktop-1200x800', w: 1200, h: 800 }, { name: 'phone
 const TOO_OLD = '这台机器的 Hub 或 daemon 版本太旧，还不支持建 Codex 共存节点。请先把 Hub 和 agent-node 升级到最新预览版，再重新创建。';
 const MISSING = '目标机器起不来 Codex 共存节点：它需要装好 tmux 和 codex，并且已经登录 codex（在那台机器上运行 codex login）。';
 const DETAIL = "child died within 5000ms post-spawn (likely missing runtime binary or auth for runtime='codex-app-server'): kill ESRCH";
+const CODEX_YOLO_FLAGS_JSON = '{"copresence":true,"approvalPolicy":"never","sandboxMode":"danger-full-access","skipGitRepoCheck":true,"copresenceFullAccess":true}';
 
 let fails = 0;
 const ck = (name, ok, extra = '') => { if (!ok) fails++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}${extra ? ` (${extra})` : ''}`); };
@@ -57,7 +58,7 @@ const overrideScript = () => {
 const web = await serveExport(WEB);
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
 
-async function submit(page, runtimeLabel, mode) {
+async function submit(page, runtimeLabel, mode, { codexAutoExecute = true } = {}) {
   await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 15000 });
   await page.evaluate((m) => { window.__createMode = m; window.__createCalls = []; }, mode);
   // 先切到别的页,保证向导重新挂载、从第一步开始
@@ -66,6 +67,11 @@ async function submit(page, runtimeLabel, mode) {
   await page.getByPlaceholder('例如 my-agent-1').fill('demo_agent');
   await page.getByText('下一步', { exact: true }).click();
   await page.getByText(runtimeLabel, { exact: true }).first().click();
+  if (runtimeLabel === 'Codex（TUI 共存）' && codexAutoExecute === false) {
+    const consent = page.getByTestId('codex-auto-execute-consent');
+    await consent.waitFor({ timeout: 5000 });
+    if (await consent.getAttribute('aria-checked') === 'true') await consent.click();
+  }
   // #614:没有可选项的步骤(共存 runtime 的 模型 / 参数)不出现 —— 按「下一步」走到出现「创建节点」为止。
   const submitBtn = page.locator('[data-testid="create-node-submit"]');
   for (let i = 0; i < 4 && !(await submitBtn.count()); i++) await page.getByText('下一步', { exact: true }).click();
@@ -98,7 +104,12 @@ for (const vp of VIEWPORTS) {
       a?.node_spec?.runtime === 'codex-app-server' && a?.node_spec?.flags?.copresence === true, JSON.stringify(a?.node_spec));
     // 默认与 codexSdkYoloFlags + TUI 全权限记忆对齐。
     ck(`${vp.name}: co-presence request sends copresence + yolo flags, no model`,
-      JSON.stringify(a?.node_spec?.flags) === '{"copresence":true,"approvalPolicy":"never","sandboxMode":"danger-full-access","skipGitRepoCheck":true,"copresenceFullAccess":true}' && !('model' in (a?.node_spec ?? {})));
+      JSON.stringify(a?.node_spec?.flags) === CODEX_YOLO_FLAGS_JSON && !('model' in (a?.node_spec ?? {})));
+    if (vp.name === 'desktop-1200x800') {
+      const d = await submit(page, 'Codex（TUI 共存）', 'ok', { codexAutoExecute: false });
+      ck(`${vp.name}: auto-exec off → flags only {copresence:true}`,
+        JSON.stringify(d?.node_spec?.flags) === '{"copresence":true}' && d?.node_spec?.runtime === 'codex-app-server', JSON.stringify(d?.node_spec?.flags));
+    }
 
     const b = await submit(page, 'Claude Agent SDK', 'ok');
     ck(`${vp.name}: Claude Agent SDK → no copresence key`, b?.node_spec?.runtime === 'claude-agent-sdk' && !('copresence' in (b?.node_spec?.flags ?? {})), JSON.stringify(b?.node_spec?.flags));
