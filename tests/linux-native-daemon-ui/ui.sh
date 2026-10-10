@@ -25,6 +25,11 @@ for attempt in $(seq 1 100); do
   sleep 0.3
 done
 python3 /fixture/verify-session.py
+# Optional TEST-ONLY source-candidate prefix. It may seed software, never Hub
+# credentials/profiles; the normal before/after registration guards still run.
+if [ -n "${TEST_DAEMON_PREFIX_PREPARE:-}" ]; then
+  python3 "$TEST_DAEMON_PREFIX_PREPARE"
+fi
 sleep 3
 import -window "$window" /evidence/agents.png
 # Real mouse input into the fixed, reviewed native 1200x800 layout. No DOM,

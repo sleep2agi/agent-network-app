@@ -1,12 +1,15 @@
 # Native V1 startup slice (TEST ONLY)
 
-**Current status: diagnostic reproducer, not a passing acceptance gate.** The
-tested candidate creates/registers V1 successfully, but omits `opencodeMode`
-and therefore retains legacy headless behavior while the wizard labels it
-TUI copresence. The observer deliberately fails this mismatch; do not treat
-the green native registration screen as a live copresence proof. See
-`../../docs/tests/report-test894-native-v1.txt`. No production behavior has
-been changed and the suite is not yet wired into CI as a required gate.
+**Scope: strict copresence diagnostic, not a V1 headless acceptance gate.**
+The historical candidate in `../../docs/tests/report-test894-native-v1.txt`
+omitted `opencodeMode`, retaining legacy headless behavior while its wizard
+incorrectly labeled it TUI copresence. This observer deliberately rejects that
+mode mismatch. The newer wizard explicitly labels V1 as compatible headless;
+that label correction does not add copresence or make this diagnostic pass.
+Use the separate `../linux-native-v1-registration/` gate to verify legacy
+registration, and bind its results to the actual package being tested. Neither
+the green registration screen nor the corrected label proves model delivery
+or full lifecycle compatibility. This suite is not a required CI gate.
 
 This suite is intentionally separate from `linux-native-opencode` (V2). It
 drives the installed ANet window with mouse/keyboard, uses the real private

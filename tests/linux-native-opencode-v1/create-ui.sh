@@ -26,6 +26,14 @@ test -e /evidence/v1-reachability-ready
 export HTTPS_PROXY=http://127.0.0.1:18829 NO_PROXY=127.0.0.1,localhost
 source /fixture/daemon-ui.sh
 trap cleanup EXIT
+# Optional extension prerequisite; default historical registration is unchanged.
+if [ -n "${TEST_V1_READINESS_GATE:-}" ]; then
+  python3 "$TEST_V1_READINESS_GATE"
+  # Picker reloads every 10s. Wait for its real GET to consume the measured
+  # daemon snapshot before selecting it; no API/config mutation or DOM injection.
+  sleep 11
+  import -window "$window" /evidence/v1-readiness-picker.png
+fi
 python3 "$observer" before
 xdotool mousemove --window "$window" 785 766 click 1
 sleep 1
