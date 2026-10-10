@@ -34,7 +34,7 @@ import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 //   2. 各分组的在线比例(与 Agent 列表同一份分组,点一行进列表并筛到该组);
 //   3. 连接本身(地址、hub 版本、网络 id、实测延迟、已连接多久;断开时给原因和重试);
 //   4. 常用入口(节点管理 / 新建节点 / 定时任务 / 事件与日志),复用已有的屏。
-//   5. 「机器」(#618):节点所在每台机器的 CPU / 内存 / 磁盘水位(host-levels.ts 定规则,点一台进节点列表筛到它)。
+//   5. 「机器」(#618):节点所在每台机器的 CPU / 内存 / 磁盘水位(host-levels.ts 定规则,点一台进该机器的守护进程管理页;没有 daemon 时退回节点列表筛到它)。
 // 宽屏(≥ WIDE_MIN)分两栏:左 = 概况 + 机器 + 分组,右 = 连接 + 操作;窄屏单栏(概况之后紧跟机器)。
 // 机器放主栏:三根条要横向长度才读得出差别,右栏 ~440px 放三列条每列不到 100px。
 
@@ -53,6 +53,7 @@ export default function ServerScreen({
   onOpenNodes,
   onCreateNode,
   onOpenScheduled,
+  onOpenDaemon,
   onSwitchProfile,
   onAddServer,
   onBack,
@@ -66,6 +67,8 @@ export default function ServerScreen({
   onOpenNodes?: () => void;
   onCreateNode?: () => void;
   onOpenScheduled?: () => void;
+  /** 点机器行:这台机器上有 host_supervisor ⇒ 进守护进程管理页(与 Daemon 会话路由一致,传 alias)。 */
+  onOpenDaemon?: (alias: string) => void;
   /** 有多个已保存的服务器时显示「切换服务器」(目前只有桌面端会存多个)。 */
   onSwitchProfile?: (profileId: string) => void | Promise<void>;
   onAddServer?: () => void;
@@ -181,7 +184,11 @@ export default function ServerScreen({
   const retry = () => { setRetrying(true); void load(); };
   const { hosts, active: activeHosts, offline: offlineHosts, unreported } = hostLevels(hostRows ?? [], Date.now(), daemons);
   const shownHosts = allHosts ? activeHosts : activeHosts.slice(0, HOSTS_COLLAPSED);
-  const openHost = (h: HostLevel) => onOpenAgents?.({ host: h.hostname, aliases: h.aliases, hostLabel: h.displayName });
+  const openHost = (h: HostLevel) => {
+    if (h.daemonAlias) onOpenDaemon?.(h.daemonAlias);
+    else onOpenAgents?.({ host: h.hostname, aliases: h.aliases, hostLabel: h.displayName });
+  };
+  const hostPressable = !!(onOpenDaemon || onOpenAgents);
 
   const overview = (
     <View style={styles.section} testID="server-overview">
@@ -223,7 +230,7 @@ export default function ServerScreen({
       </View>
       <View style={styles.panel} testID="server-hosts">
         {shownHosts.map((h, i) => (
-          <HostRow key={h.hostname} host={h} wide={wide} first={i === 0} onPress={onOpenAgents ? () => openHost(h) : undefined} />
+          <HostRow key={h.hostname} host={h} wide={wide} first={i === 0} onPress={hostPressable ? () => openHost(h) : undefined} />
         ))}
         {activeHosts.length > HOSTS_COLLAPSED ? (
           <Pressable
@@ -249,7 +256,7 @@ export default function ServerScreen({
         ) : null}
         {showOfflineHosts
           ? offlineHosts.map(h => (
-            <HostRow key={h.hostname} host={h} wide={wide} first={false} onPress={onOpenAgents ? () => openHost(h) : undefined} />
+            <HostRow key={h.hostname} host={h} wide={wide} first={false} onPress={hostPressable ? () => openHost(h) : undefined} />
           ))
           : null}
       </View>
@@ -584,7 +591,7 @@ function HostRow({ host: h, wide, first, onPress }: { host: HostLevel; wide: boo
       ) : null}
     </View>
   );
-  const a11y = `${h.displayName}${h.renamed ? `(${h.hostname})` : ''}${h.alert ? ' 告警' : ''} ${h.online} 在线 · 共 ${h.total} 节点 · ${METERS.map(m => `${m.label} ${h[m.key].value}`).join(' · ')}${h.staleLabel ? ` · ${h.staleLabel}` : ''},查看节点`;
+  const a11y = `${h.displayName}${h.renamed ? `(${h.hostname})` : ''}${h.alert ? ' 告警' : ''} ${h.online} 在线 · 共 ${h.total} 节点 · ${METERS.map(m => `${m.label} ${h[m.key].value}`).join(' · ')}${h.staleLabel ? ` · ${h.staleLabel}` : ''},${h.daemonAlias ? '查看守护进程' : '查看节点'}`;
   return (
     <Pressable
       testID={`server-hostrow-${h.hostname}`}

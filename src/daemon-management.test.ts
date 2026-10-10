@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { setLanguagePreference } from './i18n';
 import { chatTranslations } from './i18n-chat';
+import { daemonTranslations } from './i18n-daemon';
 import {
   actionReason,
   createAction,
@@ -122,13 +123,22 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 ck('management screen calls the existing lifecycle helper and the create callback', screen.includes('runNodeLifecycleAction(cfg, lifecycleTool(id), selected.node)') && screen.includes('onCreate(lookup.daemon)'));
 ck('management screen does not invent a probe call', !/probe_provider_model|probe_node|\/api\/probe/.test(screen));
 ck('logs entry is on the management page', screen.includes('testID="daemon-mgmt-logs"') && screen.includes('onOpenLogs'));
+ck('daemon node settings and VM domain settings are in the header', screen.includes('testID="daemon-mgmt-node-settings"') && screen.includes('testID="daemon-mgmt-domain-settings"') && screen.includes("t('daemon.mgmt.nodeSettings')") && screen.includes("t('daemon.mgmt.domainSettings')"));
+ck('settings card and sidebar entries spell node vs VM domain', screen.includes('testID="daemon-mgmt-settings-card"') && screen.includes('testID="daemon-mgmt-settings-node"') && screen.includes('testID="daemon-mgmt-settings-domain"') && screen.includes('testID="daemon-section-node-settings"') && screen.includes('testID="daemon-section-domain-settings"') && screen.includes("t('daemon.mgmt.levelNode')") && screen.includes("t('daemon.mgmt.levelDomain')"));
+ck('domain settings title includes Daemon / VM domain', daemonTranslations['daemon.mgmt.domainSettings'][0].includes('虚拟机域') && daemonTranslations['daemon.mgmt.domainSettings'][1].includes('VM domain'));
+ck('managed nodes can open chat when a handler is passed', screen.includes('testID="daemon-mgmt-open-chat"') && screen.includes('onOpenManagedChat'));
+ck('daemon integration nav uses daemon.integrations label', screen.includes("t('daemon.integrations')") && screen.includes('testID="daemon-integrations-label"') && !screen.includes("t('server.integrations')"));
+ck('ChatScreen passes node settings and managed chat into the management page', /onOpenNodeSettings=\{onOpenNodeSettings\}/.test(chat) && /onOpenManagedChat=\{onOpenManagedChat\}/.test(chat));
+ck('App wires managed chat from the daemon page', (app.match(/onOpenManagedChat=\{managedAlias => setScreen\(\{ name: 'chat', alias: managedAlias/g) ?? []).length >= 3);
 ck('back affordance is hidden on desktop and in the two-pane', /const showBack = !desktop && !hideBack;/.test(screen) && screen.includes('testID={PANE_BACK_TEST_ID}'));
 ck('ChatScreen replaces the daemon chat with the management page', /if \(composerKind === 'daemon'\) \{\s*return \(\s*<DaemonManagementScreen/.test(chat));
 ck('daemon logs still open the node page on the logs section', /requestNodeSection\(nodeInfoSectionKey\([^)]*\), 'logs'\);\s*onOpenNodeSettings\(\)/.test(chat));
 ck('the chat composer notice is no longer the daemon view', !chat.includes('DaemonComposerNotice'));
 ck('phone, two-pane, and desktop chats can open the existing wizard and return here', (app.match(/onCreateNode=\{daemon => setScreen\(\{ name: 'wizard', daemon, back: \{ name: 'chat', alias:/g) ?? []).length === 3);
 ck('wizard back returns to whoever opened it', app.includes('screen.back ?? { name: \'picker\' }') && app.includes("if (screen.name === 'wizard' && screen.back)"));
-ck('the old notice sentence remains translated', chatTranslations['chat.daemon.notice'][0].includes('不能对话') && !!chatTranslations['chat.daemon.notice'][1]);
+ck('daemon notice copy mentions managed agents can chat', chatTranslations['chat.daemon.notice'][0].includes('托管') && chatTranslations['chat.daemon.notice'][0].includes('对话') && !!chatTranslations['chat.daemon.notice'][1]);
+ck('managed node row opens chat when a handler is wired', screen.includes('onOpenManagedChat?.(row.alias)') && screen.includes('opensChat={!!onOpenManagedChat}'));
+ck('intro no longer tells users managed agents cannot chat', !daemonTranslations['daemon.mgmt.intro'][0].includes('不能对话') && daemonTranslations['daemon.mgmt.intro'][0].includes('对话'));
 
 setLanguagePreference('system');
 console.log(`\n${passed}/${total} passed`);

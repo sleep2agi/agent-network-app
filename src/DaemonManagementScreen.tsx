@@ -51,6 +51,7 @@ import { usePoll } from './usePoll';
 import { PANE_BACK_TEST_ID } from './pane-header';
 import { pointerUi } from './pointer-ui';
 import DialogFrame from './DialogFrame';
+import { SettingsGroup, SettingsRow } from './settings-kit';
 
 const CONFIRM_TITLE: Record<NodeActionId, string> = {
   start: 'daemon.mgmt.confirmStart',
@@ -91,6 +92,8 @@ export default function DaemonManagementScreen({
   initialSection = 'nodes',
   onBack,
   onOpenLogs,
+  onOpenNodeSettings,
+  onOpenManagedChat,
   onCreate,
 }: {
   cfg: HubConfig;
@@ -100,6 +103,10 @@ export default function DaemonManagementScreen({
   initialSection?: DaemonSection;
   onBack: () => void;
   onOpenLogs?: () => void;
+  /** 打开本守护进程节点自身的节点设置页。 */
+  onOpenNodeSettings?: () => void;
+  /** 打开某个托管节点的会话。 */
+  onOpenManagedChat?: (alias: string) => void;
   onCreate?: (daemon: HostSupervisorDaemon) => void;
 }) {
   useTranslation();
@@ -163,6 +170,9 @@ export default function DaemonManagementScreen({
     daemon?.hostname?.trim() || (lookup.kind === 'ready' ? lookup.daemon?.hostname?.trim() : '') || '',
   ].filter(Boolean).join(' · ');
 
+  const openDomainSettings = useCallback(() => setSection('skills'), []);
+  const domainSettingsActive = section !== 'nodes';
+
   const run = async (id: NodeActionId) => {
     if (!selected || busy) return;
     setBusy(true);
@@ -190,6 +200,28 @@ export default function DaemonManagementScreen({
         <Text style={{ color: colors.text, fontSize: type.title, fontWeight: weight.strong }} numberOfLines={1}>{alias}</Text>
         <Text style={{ color: colors.textSecondary, fontSize: type.small }} numberOfLines={1}>{subtitle}</Text>
       </View>
+      <Pressable
+        testID="daemon-mgmt-node-settings"
+        accessibilityRole="link"
+        disabled={!onOpenNodeSettings}
+        onPress={onOpenNodeSettings}
+        hitSlop={6}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, pressed && onOpenNodeSettings && { opacity: 0.6 }, !onOpenNodeSettings && { opacity: 0.45 }]}
+      >
+        <Ionicons name="settings-outline" size={16} color={colors.accent} />
+        <Text style={{ color: colors.accent, fontSize: type.body }}>{t('daemon.mgmt.nodeSettings')}</Text>
+      </Pressable>
+      <Pressable
+        testID="daemon-mgmt-domain-settings"
+        accessibilityRole="link"
+        accessibilityLabel={t('daemon.mgmt.domainSettings')}
+        onPress={openDomainSettings}
+        hitSlop={6}
+        style={({ pressed }) => [{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }, pressed && { opacity: 0.6 }, domainSettingsActive && { backgroundColor: colors.rowActive, borderRadius: radius.item, paddingHorizontal: spacing.xs }]}
+      >
+        <Ionicons name="layers-outline" size={16} color={colors.accent} />
+        <Text style={{ color: colors.accent, fontSize: type.body }} numberOfLines={1}>{t('daemon.mgmt.domainSettings')}</Text>
+      </Pressable>
       <Pressable
         testID="daemon-mgmt-logs"
         accessibilityRole="link"
@@ -237,6 +269,25 @@ export default function DaemonManagementScreen({
 
   const daemonActions = (
     <View style={{ gap: spacing.sm }}>
+      <SettingsGroup testID="daemon-mgmt-settings-card" title={t('daemon.mgmt.settingsSection')}>
+        <SettingsRow
+          testID="daemon-mgmt-settings-node"
+          icon="settings-outline"
+          label={t('daemon.mgmt.nodeSettings')}
+          subtitle={`${t('daemon.mgmt.levelNode')} · ${t('daemon.mgmt.nodeSettingsHint')}`}
+          value={t('daemon.mgmt.levelNode')}
+          onPress={onOpenNodeSettings}
+          disabled={!onOpenNodeSettings}
+        />
+        <SettingsRow
+          testID="daemon-mgmt-settings-domain"
+          icon="layers-outline"
+          label={t('daemon.mgmt.domainSettings')}
+          subtitle={`${t('daemon.mgmt.levelDomain')} · ${t('daemon.mgmt.domainSettingsHint')}`}
+          value={t('daemon.mgmt.levelDomain')}
+          onPress={openDomainSettings}
+        />
+      </SettingsGroup>
       <Text style={{ color: colors.textSecondary, fontSize: type.body, lineHeight: 20 }}>{t('daemon.mgmt.intro')}</Text>
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, alignItems: 'center' }}>
         <MgmtButton testID="daemon-mgmt-create" action={create} busy={busy} onPress={() => { if (lookup.kind === 'ready' && lookup.daemon && onCreate) onCreate(lookup.daemon); }} />
@@ -264,6 +315,17 @@ export default function DaemonManagementScreen({
       )}
       {selected ? (
         <>
+          {onOpenManagedChat ? (
+            <Pressable
+              testID="daemon-mgmt-open-chat"
+              accessibilityRole="button"
+              accessibilityLabel={t('daemon.mgmt.openChat')}
+              onPress={() => onOpenManagedChat(selected.alias)}
+              style={({ pressed }) => [buttonStyle('primary'), { alignSelf: 'flex-start' }, pressed && { opacity: 0.85 }]}
+            >
+              <Text style={buttonTextStyle('primary')}>{t('daemon.mgmt.openChat')}</Text>
+            </Pressable>
+          ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
             {actions.filter(action => action.visible).map(action => (
               <MgmtButton
@@ -287,7 +349,17 @@ export default function DaemonManagementScreen({
     <Text testID="daemon-mgmt-empty" style={{ color: colors.textMuted, fontSize: type.body, padding: spacing.lg }}>{t('daemon.mgmt.empty')}</Text>
   ) : (
     rows.map(row => (
-      <Row key={row.nodeId} row={row} selected={row.nodeId === selected?.nodeId} compact={layout === 'split'} onPress={() => setSelectedId(row.nodeId)} />
+      <Row
+        key={row.nodeId}
+        row={row}
+        selected={row.nodeId === selected?.nodeId}
+        compact={layout === 'split'}
+        opensChat={!!onOpenManagedChat}
+        onPress={() => {
+          setSelectedId(row.nodeId);
+          onOpenManagedChat?.(row.alias);
+        }}
+      />
     ))
   );
 
@@ -305,7 +377,27 @@ export default function DaemonManagementScreen({
         <Ionicons name="git-network-outline" size={18} color={section === 'nodes' ? colors.accent : colors.textSecondary} />
         <Text style={[screenStyles.sectionItemText, section === 'nodes' && screenStyles.sectionItemTextActive]} numberOfLines={1}>{t('daemon.mgmt.nodesCount', { count: rows.length })}</Text>
       </Pressable>
-      <Text style={screenStyles.sectionLabel}>{t('server.integrations')}</Text>
+      <Text style={screenStyles.sectionLabel}>{t('daemon.mgmt.settingsSection')}</Text>
+      <DaemonSettingsNavItem
+        testID="daemon-section-node-settings"
+        icon="settings-outline"
+        title={t('daemon.mgmt.nodeSettings')}
+        level={t('daemon.mgmt.levelNode')}
+        hint={t('daemon.mgmt.nodeSettingsHint')}
+        active={false}
+        disabled={!onOpenNodeSettings}
+        onPress={onOpenNodeSettings}
+      />
+      <DaemonSettingsNavItem
+        testID="daemon-section-domain-settings"
+        icon="layers-outline"
+        title={t('daemon.mgmt.domainSettings')}
+        level={t('daemon.mgmt.levelDomain')}
+        hint={t('daemon.mgmt.domainSettingsHint')}
+        active={domainSettingsActive}
+        onPress={openDomainSettings}
+      />
+      <Text style={screenStyles.sectionLabel} testID="daemon-integrations-label">{t('daemon.integrations')}</Text>
       <PendingSegmentedTabs
         stacked
         value={pendingSection}
@@ -405,6 +497,44 @@ function messageTone(message: string): string {
   return submitted ? colors.running : colors.failed;
 }
 
+function DaemonSettingsNavItem({ testID, icon, title, level, hint, active, disabled, onPress }: {
+  testID: string;
+  icon: string;
+  title: string;
+  level: string;
+  hint: string;
+  active: boolean;
+  disabled?: boolean;
+  onPress?: () => void;
+}) {
+  return (
+    <Pressable
+      testID={testID}
+      accessibilityRole="button"
+      accessibilityState={{ selected: active, disabled: !!disabled }}
+      disabled={disabled || !onPress}
+      onPress={onPress}
+      style={({ pressed }) => [
+        screenStyles.sectionItem,
+        active && screenStyles.sectionItemActive,
+        (disabled || !onPress) && { opacity: 0.45 },
+        pressed && onPress && !disabled && { opacity: 0.65 },
+      ]}
+    >
+      <Ionicons name={icon as 'settings-outline'} size={18} color={active ? colors.accent : colors.textSecondary} />
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={[screenStyles.sectionItemText, active && screenStyles.sectionItemTextActive]} numberOfLines={2}>{title}</Text>
+        <Text style={screenStyles.sectionItemHint} numberOfLines={2}>
+          <Text style={screenStyles.sectionItemLevel}>{level}</Text>
+          {' · '}
+          {hint}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+    </Pressable>
+  );
+}
+
 function Fact({ label, value, dot, testID }: { label: string; value: string; dot?: string; testID?: string }) {
   return (
     <View testID={testID} style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 }}>
@@ -473,10 +603,11 @@ function MgmtButton({ action, onPress, testID, busy, tone }: {
   );
 }
 
-function Row({ row, selected, compact, onPress }: {
+function Row({ row, selected, compact, opensChat, onPress }: {
   row: ReturnType<typeof managedRows>[number];
   selected: boolean;
   compact?: boolean;
+  opensChat?: boolean;
   onPress: () => void;
 }) {
   const dot = row.status.online === null ? colors.rest : statusColor(row.status.text, row.status.online);
@@ -485,7 +616,7 @@ function Row({ row, selected, compact, onPress }: {
       testID={`daemon-mgmt-row-${row.nodeId}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${row.name}, ${statusLabel(row.status)}, ${runtimeLabel(row.runtime)}, ${nodeTypeLabel(row.type)}`}
+      accessibilityLabel={`${row.name}, ${statusLabel(row.status)}, ${runtimeLabel(row.runtime)}, ${nodeTypeLabel(row.type)}${opensChat ? `, ${t('daemon.mgmt.openChat')}` : ''}`}
       onPress={onPress}
       style={({ pressed }) => [{
         paddingHorizontal: spacing.lg,
@@ -546,6 +677,8 @@ const makeScreenStyles = () =>
     sectionItemActive: { backgroundColor: colors.rowActive },
     sectionItemText: { color: colors.textSecondary, fontSize: 13, fontWeight: weight.medium, flex: 1 },
     sectionItemTextActive: { color: colors.text, fontWeight: weight.strong },
+    sectionItemHint: { color: colors.textMuted, fontSize: type.caption, lineHeight: 16 },
+    sectionItemLevel: { color: colors.accent, fontWeight: weight.strong },
     content: { flex: 1, minWidth: 0 },
     contentInner: { width: '100%', padding: spacing.xl, paddingBottom: spacing.xl * 2, gap: spacing.lg },
     pageHeading: { gap: spacing.md },

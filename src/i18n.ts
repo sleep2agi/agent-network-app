@@ -37,7 +37,7 @@ const tables: TranslationTable = {
   'server.hub.providers': ['Provider', 'Provider'],
   'server.navLabel': ['Hub：{label}', 'Hub: {label}'],
   'server.network': ['网络', 'Network'],
-  'server.integrations': ['集成', 'Integrations'],
+  'server.integrations': ['Hub 域集成', 'Hub integrations'],
   'server.pendingTitle.skills': ['SKILLS', 'SKILLS'],
   'server.pendingTitle.tokens': ['令牌', 'Tokens'],
   'server.pendingTitle.provider': ['Provider', 'Provider'],

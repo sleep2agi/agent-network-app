@@ -285,8 +285,12 @@ interface Props {
   onOpenTask?: (requirementId: string, networkId: string | null) => void;
   /** #908 守护进程管理页的「新建节点」:打开现有向导。不传(分离聊天窗)= 按钮置灰。 */
   onCreateNode?: (daemon: HostSupervisorDaemon) => void;
+  /** 守护进程管理页里点托管节点的「对话」。 */
+  onOpenManagedChat?: (alias: string) => void;
   /** #769: 点开这个会话的那一行所在网络。发送 / 历史 / 已读 / 附件都打到它,不是账号当前网络。 */
   networkId?: string;
+  /** Hub 概览点机器进守护进程管理:角色尚未从 /api/nodes 确认时也显示管理页与设置入口。 */
+  daemonMgmt?: boolean;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -297,7 +301,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onCreateNode }: Props) {
+export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, daemonMgmt = false }: Props) {
   useTranslation();
   // #769: everything below is agent-scoped — use THIS agent's network, not the account's current one.
   const cfg = useMemo(() => cfgForAgent(accountCfg, alias, networkId), [accountCfg, alias, networkId]);
@@ -328,7 +332,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const sendKey = useSyncExternalStore(subscribeShortcuts, sendKeyPref, sendKeyPref);
   // #908 守护节点(host_supervisor):整页换成管理页,不进对话。角色还没到时仍先按普通会话画。
   useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
-  const composerKind = chatComposerKind(isHostSupervisorAlias(alias));
+  const composerKind = chatComposerKind(isHostSupervisorAlias(alias) || daemonMgmt);
   // Fold/unfold remounts this screen (phone stack ⇄ two-pane); carry the unsent
   // draft across that remount only. Ordinary back/leave still drops it, as before.
   const draftHandoffKey = `chatDraft:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
@@ -1982,7 +1986,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         desktop={desktop}
         hideBack={hideBack}
         onBack={onBack}
+        onOpenNodeSettings={onOpenNodeSettings}
         onOpenLogs={onOpenNodeSettings ? () => { requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), 'logs'); onOpenNodeSettings(); } : undefined}
+        onOpenManagedChat={onOpenManagedChat}
         onCreate={onCreateNode}
       />
     );

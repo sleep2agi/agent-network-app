@@ -92,7 +92,7 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 {
-  ck('ChatScreen picks the page by role', /composerKind = chatComposerKind\(isHostSupervisorAlias\(alias\)\)/.test(chat));
+  ck('ChatScreen picks the page by role or Hub daemon route', /composerKind = chatComposerKind\(isHostSupervisorAlias\(alias\) \|\| daemonMgmt\)/.test(chat));
   ck('daemon branch returns the management page before the chat composer', /if \(composerKind === 'daemon'\) \{\s*return \(\s*<DaemonManagementScreen/.test(chat));
   ck('the chat composer stays on the normal-node path', chat.includes('testID="desktop-composer-card"') && !chat.includes('DaemonComposerNotice'));
   ck('run-logs entry opens the node page on the logs section', /requestNodeSection\(nodeInfoSectionKey\([^)]*\), 'logs'\);\s*onOpenNodeSettings\(\)/.test(chat));
@@ -101,7 +101,7 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
   ck('App feeds the same /api/nodes poll into the role store', (app.match(/hydrateNodeRoles\(r\.nodes\)/g) ?? []).length === 2);
   ck('App wires the managed-nodes entry on phone and desktop', /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'mobile'\)/.test(app) && /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'desktop'\)/.test(app));
 }
-ck('notice copy is the agreed sentence (zh) and has an English column', chatTranslations['chat.daemon.notice'][0] === '守护节点只执行创建 / 停止 / 重启 / 删除等结构化命令，不能对话' && !!chatTranslations['chat.daemon.notice'][1] && !!chatTranslations['chat.daemon.managed'][1]);
+ck('notice copy says managed agents can chat (zh) and has an English column', chatTranslations['chat.daemon.notice'][0].includes('托管') && chatTranslations['chat.daemon.notice'][0].includes('对话') && !!chatTranslations['chat.daemon.notice'][1] && !!chatTranslations['chat.daemon.managed'][1]);
 
 resetNodeRoles();
 console.log(`\n${passed}/${total} passed`);

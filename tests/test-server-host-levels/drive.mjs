@@ -31,7 +31,7 @@
 //   align   每一列(CPU / 内存 / 磁盘)的条左边缘逐行相等(±1px);窄屏三根条左边缘也相等
 //   fit     窄屏:每行右边缘不超出视口、文档没有横向滚动(折叠 / 展开都量)
 //   more    11 台机器时只显示 8 行 +「全部 11 台」,点开显示 11 行
-//   click   点 host-a → 节点列表出现「机器 alpha」筛选,列表只剩 host-a 的 4 个节点
+//   click   点 host-a(有 daemon-alpha) → 进入守护进程管理页 daemon-alpha;点托管节点可「对话」
 // BASELINE=1:只截图(改动前的 before 列),不断言。任何一条没跑到 = FAIL(不是 skip)。
 import { mkdirSync, writeFileSync } from 'node:fs';
 import { serveExport, initScript, findChromium, ANDROID_UA, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
@@ -74,8 +74,15 @@ const fixtureScript = ({ manyHosts }) => {
   rows.push({ alias: '示例-X', status: 'idle', agent: 'codex', node_id: 'n_x', updated_at: iso(1), hostname: null, host: { hostname: null } });
   if (manyHosts) for (let i = 1; i <= 6; i++) add(`示例-M${i}`, 'idle', 1, host(`host-m${i}`));
   const daemons = [{ daemon_node_id: 'd_sweep_alpha', alias: 'daemon-alpha', hostname: 'host-a', online: true, last_seen_at: iso(0), runtimes_supported: ['claude-code'] }];
+  const daemonNodes = [
+    { node_id: 'd_sweep_alpha', alias: 'daemon-alpha', role: 'host_supervisor', hostname: 'host-a', lifecycle_state: 'running', lifecycle_controllable: true },
+    ...['示例-A1', '示例-A2', '示例-A3', '示例-A4'].map(alias => ({
+      node_id: `n_${alias}`, alias, role: 'agent', lifecycle_daemon_node_id: 'd_sweep_alpha', lifecycle_state: 'running', lifecycle_controllable: true,
+    })),
+  ];
   window.__routeOverride = (u) => {
     if (u.pathname === '/api/host-supervisors') return { ok: true, count: daemons.length, daemons };
+    if (u.pathname === '/api/nodes') return { ok: true, nodes: daemonNodes, count: daemonNodes.length };
     if (u.pathname !== '/api/status') return undefined;
     if (u.searchParams.get('light') === '1') return { ok: true, sessions: rows.map(s => ({ alias: s.alias, status: s.status, agent: s.agent, task: null, server: null, updated_at: s.updated_at, runtime: s.runtime ?? null, network_id: 'net-sweep' })) };
     return { ok: true, sessions: rows };
@@ -141,6 +148,10 @@ for (const layout of ['desktop', 'phone']) {
     if (BASELINE) { console.log(`baseline ${tag}: 机器分区 ${hasPanel ? '有' : '没有'}`); await ctx.close(); continue; }
 
     ck(`${tag}: 「机器」分区出现`, hasPanel);
+    if (layout === 'desktop' && theme === 'light') {
+      const hubInt = await page.locator('[data-testid="server-integrations-label"]').textContent({ timeout: 3000 }).catch(() => null);
+      ck(`${tag}: Hub 侧栏集成分组「Hub 域集成」`, hubInt === 'Hub 域集成', String(hubInt));
+    }
     const C = COLORS[theme];
     const CLOUD = 'iZab12cd34ef56gh78ijZ';
     const ROW = '[data-testid^="server-hostrow-"]';
@@ -302,13 +313,26 @@ for (const layout of ['desktop', 'phone']) {
     // click(每种布局浅色跑一次)
     if (theme === 'light') {
       await page.locator('[data-testid="server-hostrow-host-a"]').click({ position: { x: 300, y: 20 } }).catch(() => page.locator('[data-testid="server-hostrow-host-a"]').click());
-      const chip = await page.locator('[data-testid="agent-filter-host"]').textContent({ timeout: 8000 }).catch(() => null);
-      ck(`${tag}: 点 host-a → 节点列表筛选「机器 alpha」`, chip === '机器 alpha', String(chip));
-      const count = await page.locator('[data-testid="agent-filter-clear"]').textContent({ timeout: 3000 }).catch(() => null);
-      ck(`${tag}: 列表只剩 host-a 的 4 个节点`, !!count && count.replace(/[-\s]/g, '') === '4个', JSON.stringify(count));
-      const otherShown = await page.getByText('示例-B1', { exact: true }).count();
-      ck(`${tag}: 别的机器的节点不在列表里`, otherShown === 0, String(otherShown));
-      if (OUT) await page.screenshot({ path: `${OUT}/${tag}-click-host-a.png` });
+      await page.locator('[data-testid="daemon-management"]').waitFor({ timeout: 12000 }).catch(() => {});
+      const daemonTitle = await page.locator('[data-testid="daemon-management"]').getByText('daemon-alpha', { exact: true }).count();
+      ck(`${tag}: 点 host-a → 守护进程管理页(daemon-alpha)`, daemonTitle >= 1, String(daemonTitle));
+      const managedTab = await page.locator('[data-testid="daemon-section-nodes"]').textContent({ timeout: 3000 }).catch(() => null);
+      ck(`${tag}: 左侧有托管的节点入口`, !!managedTab && managedTab.includes('托管的节点'), String(managedTab));
+      const daemonInt = await page.locator('[data-testid="daemon-integrations-label"]').textContent({ timeout: 3000 }).catch(() => null);
+      ck(`${tag}: Daemon 侧栏集成分组「Daemon 域集成」`, daemonInt === 'Daemon 域集成', String(daemonInt));
+      const intro = await page.locator('[data-testid="daemon-management"]').textContent({ timeout: 3000 }).catch(() => '');
+      ck(`${tag}: 管理页不再写「不能对话」`, !intro.includes('不能对话'), intro.slice(0, 120));
+      await page.locator('[data-testid="daemon-mgmt-settings-card"]').waitFor({ timeout: 8000 });
+      const settingsCard = await page.locator('[data-testid="daemon-mgmt-settings-card"]').textContent();
+      ck(`${tag}: Hub 进 Daemon 后设置卡含节点与虚拟机域`, settingsCard.includes('Daemon 节点设置') && settingsCard.includes('虚拟机域') && settingsCard.includes('SKILLS'), settingsCard?.slice(0, 80));
+      await page.locator('[data-testid="daemon-mgmt-settings-domain"]').click({ timeout: 5000 });
+      await page.locator('[data-testid="daemon-pending-skills"]').waitFor({ timeout: 8000 });
+      if (OUT) await page.screenshot({ path: `${OUT}/${tag}-hub-daemon-domain-settings.png`, fullPage: false });
+      await page.locator('[data-testid="daemon-section-nodes"]').click({ timeout: 3000 }).catch(() => {});
+      await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click({ timeout: 3000 }).catch(() => {});
+      const chatPane = await page.locator('[data-testid="chat-pane"]').count();
+      ck(`${tag}: 点托管节点行进会话页`, chatPane >= 1, String(chatPane));
+      if (OUT) await page.screenshot({ path: `${OUT}/${tag}-click-host-a-daemon.png` });
       // back:回到服务器页,没有一行留着按下态的灰底
       await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'server' }));
       await page.locator('[data-testid="server-hosts"]').waitFor({ timeout: 15000 }).catch(() => {});
