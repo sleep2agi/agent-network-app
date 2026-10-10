@@ -7,6 +7,7 @@
 // 这个开关放在 flags 里而不是 node_spec 顶层,是为了让老 Hub / 老 daemon **报错**(flag_key_unknown)
 // 而不是静默丢掉字段、照样建一个无头节点。
 
+import { codexYoloFlagsForCreate, describeCodexExecutionFlagError } from './codex-execution-posture';
 import { normalizeNodeName } from './node-name';
 import { opencodeCreateFlags, type OpenCodeGeneration } from './opencode-create-options';
 
@@ -73,6 +74,8 @@ export interface CreateNodeSpecInput {
   workdirField: { workdir?: string };
   opencodeGeneration?: OpenCodeGeneration;
   opencodeUnsafeTools?: boolean;
+  /** Codex SDK / TUI 共存:默认 true,与 `codexSdkYoloFlags()` 对齐。 */
+  codexAutoExecute?: boolean;
 }
 
 export interface CreateNodeSpec {
@@ -94,6 +97,7 @@ export function buildCreateNodeSpec(i: CreateNodeSpecInput): CreateNodeSpec {
     ...(params.includes('maxTurns') && numOrUndef(i.maxTurns) !== undefined ? { maxTurns: numOrUndef(i.maxTurns) } : {}),
     ...(params.includes('budget') && numOrUndef(i.budget) !== undefined ? { budget: numOrUndef(i.budget) } : {}),
     ...copresenceFlags(i.runtimeId),
+    ...codexYoloFlagsForCreate(i.runtimeId, i.codexAutoExecute !== false),
     ...opencodeCreateFlags({ ...i, model: model ?? '' }),
   };
   return {
@@ -124,6 +128,8 @@ export const COPRESENCE_MISSING_DEPS =
  *   - runtime_capability_check_failed(只对共存 runtime 换说法,runtime 未知时不换),detail = 服务器原文
  */
 export function describeCopresenceError(e: { error?: string | null; field?: string | null; status?: string | null; runtime?: string | null }): string | null {
+  const exec = describeCodexExecutionFlagError(e);
+  if (exec) return exec;
   const err = (e.error ?? '').trim();
   if (/flag_key_unknown:copresence\b/.test(err) || (/^flag_key_unknown\b/.test(err) && e.field === 'copresence')) {
     return COPRESENCE_TOO_OLD;

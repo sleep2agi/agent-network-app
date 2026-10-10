@@ -15,6 +15,7 @@ const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 check('api sends patch.flags for reasoning', api.includes('patch.flags') && api.includes('req.patch.flags'));
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
 check('detail mounts reasoning section for codex-app-server', detail.includes('<NodeCodexReasoningSection') && detail.includes("node.runtime === 'codex-app-server'"));
+check('detail mounts execution section before reasoning', detail.indexOf('<NodeCodexExecutionSection') < detail.indexOf('<NodeCodexReasoningSection'));
 check('model section not gated by readOnly', detail.includes('{node ? <NodeModelSection') && !detail.includes('!readOnly && node ? <NodeModelSection'));
 
 console.log(`node codex reasoning: ${passed}/${total} checks passed`);

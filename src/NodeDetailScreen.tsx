@@ -79,6 +79,7 @@ import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
+import NodeCodexExecutionSection from './NodeCodexExecutionSection';
 import NodeCodexReasoningSection from './NodeCodexReasoningSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
 import { isCodexRuntime } from './provider-create-options';
@@ -605,7 +606,10 @@ export default function NodeDetailScreen({
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
         {node ? <NodeModelSection cfg={cfg} node={node} /> : null}
         {node && (node.runtime === 'codex-app-server' || node.runtime === 'codex-sdk') ? (
-          <NodeCodexReasoningSection cfg={cfg} node={node} />
+          <>
+            <NodeCodexExecutionSection cfg={cfg} node={node} />
+            <NodeCodexReasoningSection cfg={cfg} node={node} />
+          </>
         ) : null}
         {!readOnly && node && isCodexRuntime(node.runtime) ? (
           <NodeCodexProviderSection runtimeId={node.runtime} serverUrl={cfg.serverUrl} />

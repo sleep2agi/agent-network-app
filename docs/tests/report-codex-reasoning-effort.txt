@@ -1,7 +1,7 @@
-Codex 思考程度 — dashboard / node detail (flags.modelReasoningEffort)
+Codex 思考程度 + 执行权限 — dashboard / node detail
 Date: 2026-10-10
 
-Contract
+Contract — 思考程度 (flags.modelReasoningEffort)
 --------
 - App: GET /api/nodes/:id/config reads flags.modelReasoningEffort; POST MCP
   update_node_config with patch.flags.modelReasoningEffort (hot tier).
@@ -10,13 +10,25 @@ Contract
 - codex-app-server: each turn/start carries `effort` from live fileConfig.flags.
 - codex-sdk: buildCodexSdkThreadOptions reads flags.modelReasoningEffort.
 
+Contract — 执行权限 (yolo flags)
+--------
+- Create (codex-sdk / codex-app-server): default flags match codexSdkYoloFlags()
+  plus copresenceFullAccess:true for TUI 共存 (hub maps → codexCopresenceFullAccess).
+- Node detail: toggle 自动执行（不弹确认）→ update_node_config patch.flags
+  {approvalPolicy,sandboxMode,skipGitRepoCheck}.
+- Hub + agent-node: FLAG_KEYS / ALLOWED_FLAGS must allow those keys (preview hub).
+
 UI
 --
-- Node detail + chat info (readOnly) 「模型与运行时」: segmented 思考程度 chips.
+- Node detail + chat info (readOnly) 「模型与运行时」: 执行权限 switch + 思考程度 chips.
 - codex-app-server and codex-sdk only.
+- Create wizard: Codex runtimes show auto-execute checkbox (default on).
 
 Verification
 ------------
-- src/node-codex-reasoning.test.ts 7/7
+- src/node-codex-reasoning.test.ts
+- src/codex-execution-posture.test.ts
+- src/node-codex-execution.test.ts
 - tests/codex-reasoning-effort/drive.mjs PASS (fixture Hub)
+- tests/test-create-node-codex-copresence/drive.mjs (flags shape)
 - Screenshot: docs/tests/screenshots-codex-reasoning/codex-reasoning-effort-applied.png
