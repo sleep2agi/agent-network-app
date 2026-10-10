@@ -3,6 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { setLanguagePreference } from './i18n';
 import { chatTranslations } from './i18n-chat';
+import { daemonTranslations } from './i18n-daemon';
 import {
   actionReason,
   createAction,
@@ -133,7 +134,9 @@ ck('daemon logs still open the node page on the logs section', /requestNodeSecti
 ck('the chat composer notice is no longer the daemon view', !chat.includes('DaemonComposerNotice'));
 ck('phone, two-pane, and desktop chats can open the existing wizard and return here', (app.match(/onCreateNode=\{daemon => setScreen\(\{ name: 'wizard', daemon, back: \{ name: 'chat', alias:/g) ?? []).length === 3);
 ck('wizard back returns to whoever opened it', app.includes('screen.back ?? { name: \'picker\' }') && app.includes("if (screen.name === 'wizard' && screen.back)"));
-ck('the old notice sentence remains translated', chatTranslations['chat.daemon.notice'][0].includes('不能对话') && !!chatTranslations['chat.daemon.notice'][1]);
+ck('daemon notice copy mentions managed agents can chat', chatTranslations['chat.daemon.notice'][0].includes('托管') && chatTranslations['chat.daemon.notice'][0].includes('对话') && !!chatTranslations['chat.daemon.notice'][1]);
+ck('managed node row opens chat when a handler is wired', screen.includes('onOpenManagedChat?.(row.alias)') && screen.includes('opensChat={!!onOpenManagedChat}'));
+ck('intro no longer tells users managed agents cannot chat', !daemonTranslations['daemon.mgmt.intro'][0].includes('不能对话') && daemonTranslations['daemon.mgmt.intro'][0].includes('对话'));
 
 setLanguagePreference('system');
 console.log(`\n${passed}/${total} passed`);

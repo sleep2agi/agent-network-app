@@ -101,7 +101,7 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
   ck('App feeds the same /api/nodes poll into the role store', (app.match(/hydrateNodeRoles\(r\.nodes\)/g) ?? []).length === 2);
   ck('App wires the managed-nodes entry on phone and desktop', /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'mobile'\)/.test(app) && /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'desktop'\)/.test(app));
 }
-ck('notice copy is the agreed sentence (zh) and has an English column', chatTranslations['chat.daemon.notice'][0] === '守护节点只执行创建 / 停止 / 重启 / 删除等结构化命令，不能对话' && !!chatTranslations['chat.daemon.notice'][1] && !!chatTranslations['chat.daemon.managed'][1]);
+ck('notice copy says managed agents can chat (zh) and has an English column', chatTranslations['chat.daemon.notice'][0].includes('托管') && chatTranslations['chat.daemon.notice'][0].includes('对话') && !!chatTranslations['chat.daemon.notice'][1] && !!chatTranslations['chat.daemon.managed'][1]);
 
 resetNodeRoles();
 console.log(`\n${passed}/${total} passed`);

@@ -325,7 +325,17 @@ export default function DaemonManagementScreen({
     <Text testID="daemon-mgmt-empty" style={{ color: colors.textMuted, fontSize: type.body, padding: spacing.lg }}>{t('daemon.mgmt.empty')}</Text>
   ) : (
     rows.map(row => (
-      <Row key={row.nodeId} row={row} selected={row.nodeId === selected?.nodeId} compact={layout === 'split'} onPress={() => setSelectedId(row.nodeId)} />
+      <Row
+        key={row.nodeId}
+        row={row}
+        selected={row.nodeId === selected?.nodeId}
+        compact={layout === 'split'}
+        opensChat={!!onOpenManagedChat}
+        onPress={() => {
+          setSelectedId(row.nodeId);
+          onOpenManagedChat?.(row.alias);
+        }}
+      />
     ))
   );
 
@@ -511,10 +521,11 @@ function MgmtButton({ action, onPress, testID, busy, tone }: {
   );
 }
 
-function Row({ row, selected, compact, onPress }: {
+function Row({ row, selected, compact, opensChat, onPress }: {
   row: ReturnType<typeof managedRows>[number];
   selected: boolean;
   compact?: boolean;
+  opensChat?: boolean;
   onPress: () => void;
 }) {
   const dot = row.status.online === null ? colors.rest : statusColor(row.status.text, row.status.online);
@@ -523,7 +534,7 @@ function Row({ row, selected, compact, onPress }: {
       testID={`daemon-mgmt-row-${row.nodeId}`}
       accessibilityRole="button"
       accessibilityState={{ selected }}
-      accessibilityLabel={`${row.name}, ${statusLabel(row.status)}, ${runtimeLabel(row.runtime)}, ${nodeTypeLabel(row.type)}`}
+      accessibilityLabel={`${row.name}, ${statusLabel(row.status)}, ${runtimeLabel(row.runtime)}, ${nodeTypeLabel(row.type)}${opensChat ? `, ${t('daemon.mgmt.openChat')}` : ''}`}
       onPress={onPress}
       style={({ pressed }) => [{
         paddingHorizontal: spacing.lg,

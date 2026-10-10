@@ -320,10 +320,11 @@ for (const layout of ['desktop', 'phone']) {
       ck(`${tag}: 左侧有托管的节点入口`, !!managedTab && managedTab.includes('托管的节点'), String(managedTab));
       const daemonInt = await page.locator('[data-testid="daemon-integrations-label"]').textContent({ timeout: 3000 }).catch(() => null);
       ck(`${tag}: Daemon 侧栏集成分组「Daemon 域集成」`, daemonInt === 'Daemon 域集成', String(daemonInt));
+      const intro = await page.locator('[data-testid="daemon-management"]').textContent({ timeout: 3000 }).catch(() => '');
+      ck(`${tag}: 管理页不再写「不能对话」`, !intro.includes('不能对话'), intro.slice(0, 120));
       await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click({ timeout: 3000 }).catch(() => {});
-      await page.locator('[data-testid="daemon-mgmt-open-chat"]').click({ timeout: 3000 }).catch(() => {});
       const chatPane = await page.locator('[data-testid="chat-pane"]').count();
-      ck(`${tag}: 托管节点「对话」进会话页`, chatPane >= 1, String(chatPane));
+      ck(`${tag}: 点托管节点行进会话页`, chatPane >= 1, String(chatPane));
       if (OUT) await page.screenshot({ path: `${OUT}/${tag}-click-host-a-daemon.png` });
       // back:回到服务器页,没有一行留着按下态的灰底
       await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'server' }));

@@ -61,6 +61,13 @@ for (const { locale, lang, hubLabel, daemonLabel, hubFile, daemonFile } of [
   const daemonText = await page.locator('[data-testid="daemon-integrations-label"]').textContent();
   ck(`${lang}: Daemon 侧栏分组标题`, daemonText === daemonLabel, String(daemonText));
   await page.screenshot({ path: `${OUT}/${daemonFile}`, fullPage: false });
+  if (lang === 'zh') {
+    const intro = await page.locator('[data-testid="daemon-management"]').textContent();
+    ck(`${lang}: 管理页文案不含「不能对话」`, !intro.includes('不能对话'));
+    await page.locator('[data-testid^="daemon-mgmt-row-"]').first().click();
+    await page.locator('[data-testid="chat-pane"]').waitFor({ timeout: 12000 });
+    await page.screenshot({ path: `${OUT}/daemon-managed-node-chat-zh.png`, fullPage: false });
+  }
   await ctx.close();
 }
 
