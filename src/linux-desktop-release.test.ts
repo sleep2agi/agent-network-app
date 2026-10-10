@@ -20,13 +20,18 @@ const throws = (fn: () => unknown, pattern: RegExp) => {
   return false;
 };
 
-const workflow = readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8');
+// actions/checkout on windows-latest writes CRLF. Normalize before matching so
+// the Ubuntu 24.04 `--bundles deb` line stays required on every runner.
+const readWorkflow = (text: string) => text.replace(/\r\n?/g, '\n');
+const workflow = readWorkflow(readFileSync(new URL('../.github/workflows/release-desktop-auto-update.yml', import.meta.url), 'utf8'));
 const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
 const secrets = [...workflow.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1]);
 const secretSet = [...new Set(secrets)].sort();
+const ubuntuDebMatrix = /platform: ubuntu-24\.04\n\s+args: --bundles deb/;
 
-check('release matrix builds the deb on Ubuntu 24.04',
-  /platform: ubuntu-24\.04\n\s+args: --bundles deb/.test(workflow));
+check('release matrix builds the deb on Ubuntu 24.04', ubuntuDebMatrix.test(workflow));
+check('Ubuntu 24.04 deb matrix still matches a Windows CRLF checkout',
+  ubuntuDebMatrix.test(readWorkflow(workflow.replace(/\n/g, '\r\n'))));
 check('release build does not apply the test updater overlay or --no-sign',
   !workflow.includes('tauri.test.conf.json') && !workflow.includes('--no-sign'));
 check('linux smoke runs the ELF, not the Windows exe',
