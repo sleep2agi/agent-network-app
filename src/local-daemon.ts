@@ -11,6 +11,8 @@ export interface LocalDaemonScan {
   node?: DaemonToolInfo | null;
   npm?: DaemonToolInfo | null;
   anet?: DaemonToolInfo | null;
+  anetCompatible?: boolean;
+  agentNodeCompatible?: boolean;
   /** 已下载的私有 Node(~/.anet/app/local-daemon/node)。 */
   privateNode?: DaemonToolInfo | null;
   /** 私有 prefix 里与 anet 同目录的 agent-node。 */
@@ -65,8 +67,8 @@ export function daemonChecklist(scan: LocalDaemonScan): ChecklistRow[] {
   return [
     { key: 'node', label: 'Node.js ≥ 22.13', state: nodeState, detail: nodeDetail },
     { key: 'npm', label: 'npm', state: systemOk && scan.npm ? 'ok' : privateOk ? 'ok' : 'missing', detail: systemOk && scan.npm ? tool(scan.npm) : privateOk ? '私有 Node 自带' : '随私有 Node 一起下载' },
-    { key: 'anet', label: 'anet CLI', state: scan.anet ? 'ok' : 'missing', detail: scan.anet ? tool(scan.anet) : '未安装 —— 点安装会装进 ~/.anet/app/local-daemon/anet(私有目录,不要 sudo)' },
-    { key: 'agentNode', label: 'agent-node(daemon 运行时)', state: scan.agentNode ? 'ok' : 'missing', detail: scan.agentNode ? `私有 ${tool(scan.agentNode)}` : scan.agentNodeOnPath ? `私有目录没有 —— PATH 上的 ${scan.agentNodeOnPath} 可能是旧版(不支持 host_supervisor),点安装会装私有版本并优先使用` : '未安装 —— 点安装会装进私有目录(与 anet 同目录)' },
+    { key: 'anet', label: 'anet CLI', state: scan.anet ? scan.anetCompatible === false ? 'bad' : 'ok' : 'missing', detail: scan.anet ? `${tool(scan.anet)}${scan.anetCompatible === false ? ' —— 私有版本不兼容,点安装会升级' : ''}` : '未安装 —— 点安装会装进 ~/.anet/app/local-daemon/anet(私有目录,不要 sudo)' },
+    { key: 'agentNode', label: 'agent-node(daemon 运行时)', state: scan.agentNode ? scan.agentNodeCompatible === false ? 'bad' : 'ok' : 'missing', detail: scan.agentNode ? `私有 ${tool(scan.agentNode)}${scan.agentNodeCompatible === false ? ' —— 版本不兼容,点安装会升级' : ''}` : scan.agentNodeOnPath ? `私有目录没有 —— PATH 上的 ${scan.agentNodeOnPath} 可能是旧版(不支持 host_supervisor),点安装会装私有版本并优先使用` : '未安装 —— 点安装会装进私有目录(与 anet 同目录)' },
     { key: 'daemon', label: '本机 daemon', state: scan.profileExists ? 'ok' : 'missing', detail: scan.profileExists ? `${scan.daemonName} · ${scan.nodeId ?? '(node_id 未知)'}` : `未初始化(将建在 ${scan.daemonDir})` },
   ];
 }
@@ -90,7 +92,7 @@ export interface HubDaemonViewInput {
   alias: string;
   sessions?: Array<{ alias?: string; status?: string; version?: string | null }> | null;
   nodes?: Array<{ node_id: string; alias?: string; role?: string | null; lifecycle_state?: string | null; config_snapshot?: { role?: string | null } | null }> | null;
-  supervisors?: Array<{ daemon_node_id?: string; alias?: string; online?: boolean }> | null;
+  supervisors?: Array<{ daemon_node_id?: string; alias?: string; online?: boolean; can_create_nodes?: boolean; create_nodes_blocked_reason?: string | null }> | null;
   /** 三个请求各自的错误(拿不到 ≠ 没有)。 */
   errors?: { sessions?: string; nodes?: string; supervisors?: string };
 }
@@ -110,11 +112,15 @@ export function hubDaemonView(input: HubDaemonViewInput): HubDaemonView {
   const node = input.nodeId ? input.nodes?.find(n => n.node_id === input.nodeId) : undefined;
   const snapRole = node?.config_snapshot?.role ?? node?.role ?? null;
   lines.push(e.nodes ? `节点行:查不到(${e.nodes})` : !input.nodeId ? '节点行:本机没有 node_id' : node ? `节点行:有 · role=${snapRole ?? '(快照里没有 role)'}${node.lifecycle_state ? ` · ${node.lifecycle_state}` : ''}` : `节点行:Hub 这个网络里没有 ${input.nodeId}(daemon 注册到了别的网络,或 init 没成功)`);
-  const listed = input.supervisors?.find(d => d.daemon_node_id === input.nodeId || d.alias === input.alias);
+  const listed = input.supervisors?.find(d => input.nodeId ? d.daemon_node_id === input.nodeId : d.alias === input.alias);
   lines.push(e.supervisors ? `host_supervisors:查不到(${e.supervisors})` : listed ? `host_supervisors:在列表里${listed.online ? '(online)' : '(offline)'}` : 'host_supervisors:不在列表里');
-  const ok = !!listed;
+  const ok = listed?.online === true && listed.can_create_nodes === true;
   let verdict: string;
-  if (ok) verdict = 'Hub 已经认到这台 daemon,选服务器列表应能看到它。';
+  if (ok) verdict = '本机 daemon 已在线,可以创建节点。';
+  else if (listed && !listed.online) verdict = 'Hub 有本机 daemon 的记录,但它已离线。点「重新注册并启动本机 daemon」修复。';
+  else if (listed) verdict = listed.create_nodes_blocked_reason
+    ? `daemon 已在线,但还不能创建节点:${listed.create_nodes_blocked_reason}`
+    : 'daemon 已在线,但尚未确认创建节点能力。点「重新注册并启动本机 daemon」升级配套运行时。';
   else if (!session) verdict = 'daemon 进程没有向 Hub 注册:点「打开日志」看 daemon 输出(常见:hub 地址/凭据不对,或进程已退出)。';
   else if (!node) verdict = 'daemon 在线但 Hub 这个网络里没有它的节点行:大概率注册到了别的网络,重新点「重新注册并启动本机 daemon」。';
   else if (snapRole !== 'host_supervisor') verdict = `daemon 在线、节点行也在,但配置快照的 role 是 ${snapRole ?? '空'} 而不是 host_supervisor:daemon 用的多半是 PATH 上的旧版 agent-node(不支持 host_supervisor)。点「重新注册并启动本机 daemon」,安装器会装私有 agent-node 并先停掉旧进程。`;
