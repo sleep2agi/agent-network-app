@@ -73,7 +73,8 @@ export function navActiveKey(screenName: string): string {
   switch (screenName) {
     case 'agents': case 'chat': case 'dm': case 'group': case 'nodeInfo': case 'nodeDetail': case 'picker': case 'wizard':
       return 'agents';
-    case 'server': case 'serverNodes': case 'serverNodeDetail': case 'logs':
+    case 'server': case 'serverPending': case 'serverNodes': case 'serverNodeDetail': case 'logs':
+    case 'hubSkills': case 'hubTokens': case 'hubEnv': case 'hubProviders':
       return 'server';
     case 'taskDetail':
       return 'tasks';

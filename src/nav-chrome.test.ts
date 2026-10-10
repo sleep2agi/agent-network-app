@@ -77,7 +77,7 @@ ck('phone leaf set', JSON.stringify([...PHONE_LEAF_SCREENS].sort()) === JSON.str
 
 // ── active destination ──
 for (const s of ['agents', 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard']) ck(`${s} lights Agent`, navActiveKey(s) === 'agents');
-for (const s of ['server', 'serverNodes', 'serverNodeDetail', 'logs']) ck(`${s} lights 服务器`, navActiveKey(s) === 'server');
+for (const s of ['server', 'serverPending', 'serverNodes', 'serverNodeDetail', 'logs', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders']) ck(`${s} lights 服务器`, navActiveKey(s) === 'server');
 ck('scheduled lights 定时任务', navActiveKey('scheduled') === 'scheduled');
 ck('settings lights 设置', navActiveKey('settings') === 'settings');
 ck('taskDetail lights the left rail 任务', navActiveKey('taskDetail') === 'tasks');
