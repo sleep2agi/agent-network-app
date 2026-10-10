@@ -153,8 +153,8 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
       await run(key, async () => {
         await page.locator('[data-testid="settings-row-server"]').click();
         await page.locator('[data-testid="server-header"]').waitFor({ timeout: 8000 });
-        const title = await paintedText(page, '[data-testid="server-header"] *', '服务器');
-        ck(`${theme} server: 打开 服务器 页`, !!title?.painted && title.w >= 8, fmtPaint(title));
+        const title = await paintedText(page, '[data-testid="server-header"] *', 'Hub');
+        ck(`${theme} server: 打开 Hub 页`, !!title?.painted && title.w >= 8, fmtPaint(title));
         await page.locator('[data-testid="server-header"] [aria-label="返回设置"]').click();
         await page.locator('[data-testid="settings-phone-list"]').waitFor({ timeout: 5000 });
         ck(`${theme} server: ‹ 回到设置`, true);

@@ -186,10 +186,10 @@ const TOP = [
   { name: 'scheduled', go: () => clickLabel(page, '定时') },
   { name: 'messages', go: () => clickLabel(page, 'Messages') },
   { name: 'settings', go: () => clickLabel(page, '设置') },
-  { name: 'server-overview', go: async () => { await clickLabel(page, '服务器设置'); await clickLabel(page, '服务器-概览'); } },
-  { name: 'server-nodes', go: () => clickLabel(page, '服务器-节点') },
-  { name: 'server-create', go: () => clickLabel(page, '服务器-新建节点') },
-  { name: 'server-logs', go: () => clickLabel(page, '服务器-事件与日志') },
+  { name: 'server-overview', go: async () => { await clickLabel(page, 'Hub 设置'); await clickLabel(page, 'Hub：概览'); } },
+  { name: 'server-nodes', go: () => clickLabel(page, 'Hub：节点') },
+  { name: 'server-create', go: () => clickLabel(page, 'Hub：新建节点') },
+  { name: 'server-logs', go: () => clickLabel(page, 'Hub：事件与日志') },
 ];
 for (const t of TOP) {
   await t.go();
@@ -207,7 +207,7 @@ for (const t of TOP) {
     // Generic on purpose (works on the baseline build, which has no testIDs): the 节点 row is the
     // button labelled 服务器-节点; the icon is its git-network glyph, the badge the element reading 99+.
     const geo = await page.evaluate((glyph) => {
-      const row = document.querySelector('[aria-label="服务器-节点"]');
+      const row = document.querySelector('[aria-label="Hub：节点"]');
       if (!row) return null;
       const leaves = [...row.querySelectorAll('div, span')].filter(n => n.childElementCount === 0);
       const rect = (el) => { const b = el.getBoundingClientRect(); return { x: b.x, y: b.y, w: b.width, h: b.height }; };
@@ -278,8 +278,8 @@ for (const t of TOP) {
       const chatAlias = await page.evaluate(() => document.querySelector('[data-testid="chat-header"]')?.innerText || '');
       await page.screenshot({ path: `${OUT}/desktop-1200x800-server-logs-click-chat.png` });
       record('server-logs:click', { opensChat: chatAlias.includes(target) }, { target, chatHeader: chatAlias.replace(/\s+/g, ' ').slice(0, 40) });
-      await clickLabel(page, '服务器设置');
-      await clickLabel(page, '服务器-事件与日志');
+      await clickLabel(page, 'Hub 设置');
+      await clickLabel(page, 'Hub：事件与日志');
     } else {
       record('server-logs:click', { opensChat: false }, { target: 'none' });
     }

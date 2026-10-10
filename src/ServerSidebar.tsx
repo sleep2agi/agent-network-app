@@ -11,15 +11,22 @@ import { displayHubAddress } from './mask-hub-address';
 import { badgeOffsetCentered, labelClearanceMargin } from './badge-anchor';
 import { ds } from './ui-scale';
 import { useTranslation } from './i18n-react';
+import { PendingSegmentedTabs, type PendingTab } from './backend-pending-ui';
 
-export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs';
+export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs' | PendingTab;
 
-const ITEMS: Array<{ key: ServerSection; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+const ITEMS: Array<{ key: Exclude<ServerSection, PendingTab>; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { key: 'overview', label: 'server.overview', icon: 'grid-outline' },
   { key: 'nodes', label: 'server.nodes', icon: 'git-network-outline' },
   { key: 'create', label: 'server.create', icon: 'add-circle-outline' },
   { key: 'logs', label: 'server.logs', icon: 'pulse-outline' },
 ];
+
+const PENDING_TABS: PendingTab[] = ['skills', 'tokens', 'provider'];
+
+export function isHubPendingSection(section: ServerSection): section is PendingTab {
+  return PENDING_TABS.includes(section as PendingTab);
+}
 
 export default function ServerSidebar({ cfg, active, onSelect }: {
   cfg: HubConfig;
@@ -27,6 +34,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
   onSelect: (section: ServerSection) => void;
 }) {
   const { t } = useTranslation();
+  const pendingActive = isHubPendingSection(active) ? active : null;
   // 在线 / 总数 —— 与服务器页、Agent 列表分组头同一口径(server-stats.ts)。
   // 以前这里是 `sessions.length`,把全部已注册会话当成「在线节点」。
   const [counts, setCounts] = useState<{ online: number; total: number } | null>(null);
@@ -50,7 +58,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <View style={[styles.serverIcon, reachable === false && styles.serverIconFailed]}>
-            <Ionicons name="server" size={18} color="#fff" />
+            <Ionicons name="server" size={18} color={colors.onAccent} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={styles.title}>{t('server.current')}</Text>
@@ -83,6 +91,18 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
           </Pressable>
         ))}
       </View>
+
+      <View style={styles.pendingBlock}>
+        <Text style={styles.sectionLabel}>{t('server.integrations')}</Text>
+        <PendingSegmentedTabs
+          stacked
+          value={pendingActive}
+          onChange={tab => onSelect(tab)}
+          testID="server-pending-tabs"
+          t={t}
+        />
+      </View>
+
       <View style={styles.footer}>
         <Text style={styles.footerLabel}>{t('server.network')}</Text>
         <Text style={styles.footerValue} numberOfLines={1}>{cfg.networkId ?? 'default'}</Text>
@@ -112,6 +132,7 @@ const makeStyles = () =>
   count: { color: colors.textMuted, fontSize: 11, marginLeft: 'auto' },
   sectionLabel: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   items: { paddingHorizontal: spacing.sm, gap: 3 },
+  pendingBlock: { marginTop: spacing.sm, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   item: { height: 42, borderRadius: radius.item, paddingHorizontal: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   // 极简:二级导航的选中态用中性 rowActive(与会话列表一致);强调色只留给最左侧 rail。
   itemActive: { backgroundColor: colors.rowActive },

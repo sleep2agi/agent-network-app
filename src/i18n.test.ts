@@ -1,6 +1,10 @@
 import { acceptLanguageStorage, currentLanguage, hydrateLanguage, languagePreference, parseLanguagePreference, refreshSystemLanguage, registerTranslations, resolveLanguage, setLanguagePreference, subscribeLanguage, t } from './i18n';
 import { chatTranslations } from './i18n-chat';
 import { settingsTranslations } from './i18n-settings';
+import './i18n-accounts';
+import './i18n-password';
+import './i18n-task-tags';
+import './i18n-users';
 let p = 0, n = 0;
 const ck = (name: string, ok: boolean) => { n++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
 ck('unknown stored preference follows system', parseLanguagePreference('bad') === 'system');
@@ -11,6 +15,8 @@ let changes = 0;
 const stop = subscribeLanguage(() => changes++);
 setLanguagePreference('en');
 ck('instant translated text', t('language.label') === 'Language' && changes === 1);
+ck('Hub navigation uses Hub consistently in English', t('nav.server') === 'Hub settings' && t('server.current') === 'Current Hub' && t('server.management') === 'Hub management' && t('server.navLabel', { label: 'Overview' }) === 'Hub: Overview');
+ck('Hub account and request copy uses Hub in English', t('login.registerCopy').includes('this Hub') && t('accounts.addCopy').includes('account or Hub') && t('password.err.network').includes('reach the Hub') && t('tags.opTimeout').startsWith('The Hub'));
 ck('language choices use system label and language self-names', t('settings.language.system') === 'Follow system' && t('settings.language.zh') === '中文' && t('settings.language.en') === 'English');
 ck('settings translations preserve interpolation fields', Object.values(settingsTranslations).every(([zh, en]) => zh.length > 0 && en.length > 0 && JSON.stringify([...zh.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort()) === JSON.stringify([...en.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort())));
 registerTranslations({ 'test.literal': ['你好 {name}', 'Hello {name}'] });
@@ -19,6 +25,8 @@ ck('chat translations have both languages and matching interpolation fields', Ob
 setLanguagePreference('system');
 refreshSystemLanguage('zh-CN');
 ck('system change updates current language', currentLanguage() === 'zh');
+ck('Hub navigation uses Hub consistently in Chinese', t('nav.server') === 'Hub 设置' && t('server.current') === '当前 Hub' && t('server.management') === 'Hub 管理' && t('server.navLabel', { label: '概览' }) === 'Hub：概览');
+ck('Hub account and request copy uses Hub in Chinese', t('login.registerCopy').includes('这个 Hub') && t('accounts.addCopy').includes('账号或 Hub') && t('password.err.network').startsWith('连不上 Hub') && t('tags.opTimeout').startsWith('Hub'));
 let finish!: (value: string | null) => void;
 let saved = '';
 const hydration = hydrateLanguage(() => new Promise(resolve => { finish = resolve; }), value => { saved = value; });

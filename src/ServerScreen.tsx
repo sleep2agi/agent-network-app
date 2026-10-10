@@ -309,7 +309,7 @@ export default function ServerScreen({
             <Ionicons name="alert-circle" size={18} color={colors.failed} />
             <View style={{ flex: 1, minWidth: 0 }}>
               <Text style={styles.failTitle}>连接已断开</Text>
-              <Text style={styles.failReason}>{failure ?? '无法访问服务器'}</Text>
+              <Text style={styles.failReason}>{failure ?? '无法访问 Hub'}</Text>
               {hasData ? <Text style={styles.failHint}>下面的数字是最后一次成功读取的结果</Text> : null}
             </View>
             <Pressable
@@ -395,7 +395,7 @@ export default function ServerScreen({
   const switcher = onSwitchProfile && otherProfiles.length ? (
     <View style={styles.section}>
       <View style={styles.sectionHead}>
-        <Text style={styles.sectionTitle}>切换服务器</Text>
+        <Text style={styles.sectionTitle}>切换 Hub</Text>
       </View>
       <View style={styles.panel} testID="server-switch">
         {otherProfiles.map((p, i) => (
@@ -415,7 +415,7 @@ export default function ServerScreen({
         ))}
         {onAddServer ? (
           <Pressable onPress={onAddServer} style={({ pressed }) => [styles.groupRow, styles.groupRowBorder, styles.groupMore, pressed && styles.pressedRow]}>
-            <Text style={styles.linkText}>添加服务器</Text>
+            <Text style={styles.linkText}>添加 Hub</Text>
           </Pressable>
         ) : null}
       </View>
@@ -445,7 +445,7 @@ export default function ServerScreen({
           </Pressable>
         ) : null}
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.title}>服务器</Text>
+          <Text style={styles.title}>Hub</Text>
           <Text style={styles.subtitle} numberOfLines={1} testID="server-subtitle">{host}</Text>
         </View>
         <View style={[styles.pill, { backgroundColor: colors.subtleFill }]} testID="server-status-pill">

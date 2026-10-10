@@ -81,7 +81,7 @@ async function runViewport(vp, viewport, ua, wide) {
 
   const login = async (hub, user, pw) => {
     await page.locator(tid('login-screen')).waitFor({ timeout: 30000 });
-    await page.getByLabel('服务器地址', { exact: true }).fill(hub.url);
+    await page.getByLabel('Hub 地址', { exact: true }).fill(hub.url);
     await page.getByLabel('用户名', { exact: true }).fill(user);
     await page.getByLabel('密码', { exact: true }).fill(pw);
     await page.locator(tid('login-submit')).click();

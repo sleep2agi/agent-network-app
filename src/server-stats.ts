@@ -180,11 +180,11 @@ export function describeFailure(err: unknown): string {
   if (http) {
     const code = Number(http[1]);
     if (code === 401 || code === 403) return `登录已失效（HTTP ${code}）`;
-    if (code >= 500) return `服务器内部错误（HTTP ${code}）`;
-    return `服务器拒绝了请求（HTTP ${code}）`;
+    if (code >= 500) return `Hub 内部错误（HTTP ${code}）`;
+    return `Hub 拒绝了请求（HTTP ${code}）`;
   }
   if (name === 'AbortError' || /abort|timeout|timed out/i.test(msg)) return '请求超时（12 秒无响应）';
-  return msg ? `无法访问服务器：${maskUrlsInText(msg)}` : '无法访问服务器';
+  return msg ? `无法访问 Hub：${maskUrlsInText(msg)}` : '无法访问 Hub';
 }
 
 /**

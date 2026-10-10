@@ -6,6 +6,7 @@ import './i18n-provider';
 import {
   BACKEND_PENDING_ENTRIES,
   demoProviderSeed,
+  inferDemoProviderProtocol,
   simulateEnvSave,
   simulateProviderProbe,
   simulateProviderSave,
@@ -26,9 +27,9 @@ const SECRET = 'sk-FAKE-demo-key-9f3a';
 const quiet = (value: unknown) => !JSON.stringify(value).includes(SECRET);
 
 setLanguagePreference('zh');
-ck('zh banner is the agreed sentence', t('backendPending.banner') === '演示数据 · 后端开发中，敬请期待');
+ck('zh banner is the agreed sentence', t('backendPending.banner') === '演示数据 · 后端开发中');
 setLanguagePreference('en');
-ck('en banner is the agreed sentence', t('backendPending.banner') === 'Demo data — backend in development, coming soon');
+ck('en banner is the agreed sentence', t('backendPending.banner') === 'Demo data · Backend in development');
 setLanguagePreference('system');
 
 let netCalls = 0;
@@ -67,13 +68,15 @@ const insecure = simulateProviderSave({
 }, false, net);
 ck('insecure transport is refused locally', !insecure.ok && insecure.issue === 'insecure_transport' && quiet(insecure));
 
-const probed = simulateProviderProbe({ providerId: 'demo-deepseek', model: 'deepseek-chat' }, net);
-ck('probe returns a visible local result', probed.ok === true && probed.network === false && probed.persisted === false && probed.ok && probed.reachable === true && probed.latencyMs === 128);
+const probed = simulateProviderProbe({ providerId: 'demo-deepseek', model: 'deepseek-chat', protocol: 'openai-responses' }, net);
+ck('probe returns a visible local result with its protocol', probed.ok === true && probed.network === false && probed.persisted === false && probed.ok && probed.reachable === true && probed.latencyMs === 128 && probed.protocol === 'openai-responses');
 const probedSecret = simulateProviderProbe({ providerId: SECRET, model: 'deepseek-chat' }, net);
 ck('probe refuses a secret-shaped id without echoing it', !probedSecret.ok && probedSecret.reason === 'secret' && quiet(probedSecret));
 const TOKEN = 'abcdef0123456789abcdef01';
 const probedToken = simulateProviderProbe({ providerId: TOKEN, model: 'deepseek-chat' }, net);
 ck('probe refuses a long undifferentiated token without echoing it', TOKEN.length >= 24 && !probedToken.ok && probedToken.reason === 'secret' && !JSON.stringify(probedToken).includes(TOKEN));
+ck('protocol inference recognizes Anthropic hosts', inferDemoProviderProtocol('https://api.anthropic.com/v1/messages') === 'anthropic-messages' && inferDemoProviderProtocol('https://proxy.anthropic.com/v1') === 'anthropic-messages');
+ck('protocol inference defaults other and incomplete URLs to Chat Completions', inferDemoProviderProtocol('https://api.openai.com/v1') === 'openai-chat-completions' && inferDemoProviderProtocol('') === 'openai-chat-completions');
 
 const seeded = demoProviderSeed();
 const added = simulateProviderUpsert(seeded, {
@@ -81,10 +84,11 @@ const added = simulateProviderUpsert(seeded, {
   baseUrl: 'https://api.example.com/v1',
   model: 'demo-model',
   apiKey: SECRET,
+  protocol: 'openai-responses',
 }, net);
-ck('provider catalog grows only in memory', added.ok === true && added.network === false && added.persisted === false && added.ok && added.rows.some(row => row.id === 'demo-custom' && row.model === 'demo-model'));
+ck('provider catalog grows only in memory and keeps the protocol', added.ok === true && added.network === false && added.persisted === false && added.ok && added.rows.some(row => row.id === 'demo-custom' && row.model === 'demo-model' && row.protocol === 'openai-responses'));
 ck('provider catalog drops the key', added.ok && quiet(added) && added.rows.every(row => !('apiKey' in row)) && !JSON.stringify(seeded).includes('demo-custom'));
-const keyedUrl = simulateProviderUpsert(seeded, { id: 'demo-custom', baseUrl: `https://api.example.com/${SECRET}`, model: 'demo-model', apiKey: '' }, net);
+const keyedUrl = simulateProviderUpsert(seeded, { id: 'demo-custom', baseUrl: `https://api.example.com/${SECRET}`, model: 'demo-model', apiKey: '', protocol: 'openai-chat-completions' }, net);
 ck('a key hiding in base_url is not copied into the catalog', !keyedUrl.ok && keyedUrl.reason === 'secret' && quiet(keyedUrl));
 
 const skill = simulateSkillOpen('demo-summarize', net);
@@ -110,6 +114,10 @@ ck('mock entry ids are the unconnected surfaces', ids.join(',') === 'provider-sa
 const logic = readFileSync(new URL('./backend-pending-demo.ts', import.meta.url), 'utf8');
 const ui = readFileSync(new URL('./BackendPendingDemo.tsx', import.meta.url), 'utf8');
 const page = readFileSync(new URL('./DaemonManagementScreen.tsx', import.meta.url), 'utf8');
+const sidebar = readFileSync(new URL('./ServerSidebar.tsx', import.meta.url), 'utf8');
+const hub = readFileSync(new URL('./HubPendingScreen.tsx', import.meta.url), 'utf8');
+const nodeDetail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
+const pendingUi = readFileSync(new URL('./backend-pending-ui.tsx', import.meta.url), 'utf8');
 const fields = readFileSync(new URL('./CodexProviderFields.tsx', import.meta.url), 'utf8');
 const wizard = readFileSync(new URL('./CreateNodeWizardScreen.tsx', import.meta.url), 'utf8');
 const reported = readFileSync(new URL('./DaemonRuntimeProviders.tsx', import.meta.url), 'utf8');
@@ -117,10 +125,24 @@ const adopt = readFileSync(new URL('./NodeAdoptionControls.tsx', import.meta.url
 const forbidden = /from '\.\/api'|from '\.\/app-fetch'|appFetch|createNode\(|fetch\(|XMLHttpRequest|WebSocket|readListProviders|runNodeLifecycleAction|localStorage|SecureStore/;
 ck('demo logic does not touch the hub client', !forbidden.test(logic) && !logic.includes('set_network_secret(') && !logic.includes('probe_provider_model('));
 ck('demo view does not touch the hub client', !forbidden.test(ui) && !ui.includes('console.'));
-ck('daemon demo is mounted on the management page with no hub props', page.includes('<DaemonPendingDemos />') && !page.includes('<DaemonPendingDemos cfg') && page.includes('testID="daemon-open-pending-demos"'));
+ck('daemon management uses a settings sidebar and full pending content pane', page.includes('testID="daemon-section-tabs"') && page.includes('<BackendPendingIntegration layer="daemon"') && page.includes('showTabs={false}'));
+ck('daemon node action notes are deduplicated and hidden until selection', page.includes('new Set(actions.map(action => actionReason(action)).filter(Boolean))') && page.includes('{selected ? ('));
+ck('hub sidebar exposes SKILLS / 令牌 / Provider tabs', sidebar.includes('testID="server-pending-tabs"') && sidebar.includes('PendingSegmentedTabs'));
+ck('hub pending screen renders tab panels', hub.includes('HubPendingScreen') && hub.includes('BackendPendingIntegration'));
+ck('node keeps its section IA and adds only the key demo', nodeDetail.includes("section === 'secrets'") && nodeDetail.includes('<NodeSecretPendingSection') && !nodeDetail.includes('NodeIntegrationsSection'));
+ck('pending chrome reuses theme tokens (buttons + settings-style segments)', pendingUi.includes('buttonStyle') === false && pendingUi.includes('segmentSelected') && ui.includes('buttonStyle('));
+ck('pending forms use responsive field grids and compact catalog rows', ui.includes('demoStyles.fieldGrid') && ui.includes('<ProviderCatalogRow') && ui.includes('flexBasis: 220'));
+ck('provider catalog and fields use the compact treatment', ui.includes('demoStyles.providerCard') && ui.includes('demoStyles.providerFieldGrid') && ui.includes("minHeight: 50"));
+ck('provider form reuses AppSelect for the three protocol options', ui.includes("import AppSelect from './AppSelect'") && ui.includes('PROVIDER_PROTOCOLS.map') && ui.includes('provider-protocol'));
+ck('provider protocol is inferred until the user overrides it', ui.includes('protocolOverride ?? inferDemoProviderProtocol(baseUrl)') && ui.includes('setProtocol: setProtocolOverride'));
+ck('provider rows badge and probes expose the selected protocol', ui.includes('PROTOCOL_BADGE_KEY[row.protocol]') && ui.includes('protocol: state.protocol') && ui.includes("t('backendPending.probeOk'"));
+ck('node key demo explains its local-only scope', ui.includes("t('backendPending.nodeSecretHint')"));
+ck('pending integration surfaces contain no hard-coded hex or rgb colors', !/[\"'](?:#[0-9a-f]{3,8}|rgba?\()[^\"']*[\"']/i.test([ui, page, sidebar, hub, pendingUi].join('\n')));
+const probePanel = ui.slice(ui.indexOf('testID={`${testIDPrefix}-probe`}'), ui.indexOf('function SkillsPendingPanel'));
+ck('probe panel sizes to its content instead of stretching', ui.includes("alignSelf: 'flex-start'") && probePanel.includes('<View style={demoStyles.fieldGrid}>'));
 ck('management probe stays the disabled shell; the demo probe stays local', page.includes('testID="daemon-mgmt-probe"') && page.includes('action={probe}') && page.includes('onPress={() => {}}') && !page.includes('simulateProviderProbe') && ui.includes('simulateProviderProbe('));
 ck('provider form keeps the shell and adds the demo save', fields.includes('<ProviderConfigDemo') && fields.includes("onClearKey={() => onChange({ ...value, apiKey: '' })}"));
-ck('secret inputs stay masked', ui.includes('testID="daemon-demo-secret-value"') && ui.includes('secureTextEntry') && ui.includes('testID="daemon-demo-provider-key"'));
+ck('secret inputs stay masked', ui.includes('testID={`${testIDPrefix}-secret-value`}') && ui.includes('secureTextEntry') && ui.includes('testID={`${testIDPrefix}-provider-key`}'));
 const submit = wizard.slice(wizard.indexOf('const handleSubmit'), wizard.indexOf('// ── render'));
 ck('create wizard still gates a real provider before createNode', submit.indexOf('codexSubmitGate') !== -1 && submit.indexOf('codexSubmitGate') < submit.indexOf('createNode(') && wizard.includes('<ProviderConfigDemo'));
 ck('reported providers stay the real catalog', !reported.includes('backend-pending-demo') && !reported.includes('simulateProvider'));

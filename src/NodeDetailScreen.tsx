@@ -52,6 +52,7 @@ import NodeControlCard from './NodeControlCard';
 import { nodeControlView } from './node-control-access';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
+import './i18n-backend-pending';
 import { adoptionError, isAdopted } from './node-adoption';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import { takeNodeSectionRequest } from './node-section-request';
@@ -81,6 +82,7 @@ import NodeModelSection from './NodeModelSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
+import { NodeSecretPendingSection } from './BackendPendingDemo';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
 import NodeLogsSection from './NodeLogsSection';
@@ -392,7 +394,7 @@ export default function NodeDetailScreen({
         {header}
         <View style={styles.center}>
           <Text style={styles.errorTitle}>加载失败</Text>
-          <Text style={styles.errorHint}>网络不稳定或服务器未响应</Text>
+          <Text style={styles.errorHint}>网络不稳定或 Hub 未响应</Text>
           <Pressable
             style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
             onPress={() => {
@@ -606,6 +608,12 @@ export default function NodeDetailScreen({
         ) : null}
       </View>
     );
+    if (section === 'secrets') return (
+      <View>
+        <SectionTitle title="密钥" />
+        <NodeSecretPendingSection />
+      </View>
+    );
     if (section === 'rules') return (
       <View style={{ flex: 1 }}>
         {/* 说明收进规则区工具条的 ⓘ(09-25 紧凑化),标题下不再常驻一行。 */}
@@ -683,7 +691,7 @@ export default function NodeDetailScreen({
     // danger
     return (
       <View>
-        <SectionTitle title="危险操作" hint="操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。" />
+        <SectionTitle title="危险操作" hint="操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时 Hub 会拒绝，不会自动强制。" />
         {!readOnly ? <View style={[localStyles.dangerZone, { borderColor: colors.failed }]}>
           {node && <NodeAdoptionControls key={JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, node.node_id])} cfg={cfg} node={node} online={online} onRefresh={() => { void load(); }} />}
           {node && isAdopted(node) ? null : node ? (

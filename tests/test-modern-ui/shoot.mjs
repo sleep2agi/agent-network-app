@@ -106,7 +106,7 @@ const SCREENS = [
     else { await rail('设置')(page); await page.getByText('外观', { exact: true }).first().click({ timeout: 10000 }); }
   } },
   { name: 'scheduled', open: async (page, L) => { if (phone(L)) await setScreen({ name: 'scheduled' })(page); else await rail('定时')(page); } },
-  { name: 'server', open: async (page, L) => { if (phone(L)) await setScreen({ name: 'server' })(page); else await rail('服务器设置')(page); } },
+  { name: 'server', open: async (page, L) => { if (phone(L)) await setScreen({ name: 'server' })(page); else await rail('Hub 设置')(page); } },
   { name: 'nodeDetail', open: async (page, L) => {
     if (phone(L)) await setScreen({ name: 'nodeDetail', alias: '示例-A' })(page);
     else { await openChat(page, L); await page.locator(tid('chat-header-more')).click(); await page.locator(tid('chat-info-panel')).waitFor({ timeout: 5000 }); await page.locator(tid('chat-info-row-node')).click({ timeout: 5000 }); await page.locator(tid('screen-header')).first().waitFor({ timeout: 10000 }); }

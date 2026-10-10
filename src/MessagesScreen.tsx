@@ -94,7 +94,7 @@ export default function MessagesScreen({ cfg }: { cfg: HubConfig }) {
         <Text style={{ fontSize: 30, marginBottom: spacing.sm }}>📡</Text>
         <Text style={{ color: colors.text, fontSize: 15, fontWeight: '600' }}>消息加载失败</Text>
         <Text style={{ color: colors.textMuted, fontSize: 13, marginTop: spacing.xs }}>
-          无法连接服务器（{since}）
+          无法连接 Hub（{since}）
         </Text>
         <Pressable
           testID="messages-retry"

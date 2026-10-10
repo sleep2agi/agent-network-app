@@ -46,7 +46,7 @@ await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
 
 // ── login ──
 await page.locator(tid('login-screen')).waitFor({ timeout: 30000 });
-await page.getByLabel('服务器地址', { exact: true }).fill(seed.hub);
+await page.getByLabel('Hub 地址', { exact: true }).fill(seed.hub);
 await page.getByLabel('用户名', { exact: true }).fill(seed.admin_user);
 await page.getByLabel('密码', { exact: true }).fill(seed.password);
 await page.locator(tid('login-submit')).click();
@@ -132,7 +132,7 @@ if (OLD) {
   await bp.addInitScript(() => { try { localStorage.setItem('theme_mode_v1', 'light'); localStorage.setItem('anet.language.v1', 'zh'); } catch {} });
   await bp.goto(`${web.url}?safeAreaSim=0,0,0,0`);
   await bp.locator(tid('login-screen')).waitFor({ timeout: 30000 });
-  await bp.getByLabel('服务器地址', { exact: true }).fill(seed.hub);
+  await bp.getByLabel('Hub 地址', { exact: true }).fill(seed.hub);
   await bp.getByLabel('用户名', { exact: true }).fill(seed.bob_user);
   await bp.getByLabel('密码', { exact: true }).fill(seed.password);
   await bp.locator(tid('login-submit')).click();
