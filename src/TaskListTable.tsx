@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
 import { isClosedColumn } from './requirement-columns';
 import { TaskTagChips } from './TaskTags';
+import TaskListRowHover from './TaskListRowHover';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -62,15 +63,6 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
   const titleDone = useRef(false);
   const [toast, setToast] = useState<{ text: string; anchor: SelectAnchor | null } | null>(null);
   const cellRefs = useRef(new Map<string, any>());
-  // 悬停的行:格子是 Pressable 以后,行自己的 hovered 在鼠标进到格子里时变 false(RN-web 的嵌套 Pressable),
-  // 「展开」按钮和行底色改按 DOM 的 pointerenter / pointerleave(进出子元素不触发)。
-  const [hoverRow, setHoverRow] = useState<string | null>(null);
-  const rowHoverRef = (id: string) => (el: any) => {
-    if (!el?.addEventListener || el.__listHover === id) return;
-    el.__listHover = id;
-    el.addEventListener('pointerenter', () => setHoverRow(id));
-    el.addEventListener('pointerleave', () => setHoverRow(h => (h === id ? null : h)));
-  };
   const posKey = (p: CellPos) => `${p.row}|${p.field}`;
   const at = (p: CellPos | null, id: string, field: FieldId) => !!p && p.row === id && p.field === field;
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(null), TOAST_MS); return () => clearTimeout(timer); }, [toast]);
@@ -243,8 +235,7 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
             {!rows.length ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{t(filtered ? 'tasks.copy.46' : 'tasks.copy.55')}</Text></View> : null}
             {rows.map(item => {
               const picked = !!selection?.ids.includes(item.id);
-              const rowHovered = live && hoverRow === item.id;
-              return <Pressable key={item.id} ref={live ? rowHoverRef(item.id) as never : undefined} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} {...a11yState({ selected: picked })} onPress={e => (selection ? selection.onPress(item.id, e) : onOpen(item.id))} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || rowHovered || state.pressed || item.id === selectedId) && s.trHover, picked && { backgroundColor: colors.accent + '14' }]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
+              return <TaskListRowHover key={item.id} enabled={live}>{(rowHovered, rowHoverRef) => <Pressable ref={rowHoverRef as never} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} {...a11yState({ selected: picked })} onPress={e => (selection ? selection.onPress(item.id, e) : onOpen(item.id))} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || rowHovered || state.pressed || item.id === selectedId) && s.trHover, picked && { backgroundColor: colors.accent + '14' }]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
                 {(state: any) => <>
                   {selection ? (
                     // 行首勾选框:悬停 / 已选 / 正在多选时出现;一直留出这一格宽,标题不跳。
@@ -271,7 +262,7 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
                     </Pressable>;
                   })}
                 </>}
-              </Pressable>;
+              </Pressable>}</TaskListRowHover>;
             })}
           </ScrollView>
         </View>

@@ -27,6 +27,14 @@ on:
     branches: ['**']
 
 jobs:
+  task-list-performance:
+    name: task list hover performance (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f tests/task-list-performance/Dockerfile -t task-list-performance .
+      - run: docker run --rm --network none task-list-performance
   user-avatar:
     name: user avatar editor (Docker)
     runs-on: ubuntu-latest
