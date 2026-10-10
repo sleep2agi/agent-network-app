@@ -60,3 +60,7 @@ glibc; see [Tauri's Debian guidance](https://v2.tauri.app/distribute/debian/).
 - Formal distribution requires a separate main-ancestry check and a fresh build
   of an exact main SHA without this test-only updater overlay, native acceptance
   and the repository's release gates. Never promote this PR artifact to release.
+  The release build is the `ubuntu-24.04` leg of
+  `.github/workflows/release-desktop-auto-update.yml`. That leg keeps the
+  production updater endpoints, signs the `.deb`, and uploads it with the
+  macOS and Windows assets.
