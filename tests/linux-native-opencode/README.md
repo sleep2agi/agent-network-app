@@ -41,6 +41,14 @@ observation to `verify-create.py`. It reuses native authentication and private
 installer checks before submitting anything. Run only after the exact candidate
 package passes those prerequisites and the atomic runtime checks above:
 
+The driver explicitly selects V2 before its separate unsafe-tools consent.
+The product defaults to V1/headless; selecting the OpenCode runtime alone is
+not a V2 selection. The unchanged observer still requires V2/copresence, explicit
+consent, exact model, live launch proof and the actual provider reply. Diagnostic
+replay can use a cached descendant image only when its V2 dependency lock matches;
+`overlay.Dockerfile` reselects and version-checks that existing V2 executable.
+It never treats such package overlay replay as a clean install or release gate.
+
 ```sh
 sg docker -c 'docker run --name native-opencode-create --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m anet-native-opencode:test sh /fixture/keyring.sh xvfb-run -a -s "-screen 0 1280x900x24 -nolisten tcp" bash /fixture/opencode-create-ui.sh'
 ```

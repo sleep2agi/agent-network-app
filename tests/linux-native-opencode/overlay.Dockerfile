@@ -1,8 +1,14 @@
-# TEST ONLY diagnostic replay of an accepted CI artifact; NOT clean-install proof.
+# TEST ONLY diagnostic replay of a CI artifact; NOT clean-install proof.
 # candidate is a named Docker build context containing the downloaded artifact.
 ARG FIXTURE_IMAGE
 FROM ${FIXTURE_IMAGE}
 USER root
+COPY tests/linux-native-opencode/tools/package-lock.json /tmp/v2-replay-lock.json
+# A cached descendant may have selected V1 for a separate compatibility probe.
+# Bind this V2 replay to the unchanged locked V2 installation explicitly.
+RUN cmp /tmp/v2-replay-lock.json /opt/opencode-fixture/package-lock.json && \
+    ln -sfn /opt/opencode-fixture/node_modules/.bin/opencode /usr/local/bin/opencode && \
+    test "$(opencode --version)" = 'opencode v2.0.22'
 ARG SOURCE_COMMIT
 ARG DEB_SHA256
 ARG DEB_FILE

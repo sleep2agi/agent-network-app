@@ -28,6 +28,12 @@ import -window "$window" /evidence/create-runtime.png
 xdotool mousemove --window "$window" 650 670 click 1
 xdotool mousemove --window "$window" 1080 650 click --repeat 9 --delay 100 5
 sleep 1
+# The compatibility default is V1/headless. Select V2 explicitly before
+# granting its separate unsafe-tools consent; do not rely on the old default.
+xdotool mousemove --window "$window" 650 645 click 1
+sleep 1
+xdotool mousemove --window "$window" 1080 650 click --repeat 9 --delay 100 5
+sleep 1
 import -window "$window" /evidence/create-consent.png
 # Explicit V2 unsafe-tools consent for this disposable fixture only.
 xdotool mousemove --window "$window" 472 668 click 1
