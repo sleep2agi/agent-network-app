@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.231:",
+  "- Hub 概览里点一台机器，可直接进入该守护进程（Daemon）的管理页。",
+  "- Hub 侧栏新增 SKILLS、令牌、环境变量、Provider 四个管理页（目前为演示数据，标明「演示数据 · 后端开发中」）。",
+  "- 支持打开托管节点的对话；域集成相关入口已接通。",
+  "- 新建节点时若旧版 Hub/daemon 不接受中文名，会提示升级到 commhub-server 0.9.0-preview.66 / agent-node 2.5.0-preview.76，或改用小写英文名。",
+  "",
   "What's new in 0.2.230:",
   "- 设置页重新整理：Hub、守护进程（Daemon）管理页采用左侧导航，包含节点、SKILLS、令牌和 Provider；节点页新增密钥分区。",
   "- Provider 新增协议选择（Anthropic Messages、OpenAI Chat Completions、OpenAI Responses），会根据接口地址自动推断，也可手动改选。",
@@ -1013,6 +1019,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.230": "2026-10-10T14:08:08Z",
   "0.2.229": "2026-10-10T10:52:24Z",
   "0.2.228": "2026-10-10T05:38:31Z",
   "0.2.226": "2026-10-08T12:58:35Z",
