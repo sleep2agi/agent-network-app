@@ -21,6 +21,7 @@ import './node-control-access';
 import './i18n-provider';
 import './i18n-backend-pending';
 import './i18n-hub-scope';
+import './i18n-runtime-support';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
@@ -49,6 +50,7 @@ migrated.push('src/DaemonRuntimeProviders.tsx');
 migrated.push('src/DaemonManagementScreen.tsx');
 migrated.push('src/BackendPendingDemo.tsx');
 migrated.push('src/HubPendingScreen.tsx');
+migrated.push('src/RuntimeSupportScreen.tsx');
 migrated.push('src/backend-pending-ui.tsx');
 migrated.push('src/HubScopeScreen.tsx');
 migrated.push('src/HubScopeFixtureScreen.tsx');

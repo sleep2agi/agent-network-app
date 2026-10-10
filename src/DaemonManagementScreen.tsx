@@ -15,6 +15,8 @@ import './i18n-daemon';
 import './i18n-backend-pending';
 import { BackendPendingIntegration } from './BackendPendingDemo';
 import { PendingPanelCard, PendingSegmentedTabs, type PendingTab } from './backend-pending-ui';
+import RuntimeSupportPane from './RuntimeSupportScreen';
+import type { RuntimeHostContext } from './runtime-support';
 import {
   fetchHostSupervisors,
   fetchHubNodes,
@@ -82,6 +84,7 @@ const INTEGRATION_TITLE: Record<PendingTab, string> = {
   skills: 'server.pendingTitle.skills',
   tokens: 'server.pendingTitle.tokens',
   provider: 'server.pendingTitle.provider',
+  runtime: 'server.pendingTitle.runtime',
 };
 
 export default function DaemonManagementScreen({
@@ -425,7 +428,23 @@ export default function DaemonManagementScreen({
     </ScrollView>
   );
 
-  const integrationPage = pendingSection ? (
+  const runtimeHost: RuntimeHostContext = lookup.kind === 'loading'
+    ? { kind: 'pending' }
+    : lookup.kind === 'unsupported'
+      ? { kind: 'unsupported' }
+      : lookup.kind === 'error'
+        ? { kind: 'error' }
+        : lookup.kind === 'ready' && lookup.ambiguous
+          ? { kind: 'several' }
+          : lookup.daemon
+            ? { kind: 'daemon', daemon: lookup.daemon }
+            : { kind: 'unlisted' };
+  const integrationPage = pendingSection === 'runtime' ? (
+    <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
+      <Text style={screenStyles.pageTitle}>{t(INTEGRATION_TITLE.runtime)}</Text>
+      <RuntimeSupportPane layer="daemon" host={runtimeHost} cfg={cfg} />
+    </ScrollView>
+  ) : pendingSection ? (
     <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
       <Text style={screenStyles.pageTitle}>{t(INTEGRATION_TITLE[pendingSection])}</Text>
       <BackendPendingIntegration layer="daemon" tab={pendingSection} showTabs={false} testIDPrefix="daemon-pending" />
