@@ -7,8 +7,10 @@ import { useTranslation } from './i18n-react';
 import './i18n-backend-pending';
 import './i18n-provider';
 import { providerIssueI18nKey, type ProviderFormValue } from './provider-create-options';
+import AppSelect from './AppSelect';
 import {
   demoProviderSeed,
+  inferDemoProviderProtocol,
   simulateEnvSave,
   simulateProviderProbe,
   simulateProviderSave,
@@ -16,6 +18,7 @@ import {
   simulateSecretSave,
   simulateSkillOpen,
   type DemoProviderRow,
+  type DemoProviderProtocol,
   type EnvSaveResult,
   type ProbeResult,
   type ProviderSaveResult,
@@ -41,6 +44,24 @@ const LAYER_HINT: Record<PendingLayer, string> = {
   hub: 'backendPending.hubHint',
   daemon: 'backendPending.daemonHint',
   node: 'backendPending.nodeHint',
+};
+
+const PROVIDER_PROTOCOLS: readonly DemoProviderProtocol[] = [
+  'anthropic-messages',
+  'openai-chat-completions',
+  'openai-responses',
+];
+
+const PROTOCOL_LABEL_KEY: Record<DemoProviderProtocol, string> = {
+  'anthropic-messages': 'backendPending.protocol.anthropic',
+  'openai-chat-completions': 'backendPending.protocol.chat',
+  'openai-responses': 'backendPending.protocol.responses',
+};
+
+const PROTOCOL_BADGE_KEY: Record<DemoProviderProtocol, string> = {
+  'anthropic-messages': 'backendPending.protocolBadge.anthropic',
+  'openai-chat-completions': 'backendPending.protocolBadge.chat',
+  'openai-responses': 'backendPending.protocolBadge.responses',
 };
 
 function DemoButton({ testID, label, onPress, primary }: { testID: string; label: string; onPress: () => void; primary?: boolean }) {
@@ -106,6 +127,7 @@ function SkillRow({
 }
 
 function ProviderCatalogRow({ row, last }: { row: DemoProviderRow; last: boolean }) {
+  const { t } = useTranslation();
   return (
     <View style={[demoStyles.catalogRow, !last && demoStyles.catalogRowDivider]}>
       <View style={demoStyles.providerMark}>
@@ -115,8 +137,13 @@ function ProviderCatalogRow({ row, last }: { row: DemoProviderRow; last: boolean
         <Text style={demoStyles.rowTitle}>{row.id}</Text>
         <Text style={demoStyles.rowDescription} numberOfLines={1}>{row.baseUrl}</Text>
       </View>
-      <View style={demoStyles.modelPill}>
-        <Text style={demoStyles.modelPillText} numberOfLines={1}>{row.model}</Text>
+      <View style={demoStyles.rowPills}>
+        <View style={demoStyles.protocolPill}>
+          <Text style={demoStyles.protocolPillText} numberOfLines={1}>{t(PROTOCOL_BADGE_KEY[row.protocol])}</Text>
+        </View>
+        <View style={demoStyles.modelPill}>
+          <Text style={demoStyles.modelPillText} numberOfLines={1}>{row.model}</Text>
+        </View>
       </View>
     </View>
   );
@@ -138,7 +165,7 @@ function probeText(result: ProbeResult, t: (key: string, values?: Record<string,
     if (result.reason === 'provider') return { ok: false, text: t('backendPending.probeNeedProvider') };
     return { ok: false, text: t('backendPending.probeNeedModel') };
   }
-  return { ok: true, text: t('backendPending.probeOk', { provider: result.providerId, model: result.model, ms: result.latencyMs }) };
+  return { ok: true, text: t('backendPending.probeOk', { provider: result.providerId, model: result.model, protocol: t(PROTOCOL_LABEL_KEY[result.protocol]), ms: result.latencyMs }) };
 }
 
 export function ProviderConfigDemo({
@@ -230,14 +257,17 @@ function usePendingProviderState() {
   const [rows, setRows] = useState<DemoProviderRow[]>(() => demoProviderSeed());
   const [id, setId] = useState('');
   const [baseUrl, setBaseUrl] = useState('');
+  const [protocolOverride, setProtocolOverride] = useState<DemoProviderProtocol | null>(null);
   const [model, setModel] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [providerResult, setProviderResult] = useState<ProviderUpsertResult | null>(null);
   const [probeProvider, setProbeProvider] = useState('demo-deepseek');
   const [probeModel, setProbeModel] = useState('deepseek-chat');
   const [probed, setProbed] = useState<ProbeResult | null>(null);
+  const protocol = protocolOverride ?? inferDemoProviderProtocol(baseUrl);
   return {
     rows, setRows, id, setId, baseUrl, setBaseUrl, model, setModel, apiKey, setApiKey,
+    protocol, setProtocol: setProtocolOverride,
     providerResult, setProviderResult, probeProvider, setProbeProvider, probeModel, setProbeModel, probed, setProbed,
   };
 }
@@ -296,6 +326,17 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
           <DemoField label={t('backendPending.providerModel')} compact>
             <TextInput testID={`${testIDPrefix}-provider-model`} value={state.model} onChangeText={state.setModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerModel')} style={inputStyle} />
           </DemoField>
+        </View>
+        <View style={[demoStyles.fieldGrid, demoStyles.providerFieldGrid]}>
+          <DemoField label={t('backendPending.providerProtocol')} compact>
+            <AppSelect
+              value={state.protocol}
+              options={PROVIDER_PROTOCOLS.map(protocol => ({ value: protocol, label: t(PROTOCOL_LABEL_KEY[protocol]) }))}
+              onChange={protocol => state.setProtocol(protocol as DemoProviderProtocol)}
+              title={t('backendPending.providerProtocol')}
+              testID={`${testIDPrefix}-provider-protocol`}
+            />
+          </DemoField>
           <DemoField label={t('backendPending.providerKey')} compact>
             <TextInput testID={`${testIDPrefix}-provider-key`} value={state.apiKey} onChangeText={state.setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.providerKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerKeyA11y')} style={inputStyle} />
           </DemoField>
@@ -306,7 +347,7 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
             label={t('backendPending.providerAdd')}
             primary
             onPress={() => {
-              const result = simulateProviderUpsert(state.rows, { id: state.id, baseUrl: state.baseUrl, model: state.model, apiKey: state.apiKey });
+              const result = simulateProviderUpsert(state.rows, { id: state.id, baseUrl: state.baseUrl, model: state.model, apiKey: state.apiKey, protocol: state.protocol });
               state.setProviderResult(result);
               if (result.ok) { state.setRows(result.rows); state.setApiKey(''); }
             }}
@@ -316,6 +357,12 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
       </PendingPanelCard>
       <PendingPanelCard testID={`${testIDPrefix}-probe`} style={[demoStyles.panelSecondary, demoStyles.providerCard]}>
         <PendingCardTitle title={t('backendPending.section.probe')} />
+        <View style={demoStyles.protocolSummary}>
+          <PendingFieldLabel>{t('backendPending.providerProtocol')}</PendingFieldLabel>
+          <View style={demoStyles.protocolPill}>
+            <Text style={demoStyles.protocolPillText}>{t(PROTOCOL_LABEL_KEY[state.protocol])}</Text>
+          </View>
+        </View>
         <View style={demoStyles.fieldGrid}>
           <DemoField label={t('backendPending.probeProvider')} compact>
             <TextInput testID={`${testIDPrefix}-probe-provider`} value={state.probeProvider} onChangeText={state.setProbeProvider} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeProvider')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeProvider')} style={inputStyle} />
@@ -325,7 +372,7 @@ function ProviderPendingPanel({ testIDPrefix, state }: { testIDPrefix: string; s
           </DemoField>
         </View>
         <View style={demoStyles.actionRow}>
-          <DemoButton testID={`${testIDPrefix}-probe-run`} label={t('backendPending.probe')} onPress={() => state.setProbed(simulateProviderProbe({ providerId: state.probeProvider, model: state.probeModel }))} />
+          <DemoButton testID={`${testIDPrefix}-probe-run`} label={t('backendPending.probe')} onPress={() => state.setProbed(simulateProviderProbe({ providerId: state.probeProvider, model: state.probeModel, protocol: state.protocol }))} />
           {probeLine ? <ResultLine testID={`${testIDPrefix}-probe-result`} ok={probeLine.ok} text={probeLine.text} /> : null}
         </View>
       </PendingPanelCard>
@@ -593,14 +640,24 @@ const makeDemoStyles = () =>
     rowCopy: { flex: 1, minWidth: 0, gap: 2 },
     rowTitle: { color: colors.text, fontSize: type.body, fontWeight: weight.strong },
     rowDescription: { color: colors.textMuted, fontSize: type.small, lineHeight: 17 },
+    rowPills: { maxWidth: '48%', alignItems: 'flex-end', gap: spacing.xs },
+    protocolPill: {
+      alignSelf: 'flex-start',
+      borderRadius: radius.pill,
+      backgroundColor: colors.tonalBg,
+      paddingHorizontal: spacing.sm,
+      paddingVertical: spacing.xs,
+    },
+    protocolPillText: { color: colors.accent, fontSize: type.caption, fontWeight: weight.strong },
     modelPill: {
-      maxWidth: '42%',
+      maxWidth: '100%',
       borderRadius: radius.pill,
       backgroundColor: colors.subtleFill,
       paddingHorizontal: spacing.sm,
       paddingVertical: spacing.xs,
     },
     modelPillText: { color: colors.textSecondary, fontSize: type.small },
+    protocolSummary: { flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm },
     skillList: { gap: spacing.xs },
     skillRow: {
       minHeight: 64,

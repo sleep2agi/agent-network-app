@@ -84,16 +84,29 @@ export type ProviderSaveResult =
 
 export type ProbeResult =
   | ({ ok: false } & typeof NO_NET & { reason: 'provider' | 'model' | 'secret' })
-  | ({ ok: true } & typeof NO_NET & { providerId: string; model: string; reachable: true; latencyMs: 128 });
+  | ({ ok: true } & typeof NO_NET & { providerId: string; model: string; protocol: DemoProviderProtocol; reachable: true; latencyMs: 128 });
+
+export type DemoProviderProtocol = 'anthropic-messages' | 'openai-chat-completions' | 'openai-responses';
+
+export function inferDemoProviderProtocol(baseUrl: string): DemoProviderProtocol {
+  try {
+    const hostname = new URL(baseUrl.trim()).hostname.toLowerCase();
+    if (hostname === 'api.anthropic.com' || hostname.endsWith('.anthropic.com')) return 'anthropic-messages';
+  } catch {
+    // Empty / incomplete demo URLs use the common OpenAI-compatible default.
+  }
+  return 'openai-chat-completions';
+}
 
 export interface DemoProviderRow {
   id: string;
   baseUrl: string;
   model: string;
+  protocol: DemoProviderProtocol;
 }
 
 export const DEMO_PROVIDER_SEED: readonly DemoProviderRow[] = [
-  { id: 'demo-deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat' },
+  { id: 'demo-deepseek', baseUrl: 'https://api.deepseek.com/v1', model: 'deepseek-chat', protocol: 'openai-chat-completions' },
 ];
 
 export function demoProviderSeed(): DemoProviderRow[] {
@@ -157,7 +170,7 @@ export function simulateProviderSave(input: ProviderSaveInput, transportOk = tru
 const PROBE_ID = /^[A-Za-z0-9_.:-]{1,64}$/;
 const PROBE_MODEL = /^[A-Za-z0-9_.:/-]{1,80}$/;
 
-export function simulateProviderProbe(input: { providerId: string; model: string }, net?: DemoNet): ProbeResult {
+export function simulateProviderProbe(input: { providerId: string; model: string; protocol?: DemoProviderProtocol }, net?: DemoNet): ProbeResult {
   blockDemoNet(net);
   const providerId = input.providerId.trim();
   const model = input.model.trim();
@@ -169,6 +182,7 @@ export function simulateProviderProbe(input: { providerId: string; model: string
     ...NO_NET,
     providerId,
     model,
+    protocol: input.protocol ?? 'openai-chat-completions',
     reachable: true as const,
     latencyMs: 128 as const,
   };
@@ -179,7 +193,7 @@ const PLAIN_MODEL = /^[A-Za-z0-9_.:-]{1,80}$/;
 
 export function simulateProviderUpsert(
   rows: readonly DemoProviderRow[],
-  input: { id: string; baseUrl: string; model: string; apiKey: string },
+  input: { id: string; baseUrl: string; model: string; apiKey: string; protocol: DemoProviderProtocol },
   net?: DemoNet,
 ): ProviderUpsertResult {
   blockDemoNet(net);
@@ -194,8 +208,8 @@ export function simulateProviderUpsert(
   if (key === 'invalid' || key === 'too_long') return { ok: false, ...NO_NET, reason: 'secret' };
   const next = rows
     .filter(row => row.id !== id)
-    .map(row => ({ id: row.id, baseUrl: row.baseUrl, model: row.model }));
-  next.push({ id, baseUrl: base.url, model });
+    .map(row => ({ id: row.id, baseUrl: row.baseUrl, model: row.model, protocol: row.protocol }));
+  next.push({ id, baseUrl: base.url, model, protocol: input.protocol });
   next.sort((a, b) => a.id.localeCompare(b.id));
   const saved = {
     ok: true as const,
