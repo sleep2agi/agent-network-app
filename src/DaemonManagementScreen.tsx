@@ -18,6 +18,7 @@ import { PendingPanelCard, PendingSegmentedTabs, type PendingTab } from './backe
 import RuntimeSupportPane from './RuntimeSupportScreen';
 import type { RuntimeHostContext } from './runtime-support';
 import DaemonOverviewSection from './DaemonOverviewSection';
+import DaemonSkillsPane from './DaemonSkillsPane';
 import type { ListingKind } from './daemon-overview';
 import {
   fetchHostSupervisors,
@@ -482,6 +483,12 @@ export default function DaemonManagementScreen({
     <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
       <Text style={screenStyles.pageTitle}>{t(INTEGRATION_TITLE.runtime)}</Text>
       <RuntimeSupportPane layer="daemon" host={runtimeHost} cfg={cfg} />
+    </ScrollView>
+  ) : pendingSection === 'skills' ? (
+    // 真数据:这台 daemon 自己的 SKILLS。令牌 / Provider 仍是下面的演示壳。
+    <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
+      <Text style={screenStyles.pageTitle}>{t(INTEGRATION_TITLE.skills)}</Text>
+      <DaemonSkillsPane cfg={cfg} alias={alias} node={daemon} supervisorOnline={lookup.kind === 'ready' ? lookup.daemon?.online : undefined} />
     </ScrollView>
   ) : pendingSection ? (
     <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">

@@ -327,7 +327,7 @@ for (const layout of ['desktop', 'phone']) {
       const settingsCard = await page.locator('[data-testid="daemon-mgmt-settings-card"]').textContent();
       ck(`${tag}: Hub 进 Daemon 后设置卡含节点与虚拟机域`, settingsCard.includes('Daemon 节点设置') && settingsCard.includes('虚拟机域') && settingsCard.includes('SKILLS'), settingsCard?.slice(0, 80));
       await page.locator('[data-testid="daemon-mgmt-settings-domain"]').click({ timeout: 5000 });
-      await page.locator('[data-testid="daemon-pending-skills"]').waitFor({ timeout: 8000 });
+      await page.locator('[data-testid="daemon-skills-real"], [data-testid="daemon-skills-empty"]').waitFor({ timeout: 8000 });
       if (OUT) await page.screenshot({ path: `${OUT}/${tag}-hub-daemon-domain-settings.png`, fullPage: false });
       // 手机窄屏:设置列表和分区二选一,先点「‹ 设置列表」回到列表才有「托管的节点」入口(桌面分栏没有这个按钮)。
       if (layout === 'phone') await page.locator('[data-testid="daemon-section-menu-back"]').click({ timeout: 5000 });
