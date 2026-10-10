@@ -3,8 +3,9 @@
 // 只读 Hub / daemon **已经带上**的两处:
 //   ① host-supervisor 的 `runtime_readiness[runtime]` 里多出来的
 //      providers / model_providers / models(旧形状没有这些键 ⇒ 没上报)
-//   ② `list_providers`(挂在 daemon 上,或工具返回体)里**标了 runtime** 的行
-// 没标 runtime 的网络级供应商不算「这台机器、这个 runtime 可用」。
+//   ② 挂在选中 daemon 上的 `list_providers` 里标了 runtime 的行
+// 网络级 list_providers 工具没有 daemon 授权/绑定契约。即使标了 runtime,
+// 也不算「这台机器、这个 runtime 可用」,不能合并到 daemon 目录。
 // 两处都没有这一格 ⇒ 调用方显示升级,不许用本地预设假装 daemon 报过。
 //
 // 密钥:只抄白名单字段。api_key / secret / token / secret_key_ref 不进结果。
@@ -228,7 +229,7 @@ export function taggedFromPayload(payload: unknown): TaggedProvider[] {
   return out;
 }
 
-function bucketsFrom(daemon: DaemonProviderSource | null | undefined, rows: readonly TaggedProvider[]): Map<string, RuntimeBucket> {
+function bucketsFrom(daemon: DaemonProviderSource | null | undefined): Map<string, RuntimeBucket> {
   const buckets = new Map<string, RuntimeBucket>();
   const readiness = daemon?.runtime_readiness;
   if (isRecord(readiness)) {
@@ -239,7 +240,7 @@ function bucketsFrom(daemon: DaemonProviderSource | null | undefined, rows: read
       buckets.set(id, { reported: true, providers: entryProviders(entry) });
     }
   }
-  const tagged = [...taggedFromPayload(daemon?.list_providers), ...rows];
+  const tagged = taggedFromPayload(daemon?.list_providers);
   for (const row of tagged) {
     for (const runtimeId of row.runtimeIds) {
       if (!buckets.has(runtimeId) && buckets.size >= MAX_RUNTIMES) continue;
@@ -293,20 +294,20 @@ export function catalogIsVisible(
 
 export function displayDaemonProviders(args: {
   daemon: DaemonProviderSource | null | undefined;
+  /** Legacy network catalog input: deliberately NOT evidence of daemon availability.
+   * Keep callers compatible until an authorized daemon catalog API exists. */
   rows?: readonly TaggedProvider[];
   read: 'pending' | 'ok' | 'unsupported' | 'error';
   runtimeId: string;
   opencodeGeneration?: 'v1' | 'v2';
 }): DaemonProviderDisplay | { kind: 'pending' } {
-  const rows = args.rows ?? [];
   const tone = toneFor(args.runtimeId, args.opencodeGeneration);
-  const daemonOnly = bucketsFrom(args.daemon, []);
-  const merged = bucketsFrom(args.daemon, rows);
-  const exposed = merged.size > 0;
-  if (!exposed && args.read === 'pending' && daemonOnly.size === 0) return { kind: 'pending' };
+  const daemonOnly = bucketsFrom(args.daemon);
+  const exposed = daemonOnly.size > 0;
+  if (!exposed && args.read === 'pending') return { kind: 'pending' };
   if (!exposed && args.read === 'error') return { kind: 'read-error', tone };
   if (!exposed) return { kind: 'upgrade', tone };
-  const bucket = merged.get(args.runtimeId);
+  const bucket = daemonOnly.get(args.runtimeId);
   if (!bucket?.reported) return { kind: 'unlisted', tone };
   if (tone === 'codex') {
     const providers = codexProviders(bucket.providers);

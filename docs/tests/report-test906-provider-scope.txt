@@ -1,0 +1,30 @@
+#906 daemon Provider scope — TEST-ONLY, 2026-10-11 Asia/Shanghai
+
+Base: 7fe4af6c1b7e6740faa7f77a1fb9bf9565051d9f (app main at inspection).
+Changed logic: src/daemon-runtime-providers.ts.
+The server list_providers API is network-scoped and has no daemon binding contract.
+Do not interpret its runtime-tagged rows as selected-daemon availability.
+Daemon-owned runtime_readiness and nested list_providers remain supported.
+
+Environment: Docker via sg docker; pinned Bun 1.3.14 image digest
+sha256:e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4.
+Runs use --rm --network none. No host mounts, credentials or production access.
+
+Red: new scope assertions against unchanged base production module: 26/32 passed,
+exit 1. Six expected failures: runtime-tagged network row, extra runtime, extra model,
+switching daemon, no selected daemon, explicit local empty catalog.
+Red image: anet-provider-scope:test906-red.
+
+Green: fixed production module plus OpenCode V2 regression cases: 34/34 passed.
+Related provider-create-options: 43/43 checks passed.
+Related opencode-create-options: PASS (suite reports no numeric denominator).
+Green image: anet-provider-scope:test906-green.
+
+Reproduce all three suites from this tree:
+sg docker -c 'docker build -f tests/daemon-provider-scope/Dockerfile -t anet-provider-scope:test906-green . && docker run --rm --network none anet-provider-scope:test906-green'
+
+Boundary: pure-function and source-wiring regression checks only, NOT rendered UI,
+authenticated Hub integration, real model calls, native package acceptance or release.
+Full Docker E2E and CI remain required before merge. No claim that custom DeepSeek
+creation or either P0 parent task is finished. No credential distribution implemented.
+Cleanup: disposable containers removed by --rm; test images retained for reproduction.
