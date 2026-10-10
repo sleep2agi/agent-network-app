@@ -4,6 +4,7 @@ import ts from 'typescript';
 import { t as translate } from './i18n';
 import './i18n-chat';
 import './i18n-daemon';
+import './i18n-agent-org';
 import './i18n-settings';
 import './i18n-tasks';
 import './i18n-task-issues';
@@ -46,6 +47,7 @@ migrated.push('src/OpenCodeProviderNote.tsx');
 migrated.push('src/DaemonRuntimeProviders.tsx');
 migrated.push('src/DaemonManagementScreen.tsx');
 migrated.push('src/BackendPendingDemo.tsx');
+migrated.push('src/AgentOrgScreen.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

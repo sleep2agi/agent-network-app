@@ -62,9 +62,9 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
   },
   {
     key: 'agentTeams',
-    label: 'Agent 组织',
+    label: 'Agent 组织架构',
     icon: 'git-network-outline',
-    rows: [{ key: 'teams', label: 'Agent 团队', keywords: ['agent', 'team', 'organization', '负责人'] }],
+    rows: [{ key: 'teams', label: 'Agent 团队', keywords: ['agent', 'team', 'organization', '负责人', '组织架构', 'department', 'owner', '部门'] }],
   },
   {
     key: 'localHub',

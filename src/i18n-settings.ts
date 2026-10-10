@@ -286,7 +286,7 @@ const copy = [
   ['修改密码', 'Change password'],
   // #695 —— 追加在末尾(理由同上):连点「版本」5 下才出现的那一组。
   ['诊断', 'Diagnostics'],
-  ['Agent 组织', 'Agent organization'],
+  ['Agent 组织架构', 'Agent organization'],
   ['Agent 团队', 'Agent teams'],
   ['我的头像', 'My avatar'],
 ] as const;

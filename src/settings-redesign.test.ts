@@ -32,10 +32,11 @@ console.log('# 1 宽屏右栏:每一段都在卡片里');
   marks.forEach((m, i) => {
     const body = settings.slice(m.at, i + 1 < marks.length ? marks[i + 1].at : settings.indexOf('</ScrollView>', m.at));
     // 自己画成设置积木卡片的组件(VoiceSettingsSection / UserManagementPanel)直接放在段里,不再套 WideCard。
-    if (!/<WideCard>|<SettingsGroup|<VoiceSettingsSection |<UserManagementPanel |<AgentTeamsEntry /.test(body)) bare.push(m.key);
+    if (!/<WideCard>|<SettingsGroup|<VoiceSettingsSection |<UserManagementPanel |<AgentOrgScreen /.test(body)) bare.push(m.key);
   });
   ck('每一段都画在 WideCard / SettingsGroup 里', bare.length === 0, bare.join(','));
-  ck('成员组织入口复用原设置卡片', /<AgentTeamsSection /.test(code(read('./AgentTeamsEntry.tsx'))) && /<SettingsGroup title="Agent 组织"/.test(code(read('./AgentTeams.tsx'))));
+  ck('设置分类挂只读组织架构页', /<AgentOrgScreen /.test(settings) && /<SettingsGroup/.test(code(read('./AgentOrgScreen.tsx'))));
+  ck('管理员用户管理仍挂 Agent 团队编辑器', /<AgentTeamsSection /.test(code(read('./UserManagementPanel.tsx'))) && /<SettingsGroup title="Agent 组织"/.test(code(read('./AgentTeams.tsx'))));
   ck('WideCard = SettingsGroup 卡片(不自带分隔,旧行自己画),空的不画', /function WideCard[\s\S]*?if \(!Children\.toArray\(children\)\.length\) return null;[\s\S]*?<SettingsGroup separators=\{false\}/.test(settings));
   ck('登录设备子页也在卡片里', /testID="settings-section-devices">\s*<WideCard>/.test(settings));
   ck('右栏内容收成居中一列(最宽 760)', /content: \{[^}]*maxWidth: 760, alignSelf: 'center'/.test(settings));
