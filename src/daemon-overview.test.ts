@@ -8,6 +8,7 @@ import {
   ANET_INSTALL_DOCS,
   ANET_RUNTIME_DOCS,
   buildDaemonOverview,
+  canJudgeGaps,
   daemonHostname,
   fixtureOverview,
   localScanMatches,
@@ -165,6 +166,29 @@ ck('overview stays inside the management screen and does not call a new probe ro
 ck('probe reads full status and the local scan, and install reuses the local daemon installer', section.includes('fetchNodeStatus(cfg)') && section.includes('scanLocalDaemon()') && section.includes('installLocalDaemon()') && section.includes('isTauriDesktop()'));
 ck('the node page does not get this overview', !nodePage.includes('DaemonOverview'));
 ck('the web fixture is wired', app.includes('readDaemonOverviewFixture') && app.includes('<DaemonOverviewFixtureScreen'));
+
+// ── 离线 / 版本取全量 / 没有判断依据 ──
+{
+  const offline = buildDaemonOverview(base({ offline: true, sessions: [hostSession], daemonVersion: '2.5.0' }));
+  ck('offline flag is carried to the model', offline.offline && !offline.demo);
+  ck('offline defaults to false (unknown is not offline)', !buildDaemonOverview(base({ sessions: [hostSession] })).offline);
+  const nothing = buildDaemonOverview(base({ supervisor: { daemon_node_id: 'node_d1', alias: 'daemon-a', hostname: 'box-a', online: false, can_create_nodes: true }, offline: true }));
+  ck('everything unreported: not demo, tools all unreported, and NOT checkable (no "no gaps" claim)', !nothing.demo && nothing.tools.every(row => row.state === 'unreported') && nothing.gaps.length === 0 && !nothing.checkable);
+  const withVersion = buildDaemonOverview(base({ daemonVersion: '2.5.0' }));
+  ck('a reported agent-node version makes the overview checkable', withVersion.tools.find(row => row.key === 'agentNode')?.state === 'ok' && withVersion.checkable);
+  ck('readiness makes it checkable', buildDaemonOverview(base({ supervisor: fixtureOverviewSupervisor() })).checkable);
+  { const d = buildDaemonOverview(base()); ck('the demo bundle stays checkable (its gaps are real rows)', d.demo && d.checkable); }
+  ck('canJudgeGaps: unknown/unreported rows alone cannot judge', !canJudgeGaps([{ key: 'node', labelKey: '', source: 'unreported', state: 'unreported', version: null, path: null }], [{ id: 'x', labelKey: '', source: 'catalog', installed: 'unknown', version: null, state: 'unknown', reason: null, noteKey: null }]));
+}
+function fixtureOverviewSupervisor() {
+  return { daemon_node_id: 'node_d1', alias: 'daemon-a', hostname: 'box-a', online: true, runtimes_supported: ['codex-sdk'], runtime_readiness: { 'codex-sdk': { ok: true, state: 'ready' as const, version: '0.98.0', cli: 'found' as const } } };
+}
+setLanguagePreference('zh');
+ck('zh copy: offline snapshot, refresh and doctor hint', t('daemon.overview.offline') === 'Daemon 离线，以下为上次快照。' && t('daemon.overview.refresh') === '刷新' && t('daemon.overview.leadReadonly').includes('anet doctor') && t('daemon.overview.gapsUnchecked').includes('无法判断'));
+ck('section: phone label is refresh, desktop keeps probe; full-status version; offline + unchecked wired',
+  section.includes("canScan ? 'daemon.overview.probe' : 'daemon.overview.refresh'") && section.includes('sessions?.find(row => row.alias === alias)?.version') && section.includes('daemon-overview-offline') && section.includes('daemon-overview-gaps-unchecked'));
+ck('phone status line says Refresh, not Probe', section.includes("canScan ? 'daemon.overview.reported' : 'daemon.overview.reportedReadonly'") && t('daemon.overview.reportedReadonly').includes('刷新') && t('daemon.overview.demoNoteReadonly').includes('刷新'));
+ck('screen passes the merged offline state to the overview', screen.includes('offline={isDaemonOffline(daemonStatus)}') && screen.includes('daemonPresence('));
 
 const quiet = JSON.stringify(readiness);
 ck('readiness result does not echo a secret-shaped field', !quiet.includes('apiKey') && !quiet.includes('sk-'));

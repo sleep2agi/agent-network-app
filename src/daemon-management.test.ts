@@ -10,6 +10,8 @@ import {
   daemonMgmtLayout,
   stackShowsMenu,
   stackShowsSection,
+  daemonPresence,
+  isDaemonOffline,
   DAEMON_MGMT_COMPACT_WIDTH,
   lifecycleErrorMessage,
   lifecycleTool,
@@ -87,6 +89,16 @@ ck('session status offline is down', statusView({ alias: 'a', status: 'offline' 
 ck('lifecycle stopped is down without a session', statusView(undefined, 'stopped').online === false && statusView(undefined, 'stopped').source === 'lifecycle');
 ck('lifecycle active without a session is not treated as online or offline', statusView(undefined, 'active').online === null && statusView(undefined, 'active').text === 'active');
 ck('nothing reported stays unreported', statusView(undefined, null).kind === 'unreported' && statusLabel(statusView(undefined, '  ')) === 'Not reported');
+{
+  const idle = statusView({ alias: 'a', status: 'idle' }, 'active');
+  ck('stale heartbeat overrides a session that still says idle (crashed daemon)', daemonPresence(idle, false).online === false && daemonPresence(idle, false).text === 'offline' && daemonPresence(idle, false).source === 'heartbeat');
+  ck('fresh heartbeat keeps the session status', daemonPresence(idle, true) === idle);
+  ck('Hub did not list the daemon: never turned into offline', daemonPresence(idle, undefined) === idle && daemonPresence(statusView(undefined, null), undefined).online === null);
+  const off = statusView({ alias: 'a', status: 'offline' }, 'active');
+  ck('session offline stays offline even when the heartbeat is still fresh', daemonPresence(off, true) === off && isDaemonOffline(daemonPresence(off, true)));
+  ck('header text is offline when either clock says so', daemonPresence(statusView(undefined, null), false).text === 'offline');
+  ck('starting is not shown as offline snapshot', !isDaemonOffline(statusView(undefined, 'starting')) && isDaemonOffline(statusView(undefined, 'stopped')) && !isDaemonOffline(idle));
+}
 ck('runtime falls back node then agent, never role', runtimeView(undefined, 'grok').text === 'grok' && runtimeView({ alias: 'a', agent: 'codex-sdk' }, null).source === 'agent' && runtimeView(undefined, null).kind === 'unreported');
 
 const sup = (over = {}) => ({ daemon_node_id: 'node_d1', alias: 'daemon-a', ...over });
