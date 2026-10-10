@@ -1,5 +1,5 @@
 import { useCallback, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, View } from 'react-native';
+import { ActivityIndicator, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { fetchStatus, type HubConfig } from './api';
@@ -12,10 +12,11 @@ import { badgeOffsetCentered, labelClearanceMargin } from './badge-anchor';
 import { ds } from './ui-scale';
 import { useTranslation } from './i18n-react';
 import { PendingSegmentedTabs, type PendingTab } from './backend-pending-ui';
+import { HUB_NAV, type HubScreen, type HubSection } from './hub-scope-demo';
 
-export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs' | PendingTab;
+export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs' | PendingTab | HubScreen;
 
-const ITEMS: Array<{ key: Exclude<ServerSection, PendingTab>; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
+const MANAGEMENT: Array<{ key: 'overview' | 'nodes' | 'create' | 'logs'; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { key: 'overview', label: 'server.overview', icon: 'grid-outline' },
   { key: 'nodes', label: 'server.nodes', icon: 'git-network-outline' },
   { key: 'create', label: 'server.create', icon: 'add-circle-outline' },
@@ -25,8 +26,21 @@ const ITEMS: Array<{ key: Exclude<ServerSection, PendingTab>; label: string; ico
 const PENDING_TABS: PendingTab[] = ['skills', 'tokens', 'provider'];
 
 export function isHubPendingSection(section: ServerSection): section is PendingTab {
-  return PENDING_TABS.includes(section as PendingTab);
+  return (PENDING_TABS as readonly string[]).includes(section);
 }
+
+const HUB_ICONS: Record<HubSection, keyof typeof Ionicons.glyphMap> = {
+  skills: 'sparkles-outline',
+  tokens: 'key-outline',
+  env: 'options-outline',
+  providers: 'cloud-outline',
+};
+
+const HUB_ITEMS: Array<{ key: HubScreen; label: string; icon: keyof typeof Ionicons.glyphMap }> = HUB_NAV.map(item => ({
+  key: item.screen,
+  label: item.labelKey,
+  icon: HUB_ICONS[item.section],
+}));
 
 export default function ServerSidebar({ cfg, active, onSelect }: {
   cfg: HubConfig;
@@ -72,37 +86,57 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
         </View>
       </View>
 
-      <Text style={styles.sectionLabel}>{t('server.management')}</Text>
-      <View style={styles.items}>
-        {ITEMS.map(item => (
-          <Pressable
-            key={item.key}
-            accessibilityLabel={t('server.navLabel', { label: t(item.label) })}
-            onPress={() => onSelect(item.key)}
-            style={({ pressed }) => [styles.item, active === item.key && styles.itemActive, pressed && { opacity: 0.65 }]}
-          >
-            <View style={styles.itemIcon} testID={`server-nav-icon-${item.key}`}>
-              <Ionicons name={item.icon} size={ITEM_ICON_GLYPH} color={active === item.key ? colors.accent : colors.textSecondary} />
-              {item.key === 'nodes' && railBadgeText(counts?.online ?? null) ? (
-                <View style={styles.badge} testID="server-nav-badge-nodes"><Text dense style={styles.badgeText}>{railBadgeText(counts?.online ?? null)}</Text></View>
-              ) : null}
-            </View>
-            <Text style={[styles.itemText, active === item.key && styles.itemTextActive]}>{t(item.label)}</Text>
-          </Pressable>
-        ))}
-      </View>
+      <ScrollView style={styles.navScroll} contentContainerStyle={styles.navContent} showsVerticalScrollIndicator={false}>
+        <Text style={styles.sectionLabel}>{t('server.management')}</Text>
+        <View style={styles.items}>
+          {MANAGEMENT.map(item => (
+            <Pressable
+              key={item.key}
+              testID={`server-nav-${item.key}`}
+              accessibilityLabel={t('server.navLabel', { label: t(item.label) })}
+              onPress={() => onSelect(item.key)}
+              style={({ pressed }) => [styles.item, active === item.key && styles.itemActive, pressed && { opacity: 0.65 }]}
+            >
+              <View style={styles.itemIcon} testID={`server-nav-icon-${item.key}`}>
+                <Ionicons name={item.icon} size={ITEM_ICON_GLYPH} color={active === item.key ? colors.accent : colors.textSecondary} />
+                {item.key === 'nodes' && railBadgeText(counts?.online ?? null) ? (
+                  <View style={styles.badge} testID="server-nav-badge-nodes"><Text dense style={styles.badgeText}>{railBadgeText(counts?.online ?? null)}</Text></View>
+                ) : null}
+              </View>
+              <Text style={[styles.itemText, active === item.key && styles.itemTextActive]} numberOfLines={1}>{t(item.label)}</Text>
+            </Pressable>
+          ))}
+        </View>
 
-      <View style={styles.pendingBlock}>
-        <Text style={styles.sectionLabel}>{t('server.integrations')}</Text>
-        <PendingSegmentedTabs
-          stacked
-          value={pendingActive}
-          onChange={tab => onSelect(tab)}
-          testID="server-pending-tabs"
-          t={t}
-        />
-      </View>
+        <View style={styles.pendingBlock}>
+          <Text style={styles.sectionLabel}>{t('server.integrations')}</Text>
+          <PendingSegmentedTabs
+            stacked
+            value={pendingActive}
+            onChange={tab => onSelect(tab)}
+            testID="server-pending-tabs"
+            t={t}
+          />
+        </View>
 
+        <Text style={styles.sectionLabel} testID="server-nav-hub">{t('server.hub')}</Text>
+        <View style={styles.items}>
+          {HUB_ITEMS.map(item => (
+            <Pressable
+              key={item.key}
+              testID={`server-nav-${item.key}`}
+              accessibilityLabel={t('server.navLabel', { label: t(item.label) })}
+              onPress={() => onSelect(item.key)}
+              style={({ pressed }) => [styles.item, active === item.key && styles.itemActive, pressed && { opacity: 0.65 }]}
+            >
+              <View style={styles.itemIcon} testID={`server-nav-icon-${item.key}`}>
+                <Ionicons name={item.icon} size={ITEM_ICON_GLYPH} color={active === item.key ? colors.accent : colors.textSecondary} />
+              </View>
+              <Text style={[styles.itemText, active === item.key && styles.itemTextActive]} numberOfLines={1}>{t(item.label)}</Text>
+            </Pressable>
+          ))}
+        </View>
+      </ScrollView>
       <View style={styles.footer}>
         <Text style={styles.footerLabel}>{t('server.network')}</Text>
         <Text style={styles.footerValue} numberOfLines={1}>{cfg.networkId ?? 'default'}</Text>
@@ -130,6 +164,8 @@ const makeStyles = () =>
   dot: { width: 7, height: 7, borderRadius: radius.pill },
   status: { color: colors.textSecondary, fontSize: 11 },
   count: { color: colors.textMuted, fontSize: 11, marginLeft: 'auto' },
+  navScroll: { flex: 1 },
+  navContent: { paddingBottom: spacing.md },
   sectionLabel: { color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.sm },
   items: { paddingHorizontal: spacing.sm, gap: 3 },
   pendingBlock: { marginTop: spacing.sm, paddingBottom: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
@@ -147,7 +183,7 @@ const makeStyles = () =>
   // (badge-anchor.ts),「99+」变宽时向外长,不再盖住图标。
   badge: { position: 'absolute', ...badgeOffsetCentered(ITEM_ICON_BOX, ITEM_ICON_BOX, ds(ITEM_ICON_GLYPH), ITEM_BADGE_H), minWidth: ITEM_BADGE_H, height: ITEM_BADGE_H, borderRadius: radius.pill, paddingHorizontal: 4, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' },
   badgeText: { color: colors.onAccent, fontSize: 9, fontWeight: '600', lineHeight: 12 },
-  footer: { marginTop: 'auto', borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.lg },
+  footer: { borderTopWidth: 1, borderTopColor: colors.border, padding: spacing.lg },
   footerLabel: { color: colors.textMuted, fontSize: 10 },
   footerValue: { color: colors.textSecondary, fontSize: 12, marginTop: 3 },
 });

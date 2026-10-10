@@ -31,6 +31,9 @@ import { agentListScreen, type AgentListFilter } from './src/server-stats';
 import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
 import HubPendingScreen from './src/HubPendingScreen';
 import type { PendingTab } from './src/backend-pending-ui';
+import HubScopeScreen from './src/HubScopeScreen';
+import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
+import { hubSectionForScreen, screenForHubSection, type HubSection } from './src/hub-scope-demo';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
@@ -126,6 +129,10 @@ type Screen =
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — 会话行菜单「节点详情」(以前是直接长按); back returns to agents
   | { name: 'logs' }                        // row 6 — network event stream leaf reached from Server tab; back returns to server
+  | { name: 'hubSkills' }                   // 服务器管理侧栏 · Hub SKILLS（演示壳）
+  | { name: 'hubTokens' }                   // 服务器管理侧栏 · Hub 令牌（演示壳）
+  | { name: 'hubEnv' }                      // 服务器管理侧栏 · Hub 环境变量（演示壳，不是 #909 三层）
+  | { name: 'hubProviders' }                // 服务器管理侧栏 · Hub Provider（演示壳，不是 daemon runtime 供应商）
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
   | { name: 'wizard'; daemon: HostSupervisorDaemon; back?: Screen };  // back: 从某台 daemon 的管理页进来时,返回回到那一页
 
@@ -251,6 +258,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <UpdatePromptFixtureScreen fixture={updateFixture} />
+      </SafeAreaProvider>
+    );
+  }
+
+  const hubFixture = readHubScopeFixture();
+  if (hubFixture) {
+    if (themeMode() !== hubFixture.theme) setThemeMode(hubFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <HubScopeFixtureScreen theme={hubFixture.theme} section={hubFixture.section} />
       </SafeAreaProvider>
     );
   }
@@ -1208,7 +1225,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const notifyKey = notifyProfileKey(cfg);
   const mutedAliases = mutedAgents(notifySettings, notifyKey);
   const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
-  const serverWorkspace = ['server', 'serverPending', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
+  const serverWorkspace = ['server', 'serverPending', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders'].includes(screen.name);
   const taskWorkspace = screen.name === 'tasks' || screen.name === 'taskDetail';
   // 设置 → 快捷键(src/shortcuts-model.ts):主窗口的全局键盘快捷键。组合可改,读的是最新存储;
   // 设置页正在录入新组合时不执行。⌘K:列表栏是服务器侧栏时先切回 Agents,再请求聚焦搜索框。
@@ -1303,6 +1320,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
   : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen(screen.back ?? { name: 'picker' })} onExit={() => setScreen(screen.back ?? { name: 'serverNodes' })} desktop />
+  : hubSectionForScreen(screen.name) ? <HubScopeScreen key={screen.name} section={hubSectionForScreen(screen.name)!} />
   : (
     <View style={desktopStyles.empty}>
       <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
@@ -1367,8 +1385,12 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             if (section === 'overview') setScreen({ name: 'server' });
             else if (section === 'nodes') setScreen({ name: 'serverNodes' });
             else if (section === 'create') setScreen({ name: 'picker' });
+            else if (section === 'logs') setScreen({ name: 'logs' });
             else if (section === 'skills' || section === 'tokens' || section === 'provider') setScreen({ name: 'serverPending', tab: section });
-            else setScreen({ name: 'logs' });
+            else {
+              const hub = hubSectionForScreen(section);
+              if (hub) openHubSection(hub, setScreen);
+            }
           }} />
         ) : (
           <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || maskedHubHost(cfg.serverUrl)); }} onOpenChat={(alias, networkId) => setScreen({ name: 'chat', alias, networkId })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
@@ -1433,8 +1455,14 @@ function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle
   );
 }
 
+function openHubSection(section: HubSection, setScreen: (screen: Screen) => void) {
+  setScreen({ name: screenForHubSection(section) });
+}
+
 function serverSectionForScreen(screen: Screen): ServerSection {
   if (screen.name === 'serverPending') return screen.tab;
+  const hub = hubSectionForScreen(screen.name);
+  if (hub) return screenForHubSection(hub);
   if (screen.name === 'serverNodes' || screen.name === 'serverNodeDetail') return 'nodes';
   if (screen.name === 'picker' || screen.name === 'wizard') return 'create';
   if (screen.name === 'logs') return 'logs';
