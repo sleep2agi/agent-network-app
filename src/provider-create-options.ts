@@ -254,7 +254,8 @@ export type CodexSubmitGate =
  */
 export function codexSubmitGate(input: ProviderCheckInput, serverUrl?: string): CodexSubmitGate {
   if (input.choice === 'none') return { action: 'omit' };
-  const transportOk = serverUrl === undefined || hubTransportAllowsSecrets(serverUrl);
+  let transportOk = true;
+  if (typeof serverUrl === 'string') transportOk = hubTransportAllowsSecrets(serverUrl);
   const local = providerLocalIssues(input, transportOk);
   if (local.length) return { action: 'block', issue: local[0] };
   return { action: 'block', issue: 'hub_not_ready' };

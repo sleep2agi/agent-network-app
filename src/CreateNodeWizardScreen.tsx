@@ -286,7 +286,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // 确认页上显式改过完整路径(workdirEdited)优先;否则 <root>/<文件夹>。
   const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, folder) : '');
   const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
-  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId) && providerIssues.length === 0;
+  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId);
 
   // ── handlers (no hooks below this line) ────────────────────────────
   // One runtime choice row. `nested` = it lives inside a 「高级」 disclosure:
