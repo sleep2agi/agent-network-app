@@ -98,6 +98,10 @@ export interface DaemonOverview {
   installBlocked: string | null;
   capability: 'ready' | 'blocked' | 'unknown' | 'absent';
   readinessReported: boolean;
+  /** Daemon 离线(session 或心跳说的)。整页是上次快照,不是现在的状态。 */
+  offline: boolean;
+  /** 有没有任何一项能判断缺不缺:工具有 ok/missing/bad,或 runtime 有就绪判定。全是未上报 = 不能说「没有缺项」。 */
+  checkable: boolean;
 }
 
 export interface DaemonOverviewInput {
@@ -113,6 +117,8 @@ export interface DaemonOverviewInput {
   localScan: LocalDaemonScan | null;
   /** 用户这次点了探测并且跑了本机扫描（无论是否对上这台 daemon）。 */
   scanned: boolean;
+  /** Daemon 离线(daemonPresence 合并后)。缺省 = 不知道,不当离线。 */
+  offline?: boolean;
 }
 
 interface RuntimeGuide {
@@ -173,6 +179,8 @@ const EMPTY: DaemonOverview = {
   installBlocked: null,
   capability: 'absent',
   readinessReported: false,
+  offline: false,
+  checkable: false,
 };
 
 export function daemonHostname(input: Pick<DaemonOverviewInput, 'supervisor' | 'nodeHostname' | 'sessions' | 'alias'>): string | null {
@@ -420,6 +428,13 @@ function hasPartialTelemetry(supervisor: HostSupervisorDaemon | null): boolean {
   return tel?.cpu_cores != null || tel?.mem_gb != null || !!tel?.ip_internal?.trim();
 }
 
+const JUDGED_STATES: ReadonlySet<RuntimeRow['state']> = new Set(['ready', 'missing_cli', 'not_logged_in', 'no_network']);
+
+/** 至少有一行是真判断过的(不是未上报 / unknown)。 */
+export function canJudgeGaps(tools: readonly ToolRow[], runtimes: readonly RuntimeRow[]): boolean {
+  return tools.some(row => row.state !== 'unreported') || runtimes.some(row => JUDGED_STATES.has(row.state));
+}
+
 export function buildDaemonOverview(input: DaemonOverviewInput): DaemonOverview {
   const notListed = input.listing === 'missing';
   const ambiguous = input.listing === 'ambiguous';
@@ -514,6 +529,8 @@ export function buildDaemonOverview(input: DaemonOverviewInput): DaemonOverview 
     installBlocked: blocked,
     capability,
     readinessReported: reported && readinessReported,
+    offline: !!input.offline,
+    checkable: !reported || canJudgeGaps(tools, runtimes),
   };
 }
 

@@ -53,6 +53,7 @@ export default function DaemonOverviewSection({
   supervisor,
   listing,
   daemonVersion,
+  offline = false,
   refreshTick = 0,
   onRefresh,
   preview,
@@ -64,6 +65,8 @@ export default function DaemonOverviewSection({
   supervisor: HostSupervisorDaemon | null;
   listing: ListingKind;
   daemonVersion: string | null;
+  /** Daemon 离线(header 同一个判断)。整页按上次快照说明。 */
+  offline?: boolean;
   refreshTick?: number;
   onRefresh?: () => Promise<void>;
   /** 验收夹具：不访问 Hub。 */
@@ -106,7 +109,9 @@ export default function DaemonOverviewSection({
     nodeHostname,
     supervisor,
     listing,
-    daemonVersion,
+    // light status (the screen's) has no `version`; the full projection read above does.
+    daemonVersion: daemonVersion || sessions?.find(row => row.alias === alias)?.version?.trim() || null,
+    offline,
     localScan: scan,
     scanned,
   });
@@ -161,15 +166,17 @@ export default function DaemonOverviewSection({
     } catch { /* The command stays selectable. */ }
   };
 
+  // 只有桌面 Tauri 会扫描本机;手机 / 网页只能重读 Hub 里 Daemon 的上报,所以叫「刷新」。
+  const canScan = isTauriDesktop();
   const wide = width >= 860;
   const resourceBasis = width >= 980 ? '23%' : width >= 520 ? '47%' : '100%';
   const statusLine = model.pending
     ? t('daemon.overview.waiting')
     : probedAt
-      ? t('daemon.overview.probed', { time: new Date(probedAt).toLocaleTimeString() })
+      ? t(canScan ? 'daemon.overview.probed' : 'daemon.overview.refreshed', { time: new Date(probedAt).toLocaleTimeString() })
       : model.demo
-        ? t('daemon.overview.demoNote')
-        : t('daemon.overview.reported');
+        ? t(canScan ? 'daemon.overview.demoNote' : 'daemon.overview.demoNoteReadonly')
+        : t(canScan ? 'daemon.overview.reported' : 'daemon.overview.reportedReadonly');
 
   return (
     <ScrollView
@@ -182,21 +189,24 @@ export default function DaemonOverviewSection({
         <View style={styles.headerText}>
           <Text style={styles.title}>{t('daemon.overview.title')}</Text>
           <Text style={styles.lead}>{t('daemon.overview.lead')}</Text>
-          {isTauriDesktop() ? <Text style={styles.lead}>{t('daemon.overview.leadDesktop')}</Text> : null}
+          {canScan ? <Text style={styles.lead}>{t('daemon.overview.leadDesktop')}</Text> : <Text testID="daemon-overview-lead-readonly" style={styles.lead}>{t('daemon.overview.leadReadonly')}</Text>}
         </View>
         <Pressable
           testID="daemon-overview-probe"
           accessibilityRole="button"
-          accessibilityLabel={t('daemon.overview.probe')}
+          accessibilityLabel={t(canScan ? 'daemon.overview.probe' : 'daemon.overview.refresh')}
           disabled={probing || installing}
           onPress={() => { void probe(); }}
           style={({ pressed }) => [styles.primaryBtn, (probing || installing) && styles.disabled, pressed && styles.pressed]}
         >
-          {probing ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.primaryBtnText}>{t('daemon.overview.probe')}</Text>}
+          {probing ? <ActivityIndicator color={colors.onAccent} /> : <Text style={styles.primaryBtnText}>{t(canScan ? 'daemon.overview.probe' : 'daemon.overview.refresh')}</Text>}
         </Pressable>
       </View>
 
       {model.demo ? <PendingDemoBanner t={t} /> : null}
+      {model.offline && !model.pending ? (
+        <Text testID="daemon-overview-offline" style={styles.warn}>{t(model.demo ? 'daemon.overview.offlineNever' : 'daemon.overview.offline')}</Text>
+      ) : null}
       <Text style={styles.statusLine}>{statusLine}</Text>
       {probeError ? <Text testID="daemon-overview-probe-error" style={styles.warn}>{t('daemon.overview.probeFailed')}</Text> : null}
       {model.notListed ? <Text testID="daemon-overview-not-listed" style={styles.warn}>{t('daemon.overview.notListed')}</Text> : null}
@@ -214,7 +224,7 @@ export default function DaemonOverviewSection({
         <>
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>{t('daemon.overview.gaps', { count: model.gaps.length })}</Text>
-            {model.gaps.length === 0 ? <Text style={styles.note}>{t('daemon.overview.noGaps')}</Text> : (
+            {model.gaps.length === 0 ? <Text testID={model.checkable ? 'daemon-overview-no-gaps' : 'daemon-overview-gaps-unchecked'} style={styles.note}>{t(model.checkable ? 'daemon.overview.noGaps' : 'daemon.overview.gapsUnchecked')}</Text> : (
               <View style={styles.gapGrid} testID="daemon-overview-gaps">
                 {model.gaps.map(gap => (
                   <GapCard

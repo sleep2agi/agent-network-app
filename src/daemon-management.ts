@@ -102,7 +102,7 @@ export interface ManagedSessionInput {
 export interface StatusView {
   kind: 'reported' | 'unreported';
   text: string;
-  source: 'session' | 'lifecycle' | 'unreported';
+  source: 'session' | 'lifecycle' | 'heartbeat' | 'unreported';
   /** null = the Hub did not say whether the process is up. Never treat that as offline. */
   online: boolean | null;
 }
@@ -115,6 +115,21 @@ export function statusView(session: ManagedSessionInput | undefined, lifecycle: 
   if (life) return { kind: 'reported', text: life, source: 'lifecycle', online: null };
   return { kind: 'unreported', text: '', source: 'unreported', online: null };
 }
+
+/**
+ * Header status for a daemon: /api/status (session.status, light) and /api/host-supervisors (`online` =
+ * heartbeat within 5 min) are different clocks. A crashed daemon keeps status "idle" forever while its
+ * heartbeat goes stale, and a cleanly stopped one writes "offline" while its heartbeat is still fresh.
+ * Either one saying offline wins. `online` undefined = the Hub did not list it, which never means offline.
+ */
+export function daemonPresence(view: StatusView, supervisorOnline: boolean | undefined): StatusView {
+  if (view.online === false) return view;
+  if (supervisorOnline === false) return { kind: 'reported', text: 'offline', source: 'heartbeat', online: false };
+  return view;
+}
+
+/** Offline for the overview banner. A daemon that is still starting is not "offline, last snapshot". */
+export const isDaemonOffline = (view: StatusView): boolean => view.online === false && view.text !== 'starting';
 
 export interface RuntimeView {
   kind: 'reported' | 'unreported';

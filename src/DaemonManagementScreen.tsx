@@ -35,6 +35,8 @@ import {
   actionReason,
   createAction,
   daemonMgmtLayout,
+  daemonPresence,
+  isDaemonOffline,
   daemonNodeOf,
   lifecycleErrorMessage,
   lifecycleTool,
@@ -175,7 +177,10 @@ export default function DaemonManagementScreen({
     networkId: cfg.networkId,
   });
   const daemonSession = (statusUnread ? null : sessions)?.find(session => session.alias === alias);
-  const daemonStatus = statusView(daemonSession, daemon?.lifecycle_state);
+  const daemonStatus = daemonPresence(
+    statusView(daemonSession, daemon?.lifecycle_state),
+    lookup.kind === 'ready' ? lookup.daemon?.online : undefined,
+  );
   const subtitle = [
     t('daemon.mgmt.kicker'),
     daemonStatus.kind === 'reported' ? daemonStatus.text : '',
@@ -446,6 +451,7 @@ export default function DaemonManagementScreen({
       supervisor={lookup.kind === 'ready' ? lookup.daemon : null}
       listing={listing}
       daemonVersion={daemonSession?.version ?? null}
+      offline={isDaemonOffline(daemonStatus)}
       refreshTick={refreshTick}
       onRefresh={load}
     />
