@@ -8,7 +8,8 @@
 //   create    「+ 新建子团队」→ 弹窗 → 填名 →「完成」⇒ POST {name, parent_id}
 //   assign    「+ 添加 Agent」→ 选未分组的 ⇒ PUT …/nodes/:id/agent-team {team_id};「移出」⇒ {team_id:null}
 //   delete    有子团队时「删除」灰掉;叶子团队删除先确认 ⇒ DELETE
-//   Member / viewer / team owner also enter independently through settings-agentTeams (#768).
+//   Member / viewer / team owner open Settings → Agent 组织架构 (read-only department tree).
+//   Team editing stays under 用户管理 for admins; the settings entry no longer mounts it.
 //   old-hub   接口 404 ⇒ 只一行「需要 Hub ≥ 0.9.0-preview.116」
 // phone 390×844(Android UA ⇒ touch),light + dark:
 //   drill     用户管理 →「Agent 团队」→ 全屏:团队一行一个 + 「未分组」;点进「平台」→ 子团队 + Agent;底部「管理团队」贴底
@@ -242,51 +243,27 @@ for (const phone of [false, true]) for (const role of ['member', 'viewer', 'team
       await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'settings' }));
       record(where, 'no admin entry', { hidden: await page.locator(tid('settings-row-users')).count() === 0 });
       await page.locator(tid('settings-row-agentTeams')).tap();
-      await page.locator(tid('team-open')).tap();
-      await page.locator(tid('team-row-t_plat')).tap();
+      await page.locator(tid('agent-org-page')).waitFor({ timeout: 10000 });
     } else {
       await page.getByRole('tab', { name: '设置', exact: true }).click();
       screen = await openStubWindow(page, 'settings', scripts);
       if (!screen) throw Error('settings window missing');
       await screen.setViewportSize({ width: 1200, height: 800 });
       record(where, 'no admin entry', { hidden: await screen.getByRole('button', { name: '设置分类 用户管理', exact: true }).count() === 0 });
-      await screen.getByRole('button', { name: '设置分类 Agent 组织', exact: true }).click();
-      await screen.locator(tid('team-tree-t_plat')).click();
+      await screen.getByRole('button', { name: '设置分类 Agent 组织架构', exact: true }).click();
+      await screen.locator(tid('agent-org-page')).waitFor({ timeout: 10000 });
     }
-    const editable = role === 'teamOwner';
-    const control = phone ? 'team-phone-action' : 'team-new-child';
-    // The existing team-permission UI is shared; changing the entry grants no rights.
-    record(where, 'scope and reads', {
-      editor: (await screen.locator(tid(control)).count() > 0) === editable,
+    const banner = (await screen.locator(tid('agent-org-demo-banner')).innerText()).replace(/\s+/g, ' ');
+    record(where, 'org page opens and does not write', {
+      page: await screen.locator(tid('agent-org-page')).count() === 1,
+      banner: banner.includes('演示数据 · 后端开发中，敬请期待'),
+      noTeamEditor: (await screen.locator(tid('team-open')).count()) === 0 && (await screen.locator(tid('team-desktop')).count()) === 0,
       noAdminReads: await screen.evaluate(() => window.__memberReads === 0),
       noWritesOnOpen: (await calls(screen)).length === 0,
-    });
-    const layout = await screen.evaluate(() => {
-      const agents = [...document.querySelectorAll('[data-testid^="team-agent-"]')].map(e => {
-        const r = e.getBoundingClientRect(); return { x: r.x, right: r.right };
-      });
-      return { width: innerWidth, agents, overflow: document.documentElement.scrollWidth > innerWidth + 1 };
-    });
-    record(where, 'agent rows aligned and in viewport', {
-      noOverflow: !layout.overflow,
-      edges: layout.agents.length === 2 && layout.agents.every(r => r.x >= 0 && r.right <= layout.width + 1 && Math.abs(r.x - layout.agents[0].x) <= 1),
-    }, { measured: layout });
+    }, { banner });
+    const layout = await screen.evaluate(() => ({ width: innerWidth, overflow: document.documentElement.scrollWidth > innerWidth + 1 }));
+    record(where, 'org page stays in the viewport', { noOverflow: !layout.overflow }, { measured: layout });
     if (OUT) await screen.screenshot({ path: `${OUT}/${phone ? 'phone-390x844' : 'desktop-1200x800'}-${role}.png` });
-    if (editable) {
-      if (phone) {
-        await screen.locator(tid('team-phone-action')).tap();
-        await screen.locator(tid('team-sheet-child')).tap();
-      } else await screen.locator(tid('team-new-child')).click();
-      await screen.locator(tid('team-name-input')).fill('成员负责的子团队');
-      await screen.locator(tid('team-name-done')).click();
-      await screen.waitForFunction(() => window.__teamCalls.some(c => c.method === 'POST'));
-      const created = (await calls(screen)).find(c => c.method === 'POST');
-      record(where, 'owner edits own subtree', { exactParent: created.body.parent_id === 't_plat' && created.body.name === '成员负责的子团队' });
-      if (!phone) {
-        await screen.locator(tid('team-tree-t_ops')).click();
-        record(where, 'other subtree remains read-only', { hidden: await screen.locator(tid('team-new-child')).count() === 0 });
-      }
-    }
   } catch (error) { record(where, 'entry flow', { ran: false }, { error: String(error).split('\n')[0] }); }
   await ctx.close();
 }
