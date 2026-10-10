@@ -78,6 +78,8 @@ import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
+import { NodeCodexProviderSection } from './CodexProviderFields';
+import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
@@ -599,6 +601,9 @@ export default function NodeDetailScreen({
         ) : null}
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
         {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
+        {!readOnly && node && isCodexRuntime(node.runtime) ? (
+          <NodeCodexProviderSection runtimeId={node.runtime} serverUrl={cfg.serverUrl} />
+        ) : null}
       </View>
     );
     if (section === 'rules') return (
