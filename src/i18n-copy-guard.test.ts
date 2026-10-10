@@ -48,6 +48,8 @@ migrated.push('src/CodexProviderFields.tsx');
 migrated.push('src/OpenCodeProviderNote.tsx');
 migrated.push('src/DaemonRuntimeProviders.tsx');
 migrated.push('src/DaemonManagementScreen.tsx');
+migrated.push('src/DaemonOverviewSection.tsx');
+migrated.push('src/DaemonOverviewFixtureScreen.tsx');
 migrated.push('src/BackendPendingDemo.tsx');
 migrated.push('src/HubPendingScreen.tsx');
 migrated.push('src/RuntimeSupportScreen.tsx');
