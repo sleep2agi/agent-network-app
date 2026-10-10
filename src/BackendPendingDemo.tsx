@@ -24,22 +24,24 @@ import {
 } from './backend-pending-demo';
 import { colors, radius, spacing } from './theme';
 
-const field = {
-  borderWidth: 1,
-  borderColor: colors.border,
-  backgroundColor: colors.inputBg,
-  borderRadius: radius.control,
-  paddingHorizontal: spacing.md,
-  minHeight: 36,
-  color: colors.text,
-  fontSize: 14,
-} as const;
+function inputStyle() {
+  return {
+    borderWidth: 1,
+    borderColor: colors.border,
+    backgroundColor: colors.inputBg,
+    borderRadius: radius.control,
+    paddingHorizontal: spacing.md,
+    minHeight: 36,
+    color: colors.text,
+    fontSize: 14,
+  };
+}
 
 function DemoBanner() {
   const { t } = useTranslation();
   return (
     <View testID="backend-pending-banner" accessibilityRole="text" style={{ borderWidth: 1, borderColor: colors.accent, backgroundColor: colors.tonalBg, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}>
-      <Text style={{ color: colors.accent, fontSize: 13, lineHeight: 18, fontWeight: '700' }}>{t('backendPending.banner')}</Text>
+      <Text style={{ color: colors.accent, fontSize: 13, lineHeight: 18, fontWeight: '600' }}>{t('backendPending.banner')}</Text>
     </View>
   );
 }
@@ -140,7 +142,7 @@ export function ProviderConfigDemo({
         placeholder={t('backendPending.probeProvider')}
         placeholderTextColor={colors.textMuted}
         accessibilityLabel={t('backendPending.probeProvider')}
-        style={field}
+        style={inputStyle()}
       />
       <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('backendPending.probeModel')}</Text>
       <TextInput
@@ -152,7 +154,7 @@ export function ProviderConfigDemo({
         placeholder={t('backendPending.probeModel')}
         placeholderTextColor={colors.textMuted}
         accessibilityLabel={t('backendPending.probeModel')}
-        style={field}
+        style={inputStyle()}
       />
       <DemoButton
         testID="provider-demo-probe"
@@ -236,10 +238,10 @@ export function DaemonPendingDemos() {
             <Text key={row.id} style={{ color: colors.textSecondary, fontSize: 12, lineHeight: 18 }}>{`${row.id} · ${row.model}`}</Text>
           ))}
         </View>
-        <TextInput testID="daemon-demo-provider-id" value={id} onChangeText={setId} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerId')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerId')} style={field} />
-        <TextInput testID="daemon-demo-provider-base" value={baseUrl} onChangeText={setBaseUrl} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerBaseUrl')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerBaseUrl')} style={field} />
-        <TextInput testID="daemon-demo-provider-model" value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerModel')} style={field} />
-        <TextInput testID="daemon-demo-provider-key" value={apiKey} onChangeText={setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.providerKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerKeyA11y')} style={field} />
+        <TextInput testID="daemon-demo-provider-id" value={id} onChangeText={setId} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerId')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerId')} style={inputStyle()} />
+        <TextInput testID="daemon-demo-provider-base" value={baseUrl} onChangeText={setBaseUrl} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerBaseUrl')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerBaseUrl')} style={inputStyle()} />
+        <TextInput testID="daemon-demo-provider-model" value={model} onChangeText={setModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.providerModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerModel')} style={inputStyle()} />
+        <TextInput testID="daemon-demo-provider-key" value={apiKey} onChangeText={setApiKey} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.providerKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.providerKeyA11y')} style={inputStyle()} />
         <DemoButton
           testID="daemon-demo-provider-save"
           label={t('backendPending.providerAdd')}
@@ -254,8 +256,8 @@ export function DaemonPendingDemos() {
 
       <View testID="daemon-demo-probe" style={{ gap: spacing.sm }}>
         <SectionTitle title={t('backendPending.section.probe')} />
-        <TextInput testID="daemon-demo-probe-provider" value={probeProvider} onChangeText={setProbeProvider} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeProvider')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeProvider')} style={field} />
-        <TextInput testID="daemon-demo-probe-model" value={probeModel} onChangeText={setProbeModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeModel')} style={field} />
+        <TextInput testID="daemon-demo-probe-provider" value={probeProvider} onChangeText={setProbeProvider} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeProvider')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeProvider')} style={inputStyle()} />
+        <TextInput testID="daemon-demo-probe-model" value={probeModel} onChangeText={setProbeModel} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.probeModel')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.probeModel')} style={inputStyle()} />
         <DemoButton testID="daemon-demo-probe-run" label={t('backendPending.probe')} onPress={() => setProbed(simulateProviderProbe({ providerId: probeProvider, model: probeModel }))} />
         {probeLine ? <ResultLine testID="daemon-demo-probe-result" ok={probeLine.ok} text={probeLine.text} /> : null}
       </View>
@@ -271,8 +273,8 @@ export function DaemonPendingDemos() {
 
       <View testID="daemon-demo-secrets" style={{ gap: spacing.sm }}>
         <SectionTitle title={t('backendPending.section.secrets')} />
-        <TextInput testID="daemon-demo-secret-name" value={secretName} onChangeText={setSecretName} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.secretName')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretName')} style={field} />
-        <TextInput testID="daemon-demo-secret-value" value={secretValue} onChangeText={setSecretValue} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.secretValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretValueA11y')} style={field} />
+        <TextInput testID="daemon-demo-secret-name" value={secretName} onChangeText={setSecretName} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.secretName')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretName')} style={inputStyle()} />
+        <TextInput testID="daemon-demo-secret-value" value={secretValue} onChangeText={setSecretValue} secureTextEntry autoCapitalize="none" autoCorrect={false} textContentType="password" placeholder={t('backendPending.secretValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.secretValueA11y')} style={inputStyle()} />
         <DemoButton
           testID="daemon-demo-secret-save"
           label={t('backendPending.secretSave')}
@@ -287,8 +289,8 @@ export function DaemonPendingDemos() {
 
       <View testID="daemon-demo-env" style={{ gap: spacing.sm }}>
         <SectionTitle title={t('backendPending.section.env')} />
-        <TextInput testID="daemon-demo-env-key" value={envKey} onChangeText={setEnvKey} autoCapitalize="characters" autoCorrect={false} placeholder={t('backendPending.envKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envKey')} style={field} />
-        <TextInput testID="daemon-demo-env-value" value={envValue} onChangeText={setEnvValue} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.envValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envValueA11y')} style={field} />
+        <TextInput testID="daemon-demo-env-key" value={envKey} onChangeText={setEnvKey} autoCapitalize="characters" autoCorrect={false} placeholder={t('backendPending.envKey')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envKey')} style={inputStyle()} />
+        <TextInput testID="daemon-demo-env-value" value={envValue} onChangeText={setEnvValue} autoCapitalize="none" autoCorrect={false} placeholder={t('backendPending.envValue')} placeholderTextColor={colors.textMuted} accessibilityLabel={t('backendPending.envValueA11y')} style={inputStyle()} />
         <DemoButton
           testID="daemon-demo-env-save"
           label={t('backendPending.envSave')}
