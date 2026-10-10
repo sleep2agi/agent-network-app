@@ -1,4 +1,6 @@
-// Screenshots for Hub / Daemon / Node pending-integration tabs (PR #810).
+// Screenshots for Hub / Daemon / Node pending-integration shells.
+// Hub and Daemon keep the SKILLS / 令牌 / Provider tabs. The node page keeps its
+// section list and shows the key demo under 密钥, with the shared demo banner.
 //   WEB_DIR=<expo web export> OUT=/opt/cursor/artifacts node tests/test-pending-integrations-screenshots/drive.mjs
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
@@ -52,34 +54,33 @@ const shot = async (name) => {
   console.log(`saved ${OUT}/${name}.png`);
 };
 
-// Hub — sidebar tabs + main pane (one per tab)
+// Hub — sidebar tabs + main pane (one per tab). The banner stays on every panel.
 await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'server' }));
 await page.locator('[data-testid="server-sidebar"]').waitFor({ timeout: 15000 });
 for (const tab of ['skills', 'tokens', 'provider']) {
   await page.locator(`[data-testid="server-pending-tabs-${tab}"]`).click();
   await page.locator('[data-testid="hub-pending-screen"]').waitFor({ timeout: 10000 });
+  await page.locator('[data-testid="backend-pending-banner"]').waitFor({ timeout: 10000 });
   await shot(`hub-pending-${tab}`);
 }
 
-// Daemon management
+// Daemon management — the same three tabs live in the settings sidebar.
 await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: '示例-守护' }));
 await page.locator('[data-testid="daemon-management"]').waitFor({ timeout: 15000 });
 for (const tab of ['skills', 'tokens', 'provider']) {
-  await page.locator(`[data-testid="daemon-pending-tabs-${tab}"]`).click();
-  await page.locator('[data-testid="daemon-pending-demos"]').waitFor({ timeout: 10000 });
+  await page.locator(`[data-testid="daemon-section-tabs-${tab}"]`).click();
+  await page.locator('[data-testid="daemon-pending-shell"]').waitFor({ timeout: 10000 });
+  await page.locator('[data-testid="backend-pending-banner"]').waitFor({ timeout: 10000 });
   await shot(`daemon-pending-${tab}`);
 }
 
-// Node integrations section
+// Node — section list stays; the key demo is the 密钥 section, not a second tab set.
 await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'nodeDetail', alias: '示例-A' }));
 await page.locator('[data-testid="node-section-nav"]').waitFor({ timeout: 15000 });
-await page.locator('[data-testid="node-section-nav"]').getByText('SKILLS · 令牌 · Provider').click();
-await page.locator('[data-testid="node-integrations-section"]').waitFor({ timeout: 10000 });
-for (const tab of ['skills', 'tokens', 'provider']) {
-  await page.locator(`[data-testid="node-pending-tabs-${tab}"]`).click();
-  await page.locator('[data-testid="node-integrations-section"]').waitFor({ timeout: 10000 });
-  await shot(`node-pending-${tab}`);
-}
+await page.locator('[data-testid="node-section-nav"]').getByText('密钥', { exact: true }).click();
+await page.locator('[data-testid="node-secret-demo"]').waitFor({ timeout: 10000 });
+await page.locator('[data-testid="backend-pending-banner"]').waitFor({ timeout: 10000 });
+await shot('node-pending-secrets');
 
 await browser.close();
 await web.close();
