@@ -5,6 +5,13 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.229:",
+  "- 创建节点时，Codex 可以填写提供商（预设、接口地址、模型）；OpenCode V2 使用 OpenCode 自己的提供商和模型。密钥不会随创建提交，填写 Codex 预设后会提示需要升级 Hub。",
+  "- 创建向导显示这台机器的 daemon 已经上报的提供商和模型；还没有这些信息时，Codex 和 OpenCode V2 会提示需要升级。",
+  "- 打开守护进程进入管理页：列出它托管的节点，并可创建、启动、停止、重启和删除。",
+  "- 尚未接通后端的入口可以点开演示，并标明「后端开发中，敬请期待」。",
+  "- 任务「废弃」状态补齐：列表和详情为灰色并划线；看板的废弃列可以拖入卡片；搜索只命中废弃任务时，可以打开「显示已废弃」。",
+  "",
   "What's new in 0.2.228:",
   "- 桌面版新增 Ubuntu 24.04（amd64）安装包，已安装的 Linux 客户端可通过应用内更新安装新版本。",
   "",
@@ -1000,6 +1007,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.228": "2026-10-10T05:38:31Z",
   "0.2.226": "2026-10-08T12:58:35Z",
   "0.2.225": "2026-10-08T12:27:54Z",
   "0.2.224": "2026-10-08T09:30:30Z",
