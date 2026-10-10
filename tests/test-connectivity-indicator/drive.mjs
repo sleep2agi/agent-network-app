@@ -38,7 +38,7 @@ const VIEWPORTS = {
 };
 // Boxes that must not move when the state flips (the page "title" row and what hangs off it).
 const REFS = ['agents-list-head', 'agents-search', 'agent-group-示例', 'desktop-rail', 'mobile-nav-rail', 'two-pane-detail', 'nav-shell', 'rail-version'];
-const STATUS_TEXT = /连接较慢|无法连接服务器/;
+const STATUS_TEXT = /连接较慢|无法连接 Hub/;
 
 const rows = [];
 const measures = [];
@@ -186,7 +186,7 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
 
       // ── offline ──
       await page.evaluate(() => { window.__stubDelayMs = 0; window.__stubFail = true; });
-      const offSeen = await waitFor(page, async () => (await page.locator(tid('connectivity-indicator-offline')).count()) > 0 || /无法连接服务器/.test(await page.evaluate(() => document.body.innerText)), 75_000);
+      const offSeen = await waitFor(page, async () => (await page.locator(tid('connectivity-indicator-offline')).count()) > 0 || /无法连接 Hub/.test(await page.evaluate(() => document.body.innerText)), 75_000);
       await page.waitForTimeout(300);
       const off = await refBoxes(page);
       for (const [k, b] of Object.entries(off)) measure(`${where}/offline`, k, b);
@@ -199,7 +199,7 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
         reached: offSeen,
         red: (await page.locator(tid('connectivity-indicator-offline')).count()) > 0,
         noWideBanner: offWide.widest < V.w * 0.5,
-        label: !!offLabel && offLabel.includes('无法连接服务器'),
+        label: !!offLabel && offLabel.includes('无法连接 Hub'),
         noShift: offMoved.length === 0,
       }, { widestText: `${r1(offWide.widest)}px ${offWide.text}`, moved: offMoved.join(',') || '-', label: offLabel });
       await shot('4-offline');

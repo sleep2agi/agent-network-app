@@ -129,7 +129,7 @@ const cfg = { serverUrl: 'http://hub.invalid', token: 'utok_placeholder_old' };
 {
   reply = 'throw';
   const out = await runChangePassword(cfg, F('old-placeholder', STRONG), async () => {});
-  ck('E6 network error: says the password was not changed', !out.ok && out.error.startsWith('连不上服务器，密码没有修改'));
+  ck('E6 network error: says the password was not changed', !out.ok && out.error.startsWith('连不上 Hub，密码没有修改'));
   reply = { status: 200, body: JSON.stringify({ ok: true, token: 'utok_placeholder_new' }) };
   const save = await runChangePassword(cfg, F('old-placeholder', STRONG), async () => { throw new Error('keychain locked'); });
   ck('E7 changed but this device could not store the new token → says so (sign in again)', !save.ok && save.error.includes('keychain locked') && save.error.includes('重新登录'));

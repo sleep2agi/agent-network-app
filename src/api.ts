@@ -163,7 +163,7 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
     );
     if (!got) {
       ctrl.abort();
-      throw new Error(`服务器 ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应（${path}）`);
+      throw new Error(`Hub ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应（${path}）`);
     }
     if (!got.ok) {
       if (!readStatusCountsAsFailure(got.res.status)) reported = true;
@@ -1038,7 +1038,7 @@ const sendTaskOnce = async (
     );
   } catch (e) {
     const aborted = ctrl.signal.aborted;
-    const error = aborted && headersAt === null ? new Error(`服务器 ${Math.round(sendHeaderTimeoutMs / 1000)} 秒内没有响应（/api/task）`) : e;
+    const error = aborted && headersAt === null ? new Error(`Hub ${Math.round(sendHeaderTimeoutMs / 1000)} 秒内没有响应（/api/task）`) : e;
     timing(aborted ? 'timeout' : 'error', error);
     throw error;
   } finally {
@@ -1046,7 +1046,7 @@ const sendTaskOnce = async (
   }
   if (!got) {
     ctrl.abort();
-    const error = new Error(`服务器 ${Math.round(sendDeadlineMs / 1000)} 秒内没有返回完整响应（/api/task）`);
+    const error = new Error(`Hub ${Math.round(sendDeadlineMs / 1000)} 秒内没有返回完整响应（/api/task）`);
     timing('timeout', error);
     throw error;
   }
@@ -1359,7 +1359,7 @@ export const runNodeLifecycleAction = async (
       signal,
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: action, arguments: args } }),
     }));
-    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持节点生命周期操作，请先升级服务器' };
+    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持节点生命周期操作，请先升级 Hub' };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const parsed = parseMcpToolResponse(await res.text());
     if (parsed.kind === 'malformed') return { ok: false, unsupported: true, error: '当前 Hub 未返回兼容的节点生命周期响应' };
@@ -1439,7 +1439,7 @@ export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequ
       signal,
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'update_node_config', arguments: args } }),
     }));
-    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持远程修改节点配置，请先升级服务器' };
+    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持远程修改节点配置，请先升级 Hub' };
     if (res.status === 409) return { ok: false, conflict: true, error: 'revision conflict' };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const parsed = parseMcpToolResponse(await res.text());
@@ -1519,22 +1519,22 @@ const callHubTool = async (cfg: HubConfig, name: string, args: Record<string, un
       HUB_TOOL_DEADLINE_MS,
       () => null,
     );
-    if (!got) return { kind: 'error', error: `服务器 ${HUB_TOOL_DEADLINE_MS / 1000} 秒内没有返回完整响应`, transient: true };
+    if (!got) return { kind: 'error', error: `Hub ${HUB_TOOL_DEADLINE_MS / 1000} 秒内没有返回完整响应`, transient: true };
     const { res } = got;
-    if (res.status === 404 || res.status === 501) return { kind: 'unsupported', error: '当前 Hub 不支持节点规则文件，请先升级服务器' };
+    if (res.status === 404 || res.status === 501) return { kind: 'unsupported', error: '当前 Hub 不支持节点规则文件，请先升级 Hub' };
     if (!res.ok) return { kind: 'error', error: `HTTP ${res.status}` };
     const parsed = parseMcpToolResponse(got.text);
     if (parsed.kind === 'malformed') return { kind: 'unsupported', error: '当前 Hub 未返回兼容的响应' };
     if (parsed.kind === 'jsonRpcError') {
       // 旧 hub 没有这个工具时 SDK 回 "Tool xxx not found"（-32602）。
-      if (/not found|unknown tool/i.test(parsed.message)) return { kind: 'unsupported', error: '当前 Hub 版本还没有规则文件工具，请先升级服务器（commhub-server 含 app#225）' };
+      if (/not found|unknown tool/i.test(parsed.message)) return { kind: 'unsupported', error: '当前 Hub 版本还没有规则文件工具，请先升级 Hub（commhub-server 含 app#225）' };
       return { kind: 'error', error: parsed.message };
     }
     return { kind: 'payload', payload: parsed.payload };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     const aborted = (error instanceof Error && error.name === 'AbortError') || /abort/i.test(msg);
-    return { kind: 'error', error: aborted ? `服务器 ${TIMEOUT_MS / 1000} 秒内没有响应` : msg, transient: true };
+    return { kind: 'error', error: aborted ? `Hub ${TIMEOUT_MS / 1000} 秒内没有响应` : msg, transient: true };
   }
 };
 
@@ -1592,8 +1592,8 @@ const enqueueSkills = async (
     ...(tool === 'read_node_skill' ? { name: name ?? '' } : {}),
   };
   const r = await callHubTool(cfg, tool, args);
-  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: '当前 Hub 版本还没有技能查看工具,请先升级服务器' };
-  if (r.kind === 'error') return { ok: false, error: /not found|unknown tool/i.test(r.error) ? '当前 Hub 版本还没有技能查看工具,请先升级服务器' : r.error };
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: '当前 Hub 版本还没有技能查看工具,请先升级 Hub' };
+  if (r.kind === 'error') return { ok: false, error: /not found|unknown tool/i.test(r.error) ? '当前 Hub 版本还没有技能查看工具,请先升级 Hub' : r.error };
   const p = r.payload;
   if (!p || p.ok !== true || typeof p.request_id !== 'string') {
     return { ok: false, error: p?.error === 'request_in_flight' ? '节点还有一个技能请求没做完,请稍后再试' : String(p?.error ?? 'Hub 返回空响应'), ...(p?.existing_request_id ? { existing_request_id: p.existing_request_id } : {}) };
@@ -1611,7 +1611,7 @@ export const readNodeSkill = (cfg: HubConfig, node: RulesTarget, name: string): 
  *  only argument besides the target is a path RELATIVE to the node's work dir;
  *  hub and node both refuse absolute paths and `..`. Results come back through
  *  getRulesFileResult / waitForRulesFileResult like the rules file. */
-const FILES_TOOL_MISSING = '当前 Hub 版本还没有项目文件夹工具,请先升级服务器';
+const FILES_TOOL_MISSING = '当前 Hub 版本还没有项目文件夹工具,请先升级 Hub';
 const enqueueFiles = async (
   cfg: HubConfig,
   tool: 'list_node_files' | 'read_node_file',
@@ -1643,7 +1643,7 @@ export const readNodeFile = (cfg: HubConfig, node: RulesTarget, relPath: string)
 /** Node run-log view — enqueue tail_node_logs (read-only, no path; the node reads
  *  and redacts its own log). The hub hands the result to this login once, then
  *  purges it. Results come back through getRulesFileResult / waitForRulesFileResult. */
-const LOGS_TOOL_MISSING = '服务器版本过旧，升级后可查看日志';
+const LOGS_TOOL_MISSING = 'Hub 版本过旧，升级后可查看日志';
 export const tailNodeLogs = async (
   cfg: HubConfig,
   node: RulesTarget,
@@ -1796,14 +1796,14 @@ export const login = async (
     if (!text.trim()) {
       // review-fix(通信龙 #34):响应形状不对=不是 hub → server-error,与 HTTP 状态码无关
       // (401+空体的常见真身是 basic-auth nginx——判 bad-credentials 会诱导用户反复重打密码)。
-      return { ok: false, kind: 'server-error', error: '服务器无响应内容 — 检查地址和端口（hub 默认 9999）' };
+      return { ok: false, kind: 'server-error', error: 'Hub 无响应内容 — 检查地址和端口（Hub 默认 9999）' };
     }
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
       // 同上:非 JSON 体(HTML 401 页等)= 不是 hub → server-error(kind 必须与本行文案同向)。
-      return { ok: false, kind: 'server-error', error: `服务器返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 hub` };
+      return { ok: false, kind: 'server-error', error: `Hub 返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 Hub` };
     }
     if (!data?.ok) return { ok: false, kind: classifyLoginFailure(false, res.status), error: String(data?.error ?? `HTTP ${res.status}`) };
     const token = data.token ?? data.user_token ?? data.access_token;

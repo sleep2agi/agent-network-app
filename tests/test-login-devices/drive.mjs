@@ -58,7 +58,7 @@ const browser = await chromium.launch({ headless: true, executablePath: findChro
 async function login(page, hub, user, pw, { reauth = false } = {}) {
   await page.locator(tid('login-screen')).waitFor({ timeout: 30000 });
   if (!reauth) {
-    await page.getByLabel('服务器地址', { exact: true }).fill(hub.url);
+    await page.getByLabel('Hub 地址', { exact: true }).fill(hub.url);
     await page.getByLabel('用户名', { exact: true }).fill(user);
   }
   await page.getByLabel('密码', { exact: true }).fill(pw);

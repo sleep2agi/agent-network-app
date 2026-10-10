@@ -394,7 +394,7 @@ export default function NodeDetailScreen({
         {header}
         <View style={styles.center}>
           <Text style={styles.errorTitle}>加载失败</Text>
-          <Text style={styles.errorHint}>网络不稳定或服务器未响应</Text>
+          <Text style={styles.errorHint}>网络不稳定或 Hub 未响应</Text>
           <Pressable
             style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
             onPress={() => {
@@ -691,7 +691,7 @@ export default function NodeDetailScreen({
     // danger
     return (
       <View>
-        <SectionTitle title="危险操作" hint="操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时服务器会拒绝，不会自动强制。" />
+        <SectionTitle title="危险操作" hint="操作通过公开 CommHub/anet 契约执行。停止不会删除配置；有任务处理中时 Hub 会拒绝，不会自动强制。" />
         {!readOnly ? <View style={[localStyles.dangerZone, { borderColor: colors.failed }]}>
           {node && <NodeAdoptionControls key={JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, node.node_id])} cfg={cfg} node={node} online={online} onRefresh={() => { void load(); }} />}
           {node && isAdopted(node) ? null : node ? (

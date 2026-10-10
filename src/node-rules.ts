@@ -97,7 +97,7 @@ export function rulesMaxWaitMessage(): string {
 export function rulesErrorMessage(error: string | null | undefined): string {
   const e = error ?? '';
   if (e === 'cancelled') return '';
-  if (e === 'request_not_found') return '服务器上找不到这次请求（可能已过期），请点「重新读取」';
+  if (e === 'request_not_found') return 'Hub 上找不到这次请求（可能已过期），请点「重新读取」';
   return e || '未说明原因';
 }
 
@@ -116,7 +116,7 @@ export function resultProblem(res: { ok: boolean; error?: string | null; status?
   }
   if (res.status === 'failed' || res.status === 'timeout') return null; // 各区块有自己的失败/超时文案
   if (res.status === 'pending' || res.status === 'in_progress') return '还在等节点响应，请稍后点「重新读取」';
-  return `服务器返回了这一版 app 认不出的状态「${String(res.status)}」，请点「重新读取」；仍不行请升级 app`;
+  return `Hub 返回了这一版 app 认不出的状态「${String(res.status)}」，请点「重新读取」；仍不行请升级 app`;
 }
 
 export type RulesReadOutcome =
@@ -174,7 +174,7 @@ export async function pollUntilTerminal<R extends { ok: boolean; status?: string
       r = { ok: false, error: e instanceof Error ? e.message : String(e), transient: true } as unknown as R;
     }
     if (opts.isCancelled?.()) return { ok: false, error: 'cancelled' };
-    if (r === STALLED) lastProblem = `服务器 ${Math.round(callDeadline / 1000)} 秒内没有响应`;
+    if (r === STALLED) lastProblem = `Hub ${Math.round(callDeadline / 1000)} 秒内没有响应`;
     else if (!r.ok) {
       if (!r.transient) return r;
       lastProblem = r.error ?? '';
@@ -274,7 +274,7 @@ export function rulesUnsupportedMessage(s: Extract<RulesSupport, { kind: 'unsupp
 export function rulesTimeoutMessage(support?: RulesSupport): string {
   if (support && (support.kind === 'capable' || support.kind === 'supported')) {
     const ver = support.version ? `（v${support.version}）` : '';
-    return `节点 60 秒内没有取走这次请求。它的版本${ver}支持规则文件，多半是节点和服务器之间的实时连接断了，或节点卡住了；重启这个节点通常能恢复`;
+    return `节点 60 秒内没有取走这次请求。它的版本${ver}支持规则文件，多半是节点和 Hub 之间的实时连接断了，或节点卡住了；重启这个节点通常能恢复`;
   }
   return `节点 60 秒内没有响应：可能离线，或版本太旧（agent-node 需要 ${RULES_MIN_AGENT_NODE} 或更新，Claude Code 会话需要 anet ${RULES_MIN_ANET_FOR_CLAUDE_CODE} 或更新）`;
 }

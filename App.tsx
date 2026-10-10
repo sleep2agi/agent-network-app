@@ -1117,7 +1117,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
       <View style={[entryStyles.card, compact && entryStyles.cardCompact]}>
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <Text style={entryStyles.title}>ANet</Text>
-        <Text style={entryStyles.copy}>在这台电脑创建本地工作区，数据留在本机；也可以登录已有服务器。</Text>
+        <Text style={entryStyles.copy}>在这台电脑创建本地工作区，数据留在本机；也可以登录已有 Hub。</Text>
         {error ? <View style={entryStyles.errorBox}><Ionicons name="alert-circle-outline" size={17} color={colors.failed} /><Text style={entryStyles.error}>{maskUrlsInText(error)}</Text></View> : null}
         <Pressable
           accessibilityRole="button"
@@ -1134,7 +1134,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
         </Pressable>
         <Pressable accessibilityRole="button" disabled={busy} style={({ pressed }) => [entryStyles.secondary, pressed && entryStyles.secondaryPressed]} onPress={onRemote}>
           <Ionicons name="globe-outline" size={17} color={colors.textSecondary} />
-          <Text style={entryStyles.secondaryText}>使用已有服务器登录</Text>
+          <Text style={entryStyles.secondaryText}>使用已有 Hub 登录</Text>
         </Pressable>
       </View>
       </ScrollView>
@@ -1566,11 +1566,11 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <View style={loginStyles.heading}>
           <Text style={entryStyles.title} testID={expired ? 'login-expired-title' : onCancelAdd && !initialProfile && !registering ? 'login-add-account-title' : undefined}>{expired ? t('sessions.expiredTitle') : initialProfile ? '重新验证账号' : registering ? t('login.registerTitle') : onCancelAdd ? t('accounts.addTitle') : '连接你的工作区'}</Text>
-          <Text style={entryStyles.copy}>{expired ? t('sessions.expiredCopy') : initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : registering ? t('login.registerCopy') : onCancelAdd ? t('accounts.addCopy') : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
+          <Text style={entryStyles.copy}>{expired ? t('sessions.expiredCopy') : initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : registering ? t('login.registerCopy') : onCancelAdd ? t('accounts.addCopy') : '输入 Hub 和账号信息，继续与你的 Agent 协作。'}</Text>
         </View>
         <View style={loginStyles.form}>
           <View style={loginStyles.field}>
-            <Text style={loginStyles.label}>服务器地址</Text>
+            <Text style={loginStyles.label}>Hub 地址</Text>
             <View style={loginStyles.inputShell}>
               <Ionicons name="server-outline" size={18} color={colors.textMuted} />
               <TextInput
@@ -1582,7 +1582,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
                 keyboardType="url"
                 value={serverUrl}
                 onChangeText={setServerUrl}
-                accessibilityLabel="服务器地址"
+                accessibilityLabel="Hub 地址"
               />
             </View>
           </View>

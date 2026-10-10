@@ -7,7 +7,7 @@ registerTranslations({
   'backendPending.layer.hub': ['Hub 层', 'Hub layer'],
   'backendPending.layer.daemon': ['Daemon 层', 'Daemon layer'],
   'backendPending.layer.node': ['Node 层', 'Node layer'],
-  'backendPending.hubHint': ['以下为 Hub 级能力的演示界面，不会向服务器发送请求，也不会写入配置。', 'Hub-level capability preview. Nothing here calls the server or writes config.'],
+  'backendPending.hubHint': ['以下为 Hub 级能力的演示界面，不会向 Hub 发送请求，也不会写入配置。', 'Hub-level capability preview. Nothing here calls the Hub or writes config.'],
   'backendPending.daemonHint': ['以下为 Daemon 级能力的演示界面，不会向 Hub 或 Daemon 发请求，也不会写入配置。', 'Daemon-level capability preview. Nothing here calls the Hub or Daemon or writes config.'],
   'backendPending.nodeHint': ['以下为 Node 级能力的演示界面，不会向 Hub 或节点发请求，也不会写入配置。', 'Node-level capability preview. Nothing here calls the Hub or the node or writes config.'],
   'backendPending.nodeSecretHint': ['为这个节点登记调用外部服务所需的密钥；演示值只保留在当前页面，不会发送或写入。', 'Register keys this node needs for external services. Demo values stay on this page and are never sent or written.'],

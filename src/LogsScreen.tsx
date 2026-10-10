@@ -165,7 +165,7 @@ export default function LogsScreen({
         }}
       >
         {showBack ? (
-          <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="返回服务器" testID={PANE_BACK_TEST_ID}>
+          <Pressable onPress={onBack} hitSlop={8} accessibilityRole="button" accessibilityLabel="返回 Hub" testID={PANE_BACK_TEST_ID}>
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </Pressable>
         ) : null}

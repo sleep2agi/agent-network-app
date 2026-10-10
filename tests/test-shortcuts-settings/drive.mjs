@@ -225,7 +225,7 @@ try {
   ck('run: Ctrl+2 → Tasks(任务看板出现)', await seen(page.locator('[data-testid="requirement-board"]'))); // 任务页现在是需求看板;hub 派发记录(示例任务二)收在左栏「派发记录」里
   await page.keyboard.press('Control+Digit5');
   await page.waitForTimeout(300);
-  ck('run: Ctrl+5 → 服务器设置', await seen(page.locator('[data-testid="server-overview"]')));
+  ck('run: Ctrl+5 → Hub 设置', await seen(page.locator('[data-testid="server-overview"]')));
   await page.keyboard.press('Control+Shift+KeyP');
   await page.waitForTimeout(400);
   {

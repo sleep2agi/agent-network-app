@@ -249,7 +249,7 @@ const rails = {};
   await page.screenshot({ path: join(OUT, `${MODE}-desktop-1200x800.png`) });
   rails.desktop = await railItems(page, `${tid('desktop-rail')} [role="tab"]`);
   record('desktop 1200x800', 'rail', {
-    labels: JSON.stringify(rails.desktop.map(r => r.label)) === JSON.stringify(['Agents', 'Tasks', '定时', 'Messages', '服务器设置', '设置']),
+    labels: JSON.stringify(rails.desktop.map(r => r.label)) === JSON.stringify(['Agents', 'Tasks', '定时', 'Messages', 'Hub 设置', '设置']),
     noBottomBar: !(await visible(page, tid('mobile-tab-bar'))),
   }, { rail: rails.desktop.map(r => r.label).join(' / ') });
   await ctx.close();

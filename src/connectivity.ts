@@ -217,8 +217,8 @@ export function slowReadDetail(s: ConnectivityState, samples: readonly ReadSampl
 export function bannerText(s: ConnectivityState, now: number = Date.now()): string | null {
   if (s.level === 'online') return null;
   if (s.level === 'slow') return s.reconnecting ? '连接较慢 · 正在重试' : '连接较慢 · 数据可能稍有延迟';
-  if (s.lastSuccessAt === null) return '无法连接服务器 · 尚未获取到数据';
-  return `无法连接服务器 · 显示缓存数据（截至 ${hhmm(s.lastSuccessAt, now)}）`;
+  if (s.lastSuccessAt === null) return '无法连接 Hub · 尚未获取到数据';
+  return `无法连接 Hub · 显示缓存数据（截至 ${hhmm(s.lastSuccessAt, now)}）`;
 }
 
 /** Test-only: reset between cases. */

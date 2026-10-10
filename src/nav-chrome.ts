@@ -50,7 +50,7 @@ export function navChromeFor(layout: AppLayout, screenName: string, inPageLeaf =
 export const PHONE_SETTINGS_PUSHED_SCREENS: readonly string[] = ['server'];
 
 /** The row 设置 shows at the top of its phone list to reach 服务器 (the page itself is unchanged). */
-export const PHONE_SETTINGS_SERVER_ENTRY = { key: 'server', label: '服务器', icon: 'server-outline' } as const;
+export const PHONE_SETTINGS_SERVER_ENTRY = { key: 'server', label: 'Hub', icon: 'server-outline' } as const;
 
 /** Where back (on-screen arrow or system back) goes from a screen pushed from 设置; null = not one. */
 export function phoneSettingsBackTarget(layout: AppLayout, screenName: string): 'settings' | null {

@@ -17,20 +17,20 @@ export interface LoginFailureCopy {
 // UI 断言用 kind/testID(结构),不耦合这些文案——文案可改,分叉不可合并。
 export const LOGIN_FAILURE_COPY: Record<LoginFailureKind, LoginFailureCopy> = {
   'bad-url': {
-    what: '服务器地址格式不对',
+    what: 'Hub 地址格式不对',
     next: '检查地址拼写,例如 https://your-hub.example.com（可省略 https://,会自动补上）',
   },
   unreachable: {
-    what: '连不上服务器',
-    next: '检查网络连接和服务器地址是否可达;如在内网,确认已连 VPN;若为内网地址,试试显式填 http://',
+    what: '连不上 Hub',
+    next: '检查网络连接和 Hub 地址是否可达;如在内网,确认已连 VPN;若为内网地址,试试显式填 http://',
   },
   'bad-credentials': {
     what: '用户名或密码不对',
     next: '核对后重新输入;忘记密码请联系管理员',
   },
   'server-error': {
-    what: '服务器响应异常',
-    next: '确认地址指向 hub 服务;若地址无误,稍后再试或联系管理员',
+    what: 'Hub 响应异常',
+    next: '确认地址指向 Hub 服务;若地址无误,稍后再试或联系管理员',
   },
 };
 

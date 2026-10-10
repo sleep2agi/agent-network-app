@@ -173,7 +173,7 @@ const t0 = Date.now();
 let offlineText = null;
 while (Date.now() - t0 < 120_000) {
   const b = await bannerNow(page);
-  if (b && b.includes('无法连接服务器')) { offlineText = b; break; }
+  if (b && b.includes('无法连接 Hub')) { offlineText = b; break; }
   await page.waitForTimeout(500);
 }
 const tookMs = Date.now() - t0;

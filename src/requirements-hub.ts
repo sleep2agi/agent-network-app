@@ -113,7 +113,7 @@ function checklistFromHub(rows: unknown[]): ChecklistItem[] {
 /** 需求池每个请求(含响应体)的硬上限。原来没有任何超时:手机链路上一个卡住的连接会让任务页
  *  首次加载永远停在转圈(2026-09-29 Vincent 折叠屏截图),而 refresh 只在 ready 时才跑,没有东西能把它救回来。 */
 export const REQUIREMENTS_DEADLINE_MS = 20_000;
-export const REQUIREMENTS_TIMEOUT_TEXT = `服务器 ${REQUIREMENTS_DEADLINE_MS / 1000} 秒内没有响应`;
+export const REQUIREMENTS_TIMEOUT_TEXT = `Hub ${REQUIREMENTS_DEADLINE_MS / 1000} 秒内没有响应`;
 let deadlineMs = REQUIREMENTS_DEADLINE_MS;
 /** Test-only: shorten the deadline so a hanging-request test doesn't wait 20 s. */
 export function __setRequirementsDeadlineForTest(ms: number = REQUIREMENTS_DEADLINE_MS): void { deadlineMs = ms; }
