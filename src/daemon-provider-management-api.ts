@@ -2,6 +2,8 @@ import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import { loadProviderSnapshot, parseProviderRpc } from './daemon-provider-management';
 import { runProviderApplication, type ProviderApplicationWrite } from './daemon-provider-application';
+import { runProviderLogin } from './daemon-provider-login';
+import type { LoginIntent } from './daemon-provider-login-contract';
 
 export function providerWriteTransportAllowed(serverUrl: string): boolean {
   try { const u = new URL(serverUrl); return !u.username && !u.password &&
@@ -17,6 +19,21 @@ async function providerFetch(url: string, init: RequestInit, containsKey: boolea
     return fetch(url, { ...init, maxRedirections: 0 });
   }
   return globalThis.fetch(url, { ...init, redirect: 'error' });
+}
+export function managedProviderLogin(cfg: HubConfig, daemonId: string, intent: LoginIntent, signal: AbortSignal) {
+  if (!providerWriteTransportAllowed(cfg.serverUrl)) return Promise.resolve({ kind: 'unconfirmed' as const });
+  return runProviderLogin({ networkId: cfg.networkId ?? '', daemonId }, intent, async (action, id, requestSignal) => {
+    const response = await providerFetch(`${cfg.serverUrl.replace(/\/$/, '')}/mcp`, {
+      method: 'POST', signal: requestSignal,
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json',
+        Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-03-26' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
+        name: 'daemon_provider_snapshot', arguments: { action, id, network_id: cfg.networkId,
+          ...(action === 'login' ? { provider: intent } : {}) },
+      } }),
+    }, true);
+    return parseProviderRpc(response.status, response.ok ? await response.text() : '');
+  }, signal);
 }
 export function readManagedProviders(cfg: HubConfig, daemonId: string, signal: AbortSignal,
   write?: { revision: number; provider: unknown }) {

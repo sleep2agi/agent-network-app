@@ -1,0 +1,85 @@
+#906 managed ChatGPT account client — 2026-10-11 14:12 +08
+
+Scope: client login start, official device-code display/link, manual status check,
+cancel, name/save, and daemon-scoped saved-account readback. Backend counterpart:
+agent-network PR2581 at e28af1faac799b9f946c2aff86ce7aa9fb863cd8.
+This is NOT account-to-node switching, a real OAuth completion, a native package
+acceptance, or a release. No model/inference requests and no production mutations.
+
+Implementation:
+- Entry: Daemon -> Provider -> OpenAI / codex-tui / ChatGPT accounts.
+- One opaque session ID per Hub credential/network/daemon, in memory only.
+- Submit one command; poll only its matching scoped receipt. 45-second observation
+  deadline. Leaving aborts observation, not remote login. Human completes login.
+- Only the backend-contract official login URL can render. No arbitrary URL,
+  raw token, credential path or provider error is shown. Saved != applied/verified.
+- Pending, forbidden, unsupported and unconfirmed are not empty account lists.
+- Existing API-key form and node application are unchanged.
+
+Evidence (Docker only, no host credentials/state mounted):
+1. Command core: 5 checks passed (exact receipts, foreign/secret projection rejected,
+   bounded hung read without resubmission, list scope, forbidden/abort semantics).
+2. TypeScript typecheck: exit 0 with current src mounted read-only in the locked
+   app dependency image. The reused image package label was 0.2.236; this is NOT
+   verification of any 0.2.236/0.2.237 native installation package.
+3. Fresh current-source Expo web export in Docker: successful, 1223 modules.
+4. Chromium + real exported React against synthetic Hub: core flow PASS:
+   start -> code -> manual check -> authenticated -> label/save -> scoped list;
+   second start -> cancel preserves previously saved account. One save request,
+   two explicit start requests, one cancel; no browser errors. No external network.
+5. Drive registry: 12/12 PASS, new drive included in existing PR stub CI.
+
+Reproduce from repository root (all docker invocations via sg docker -c):
+docker build -f tests/daemon-provider-login/Dockerfile -t login-core .
+docker run --rm --init --network none login-core
+docker build --target web -f tests/daemon-provider-management/Dockerfile -t login-web .
+docker build --build-context web=docker-image://login-web -f tests/daemon-provider-login/Dockerfile.ui -t login-ui .
+docker run --rm --init --network none login-ui
+
+Cleanup: test containers used --rm, completed. No daemon/node restart, credential
+copy, global package install or public artifact from this branch. Test images remain
+as build cache. Synthetic codes/receipts are deliberately TEST-ONLY.
+
+Release/recovery boundaries:
+- Client changes are bundled by existing checked-in desktop/Android release
+  workflows; no new service, port, reverse proxy, tunnel or deployment credential.
+- Login uses existing configured Hub HTTPS/loopback MCP endpoint and existing
+  admin credential. Human OAuth secrets remain on daemon, not in repository/Hub UI.
+- Current backend still draft; unsupported text explicitly says no released login
+  upgrade target exists. Set exact Hub/CLI/runtime targets before formal release.
+- Roll back client by reinstalling previous exact main release; this does not
+  delete daemon accounts. Backend recovery and account-private storage are owned
+  by PR2581. Repository clone alone does not restore private authentication state.
+- Remaining #906 work: bind saved account to Provider/runtime/model, apply to the
+  selected node with exact readback and rollback; human OAuth acceptance; release
+  compatible backend/client from exact merged main SHAs. Do not mark #906 done.
+
+2026-10-11 14:18 +08 binding increment:
+- Saved-account card now accepts configured model IDs and binds the chosen opaque
+  account_id under OpenAI/codex-tui using existing revisioned Provider writes.
+- Provider parser accepts only UUID refs on ChatGPT profiles, not API-key ones.
+  Existing enable/disable and API-key profile edits preserve account references.
+- Docker binding command cases: 5/5 PASS; current-source typecheck exit 0.
+- Fresh Expo export (1224 modules) + Chromium UI core PASS, including a single
+  bind write and public model readback after saving the account. No real OAuth,
+  model entitlement test, node application or native-package claim.
+- Model IDs are explicitly configured, not advertised as discovered entitlement.
+  Dynamic account model discovery and node switch/rollback remain separate work.
+2026-10-11 14:28 +08 — managed-account application UI increment, not released:
+- Saved present account/model can be selected for one scanned versioned Codex node.
+  Selection carries exact opaque account_id, no path or credentials. An unbound or
+  absent account remains disabled. Two-step confirmation explains the target-node
+  restart, credential update and exclusive refresh-chain binding.
+- Public receipt validation requires the same account_id with built-in openai,
+  exact model/node/provider revision. API-key protocol remains compatible.
+- Docker current src mounted read-only: management/selection/application 25/25 PASS;
+  npm run typecheck PASS. No local dependency installs or production calls.
+- Expo export: 1224 modules. Chromium real rendered UI PASS:
+  start/code/manual-check/save/scoped-list/bind-model/select/confirm-apply/exact-receipt/
+  cancel. Exactly one apply after confirmation. Hub/account/application are synthetic
+  fixtures, NOT real OAuth, real node restart, or native macOS/Windows/Android proof.
+- First expanded UI attempt failed before login because the new fixture inventory
+  omitted required observed-row fields. Fixed the fixture to the real strict schema;
+  no product parser/guard relaxation. Only the failed UI drive rerun; final PASS.
+- Image: anet-app:provider-account-apply-ui using provider-account-apply-web export.
+  Containers --rm; build caches retained. No new release/version bump.
