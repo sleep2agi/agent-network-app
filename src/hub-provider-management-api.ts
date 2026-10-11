@@ -24,7 +24,7 @@ async function rpc(cfg: HubConfig, name: string, args: Record<string, unknown>, 
 }
 export async function readHubProviderCatalog(cfg: HubConfig, signal: AbortSignal) {
   try {
-    const result = await rpc(cfg, 'hub_provider_config', { action: 'read' }, signal);
+    const result = await rpc(cfg, 'daemon_provider_snapshot', { action: 'hub_read', id: 'hub' }, signal);
     if (result.kind !== 'payload') return null;
     return parseHubProviderCatalog(result.value, cfg.networkId ?? '');
   } catch { return null; }
@@ -32,7 +32,7 @@ export async function readHubProviderCatalog(cfg: HubConfig, signal: AbortSignal
 export async function saveHubProviderConfig(cfg: HubConfig, form: HubProviderForm, signal: AbortSignal) {
   const input = hubProviderInput(form); if (!input || !providerWriteTransportAllowed(cfg.serverUrl)) return null;
   try {
-    const result = await rpc(cfg, 'hub_provider_config', { action: 'put', revision: form.revision, provider: input }, signal, true);
+    const result = await rpc(cfg, 'daemon_provider_snapshot', { action: 'hub_put', id: input.id, revision: form.revision, provider: input }, signal, true);
     if (result.kind !== 'payload' || result.value.network_id !== cfg.networkId) return null;
     const saved = parseHubProvider(result.value.provider);
     if (!saved || saved.id !== input.id || saved.revision !== form.revision + 1 || saved.label !== input.label
@@ -47,8 +47,8 @@ export async function bindHubProviderConfig(cfg: HubConfig, provider: HubProvide
   const before = await readManagedProviders(cfg, daemonId, signal); if (before.kind !== 'ready') return false;
   let expectedId = '';
   const result = await loadProviderSnapshot({ networkId: cfg.networkId ?? '', daemonId }, async (action, id, requestSignal) => {
-    const result = await rpc(cfg, action === 'refresh' ? 'hub_provider_config' : 'daemon_provider_snapshot', action === 'refresh'
-      ? { action: 'bind', id: provider.id, revision: provider.revision, daemon_node_id: daemonId, daemon_revision: before.snapshot.revision, confirm: true }
+    const result = await rpc(cfg, 'daemon_provider_snapshot', action === 'refresh'
+      ? { action: 'hub_bind', id: provider.id, revision: provider.revision, provider: { daemon_node_id: daemonId, daemon_revision: before.snapshot.revision, confirm: true } }
       : { action: 'read', id }, requestSignal);
     if (action === 'refresh' && result.kind === 'payload') {
       const ref = result.value.provider_reference;

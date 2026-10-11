@@ -29,7 +29,8 @@ not complete. A configured model is not proof of entitlement or inference.
 No new service/port/tunnel or client data store is added. Build and publish only
 from exact merged main SHAs through the existing desktop/Android workflows; branch
 exports and Docker screenshots are TEST ONLY. This slice is not in client240.
-The Hub must contain `hub_provider_config`; no published minimum version is
+The Hub must support `daemon_provider_snapshot` actions `hub_read`, `hub_put`
+and `hub_bind`; no published minimum version is
 invented before the backend release. Without a valid read result the page shows
 unconfirmed and refuses key submission, rather than presenting synthetic rows.
 

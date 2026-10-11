@@ -25,3 +25,10 @@ Android38134486043 same exact main SHA is IN_PROGRESS, not published.
 Do not inherit desktop success as Android success. Separate Android main-SHA
 publication and updater VERSION verification remain required.
 Artifacts downloaded into task temporary directory; screenshots test-only.
+
+Correction/fresh observation 2026-10-11T11:44Z:
+Both original desktop mirror runs38135839439/38135840982 are CANCELLED, not
+successful. Existing continuation38136281592 is QUEUED; no duplicate dispatch.
+Android exact-main build38134486043 is SUCCESS. Authorized publisher
+38136239391 is QUEUED. Thus desktop GitHub/updater availability is established;
+China mirror and Android public download availability are not yet established.

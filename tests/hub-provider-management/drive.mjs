@@ -26,22 +26,22 @@ try {
       window.__routeOverride = (url, text) => {
         if (url.pathname !== '/mcp') return;
         const { name, arguments: a } = JSON.parse(text || '{}').params || {};
-        if (name === 'hub_provider_config') {
-          if (a.action === 'read') return envelope({ ok: true, network_id: a.network_id, source: 'hub', providers: window.__hubProviders });
-          if (a.action === 'put') {
+        if (name === 'daemon_provider_snapshot' && a.action.startsWith('hub_')) {
+          if (a.action === 'hub_read') return envelope({ ok: true, network_id: a.network_id, source: 'hub', providers: window.__hubProviders });
+          if (a.action === 'hub_put') {
             window.__hubWrites.push({ network_id: a.network_id, revision: a.revision, id: a.provider.id });
             const { key, ...publicConfig } = a.provider;
             const saved = { ...publicConfig, revision: a.revision + 1, updated_at: Date.now(), source: 'hub', credential_present: true,
               verification: 'not_checked', compatible_runtimes: a.provider.protocol === 'openai-responses' ? ['codex-tui'] : [] };
             window.__hubProviders = [saved]; return envelope({ ok: true, network_id: a.network_id, provider: saved });
           }
-          if (a.action === 'bind') {
+          if (a.action === 'hub_bind') {
             window.__hubBindings.push(a); const source = window.__hubProviders.find(p => p.id === a.id);
             const targetId = 'hub_' + 'a'.repeat(24); daemonRevision++;
             daemonProviders = [{ id: targetId, label: `Hub · ${source.label}`, enabled: true, runtimes: [{ runtime: 'codex-tui', auth: [{
               id: 'hub_key', kind: 'api_key', models: source.models, baseUrl: source.baseUrl, credential_present: true,
               verification: 'not_checked', application: 'not_applied' }] }] }];
-            const pending = request(a.daemon_node_id, daemonProviders);
+            const pending = request(a.provider.daemon_node_id, daemonProviders);
             return envelope({ ...pending, provider_reference: { network_id: a.network_id, id: a.id, revision: a.revision, daemon_provider_id: targetId } });
           }
         }

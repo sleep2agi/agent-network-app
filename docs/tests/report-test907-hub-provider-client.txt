@@ -44,3 +44,16 @@ main SHA and independent formal platform workflows. No production changes.
 Containers --rm; no real credentials, databases or node identities used.
 Screenshot capture is test-fixture only; outside-container capture/visual review
 is recorded separately if retained. No complete disaster-recovery claim.
+
+2026-10-11T11:44Z exact changed transport rebuild:
+Hub RPCs now use existing daemon_provider_snapshot hub_read/hub_put/hub_bind
+actions to match backend PR2601's required tools/list budget correction.
+Scope, consent and matched Daemon receipt assertions were not relaxed.
+Core Docker3/3 + full client typecheck PASS; image config
+6682fee80a6b526509be724f2272043f097c310419fc1356947237924058d0ab.
+Rebuilt Expo-exported actual page: Docker Chromium19/19 PASS, desktop/light
+and phone/dark with actual palette assertions; browser image config
+cae619b165aacda9d920f96ee9f9b0c9e96353531e929c8ac4a34af1a547be43.
+No mounted driver/product source, no real credentials or host test execution.
+Containers removed; images retained as development cache. Not native/package,
+real inference, remote Hub deployment or exact-head CI completion evidence.
