@@ -20,7 +20,7 @@ const chrome = (os: string, width: number, screen = 'agents', opts: { tauri?: bo
 
 // 'server' is no longer a phone tab (Vincent 2026-09-29 「服务器 换成 任务」): it is pushed from 设置.
 const TAB_SCREENS = ['agents', 'scheduled', 'settings', 'tasks', 'messages'];
-const ALL_SCREENS = [...TAB_SCREENS, 'server', 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs', 'serverNodes', 'serverNodeDetail'];
+const ALL_SCREENS = [...TAB_SCREENS, 'server', 'serverDaemon', 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs', 'serverNodes', 'serverNodeDetail'];
 
 // ── Android wide (unfolded / tablet / landscape): rail everywhere once signed in ──
 for (const w of [700, 800, 850, 880, 1200, 1280]) {
@@ -73,11 +73,11 @@ ck('tauri @800 agents → bottomTabs (narrow desktop window = phone stack, uncha
 }
 
 // ── phone leaves = exactly the screens App rendered without mobileTabBar before ──
-ck('phone leaf set', JSON.stringify([...PHONE_LEAF_SCREENS].sort()) === JSON.stringify(['chat', 'dm', 'group', 'login', 'logs', 'nodeDetail', 'nodeInfo', 'picker', 'taskDetail', 'wizard']));
+ck('phone leaf set', JSON.stringify([...PHONE_LEAF_SCREENS].sort()) === JSON.stringify(['chat', 'dm', 'group', 'login', 'logs', 'nodeDetail', 'nodeInfo', 'picker', 'serverDaemon', 'taskDetail', 'wizard']));
 
 // ── active destination ──
 for (const s of ['agents', 'chat', 'nodeInfo', 'nodeDetail', 'picker', 'wizard']) ck(`${s} lights Agent`, navActiveKey(s) === 'agents');
-for (const s of ['server', 'serverPending', 'serverNodes', 'serverNodeDetail', 'logs', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders']) ck(`${s} lights 服务器`, navActiveKey(s) === 'server');
+for (const s of ['server', 'serverPending', 'serverDaemon', 'serverNodes', 'serverNodeDetail', 'logs', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders']) ck(`${s} lights 服务器`, navActiveKey(s) === 'server');
 ck('scheduled lights 定时任务', navActiveKey('scheduled') === 'scheduled');
 ck('settings lights 设置', navActiveKey('settings') === 'settings');
 ck('taskDetail lights the left rail 任务', navActiveKey('taskDetail') === 'tasks');

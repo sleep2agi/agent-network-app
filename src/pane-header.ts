@@ -27,4 +27,5 @@ export const PANE_SCREENS_WITH_BACK: Readonly<Record<string, string>> = {
   TaskDetailScreen: 'src/TaskDetailScreen.tsx',
   HostSupervisorPickerScreen: 'src/HostSupervisorPickerScreen.tsx',
   CreateNodeWizardScreen: 'src/CreateNodeWizardScreen.tsx',
+  HubDaemonEntryScreen: 'src/HubDaemonEntryScreen.tsx',
 };

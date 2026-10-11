@@ -52,6 +52,7 @@ migrated.push('src/DaemonOverviewSection.tsx');
 migrated.push('src/DaemonOverviewFixtureScreen.tsx');
 migrated.push('src/BackendPendingDemo.tsx');
 migrated.push('src/HubPendingScreen.tsx');
+migrated.push('src/HubDaemonEntryScreen.tsx');
 migrated.push('src/RuntimeSupportScreen.tsx');
 migrated.push('src/backend-pending-ui.tsx');
 migrated.push('src/HubScopeScreen.tsx');

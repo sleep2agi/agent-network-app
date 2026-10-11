@@ -30,6 +30,7 @@ import { maskedHubHost, maskUrlsInText } from './src/mask-hub-address';
 import { agentListScreen, type AgentListFilter } from './src/server-stats';
 import ServerSidebar, { isHubPendingSection, type ServerSection } from './src/ServerSidebar';
 import HubPendingScreen from './src/HubPendingScreen';
+import HubDaemonEntryScreen from './src/HubDaemonEntryScreen';
 import type { PendingTab } from './src/backend-pending-ui';
 import HubScopeScreen from './src/HubScopeScreen';
 import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
@@ -120,6 +121,7 @@ type Screen =
   | { name: 'messages' }
   | { name: 'server' }
   | { name: 'serverPending'; tab: PendingTab }
+  | { name: 'serverDaemon' }                // Hub 域集成 → Daemon：一台直接进管理页，多台先点选，点下去仍是 openDaemonFromHub
   | { name: 'serverNodes'; filter?: AgentListFilter }
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
@@ -714,7 +716,7 @@ function AppRoot() {
       }
       // logs is a full-screen leaf under the Server tab — hardware back
       // returns to Server, not skipping past to Agents.
-      if (screen.name === 'logs') {
+      if (screen.name === 'logs' || screen.name === 'serverDaemon') {
         setScreen({ name: 'server' });
         return true;
       }
@@ -1101,6 +1103,12 @@ function AppRoot() {
                       onOpenScheduled={() => setScreen({ name: 'scheduled' })}
                       onBack={phoneSettingsBackTarget(layout, screen.name) ? () => setScreen({ name: 'settings' }) : undefined}
                     />
+                  ) : screen.name === 'serverDaemon' ? (
+                    <HubDaemonEntryScreen
+                      cfg={cfg}
+                      onBack={() => setScreen({ name: 'server' })}
+                      onOpenDaemon={alias => setScreen(openDaemonFromHub(alias))}
+                    />
                   ) : screen.name === 'settings' ? (
                     <SettingsScreen
                       cfg={cfg}
@@ -1252,7 +1260,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const notifyKey = notifyProfileKey(cfg);
   const mutedAliases = mutedAgents(notifySettings, notifyKey);
   const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
-  const serverWorkspace = ['server', 'serverPending', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders'].includes(screen.name);
+  const serverWorkspace = ['server', 'serverPending', 'serverDaemon', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders'].includes(screen.name);
   const taskWorkspace = screen.name === 'tasks' || screen.name === 'taskDetail';
   // 设置 → 快捷键(src/shortcuts-model.ts):主窗口的全局键盘快捷键。组合可改,读的是最新存储;
   // 设置页正在录入新组合时不执行。⌘K:列表栏是服务器侧栏时先切回 Agents,再请求聚焦搜索框。
@@ -1341,6 +1349,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     />
   )
   : screen.name === 'serverPending' ? <HubPendingScreen cfg={cfg} tab={screen.tab} />
+  : screen.name === 'serverDaemon' ? <HubDaemonEntryScreen cfg={cfg} desktop onBack={() => setScreen({ name: 'server' })} onOpenDaemon={alias => setScreen(openDaemonFromHub(alias))} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} filter={screen.filter} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} onProfileEdited={onProfileEdited} />
@@ -1417,6 +1426,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             else if (section === 'create') setScreen({ name: 'picker' });
             else if (section === 'logs') setScreen({ name: 'logs' });
             else if (isHubPendingSection(section)) setScreen({ name: 'serverPending', tab: section });
+            else if (section === 'daemon') setScreen({ name: 'serverDaemon' });
             else {
               const hub = hubSectionForScreen(section);
               if (hub) openHubSection(hub, setScreen);
@@ -1491,6 +1501,7 @@ function openHubSection(section: HubSection, setScreen: (screen: Screen) => void
 
 function serverSectionForScreen(screen: Screen): ServerSection {
   if (screen.name === 'serverPending') return screen.tab;
+  if (screen.name === 'serverDaemon') return 'daemon';
   const hub = hubSectionForScreen(screen.name);
   if (hub) return screenForHubSection(hub);
   if (screen.name === 'serverNodes' || screen.name === 'serverNodeDetail') return 'nodes';
