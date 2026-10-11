@@ -5,6 +5,7 @@ import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
 import { clockOffsetFrom, dreqCreatedAt, recordSendTiming, type SendTiming } from './send-timing';
 import { pollUntilTerminal } from './node-rules';
+import { interpretCloneReply, isCloneToolMissing, type CloneNodeArgs } from './node-clone';
 
 // Thin CommHub API client. The app talks to the same hub the dashboard
 // proxies (status / tasks / messages); auth is the network token sent
@@ -1766,6 +1767,57 @@ export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promis
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
 };
+
+/** Hub MCP `clone_node`. Same doorbell style as create_node. Tool missing → demo, no node created. */
+export async function cloneNode(cfg: HubConfig, req: CloneNodeArgs): Promise<ReturnType<typeof interpretCloneReply>> {
+  const preview: CloneNodeArgs = {
+    daemon_node_id: req.daemon_node_id,
+    source_node_id: req.source_node_id,
+    name: req.name,
+    copy_session: req.copy_session,
+  };
+  try {
+    const networkId = req.network_id ?? cfg.networkId ?? (await fetchNetworkId(cfg));
+    if (networkId) preview.network_id = networkId;
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/mcp`, {
+        method: 'POST',
+        headers: {
+          ...headers(cfg),
+          Accept: 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '2025-03-26',
+        },
+        signal,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'clone_node', arguments: preview },
+        }),
+      }),
+    );
+    if (res.status === 404 || res.status === 501) return interpretCloneReply({ kind: 'unsupported' }, preview);
+    const raw = await res.text();
+    if (!res.ok) {
+      try {
+        const j = JSON.parse(raw) as { error?: string | { message?: string } };
+        const err = typeof j?.error === 'string' ? j.error : j?.error?.message;
+        const message = err || `HTTP ${res.status}`;
+        return interpretCloneReply(isCloneToolMissing(message) ? { kind: 'unsupported' } : { kind: 'error', error: message }, preview);
+      } catch {
+        return interpretCloneReply({ kind: 'error', error: `HTTP ${res.status}` }, preview);
+      }
+    }
+    const parsed = parseMcpToolResponse(raw);
+    if (parsed.kind === 'malformed') return interpretCloneReply({ kind: 'unsupported' }, preview);
+    if (parsed.kind === 'jsonRpcError') {
+      return interpretCloneReply(isCloneToolMissing(parsed.message) ? { kind: 'unsupported' } : { kind: 'error', error: parsed.message }, preview);
+    }
+    return interpretCloneReply({ kind: 'payload', payload: parsed.payload }, preview);
+  } catch (e: unknown) {
+    return interpretCloneReply({ kind: 'error', error: e instanceof Error ? e.message : String(e) }, preview);
+  }
+}
 
 export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undefined> => {
   try {

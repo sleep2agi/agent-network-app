@@ -1,0 +1,40 @@
+import { registerTranslations } from './i18n';
+
+/** Hub req #938 — 复制节点对话框。 */
+export const nodeCloneTranslations = {
+  'nodeClone.title': ['复制节点', 'Clone node'],
+  'nodeClone.sectionHint': ['在同一台 Daemon 上再建一个节点，可以改名，也可以带上当前会话。', 'Create another node on the same daemon. Rename it, and optionally keep the current session.'],
+  'nodeClone.cardBody': ['复制品使用新的节点身份，留在这台 Daemon 上。源节点不会被改动。', 'The copy gets a new node identity and stays on this daemon. The source node is left as it is.'],
+  'nodeClone.source': ['源节点 {name}', 'Source {name}'],
+  'nodeClone.nameLabel': ['新名称', 'New name'],
+  'nodeClone.copySession': ['复制会话', 'Copy session'],
+  'nodeClone.copySessionHint': ['默认开。新节点沿用源节点当前可恢复的会话。关掉则只复制运行时和设置，会话是空的。', 'On by default. The new node resumes the source’s current session. Off copies runtime and settings only, with an empty session.'],
+  'nodeClone.note.identity': ['留在同一台 Daemon 上。新的 node id 和令牌，不会和源节点抢同一条连接。', 'Stays on the same daemon. New node id and token, so it does not share the source’s connection.'],
+  'nodeClone.note.secrets': ['密钥和登录不会复制。', 'Secrets and sign-in are not copied.'],
+  'nodeClone.note.session': ['复制会话要源节点已经上报可恢复的 session id。没有的话可以关掉这项再试。', 'Copying the session needs a resume id the source has already reported. Turn this off and try again if there isn’t one.'],
+  'nodeClone.submit': ['复制', 'Clone'],
+  'nodeClone.cancel': ['取消', 'Cancel'],
+  'nodeClone.working': ['提交中…', 'Submitting…'],
+  'nodeClone.ack': ['知道了', 'OK'],
+  'nodeClone.demoBadge': ['演示', 'Demo'],
+  'nodeClone.demoBody': ['当前 Hub 还没有 clone_node。名称和「复制会话」已按约定组好请求，这次没有创建节点。', 'This Hub has no clone_node tool yet. The name and copy-session choice were packed into the expected request. No node was created.'],
+  'nodeClone.demoAck': ['演示：Hub 还没有 clone_node，没有创建节点。', 'Demo: this Hub has no clone_node tool, so no node was created.'],
+  'nodeClone.submitted.copy': ['复制请求已提交。新节点「{name}」留在同一台 Daemon 上，并带上源节点的会话。', 'Clone submitted. “{name}” stays on the same daemon and keeps the source session.'],
+  'nodeClone.submitted.fresh': ['复制请求已提交。新节点「{name}」留在同一台 Daemon 上，会话是空的。', 'Clone submitted. “{name}” stays on the same daemon with an empty session.'],
+  'nodeClone.error.empty': ['请填写新名称。', 'Enter a new name.'],
+  'nodeClone.error.invalid': ['名称只能用文字、字母、数字、_ 和 -，不能以 - 开头，最多 64 个字符。', 'Use letters, digits, _ and -, don’t start with -, and keep it within 64 characters.'],
+  'nodeClone.error.same': ['新名称要和源节点不同。', 'The new name has to differ from the source.'],
+  'nodeClone.error.taken': ['这个名称已经有节点在用。', 'A node already uses this name.'],
+  'nodeClone.error.source': ['找不到要复制的节点。', 'The source node was not found.'],
+  'nodeClone.error.daemonMismatch': ['这个节点不在当前 Daemon 上，不能在这里复制。', 'This node is not on the current daemon, so it can’t be cloned here.'],
+  'nodeClone.error.noDaemon': ['找不到这台 Daemon。', 'That daemon was not found.'],
+  'nodeClone.error.daemonBlocked': ['这台 Daemon 现在不能新建节点，所以也不能复制。', 'This daemon cannot create nodes right now, so it cannot clone one either.'],
+  'nodeClone.error.role': ['需要管理员才能复制节点。', 'Cloning a node requires an admin.'],
+  'nodeClone.error.noSession': ['源节点还没有可恢复的会话。关掉「复制会话」后再试。', 'The source has no resumeable session. Turn off Copy session and try again.'],
+  'nodeClone.reason.loading': ['正在读取节点…', 'Loading the node…'],
+  'nodeClone.reason.noNode': ['还没有这个节点的 node id，不能复制。', 'This node has no node id yet, so it can’t be cloned.'],
+  'nodeClone.reason.daemonSelf': ['守护进程本身不在这里复制。打开它托管的节点再复制。', 'The daemon itself isn’t cloned here. Open one of its managed nodes.'],
+  'nodeClone.reason.needsDaemon': ['这个节点没有 Daemon 管。先交给 Daemon 管理，才能在同一台机器上复制。', 'No daemon manages this node. Hand it to a daemon before cloning it on that machine.'],
+} as const;
+
+registerTranslations(nodeCloneTranslations);
