@@ -1,5 +1,15 @@
 import { registerTranslations } from './i18n';
 registerTranslations({
+  'providerManagement.collect.title': ['收录已有 API Key 配置', 'Collect an existing API-key profile'],
+  'providerManagement.collect.boundary': ['明确选择已归属此 Daemon 的 Codex 配置。密钥只在 Daemon 本机读取并保存，不上传 Hub；不复制 ChatGPT 登录，不改源节点、不重启。', 'Explicitly select a Codex configuration bound to this daemon. Its key is read and stored only on the daemon, not uploaded to the Hub. No ChatGPT login copy, source changes or restart.'],
+  'providerManagement.collect.source': ['配置来源节点', 'Source node'],
+  'providerManagement.collect.noSource': ['暂无可收录的已绑定 API Key 配置，请先刷新扫描。ChatGPT 账号请使用下方登录管理；本机未绑定节点不在此列表中。', 'No collectable bound API-key configuration. Refresh the inventory. Use login management for ChatGPT; locally discovered unbound nodes are excluded.'],
+  'providerManagement.collect.providerId': ['Provider ID', 'Provider ID'],
+  'providerManagement.collect.authId': ['密钥配置 ID（不能覆盖已有配置）', 'Key profile ID (existing profiles cannot be replaced)'],
+  'providerManagement.collect.label': ['显示名称', 'Display name'],
+  'providerManagement.collect.button': ['收录到此 Daemon', 'Collect into this daemon'],
+  'providerManagement.collect.confirm': ['确认收录', 'Confirm collection'],
+  'providerManagement.collect.confirmHint': ['仅保存所选来源的 Provider、密钥和当前配置模型，之后可在下方选择应用。源节点保持不变；收录不代表模型调用已验证。需要 Hub 与 Daemon 支持收录协议，未确认时请刷新检查，不要重复提交。', 'Save only the selected source’s provider, key and configured model, then select it below for application. The source is unchanged; model access is not verified. Requires collection support in the Hub and daemon. If unconfirmed, refresh and inspect instead of submitting again.'],
   'providerManagement.enable': ['启用此配置', 'Enable configuration'],
   'providerManagement.disable': ['停用此配置', 'Disable configuration'],
   'providerManagement.confirmEnable': ['确认启用', 'Confirm enable'],

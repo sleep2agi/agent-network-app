@@ -1,0 +1,28 @@
+name: Provider collection client core
+on:
+  pull_request:
+    paths:
+      - 'src/DaemonProviderCollection.tsx'
+      - 'src/daemon-provider-collection.ts'
+      - 'src/DaemonProvidersPane.tsx'
+      - 'src/daemon-provider-management-api.ts'
+      - 'src/daemon-provider-management.test.ts'
+      - 'src/i18n-provider-management.ts'
+      - 'tests/provider-collection/**'
+      - 'tests/daemon-provider-management/drive.mjs'
+      - '.github/workflows/provider-collection.yml'
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Scoped collection intent and typecheck (Docker)
+        run: |
+          sg docker -c 'docker build --target core -f tests/provider-collection/Dockerfile -t anet-app:provider-collection-core .'
+          sg docker -c 'docker run --rm --network none anet-app:provider-collection-core'
+      - name: Explicit collection and selectable profile (Docker exported UI fixture)
+        run: |
+          sg docker -c 'docker build --target browser -f tests/provider-collection/Dockerfile -t anet-app:provider-collection-browser .'
+          sg docker -c 'docker run --rm --network none anet-app:provider-collection-browser'

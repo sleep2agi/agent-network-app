@@ -46,6 +46,14 @@ try {
           window.__providerRevision++;
           return envelope({ ok: true, request_id: requestId, status: 'pending' });
         }
+        if (params.arguments.action === 'collect') {
+          const intent = params.arguments;
+          if (intent.revision !== window.__providerRevision) return envelope({ ok: false, error: 'revision_conflict' });
+          window.__savedProviders[intent.provider.provider_id] = { id: intent.provider.provider_id, label: intent.provider.label, enabled: true,
+            runtimes: [{ runtime: 'codex-tui', auth: [{ id: intent.provider.auth_id, kind: 'api_key', models: ['existing-model'], baseUrl: 'https://api.example.test/v1' }] }] };
+          window.__providerRevision++;
+          return envelope({ ok: true, request_id: requestId, status: 'pending' });
+        }
         if (window.__providerMode === 'forbidden') return envelope({ ok: false, error: 'provider_admin_required' });
         if (window.__providerMode === 'unsupported') return { jsonrpc: '2.0', id: 1, error: { message: 'Unknown tool daemon_provider_snapshot' } };
         if (window.__providerMode === 'timeout') return envelope({ ok: true, request_id: requestId, daemon_node_id: daemon.node_id, status: 'pending' });
@@ -117,6 +125,34 @@ try {
     assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 0); passed++;
     const panel = page.getByTestId('daemon-providers-real');
     await page.getByTestId('daemon-provider-deepseek').waitFor();
+    if (process.env.CORE_COLLECTION_ONLY === '1') {
+      await page.evaluate(() => { window.__providerApplyEnabled = true; });
+      await page.getByTestId('daemon-providers-refresh').click();
+      await page.getByTestId('daemon-provider-collect-source').click();
+      await page.getByTestId('daemon-provider-collect-source-menu-opt-n_existing').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-collect-source-menu-opt-n_manual').count(), 0); passed++;
+      await page.getByTestId('daemon-provider-collect-source-menu-opt-n_existing').click();
+      assert.equal(await page.getByTestId('daemon-provider-collect-providerId').inputValue(), 'configured-custom');
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect').length), 0); passed++;
+      await page.getByTestId('daemon-provider-collect').click();
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect').length), 0); passed++;
+      await page.getByTestId('daemon-provider-collect-confirm').click();
+      await page.getByTestId('daemon-provider-configured-custom').waitFor();
+      const calls = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect'));
+      assert.equal(calls.length, 1);
+      assert.deepEqual(calls[0].arguments.provider, { node_id: 'n_existing', alias: 'existing-codex', node_revision: 'a'.repeat(64),
+        provider_id: 'configured-custom', auth_id: 'source_n_existing', label: 'configured-custom' });
+      assert.equal(calls[0].arguments.revision, 3); passed++;
+      for (const [field, id] of Object.entries({ nodeId: 'n_existing', providerId: 'configured-custom', authId: 'source_n_existing', model: 'existing-model' })) {
+        const control = `daemon-provider-select-${field}`;
+        await page.getByTestId(control).click(); await page.getByTestId(`${control}-menu-opt-${id}`).click();
+      }
+      assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), false);
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), 0); passed++;
+      assert.deepEqual(errors, []); passed++;
+      if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/provider-collection.png`, fullPage: true });
+      await ctx.close(); continue;
+    }
     assert((await panel.innerText()).includes('deepseek-chat')); passed++;
     assert((await panel.innerText()).includes('未验证')); passed++;
     assert((await panel.innerText()).includes('尚未应用')); passed++;
@@ -213,7 +249,9 @@ try {
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(process.env.CORE_NODE_SWITCH === '1'
+  console.log(process.env.CORE_COLLECTION_ONLY === '1'
+    ? `PASS Provider collection UI ${passed}/${passed} (opt-in source, confirm once, exact intent, saved profile selectable; synthetic Hub, no native credential access)`
+    : process.env.CORE_NODE_SWITCH === '1'
     ? `PASS node Provider switch UI ${passed}/${passed} (node-info target lock, selection, confirmed submit/receipt, unbound refusal, zero page errors; synthetic Hub, no real runtime)`
     : process.env.CORE_DISCOVERY_ONLY === '1'
     ? `PASS existing Codex discovery UI ${passed}/${passed} (bound/manual readback, opt-in request, read-only boundary, selection exclusion; synthetic Hub, no real runtime)`

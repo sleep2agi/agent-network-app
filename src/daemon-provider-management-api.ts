@@ -36,7 +36,7 @@ export function managedProviderLogin(cfg: HubConfig, daemonId: string, intent: L
   }, signal);
 }
 export function readManagedProviders(cfg: HubConfig, daemonId: string, signal: AbortSignal,
-  write?: { revision: number; provider: unknown }) {
+  write?: { revision: number; provider: unknown; action?: 'put' | 'collect' }) {
   if (write && !providerWriteTransportAllowed(cfg.serverUrl)) return Promise.resolve({ kind: 'error' as const });
   return loadProviderSnapshot({ networkId: cfg.networkId ?? '', daemonId }, async (action, id, requestSignal) => {
     const response = await providerFetch(`${cfg.serverUrl.replace(/\/$/, '')}/mcp`, {
@@ -44,8 +44,9 @@ export function readManagedProviders(cfg: HubConfig, daemonId: string, signal: A
       headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json',
         Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-03-26' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
-        name: 'daemon_provider_snapshot', arguments: { action: write && action === 'refresh' ? 'put' : action,
-          id, network_id: cfg.networkId, ...(action === 'read' ? { include_discovery: true } : {}), ...(write && action === 'refresh' ? write : {}) },
+        name: 'daemon_provider_snapshot', arguments: { action: write && action === 'refresh' ? write.action ?? 'put' : action,
+          id, network_id: cfg.networkId, ...(action === 'read' ? { include_discovery: true } : {}),
+          ...(write && action === 'refresh' ? { revision: write.revision, provider: write.provider } : {}) },
       } }),
     }, !!write && action === 'refresh');
     return parseProviderRpc(response.status, response.ok ? await response.text() : '');

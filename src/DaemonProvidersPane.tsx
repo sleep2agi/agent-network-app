@@ -13,6 +13,8 @@ import DaemonProviderSelection from './DaemonProviderSelection';
 import { PROVIDER_VERIFIED_VERSIONS } from './daemon-provider-management';
 import DaemonCodexAccounts from './DaemonCodexAccounts';
 import DaemonCodexInventoryRow from './DaemonCodexInventoryRow';
+import DaemonProviderCollection from './DaemonProviderCollection';
+import { providerCollectionConfirmed, type ProviderCollectionWrite } from './daemon-provider-collection';
 
 export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersion, offline = false }: {
   cfg: HubConfig; daemonId?: string; alias: string; daemonVersion?: string | null; offline?: boolean;
@@ -47,16 +49,19 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersio
   const write = snapshot ? providerKeyWrite(snapshot, form) : null;
   const secure = providerWriteTransportAllowed(cfg.serverUrl);
   const toggleScope = JSON.stringify([identity, snapshot?.revision]);
-  const save = async (requested = write) => {
-    if (!requested || !daemonId || !secure || saving) return;
+  const save = async (requested: { revision: number; provider: unknown; action?: 'put' | 'collect' } | null = write) => {
+    if (!requested || !daemonId || !secure || saving || writeController.current && !writeController.current.signal.aborted) return;
     setSaveState({ identity, phase: 'saving' });
     setToggleRequest(null);
     const ctrl = new AbortController(); writeController.current = ctrl;
     setEditing({ identity, form: { ...form, key: '' } });
-    const saved = await readManagedProviders(cfg, daemonId, ctrl.signal, requested);
+    let saved = await readManagedProviders(cfg, daemonId, ctrl.signal, requested);
     if (ctrl.signal.aborted) return;
+    if (requested.action === 'collect' && saved.kind === 'ready' && (!snapshot
+      || !providerCollectionConfirmed(snapshot, requested as ProviderCollectionWrite, saved.snapshot))) saved = { kind: 'error' };
     setResult({ identity, value: saved });
     setSaveState({ identity, phase: saved.kind === 'ready' ? 'saved' : 'unconfirmed' });
+    ctrl.abort();
   };
   return <View testID="daemon-providers-real" style={{ gap: spacing.md }}>
     <PendingPanelCard>
@@ -99,6 +104,7 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersio
         </View>
       </>}
     </PendingPanelCard> : null}
+    {snapshot ? <DaemonProviderCollection snapshot={snapshot} identity={identity} secure={secure} busy={saving} collect={save} /> : null}
     {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} cfg={cfg} /> : null}
     {snapshot && daemonId ? <DaemonCodexAccounts key={identity} cfg={cfg} daemonId={daemonId}
       scope={JSON.stringify([cfg.serverUrl, cfg.networkId, cfg.token, daemonId])} snapshot={snapshot} bind={save} binding={saving} /> : null}

@@ -6,6 +6,7 @@ import { runProviderApplication } from './daemon-provider-application';
 import { PROVIDER_VERIFIED_VERSIONS } from './daemon-provider-management';
 import { t, setLanguagePreference } from './i18n';
 import './i18n-provider-management';
+import { collectionSourceOptions, collectionSourceForm, providerCollectionWrite, providerCollectionConfirmed } from './daemon-provider-collection';
 let passed = 0;
 const test = async (name: string, run: () => void | Promise<void>) => { await run(); passed++; console.log(`PASS ${name}`); };
 const scope = { networkId: 'net-fixture', daemonId: 'daemon-a' };
@@ -262,5 +263,31 @@ await test('local discovery is readable but never a provider application target'
   value.codex_inventory.local_discovery.rows[0].config_revision = null;
   value.codex_inventory.local_discovery.rows[0].token = 'TEST-ONLY-secret';
   assert.equal(parseProviderSnapshot(value, scope), null);
+});
+await test('collection is opt-in, bound/versioned API-key only and never overwrites a managed profile', () => {
+  const before = parseProviderSnapshot(snapshot(), scope)!;
+  before.codex_inventory = { observed_at: 1000, scope: 'hub_bound_nodes', rows: [{ node_id: 'n_a', alias: 'source', status: 'observed',
+    runtime: 'codex-app-server', auth_kind: 'api_key', config_revision: 'a'.repeat(64), configured_provider: 'deepseek', configured_model: 'deepseek-chat' }] };
+  const original = JSON.stringify(before); const form = collectionSourceForm(before, 'n_a');
+  assert.equal(providerCollectionWrite(before, form, false), null);
+  const write = providerCollectionWrite(before, form, true)!;
+  assert.deepEqual(write, { action: 'collect', revision: 2, provider: { node_id: 'n_a', alias: 'source', node_revision: 'a'.repeat(64),
+    provider_id: 'deepseek', auth_id: 'source_n_a', label: 'deepseek' } });
+  assert.equal(providerCollectionWrite(before, { ...form, authId: 'work' }, true), null);
+  assert.equal(JSON.stringify(before), original);
+  for (const change of [{ auth_kind: 'chatgpt' }, { config_revision: null }, { runtime: 'codex-sdk' }, { status: 'unavailable' as const }]) {
+    const other = structuredClone(before); Object.assign(other.codex_inventory!.rows[0], change);
+    assert.equal(collectionSourceOptions(other).length, 0);
+  }
+  const after = structuredClone(before); after.revision++;
+  after.providers[0].label = 'deepseek'; after.providers[0].runtimes[0].auth.push({ ...after.providers[0].runtimes[0].auth[0], id: 'source_n_a' });
+  assert.equal(providerCollectionConfirmed(before, write, after), true);
+  for (const change of ['model', 'scope', 'revision']) {
+    const wrong = structuredClone(after);
+    if (change === 'model') wrong.providers[0].runtimes[0].auth[1].models = ['wrong-model'];
+    if (change === 'scope') wrong.daemon_node_id = 'another';
+    if (change === 'revision') wrong.revision++;
+    assert.equal(providerCollectionConfirmed(before, write, wrong), false);
+  }
 });
 console.log(`${passed}/${passed} passed`);
