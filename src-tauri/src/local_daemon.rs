@@ -33,7 +33,7 @@ pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
 const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.163";
 /// Desktop features require the preview runtime, not npm's older `latest` tag.
 const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@2.5.0-preview.129";
-const MIN_HUB_VERSION: &str = "0.9.0-preview.120";
+const MIN_HUB_VERSION: &str = "0.9.0-preview.121";
 static INSTALL_LOCK: Mutex<()> = Mutex::new(());
 const NPM_MIRROR: &str = "https://registry.npmmirror.com";
 /// 私有 Node 运行时:缺 Node 或版本太低时从 nodejs.org 下 v22 最新 LTS 到 ~/.anet/app/local-daemon/node,

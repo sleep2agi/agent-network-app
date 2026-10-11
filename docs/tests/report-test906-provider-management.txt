@@ -181,3 +181,20 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
   registry artifact exists. Update the sidecar lock using registry integrity,
   never fabricated metadata. Commit locally; push consolidated client changes
   after that dependency is published, then main-SHA build/sign/package gates.
+
+2026-10-11 10:43 CST: bind desktop release to actual Hub .121 registry artifact.
+  Backend merged main: b4413131b73c52c286beec46509773716698d89f.
+  Registry now returns @sleep2agi/commhub-server@0.9.0-preview.121;
+  integrity sha512-iuDcA+oagXdSrmwFDzJWEVm95RRbG4ITGfgFgUux/4PpJ2nsE3tc9YEM3bBuAspwt9ed2hyCdRi7FI0Bcb9o9w==.
+  npm --package-lock-only --ignore-scripts in isolated Docker regenerated the
+  sidecar lock. Only the direct Hub version, URL and integrity changed; no
+  transitive updates. Supervisor/minimum-version pins and positive installer
+  fixtures now agree on .121. Old incompatible fixture remains unchanged.
+  Existing Docker image anet-provider-panel:test906, readonly repository mount,
+  --rm --network none: sidecar 14, version 14, changelog 7, installer TS 34
+  checks PASS; git diff --check PASS. No business sample or native Rust rerun.
+  Both containers removed. No production restart or global package changes.
+  Notes state API-key endpoints require Responses compatibility; no claim of
+  native DeepSeek endpoint inference or official ChatGPT account switching.
+  Runtime .129 / CLI .163 publication still must finish before desktop release.
+  This is release preparation, not a signed installer or public desktop release.
