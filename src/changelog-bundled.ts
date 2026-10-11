@@ -3,7 +3,7 @@
 // 设置 → 关于 → 更新日志 shows these notes when the mirror / GitHub cannot be reached (src/changelog-source.ts).
 
 export const BUNDLED_RELEASE_BODY: string = [
-  "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
+  "Signed desktop update for macOS (Apple Silicon, notarized) and Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
   "What's new in 0.2.238:",
   "- Daemon Provider 页新增托管 ChatGPT 账号登录与账号列表；登录需由本人在官方页面完成。可明确选择账号和模型，确认后只重启所选 Codex TUI 共存节点并保留会话。",

@@ -12,6 +12,11 @@ on:
         required: false
         default: true
         type: boolean
+      include_linux:
+        description: Also build and verify Ubuntu 24.04 amd64 (deferred by default)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -26,16 +31,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macos-14
-            args: --bundles app,dmg
-          - platform: windows-latest
-            args: --bundles nsis,msi
-          # Ubuntu 24.04 amd64 matches tests/linux-deb-package. Production
-          # tauri.conf.json is used, so updater endpoints stay in the binary
-          # and the .deb is minisign-signed. The test overlay is not applied.
-          - platform: ubuntu-24.04
-            args: --bundles deb
+        # Linux is opt-in, not a skipped matrix job that delays the primary pair.
+        # When requested it still uses the production updater/signing/retention gates.
+        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-24.04","args":"--bundles deb"}]' || '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -183,7 +181,7 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: ANet Desktop v__VERSION__
           releaseBody: |-
-            Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).
+            Signed desktop update for macOS (Apple Silicon, notarized) and Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
             What's new in 0.2.238:
             - Daemon Provider 页新增托管 ChatGPT 账号登录与账号列表；登录需由本人在官方页面完成。可明确选择账号和模型，确认后只重启所选 Codex TUI 共存节点并保留会话。
@@ -1531,8 +1529,9 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Require draft assets, Linux updater entries, and checksums
+      - name: Require selected platform draft assets, updater entries, and checksums
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
+          INCLUDE_LINUX: ${{ inputs.include_linux }}
         run: node scripts/verify-desktop-release-draft.mjs

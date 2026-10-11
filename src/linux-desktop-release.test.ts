@@ -1,4 +1,4 @@
-// The desktop release workflow must build the Ubuntu 24.04 amd64 .deb with the
+// When Linux is selected, the release workflow builds the Ubuntu 24.04 .deb with the
 // production updater endpoints and upload it on the same draft as macOS and
 // Windows. The test-only overlay in tests/linux-deb-package stays off this path.
 import { readFileSync } from 'node:fs';
@@ -27,11 +27,24 @@ const workflow = readWorkflow(readFileSync(new URL('../.github/workflows/release
 const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
 const secrets = [...workflow.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1]);
 const secretSet = [...new Set(secrets)].sort();
-const ubuntuDebMatrix = /platform: ubuntu-24\.04\n\s+args: --bundles deb/;
-
-check('release matrix builds the deb on Ubuntu 24.04', ubuntuDebMatrix.test(workflow));
-check('Ubuntu 24.04 deb matrix still matches a Windows CRLF checkout',
-  ubuntuDebMatrix.test(readWorkflow(workflow.replace(/\n/g, '\r\n'))));
+const matrices = (text: string) => {
+  const match = text.match(/include: \$\{\{ fromJSON\(inputs\.include_linux && '(\[.*\])' \|\| '(\[.*\])'\) \}\}/);
+  if (!match) throw new Error('missing explicit platform selection');
+  return [JSON.parse(match[1]), JSON.parse(match[2])];
+};
+const [withLinux, primaryOnly] = matrices(workflow);
+check('opt-in release matrix builds the deb on Ubuntu 24.04',
+  withLinux.some((row: any) => row.platform === 'ubuntu-24.04' && row.args === '--bundles deb'));
+check('platform selection survives a Windows CRLF checkout',
+  JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
+check('default release matrix contains only the exact macOS and Windows bundles',
+  JSON.stringify(primaryOnly) === JSON.stringify([
+    { platform: 'macos-14', args: '--bundles app,dmg' },
+    { platform: 'windows-latest', args: '--bundles nsis,msi' },
+  ]));
+check('Linux selection defaults off and is passed to the draft verifier',
+  /include_linux:[\s\S]*?default: false\n\s+type: boolean/.test(workflow)
+  && workflow.includes('INCLUDE_LINUX: ${{ inputs.include_linux }}'));
 check('release build does not apply the test updater overlay or --no-sign',
   !workflow.includes('tauri.test.conf.json') && !workflow.includes('--no-sign'));
 check('linux smoke runs the ELF, not the Windows exe',
@@ -133,5 +146,26 @@ check('deb without a digest is refused', throws(() => assertDesktopReleaseDraft(
   release: { ...release, assets: release.assets.map((item) => item.name.endsWith('.deb') && !item.name.endsWith('.sig') ? { ...item, digest: null } : item) },
   manifest, expectedCommit: 'a'.repeat(40),
 }), /sha256 digest/));
+
+const primaryRelease = { ...release, assets: release.assets.filter(item => !/\.deb(?:\.sig)?$/.test(item.name)) };
+const primaryManifest = { ...manifest, platforms: {
+  'darwin-aarch64': manifest.platforms['darwin-aarch64'],
+  'windows-x86_64': manifest.platforms['windows-x86_64'],
+} };
+const primaryInput = { product, version, release: primaryRelease, manifest: primaryManifest, expectedCommit: 'a'.repeat(40), includeLinux: false };
+check('primary-only draft succeeds without claiming a Linux digest',
+  assertDesktopReleaseDraft(primaryInput).debSha256 === null);
+check('selecting Linux still requires the omitted deb', throws(() => assertDesktopReleaseDraft({ ...primaryInput, includeLinux: true }), /missing.*\.deb/));
+check('primary-only draft rejects an unexpected Linux updater entry', throws(() => assertDesktopReleaseDraft({ ...primaryInput, manifest }), /Linux updater entries/));
+check('primary-only draft rejects unexpected Linux assets', throws(() => assertDesktopReleaseDraft({ ...primaryInput, release }), /Linux assets/));
+check('primary-only draft still rejects a missing Windows installer', throws(() => assertDesktopReleaseDraft({
+  ...primaryInput, release: { ...primaryRelease, assets: primaryRelease.assets.filter(item => !item.name.endsWith('_x64-setup.exe')) },
+}), /missing.*setup\.exe/));
+check('primary-only draft still rejects a missing macOS signature', throws(() => assertDesktopReleaseDraft({
+  ...primaryInput, manifest: { ...primaryManifest, platforms: { ...primaryManifest.platforms, 'darwin-aarch64': { ...primaryManifest.platforms['darwin-aarch64'], signature: '' } } },
+}), /darwin-aarch64 signature/));
+check('primary-only draft still rejects a mismatched source SHA', throws(() => assertDesktopReleaseDraft({
+  ...primaryInput, expectedCommit: 'b'.repeat(40),
+}), /targetCommitish/));
 
 console.log(`\n${passed} passed`);

@@ -15,7 +15,7 @@ Two workflows, two purposes:
 | Workflow | Produces | Use for |
 |---|---|---|
 | `.github/workflows/desktop-tauri.yml` | **unsigned** macOS arm64 + Windows x64 bundles, as Actions artifacts | throwaway test builds |
-| `.github/workflows/release-desktop-auto-update.yml` | **signed + notarized** macOS and Windows bundles, a **signed** Ubuntu 24.04 amd64 `.deb`, updater signatures, `latest.json`, one **draft** Release | every real release |
+| `.github/workflows/release-desktop-auto-update.yml` | signed macOS (notarized) and Windows bundles; opt-in signed Ubuntu 24.04 amd64 `.deb`; updater signatures, `latest.json`, one **draft** Release | every real release |
 
 Unsigned artifacts are for testing only. Label them as such: macOS Gatekeeper
 blocks them and Windows shows SmartScreen.
@@ -118,8 +118,15 @@ gh workflow run release-desktop-auto-update.yml \
   -f commit=<40-character SHA>
 ```
 
-`publish` defaults to true. A dry run builds, signs, and smoke-tests every
-platform, then uploads Actions artifacts only:
+`publish` defaults to true. `include_linux` defaults to false: macOS and Windows
+are the primary desktop release; Android uses its separate workflow below.
+To also release Linux, pass `-F include_linux=true` on the initial dispatch.
+Do not append Linux artifacts to an already published version; use a new version
+and the same main-only release process. Linux selection does not disable any
+signing, updater, packaged smoke or retention check for selected platforms.
+
+A dry run builds, signs, and smoke-tests the selected platforms, then uploads
+Actions artifacts only:
 
 ```bash
 gh workflow run release-desktop-auto-update.yml \
@@ -184,7 +191,7 @@ main has moved, cancel it **before** approval (no certificate is used).
 
 ## 3. `macos-signing` environment approval
 
-Both matrix jobs run under `environment: macos-signing` and wait for approval.
+All selected matrix jobs run under `environment: macos-signing` and wait for approval.
 Approving authorizes use of the signing material referenced by the workflow:
 the Tauri updater key, the Apple Developer ID certificate, and the App Store
 Connect API key — all read from repository secrets by name. The Developer ID
@@ -196,8 +203,8 @@ release. Approval is what starts consuming signing and notarization quota.
 
 ## 4. What CI enforces (all of it must be green)
 
-Matrix: `macos-14 → --bundles app,dmg`,
-`windows-latest → --bundles nsis,msi`, and
+Default matrix: `macos-14 → --bundles app,dmg` and
+`windows-latest → --bundles nsis,msi`. With `include_linux=true`, also build
 `ubuntu-24.04 → --bundles deb`, with `fail-fast: false` so one platform
 failing still reports the others. The Linux leg uses production
 `src-tauri/tauri.conf.json` (real updater endpoints, updater artifacts
@@ -274,14 +281,17 @@ gh run view <run id> --repo sleep2agi/agent-network-app --json jobs
 Publish only when all of these hold:
 
 - `targetCommitish` equals the 40-character SHA you triggered with;
-- the macOS, Windows, and Linux jobs concluded `success`, and so did
-  `verify-draft`;
-- the ten expected assets are present: macOS `.dmg` and `.app.tar.gz`,
-  Windows `x64-setup.exe` and `x64_en-US.msi`, Linux `amd64.deb`, the `.sig`
-  for each updater artifact (including the `.deb.sig`), and `latest.json`;
-- `latest.json` contains `linux-x86_64` and `linux-x86_64-deb`, both pointing
-  at that `.deb` and sharing one signature, and still contains
-  `darwin-aarch64` and `windows-x86_64`;
+- macOS, Windows and every selected optional platform concluded `success`,
+  and so did `verify-draft` (which receives the same `include_linux` input);
+- the eight primary assets are present: macOS `.dmg` and `.app.tar.gz`,
+  Windows `x64-setup.exe` and `x64_en-US.msi`, the `.sig` for each updater
+  artifact, and `latest.json`. Linux selection adds `.deb` and `.deb.sig`
+  for ten assets in total;
+- `latest.json` contains `darwin-aarch64` and `windows-x86_64` pointing to the
+  actual assets with signatures. If Linux is selected, also require
+  `linux-x86_64` and `linux-x86_64-deb` pointing at that `.deb` and sharing one
+  signature. Otherwise refuse unexpected Linux assets/entries rather than
+  carrying old binaries forward as if built from this release SHA;
 - asset sizes match the build log. The Linux job summary prints `sha256sum`
   lines for the `.deb` and `.sig`. GitHub asset digests are the checksums the
   mirror copies; do not upload a release asset named `SHA256SUMS`.
@@ -607,7 +617,11 @@ with `curl -sIL` (both routes must answer 200 with the same `Content-Length`)
 before opening the PR. Do not edit the page before the mirror has the version:
 the 线路一 buttons would 404.
 
-**Linux card, only after that version's `.deb` is on the mirror.** The dynamic
+**Linux card, only after that version's `.deb` is on the mirror.**
+When Linux is deferred, retain the last verified Linux download/version on the
+static page; do not relabel it as the new primary release or invent a `.deb` URL.
+Do not overwrite the new update manifest with Linux entries from an older build.
+The dynamic
 updater endpoint already forwards every platform in the release `latest.json`,
 including `linux-x86_64` and `linux-x86_64-deb`, once this workflow has
 published one. The download page is static. Insert a third card in the desktop
