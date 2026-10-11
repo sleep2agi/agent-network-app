@@ -24,3 +24,16 @@ docker run --rm --network none anet-app:release-platform-selection
 Exit 0; no account, token, signing material or network mounted into the test.
 Only the test image retained. The workflow still needs hosted CI and selected
 signed-package checks before any release. Hub .122 release remains queued.
+
+2026-10-11 15:43 +08 incremental correction
+Windows CI on 71569d06: 398/399 files passed; modelscope-mirror alone failed
+because release notes extraction expects the existing "Signed and notarized"
+opening. Kept that opening while accurately limiting notarization to macOS and
+describing Windows as signed. No assertion changed or removed.
+Rebuilt targeted Docker suite with the mirror/Android-notes test included:
+platform 28 PASS, version 14 PASS, bundled notes 7/7 PASS, mirror 62 PASS, exit 0.
+Image config SHA256: 45aa8162810d089c648caa8376d28fd214188bca5d01a733f8e127f55143f207
+Container --rm --network none, no credentials or native package build.
+Also corrected SOP to match the existing dynamic /download catalog: a deferred
+Linux platform is shown as missing for this version, with old packages available
+in release history, not as a relabeled stale current-version download.

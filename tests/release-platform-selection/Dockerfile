@@ -4,4 +4,4 @@ FROM node:22.22.2-bookworm-slim@sha256:9f6d5975c7dca860947d3915877f85607946403fc
 COPY --from=bun /usr/local/bin/bun /usr/local/bin/bun
 WORKDIR /app
 COPY . .
-CMD ["sh", "-c", "bun src/linux-desktop-release.test.ts && bun src/version-consistency.test.ts && bun src/changelog-bundled.test.ts"]
+CMD ["sh", "-c", "bun src/linux-desktop-release.test.ts && bun src/version-consistency.test.ts && bun src/changelog-bundled.test.ts && bun src/modelscope-mirror.test.ts"]
