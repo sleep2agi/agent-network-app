@@ -85,7 +85,7 @@ check('聊天信息 rows open node settings (with the section they name)', chat.
 check('node info page honours the requested section (read-only page only)', detail.includes('const requested = readOnly ? takeNodeSectionRequest(sectionHandoffKey) : undefined;'));
 check('read-only details hide mutation surfaces except overview restart/stop (board #694)', detail.includes('!readOnly ? <AvatarEditSection') && detail.includes('visible={!!pendingAction && (!readOnly || OVERVIEW_ACTIONS.includes(pendingAction))}') && detail.includes("{readOnly ? '节点信息' : '节点详情'}"));
 check('details use network-scoped full status rather than the list projection', detail.includes('fetchNodeStatus(cfg, alias)'));
-check('model & runtime summary reads runtimeSummaryFacts (session-id beside 版本)', detail.includes('const runtimeFacts = runtimeSummaryFacts(facts);') && detail.includes('runtimeFacts.map(fact => <FactCell'));
+check('model & runtime summary reads modelSectionFacts (session-id beside 版本)', detail.includes('const runtimeFacts = modelSectionFacts(facts);') && detail.includes('runtimeFacts.map(fact => <FactCell'));
 check('fact values stay selectable; a wrapped session-id is not ellipsized', detail.includes('selectable') && detail.includes('...(fact.wrap ? {} : { numberOfLines: 2 })') && detail.includes("overflowWrap: 'anywhere'"));
 
 console.log(`node info: ${passed}/${passed} checks passed`);

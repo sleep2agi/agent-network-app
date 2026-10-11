@@ -95,7 +95,7 @@ import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, runtimeSummaryFacts, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
@@ -481,7 +481,7 @@ export default function NodeDetailScreen({
   const guardLeave = (go: () => void) => { if (needConfirm) setPendingLeave(() => go); else go(); };
   const chrome = nodePageChrome({ section, keyboardVisible });
   const pageScrolls = nodePageScrolls(section);
-  const runtimeFacts = runtimeSummaryFacts(facts);
+  const runtimeFacts = modelSectionFacts(facts);
 
   // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
   const headerCard = (
