@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, type ProviderRpc } from './daemon-provider-management';
+import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, scopedProviderSave, type ProviderRpc } from './daemon-provider-management';
 let passed = 0;
 const test = async (name: string, run: () => void | Promise<void>) => { await run(); passed++; console.log(`PASS ${name}`); };
 const scope = { networkId: 'net-fixture', daemonId: 'daemon-a' };
@@ -132,5 +132,21 @@ await test('existing inventory stays separate, unknown credentials are not logou
   assert(parseProviderSnapshot(v, scope)); assert.equal(providerConfiguredCounts(parseProviderSnapshot(v, scope)!).providers, 1);
   v.codex_inventory.rows[0].key = 'TEST-ONLY'; assert.equal(parseProviderSnapshot(v, scope), null);
   delete v.codex_inventory.rows[0].key; v.codex_inventory.rows[0].effective_state = 'applied'; assert.equal(parseProviderSnapshot(v, scope), null);
+});
+await test('save status never crosses Hub, credential, network, daemon or refresh scope', () => {
+  const parts = ['https://hub.example.test', 'net-a', 'TEST-ONLY-token-a', 'daemon-a', false, 0];
+  const identity = JSON.stringify(parts);
+  for (const phase of ['saving', 'saved', 'unconfirmed'] as const) {
+    const state = { identity, phase };
+    assert.equal(scopedProviderSave(state, identity), phase);
+    for (let i = 0; i < parts.length; i++) {
+      const changed = [...parts]; changed[i] = `${changed[i]}-changed`;
+      assert.equal(scopedProviderSave(state, JSON.stringify(changed)), '');
+    }
+  }
+  assert.equal(scopedProviderSave(null, identity), '');
+  const pane = readFileSync(new URL('./DaemonProvidersPane.tsx', import.meta.url), 'utf8');
+  assert(pane.includes('scopedProviderSave(saveState, identity)'));
+  assert(pane.includes("const saving = saveNote === 'saving'"));
 });
 console.log(`${passed}/${passed} passed`);

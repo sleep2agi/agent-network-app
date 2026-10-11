@@ -77,8 +77,11 @@ try {
     assert((await page.getByTestId('daemon-provider-custom').innerText()).includes('model-save'));
     assert.equal(await page.getByTestId('daemon-provider-input-key').inputValue(), '');
     assert(!(await panel.innerText()).includes('TEST-ONLY-UI-KEY')); passed++;
+    await page.getByTestId('daemon-providers-refresh').click();
+    await page.getByTestId('daemon-provider-custom').waitFor();
+    assert.equal(await page.getByTestId('daemon-provider-save-status').count(), 0); passed++;
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(`PASS daemon Provider management UI ${passed}/9 (one inventory and core save flow; synthetic Hub)`);
+  console.log(`PASS daemon Provider management UI ${passed}/10 (one inventory, save and refreshed receipt flow; synthetic Hub)`);
 } finally { await browser.close(); web.close(); }

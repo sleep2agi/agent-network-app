@@ -18,6 +18,12 @@ export type ProviderSnapshot = { network_id: string; daemon_node_id: string; rev
 export type ProviderRead = { kind: 'ready'; snapshot: ProviderSnapshot; observedAt: number }
   | { kind: 'unsupported' | 'forbidden' | 'error' | 'timeout' | 'cancelled' };
 
+export type ProviderSaveState = { identity: string; phase: 'saving' | 'saved' | 'unconfirmed' };
+/** Receipts, not just configuration, belong to one Hub/credential/daemon scope. */
+export function scopedProviderSave(state: ProviderSaveState | null, identity: string) {
+  return state?.identity === identity ? state.phase : '';
+}
+
 const record = (v: unknown): v is Record<string, any> => !!v && typeof v === 'object' && !Array.isArray(v);
 const fields = (v: unknown, allowed: string[]) => record(v) && Object.keys(v).every(k => allowed.includes(k));
 const id = (v: unknown): v is string => typeof v === 'string' && /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(v);

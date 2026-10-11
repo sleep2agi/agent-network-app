@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import type { HubConfig } from './api';
 import { readManagedProviders, providerWriteTransportAllowed } from './daemon-provider-management-api';
-import { providerConfiguredCounts, providerKeyWrite, EMPTY_PROVIDER_KEY_FORM, type ProviderKeyForm, type ProviderRead } from './daemon-provider-management';
+import { providerConfiguredCounts, providerKeyWrite, scopedProviderSave, EMPTY_PROVIDER_KEY_FORM, type ProviderKeyForm, type ProviderRead, type ProviderSaveState } from './daemon-provider-management';
 import { PendingCardTitle, PendingPanelCard } from './backend-pending-ui';
 import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
@@ -19,13 +19,14 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
   const identity = JSON.stringify([cfg.serverUrl, cfg.networkId, cfg.token, daemonId, offline, tick]);
   const [result, setResult] = useState<{ identity: string; value: ProviderRead } | null>(null);
   const [editing, setEditing] = useState<{ identity: string; form: ProviderKeyForm } | null>(null);
-  const [saving, setSaving] = useState(false);
-  const [saveNote, setSaveNote] = useState('');
+  const [saveState, setSaveState] = useState<ProviderSaveState | null>(null);
+  const saveNote = scopedProviderSave(saveState, identity);
+  const saving = saveNote === 'saving';
   const writeController = useRef<AbortController | null>(null);
   const form = editing?.identity === identity ? editing.form : EMPTY_PROVIDER_KEY_FORM;
   const setField = (field: keyof ProviderKeyForm, text: string) => setEditing({ identity, form: { ...form, [field]: text } });
   useEffect(() => {
-    setSaving(false); setSaveNote(''); setEditing(null);
+    setSaveState(null); setEditing(null);
     if (!daemonId || !cfg.networkId || offline) return;
     const ctrl = new AbortController();
     void readManagedProviders(cfg, daemonId, ctrl.signal).then(value => {
@@ -42,14 +43,13 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
   const secure = providerWriteTransportAllowed(cfg.serverUrl);
   const save = async () => {
     if (!write || !daemonId || !secure || saving) return;
-    setSaving(true); setSaveNote('saving');
+    setSaveState({ identity, phase: 'saving' });
     const ctrl = new AbortController(); writeController.current = ctrl;
     setEditing({ identity, form: { ...form, key: '' } });
     const saved = await readManagedProviders(cfg, daemonId, ctrl.signal, write);
     if (ctrl.signal.aborted) return;
-    setSaving(false);
     setResult({ identity, value: saved });
-    setSaveNote(saved.kind === 'ready' ? 'saved' : 'unconfirmed');
+    setSaveState({ identity, phase: saved.kind === 'ready' ? 'saved' : 'unconfirmed' });
   };
   return <View testID="daemon-providers-real" style={{ gap: spacing.md }}>
     <PendingPanelCard>

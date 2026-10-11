@@ -72,3 +72,21 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
   postdates the web export above; no repeat of the full browser suite.
   Runtime model/account switching and unbound host inventory still pending.
   No production changes or formal release; containers --rm, test images retained.
+
+2026-10-11 09:20 CST: save-receipt scope correction (on f75511c3).
+  Existing config/form were scope-bound, but saveNote/saving were plain React
+  state cleared only by an effect. The first render after changing Hub, auth,
+  network, daemon, offline state or refresh could still display the old receipt.
+  Bound all three save phases to the same in-memory identity as the readback;
+  render-time filtering now also hides old saving/success/unconfirmed notices.
+  No API change, daemon mutation or fabricated apply/login capability.
+  Docker core client checks 19/19 PASS; full client TypeScript exit 0.
+  Real Chromium production export: one inventory/save/refresh flow, 10/10 PASS;
+  synthetic Hub only. The extra browser check verifies refresh discards the
+  old success note; the pure guard checks all identity dimensions.
+  Web export manifest list:
+    cae5f0bfa723d4732628fac9a4f48f30bd1e52fdf024fa33b92c8c4de8ce3a0f
+  Browser manifest list:
+    b53a287ec2b5ea357dadcb72e4795d21bfa0b2caace3dc6257bc332875728fa2
+  Existing Dockerfiles/commands above; TEST-ONLY images retained, --rm runs
+  completed. No production credentials, release, or native model-switch claim.
