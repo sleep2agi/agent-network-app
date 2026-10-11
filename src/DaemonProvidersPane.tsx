@@ -12,6 +12,7 @@ import { colors, spacing, type, radius } from './theme';
 import DaemonProviderSelection from './DaemonProviderSelection';
 import { PROVIDER_VERIFIED_VERSIONS } from './daemon-provider-management';
 import DaemonCodexAccounts from './DaemonCodexAccounts';
+import DaemonCodexInventoryRow from './DaemonCodexInventoryRow';
 
 export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersion, offline = false }: {
   cfg: HubConfig; daemonId?: string; alias: string; daemonVersion?: string | null; offline?: boolean;
@@ -87,17 +88,7 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersio
         <Text style={{ color: colors.textSecondary }}>{new Date(snapshot.codex_inventory.observed_at).toLocaleString()}</Text>
         <Text style={{ color: colors.textSecondary }}>Codex · {t(`providerManagement.installation.${snapshot.codex_inventory.installation?.status ?? 'unknown'}`)} · {snapshot.codex_inventory.installation?.version ?? '—'}</Text>
         {!snapshot.codex_inventory.rows.length ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.inventoryEmpty')}</Text> : null}
-        {snapshot.codex_inventory.rows.map(row => <View key={row.node_id} style={{ gap: spacing.xs, paddingVertical: spacing.sm }}>
-          <Text style={{ color: colors.text }}>{row.alias} · {row.node_id}</Text>
-          <Text style={{ color: colors.textSecondary }}>{t(`providerManagement.inventory.${row.status}`)}</Text>
-          {row.status === 'observed' ? <>
-            <Text style={{ color: colors.textSecondary }}>{row.runtime} · CODEX_HOME #{row.home_ref} · {row.home_source}</Text>
-            <Text style={{ color: colors.textSecondary }}>{t('providerManagement.inventorySelection', { provider: row.configured_provider ?? '—', model: row.configured_model ?? '—', nodeModel: row.node_configured_model ?? '—' })}</Text>
-            <Text style={{ color: colors.textSecondary }}>{t('providerManagement.inventoryProviders', { providers: row.provider_ids?.join(' · ') || '—' })}</Text>
-            <Text style={{ color: colors.textSecondary }}>{t(`providerManagement.auth.${row.auth_kind}`)} · {t(`providerManagement.credential.${row.credential_status}`)}</Text>
-            {row.account_fingerprint ? <Text style={{ color: colors.textSecondary }}>Account #{row.account_fingerprint}</Text> : null}
-          </> : null}
-        </View>)}
+        {snapshot.codex_inventory.rows.map(row => <DaemonCodexInventoryRow key={`${identity}:${row.node_id}`} row={row} />)}
       </>}
     </PendingPanelCard> : null}
     {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} cfg={cfg} /> : null}

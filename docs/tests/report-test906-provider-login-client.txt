@@ -84,7 +84,7 @@ Release/recovery boundaries:
 - Image: anet-app:provider-account-apply-ui using provider-account-apply-web export.
   Containers --rm; build caches retained. No new release/version bump.
 
-2026-10-11 14:37 +08 — exact CI failures repaired (PR836, not a release)
+2026-10-11 14:35 +08 — exact CI failures repaired (PR836, not a release)
 - Windows job114407293723 at 66539a65 failed 2/398 files: open-external and
   theme-minimal. The login component bypassed the desktop opener and used 700.
 - Use the existing openExternal platform dispatcher, handle false/rejection,
@@ -92,3 +92,17 @@ Release/recovery boundaries:
 - Docker --network none with current src mounted readonly: open-external 29/29,
   theme-minimal 60/60 PASS. Image anet-app:provider-account-apply-web; --rm cleanup.
 - This is focused regression evidence, not a native desktop/browser OAuth test.
+
+2026-10-11 14:40 +08 — user screenshot visual hierarchy (#959 / #906)
+- Existing Codex inventory now has a separate bordered surface per node: clear
+  node heading, configured provider/model/auth fields, neutral unverified status.
+  Technical IDs, CODEX_HOME reference/source and account fingerprint are disclosed
+  on demand. No scan, credential-validity or effective-state semantics changed.
+- Expo web export: 1225 modules. Docker typecheck PASS; external-link 29/29 and
+  theme 60/60 PASS. Images anet-app:provider-hierarchy-web / provider-hierarchy-ui.
+- Chromium rendered core passed, including visible configured model, details
+  initially absent, expand exposes CODEX_HOME, collapse removes details, plus
+  existing login/binding/confirm-apply/receipt/cancel path. Synthetic Hub only.
+- Captured and visually inspected light-theme inventory screenshot under
+  /tmp/anet-provider-hierarchy-D6EV7Y (ephemeral evidence, not deployment input).
+  Containers --rm, no production changes; no new release claimed.

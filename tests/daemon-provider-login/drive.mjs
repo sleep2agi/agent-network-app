@@ -80,6 +80,14 @@ try {
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: 'daemon-a', daemonMgmt: true }));
   await page.getByTestId('daemon-section-tabs-provider').click();
   await page.getByTestId('daemon-login-empty').waitFor();
+  const inventoryRow = page.getByTestId('daemon-codex-row-node-fixture');
+  assert((await inventoryRow.innerText()).includes('model-fixture'));
+  assert.equal(await page.getByTestId('daemon-codex-details-node-fixture').count(), 0);
+  await page.getByTestId('daemon-codex-details-toggle-node-fixture').click();
+  assert((await page.getByTestId('daemon-codex-details-node-fixture').innerText()).includes('CODEX_HOME'));
+  await page.getByTestId('daemon-codex-details-toggle-node-fixture').click();
+  assert.equal(await page.getByTestId('daemon-codex-details-node-fixture').count(), 0);
+  if (process.env.OUT_DIR) await page.getByTestId('daemon-codex-inventory').screenshot({ path: `${process.env.OUT_DIR}/codex-inventory-hierarchy.png` });
   await page.getByTestId('daemon-login-start').click();
   assert.equal(await page.getByTestId('daemon-login-code').innerText(), 'TEST-1234');
   if (process.env.OUT_DIR) await page.getByTestId('daemon-login-card').screenshot({ path: `${process.env.OUT_DIR}/managed-login-code.png` });
