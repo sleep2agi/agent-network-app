@@ -1,0 +1,37 @@
+Task #898: task sidebar label count descending
+Observed: 2026-10-10 08:12 Asia/Shanghai
+Base: origin/main a48e697 (independent branch fix/task-label-count-order)
+
+Change:
+- TaskFilterSidebar uses sidebarTagNames with the same Map as displayed badges.
+- Numeric count descending; ties retain the previous localeCompare name order.
+- All-tags row remains first; selected missing tag remains visible at zero.
+- No changes to count scope, Hub requests/storage, permissions or tag trees.
+
+Docker validation (no host tests / production / credentials / mounts):
+sg docker -c 'docker build -f tests/tag-count-order/Dockerfile -t anet-tag-count-order:898 .'
+sg docker -c 'docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-tag-count-order:898'
+Pinned Bun 1.3.14 digest is recorded in the suite Dockerfile.
+Environment/build: PASS.
+tag catalog: 45/45
+task side menu: 28/28
+task board model: 142/142
+requirement tags: 18/18
+Total: 233/233 checks, container exit 0.
+New checks: screenshot count example, numeric comparison, equal-count order,
+response-order stability, selected zero-count label, selected existing label,
+empty input, input non-mutation, refreshed counts, and two source wiring checks.
+Source wiring checks are not rendered UI/E2E acceptance.
+
+Initial harness attempt: first two suites passed, then a nonexistent
+task-sidebar-prefs.test.ts path failed. Corrected the suite command to existing
+task-board-model.test.ts and requirement-tags.test.ts; reran the complete suite
+above. No assertion weakened. git diff --check passed.
+
+Limits: no browser/native screenshot, full application typecheck or release
+validation claimed locally. CI runs the dedicated Docker suite plus existing
+application gates. Do not merge until required Docker E2E gates pass.
+No merge, package build, release or production modification in this report.
+Cleanup: --rm containers removed; reproducible local test image retained.
+Recovery: no daemon/ports/secrets/schema/backup changes; existing application
+build/deploy/rollback procedures remain authoritative, no new external state.

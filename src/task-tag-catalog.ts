@@ -148,6 +148,12 @@ export function tagSuggestions(all: readonly string[], counts: Readonly<Record<s
     .slice(0, limit);
 }
 
+/** 侧栏按显示的任务数降序;同数沿用名称顺序,保留已选的零任务标签以便取消筛选。 */
+export function sidebarTagNames(counts: ReadonlyMap<string, number>, selected = ''): string[] {
+  return [...new Set([...counts.keys(), ...(selected ? [selected] : [])])]
+    .sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b));
+}
+
 /** 本地卡片上的用量(侧栏的数字按当前列表算,与项目的数字同一口径)。 */
 export function localTagCounts(items: readonly { tags?: readonly string[] }[]): Map<string, number> {
   const m = new Map<string, number>();
