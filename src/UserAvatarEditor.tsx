@@ -59,9 +59,9 @@ function Editor({ cfg }: { cfg: HubConfig }) {
     : user ? sourceForFile(poolFileNameForAlias(user.id)) : null;
   return <SettingsGroup title={t('userAvatar.title')} testID="user-avatar-editor">
     <SettingsCardContent>
-      <Text>{t('userAvatar.hint')}</Text>
-      {source && !imageError ? <Image testID="user-avatar-preview" source={source} onError={() => setImageError(true)} style={{ width: 56, height: 56, borderRadius: avatarRadius(56), marginVertical: 12 }} /> : <Text testID="user-avatar-fallback">{cfg.username || '·'}</Text>}
-      {loading ? <Text>{t('userAvatar.loading')}</Text> : null}
+      <Text testID="user-avatar-hint" style={{ color: colors.textSecondary, lineHeight: 20 }}>{t('userAvatar.hint')}</Text>
+      {source && !imageError ? <Image testID="user-avatar-preview" source={source} onError={() => setImageError(true)} style={{ width: 56, height: 56, borderRadius: avatarRadius(56), marginVertical: 12 }} /> : <Text style={{ color: colors.text }} testID="user-avatar-fallback">{cfg.username || '·'}</Text>}
+      {loading ? <Text style={{ color: colors.textSecondary }}>{t('userAvatar.loading')}</Text> : null}
       {user ? <>
         <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>
           {POOL_FILENAMES.map((file, i) => <Pressable key={file} accessibilityRole="button" accessibilityLabel={t('userAvatar.pick', { n: i + 1 })} testID={`user-avatar-pick-${i + 1}`} disabled={busy || loading} onPress={() => void apply(`/avatars/${file}`)} style={{ padding: 6, opacity: busy ? 0.5 : 1 }}>
@@ -69,15 +69,15 @@ function Editor({ cfg }: { cfg: HubConfig }) {
           </Pressable>)}
         </View>
         <Text style={{ color: colors.textMuted, marginVertical: 12 }}>{t('userAvatar.remote')}</Text>
-        <TextInput testID="user-avatar-url" accessibilityLabel={t('userAvatar.url')} placeholder={t('userAvatar.url')} value={url} onChangeText={setUrl} editable={!busy && !loading} autoCapitalize="none" style={{ color: colors.text, padding: 12, borderWidth: 1, borderColor: colors.textMuted, borderRadius: radius.control }} />
-        <SettingsButton testID="user-avatar-save" label={t('userAvatar.save')} disabled={busy || loading || !url.trim()} onPress={() => {
+        <TextInput testID="user-avatar-url" accessibilityLabel={t('userAvatar.url')} placeholder={t('userAvatar.url')} placeholderTextColor={colors.textMuted} value={url} onChangeText={setUrl} editable={!busy && !loading} autoCapitalize="none" style={{ color: colors.text, backgroundColor: colors.inputBg, padding: 12, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control }} />
+        <SettingsButton testID="user-avatar-save" label={t('userAvatar.save')} variant={busy || loading || !url.trim() ? 'plain' : 'primary'} disabled={busy || loading || !url.trim()} onPress={() => {
           const v = validateCustomAvatarUrl(url);
           if (!v.ok) setMessage('userAvatar.invalid'); else void apply(v.url);
         }} />
-        <SettingsButton testID="user-avatar-reset" label={t('userAvatar.reset')} disabled={busy || loading} onPress={() => void apply(null)} />
+        <SettingsButton testID="user-avatar-reset" variant="plain" label={t('userAvatar.reset')} disabled={busy || loading} onPress={() => void apply(null)} />
       </> : !loading ? <SettingsButton label={t('userAvatar.retry')} testID="user-avatar-retry" onPress={() => void load()} /> : null}
-      {busy ? <Text>{t('userAvatar.busy')}</Text> : null}
-      {message ? <Text testID="user-avatar-message" accessibilityLiveRegion="polite">{t(message)}</Text> : null}
+      {busy ? <Text style={{ color: colors.textSecondary }}>{t('userAvatar.busy')}</Text> : null}
+      {message ? <Text style={{ color: colors.text, marginTop: 12, lineHeight: 20 }} testID="user-avatar-message" accessibilityLiveRegion="polite">{t(message)}</Text> : null}
     </SettingsCardContent>
   </SettingsGroup>;
 }
