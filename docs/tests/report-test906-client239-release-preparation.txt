@@ -100,3 +100,13 @@ Agents. Existing13 discovery assertions retained; no product assertions
 removed. Placeholder API responses only, not production Hub/native runtime.
 Screenshots codex-discovery.png / codex-discovery-selection.png retained as
 local test evidence, not public installable binaries. No browser page errors.
+
+18:00+08 incremental CI correction: exact0fab5951 Ubuntu push unit job
+114442317807 completed398/399 test files; only version-consistency failed
+because its expected constant remained0.2.238 after the product version bump.
+Updated the expected value to0.2.239, retaining all fourteen assertions.
+Disposable Docker anet-app:provider-login-version-web with complete candidate
+version inputs, --network none: version-consistency14/14 PASS. The first
+attempt used the browser-only final image, which has no source tree; cp failed
+before testing. Correct source image run passed; no test failure was hidden.
+Other source-head CI and native formal packages remain independently pending.
