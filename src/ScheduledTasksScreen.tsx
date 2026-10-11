@@ -26,6 +26,7 @@ import {
 import AliasAvatar from './AliasAvatar';
 import { pointerUi } from './pointer-ui';
 import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
+import { pinyinMatch } from './lib/pinyin';
 import { scheduledTaskActions } from './scheduled-task-actions';
 import type { ScheduleOpenRequest } from './node-schedules';
 import ScheduleRunResult, { type RunTaskState } from './ScheduleRunResult';
@@ -43,17 +44,29 @@ import {
   describeMisfire,
   describeSchedule,
   emptyStateFor,
+  externalEmptyState,
+  externalEnabledChips,
+  externalNodeOptions,
+  externalSchedulesMatching,
+  externalScopeActive,
   filterChips,
+  filterExternalNodes,
+  filterNodeOptions,
   formatAbsolute,
   formatRelative,
   isMasterDetail,
   masterListWidth,
+  nodeFilterLabel,
+  reconcileNodeFilter,
   reconcileSelection,
+  scheduleNodeOptions,
   scheduleRowModel,
   scheduleStatusMeta,
+  schedulesInScope,
+  scopeNarrows,
   visibleSchedules,
 } from './scheduled-view-model';
-import type { ScheduleFilter } from './scheduled-view-model';
+import type { ExternalEnabledFilter, ScheduleFilter, ScheduleNodeOption } from './scheduled-view-model';
 import { elevated } from './elevation';
 import './i18n-schedules';
 // 编辑器(表单 + 外壳 + 确认框)与节点页共用:ScheduleEditor.tsx。
@@ -114,6 +127,13 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
   const [contentOpen, setContentOpen] = useState<string | null>(null);
   const [tab, setTab] = useState<'hub' | 'node'>('hub');
   const [filter, setFilter] = useState<ScheduleFilter>(DEFAULT_SCHEDULE_FILTER);
+  // 两个 tab 各记一份:切走再回来,搜索和节点筛选还在。节点计划的「状态」是快照上的启用/停用。
+  const [hubQuery, setHubQuery] = useState('');
+  const [hubNodeId, setHubNodeId] = useState('');
+  const [extQuery, setExtQuery] = useState('');
+  const [extNodeId, setExtNodeId] = useState('');
+  const [extEnabled, setExtEnabled] = useState<ExternalEnabledFilter>('all');
+  const [nodePicker, setNodePicker] = useState<'hub' | 'node' | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
   const [runs, setRuns] = useState<{ id: string; runs: HubScheduledRun[]; error: string } | null>(null);
   // 执行记录展开的那一行 + 每条执行绑定任务的读取结果(按 task_id;只读展开的和还没结束的)。
@@ -180,13 +200,16 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
     if (!open) return;
     if (open.kind === 'create') { setTab('hub'); setEditing(null); setCopySource(null); setCreateTarget(open.nodeId); setShowForm(true); return; }
     if (open.kind === 'hub') { setTab('hub'); setPendingHubFocus(open.scheduleId); return; }
-    setTab('node'); setFocusedExternal(`${open.nodeId}:${open.scheduleId}`);
+    setTab('node'); setExtQuery(''); setExtNodeId(''); setExtEnabled('all'); setFocusedExternal(`${open.nodeId}:${open.scheduleId}`);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [open?.seq]);
 
   useEffect(() => {
     if (!pendingHubFocus || loading) return;
     const row = items.find(item => item.schedule_id === pendingHubFocus);
+    // 从节点页落进来时清掉搜索和节点筛选,否则那一条可能被滤掉、选不中。
+    setHubQuery('');
+    setHubNodeId('');
     if (row) { setFilter(row.status); setSelectedId(row.schedule_id); }
     setPendingHubFocus(null);
   }, [pendingHubFocus, loading, items]);
@@ -201,8 +224,22 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
     nodeListRef.current?.scrollTo({ y: Math.max(0, cardY + rowY - spacing.lg), animated: false });
   };
 
-  const counts = useMemo(() => countByStatus(items), [items]);
-  const visible = useMemo(() => visibleSchedules(items, filter), [items, filter]);
+  const hubNodeOptions = useMemo(() => scheduleNodeOptions(items), [items]);
+  const hubNodeIdLive = reconcileNodeFilter(hubNodeOptions, hubNodeId);
+  const hubScope = useMemo(() => ({ query: hubQuery, nodeId: hubNodeIdLive }), [hubQuery, hubNodeIdLive]);
+  const hubScoped = useMemo(() => schedulesInScope(items, hubScope), [items, hubScope]);
+  const hubNarrowed = scopeNarrows(hubScope);
+  const counts = useMemo(() => countByStatus(hubScoped), [hubScoped]);
+  const visible = useMemo(() => visibleSchedules(hubScoped, filter), [hubScoped, filter]);
+  const extNodeOptions = useMemo(() => externalNodeOptions(external), [external]);
+  const extNodeIdLive = reconcileNodeFilter(extNodeOptions, extNodeId);
+  const extTextScope = useMemo(() => ({ query: extQuery, nodeId: extNodeIdLive }), [extQuery, extNodeIdLive]);
+  const extMatching = useMemo(() => externalSchedulesMatching(external, extTextScope), [external, extTextScope]);
+  const extVisible = useMemo(() => filterExternalNodes(external, { ...extTextScope, enabled: extEnabled }), [external, extTextScope, extEnabled]);
+  const extNarrowed = externalScopeActive({ ...extTextScope, enabled: extEnabled });
+  const pickerOptions = nodePicker === 'node' ? extNodeOptions : hubNodeOptions;
+  const pickerSelected = nodePicker === 'node' ? extNodeIdLive : hubNodeIdLive;
+  const pickerAllCount = nodePicker === 'node' ? external.reduce((sum, node) => sum + node.schedules.length, 0) : items.length;
   // 选中项由当前筛选派生:宽屏总有一条(第一条),窄屏只有点过才有。
   const activeId = reconcileSelection(visible, selectedId, wide);
   const selected = visible.find(row => row.schedule_id === activeId) ?? null;
@@ -337,6 +374,16 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
 
   const hubBody = loading ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
     <View style={styles.hubBody}>
+      <ScheduleFilterBar
+        testID="schedule-search"
+        query={hubQuery}
+        onQuery={setHubQuery}
+        placeholder="搜索任务标题或内容"
+        nodeLabel={nodeFilterLabel(hubNodeOptions, hubNodeIdLive)}
+        nodeSelected={!!hubNodeIdLive}
+        onOpenNode={() => setNodePicker('hub')}
+        onClearNode={() => setHubNodeId('')}
+      />
       <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips}>
         {filterChips(counts, filter).map(chip => (
           <Pressable
@@ -360,7 +407,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
           refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => load(true)} tintColor={colors.accent} />}
         >
           {visible.length === 0 ? (() => {
-            const empty = emptyStateFor(filter, items.length);
+            const empty = emptyStateFor(filter, hubNarrowed ? hubScoped.length : items.length, hubNarrowed);
             return (
               <View style={styles.empty} testID="schedule-empty">
                 <Text style={styles.emptyTitle}>{empty.title}</Text>
@@ -408,15 +455,48 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {tab === 'node' ? (
           !externalLoaded ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
+            <View style={styles.hubBody}>
+            <ScheduleFilterBar
+              testID="external-schedule-search"
+              query={extQuery}
+              onQuery={setExtQuery}
+              placeholder="搜索计划名称或频率"
+              nodeLabel={nodeFilterLabel(extNodeOptions, extNodeIdLive)}
+              nodeSelected={!!extNodeIdLive}
+              onOpenNode={() => setNodePicker('node')}
+              onClearNode={() => setExtNodeId('')}
+            />
+            <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chipsScroll} contentContainerStyle={styles.chips}>
+              {externalEnabledChips(extMatching, extEnabled).map(chip => (
+                <Pressable
+                  key={chip.status}
+                  testID={`external-filter-${chip.status}`}
+                  accessibilityRole="button"
+                  accessibilityState={{ selected: chip.selected }}
+                  onPress={() => setExtEnabled(chip.status)}
+                  style={[styles.chip, chip.selected && styles.chipActive]}
+                >
+                  <Text style={chip.selected ? styles.chipTextActive : styles.chipText}>{chip.label}</Text>
+                  <Text style={chip.selected ? styles.chipCountActive : styles.chipCount}>{chip.count}</Text>
+                </Pressable>
+              ))}
+            </ScrollView>
             <ScrollView
               ref={nodeListRef}
+              style={styles.flex}
               contentContainerStyle={styles.list}
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadExternal(true)} tintColor={colors.accent} />}
             >
               <Text style={[styles.muted, { marginBottom: spacing.md }]}>节点上报的本机计划 · owner 可改托管 cron</Text>
-              {external.length === 0 ? (
-                <View style={styles.empty}><Text style={styles.emptyTitle}>暂无节点计划</Text><Text style={styles.emptyBody}>节点升级后会自动上报本机 crontab 等计划。</Text></View>
-              ) : external.map(node => (
+              {extVisible.length === 0 ? (() => {
+                const empty = externalEmptyState(external.length, extNarrowed);
+                return (
+                  <View style={styles.empty} testID="external-schedule-empty">
+                    <Text style={styles.emptyTitle}>{empty.title}</Text>
+                    <Text style={styles.emptyBody}>{empty.body}</Text>
+                  </View>
+                );
+              })() : extVisible.map(node => (
                 <View key={node.node_id} style={styles.card} onLayout={e => { externalOffsets.current.cards[node.node_id] = e.nativeEvent.layout.y; scrollToFocusedExternal(); }}>
                   <View style={styles.cardTop}>
                     <Text style={styles.cardTitle}>{node.alias}</Text>
@@ -453,6 +533,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
                 </View>
               ))}
             </ScrollView>
+            </View>
           )
         ) : hubBody}
       </>}
@@ -483,6 +564,18 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
         onSubmit={cron => { if (cronEdit) void submitEditIntent(cronEdit.node, cronEdit.schedule, { cron }); }}
       />
       <IntentsModal value={intents} onClose={() => setIntents(null)} />
+      <NodeFilterSheet
+        visible={nodePicker !== null}
+        options={pickerOptions}
+        selectedId={pickerSelected}
+        allCount={pickerAllCount}
+        onSelect={id => {
+          if (nodePicker === 'node') setExtNodeId(id);
+          else setHubNodeId(id);
+          setNodePicker(null);
+        }}
+        onClose={() => setNodePicker(null)}
+      />
       {openContentDraft ? (
         <ScheduleContentFullscreen
           cfg={cfg}
@@ -783,6 +876,134 @@ function CronEditModal({ value, busy, onClose, onSubmit }: {
   </ScheduleModal>;
 }
 
+function useLocalStyles() {
+  const [themeVersion, setThemeVersion] = useState(0);
+  useEffect(() => onThemeChange(() => setThemeVersion(v => v + 1)), []);
+  return useMemo(makeStyles, [themeVersion]);
+}
+
+function ScheduleFilterBar({ testID, query, onQuery, placeholder, nodeLabel, nodeSelected, onOpenNode, onClearNode }: {
+  testID: string;
+  query: string;
+  onQuery: (value: string) => void;
+  placeholder: string;
+  nodeLabel: string;
+  nodeSelected: boolean;
+  onOpenNode: () => void;
+  onClearNode: () => void;
+}) {
+  const s = useLocalStyles();
+  return (
+    <View style={s.filterBar}>
+      <View style={s.searchField} testID={testID} accessibilityRole={'search' as never}>
+        <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+        <TextInput
+          value={query}
+          onChangeText={onQuery}
+          placeholder={placeholder}
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          autoCorrect={false}
+          returnKeyType="search"
+          accessibilityLabel={placeholder}
+          style={[s.searchInput, { outlineStyle: 'none' } as object]}
+          testID={`${testID}-input`}
+        />
+        {query ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="清除搜索" onPress={() => onQuery('')} hitSlop={8} testID={`${testID}-clear`}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+      <View style={[s.nodeButton, nodeSelected && s.nodeButtonOn]}>
+        <Pressable
+          style={s.nodeButtonMain}
+          onPress={onOpenNode}
+          accessibilityRole="button"
+          accessibilityLabel={nodeSelected ? `节点 ${nodeLabel}` : '按节点筛选'}
+          accessibilityState={{ selected: nodeSelected }}
+          testID={`${testID}-node`}
+        >
+          <Text style={s.nodeButtonLabel} numberOfLines={1}>{nodeSelected ? nodeLabel : '全部节点'}</Text>
+          {nodeSelected ? null : <Ionicons name="chevron-down" size={14} color={colors.textMuted} />}
+        </Pressable>
+        {nodeSelected ? (
+          <Pressable accessibilityRole="button" accessibilityLabel="清除节点筛选" onPress={onClearNode} hitSlop={8} testID={`${testID}-node-clear`}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+      </View>
+    </View>
+  );
+}
+
+function NodeFilterSheet({ visible, options, selectedId, allCount, onSelect, onClose }: {
+  visible: boolean;
+  options: readonly ScheduleNodeOption[];
+  selectedId: string;
+  allCount: number;
+  onSelect: (id: string) => void;
+  onClose: () => void;
+}) {
+  const s = useLocalStyles();
+  const [query, setQuery] = useState('');
+  useEffect(() => { if (visible) setQuery(''); }, [visible]);
+  const shown = useMemo(() => filterNodeOptions(options, query, pinyinMatch), [options, query]);
+  return (
+    <ScheduleModal visible={visible} onClose={onClose} sheet testID="schedule-node-picker" title="筛选节点">
+      <View style={s.pickerBody}>
+        <View style={s.pickerSearchWrap}>
+          <View style={s.searchField}>
+            <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+            <TextInput
+              value={query}
+              onChangeText={setQuery}
+              placeholder="搜索节点"
+              placeholderTextColor={colors.textMuted}
+              autoCapitalize="none"
+              autoCorrect={false}
+              accessibilityLabel="搜索节点"
+              style={[s.searchInput, { outlineStyle: 'none' } as object]}
+              testID="schedule-node-picker-search"
+            />
+          </View>
+        </View>
+        <ScrollView style={s.flex} keyboardShouldPersistTaps="handled" contentContainerStyle={s.pickerList}>
+          <Pressable
+            testID="schedule-node-option-all"
+            accessibilityRole="button"
+            accessibilityState={{ selected: !selectedId }}
+            onPress={() => onSelect('')}
+            style={[s.pickerRow, !selectedId && s.pickerRowOn]}
+          >
+            <Text style={s.pickerLabel} numberOfLines={1}>全部节点</Text>
+            <Text style={s.pickerCount}>{allCount}</Text>
+            {!selectedId ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : <View style={s.pickerCheck} />}
+          </Pressable>
+          {shown.length === 0 ? <Text style={[s.muted, s.pickerEmpty]}>没有匹配的节点</Text> : shown.map(option => {
+            const selected = option.id === selectedId;
+            return (
+              <Pressable
+                key={option.id}
+                testID={`schedule-node-option-${option.id}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected }}
+                accessibilityLabel={`${option.label}，${option.count} 个计划`}
+                onPress={() => onSelect(option.id)}
+                style={[s.pickerRow, selected && s.pickerRowOn]}
+              >
+                <Text style={s.pickerLabel} numberOfLines={1}>{option.label}</Text>
+                <Text style={s.pickerCount}>{option.count}</Text>
+                {selected ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : <View style={s.pickerCheck} />}
+              </Pressable>
+            );
+          })}
+        </ScrollView>
+      </View>
+    </ScheduleModal>
+  );
+}
+
 function IntentsModal({ value, onClose }: { value: { title: string; edits: HubExternalScheduleEditIntent[] } | null; onClose: () => void }) {
   const s = useMemo(makeStyles, [value]);
   return <ScheduleModal visible={!!value} onClose={onClose} testID="intents" title={value?.title || '意向记录'}>
@@ -815,6 +1036,22 @@ function makeStyles() { return StyleSheet.create({
   hubBody: { flex: 1 },
   chipsScroll: { flexGrow: 0 },
   chips: { paddingHorizontal: spacing.lg, paddingBottom: spacing.sm, gap: spacing.sm, flexDirection: 'row' },
+  filterBar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingBottom: spacing.sm },
+  searchField: { flexGrow: 1, flexShrink: 1, flexBasis: 180, minWidth: 140, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.inputBg, borderWidth: 1, borderColor: colors.border },
+  searchInput: { flex: 1, minWidth: 0, minHeight: 40, paddingVertical: 0, color: colors.text, fontSize: fontSize.body },
+  nodeButton: { flexDirection: 'row', alignItems: 'center', maxWidth: 240, minHeight: 40, paddingLeft: spacing.md, paddingRight: spacing.sm, borderRadius: radius.control, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  nodeButtonOn: { borderColor: colors.accent, backgroundColor: colors.tonalBg },
+  nodeButtonMain: { flexShrink: 1, minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingVertical: spacing.sm },
+  nodeButtonLabel: { flexShrink: 1, color: colors.text, fontSize: fontSize.small },
+  pickerBody: { flex: 1 },
+  pickerSearchWrap: { paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  pickerList: { paddingBottom: spacing.xl },
+  pickerRow: { minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  pickerRowOn: { backgroundColor: colors.rowActive },
+  pickerLabel: { flex: 1, color: colors.text, fontSize: fontSize.body },
+  pickerCount: { color: colors.textMuted, fontSize: fontSize.small },
+  pickerCheck: { width: 18 },
+  pickerEmpty: { padding: spacing.lg },
   chip: { flexDirection: 'row', alignItems: 'center', gap: 6, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, paddingHorizontal: 12, paddingVertical: 6, minHeight: 32 },
   chipActive: { backgroundColor: colors.text, borderColor: colors.text },
   chipText: { color: colors.textSecondary, fontSize: fontSize.small },
