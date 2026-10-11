@@ -6,6 +6,7 @@ export type CodexInventory = { observed_at: number; scope: 'hub_bound_nodes'; in
   node_id: string; alias: string; status: 'observed' | 'unavailable' | 'not_codex';
   runtime?: string | null; home_ref?: string; home_source?: string; config_status?: string;
   configured_provider?: string | null; configured_model?: string | null; node_configured_model?: string | null;
+  config_revision?: string | null;
   provider_ids?: string[]; auth_kind?: string; credential_status?: string; account_fingerprint?: string | null;
   verification?: 'not_checked'; effective_state?: 'not_checked';
 }> };

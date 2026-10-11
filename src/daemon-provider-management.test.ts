@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, providerEnabledWrite, scopedProviderSave, type ProviderRpc } from './daemon-provider-management';
-import { changeProviderSelection, EMPTY_PROVIDER_SELECTION, providerSelectionOptions, resolveProviderSelection } from './daemon-provider-selection';
+import { changeProviderSelection, EMPTY_PROVIDER_SELECTION, providerSelectionOptions, resolveProviderSelection, providerApplicationWrite } from './daemon-provider-selection';
 let passed = 0;
 const test = async (name: string, run: () => void | Promise<void>) => { await run(); passed++; console.log(`PASS ${name}`); };
 const scope = { networkId: 'net-fixture', daemonId: 'daemon-a' };
@@ -162,6 +162,12 @@ await test('selection is scoped to scanned TUI nodes and enabled provider/auth/m
   const resolved = resolveProviderSelection(v, selected)!;
   assert.equal(resolved.daemonId, scope.daemonId); assert.equal(resolved.providerRevision, 2);
   assert.equal(resolved.authKind, 'api_key'); assert.equal('key' in resolved, false);
+  assert.equal(providerApplicationWrite(v, selected, true), null); // old scan has no revision
+  v.codex_inventory.rows[0].config_revision = 'a'.repeat(64);
+  assert.equal(providerApplicationWrite(v, selected, false), null);
+  assert.deepEqual(providerApplicationWrite(v, selected, true), { revision: 2, provider: {
+    node_id: 'n_a', node_revision: 'a'.repeat(64), provider_id: 'deepseek', auth_id: 'work', model: 'deepseek-chat', confirm_restart: true,
+  } });
   for (const change of [{ nodeId: 'foreign' }, { providerId: 'foreign' }, { authId: 'foreign' }, { model: 'foreign' }]) {
     assert.equal(resolveProviderSelection(v, { ...selected, ...change }), null);
   }

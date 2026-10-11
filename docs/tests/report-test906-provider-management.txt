@@ -129,3 +129,17 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
   Docker web-export target output. Browser run --rm --network none.
   Containers completed/removed. TEST-ONLY images/export retained; no production
   daemon, real account, native package, runtime-switch or release claim.
+
+2026-10-11 09:51 CST: carry scanned node revision into explicit application intent.
+  Base ce69c3847efb5f24ebe12d363fc42b4131f30c01 plus working tree.
+  Reviewed exact Expo v56 reference before editing per AGENTS.md.
+  Existing inventory without config_revision remains readable. Application
+  construction requires explicit restart confirmation, API-key selection and
+  both daemon-store and node-config revisions; never contains endpoint/key/path.
+  CLI/Hub/node/client inventory validators match byte-for-byte (cmp exit0).
+  Docker --rm --network none, test906-toggle-core image
+    sha256:1bb880348cc30c0a33ac07d8ccd7fb75ccf37f723ae6ee57346ee09e53aaed52,
+  current src read-only mounted: 22/22 core PASS, full client TypeScript PASS.
+  Existing selection test extended, not reported as extra independent tests.
+  No UI changes or browser rerun; application button remains unavailable until
+  real daemon lifecycle integration. No native build, production or release.
