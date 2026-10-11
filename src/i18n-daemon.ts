@@ -3,6 +3,13 @@ import { registerTranslations } from './i18n';
 /** Board #908 — daemon management page. UI copy only. */
 export const daemonTranslations = {
   'daemon.integrations': ['Daemon 域集成', 'Daemon integrations'],
+  'daemon.entry.choose': ['选择一台守护进程，打开它的管理页。', 'Choose a daemon to open its management page.'],
+  'daemon.entry.missing': ['当前 Hub 还没有上报守护进程。', 'This Hub has not reported a daemon.'],
+  'daemon.entry.unsupported': ['当前 Hub 没有 host_supervisor 列表，打不开守护进程管理页。', 'This Hub has no host-supervisor list, so daemon management cannot be opened.'],
+  'daemon.entry.error': ['没能读到守护进程列表。', 'The daemon list could not be read.'],
+  'daemon.entry.loading': ['正在读取守护进程…', 'Loading daemons…'],
+  'daemon.entry.online': ['在线', 'Online'],
+  'daemon.entry.offline': ['离线', 'Offline'],
   'daemon.mgmt.kicker': ['守护进程', 'Daemon'],
   'daemon.mgmt.settingsSection': ['设置', 'Settings'],
   'daemon.mgmt.levelNode': ['节点', 'Node'],

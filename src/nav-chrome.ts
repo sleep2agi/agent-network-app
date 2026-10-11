@@ -22,7 +22,7 @@ export type NavChrome = 'rail' | 'bottomTabs' | 'none';
  * existed; login never had navigation.
  */
 export const PHONE_LEAF_SCREENS: readonly string[] = [
-  'login', 'chat', 'dm', 'group', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs',
+  'login', 'chat', 'dm', 'group', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs', 'serverDaemon',
 ];
 
 /**
@@ -73,7 +73,7 @@ export function navActiveKey(screenName: string): string {
   switch (screenName) {
     case 'agents': case 'chat': case 'dm': case 'group': case 'nodeInfo': case 'nodeDetail': case 'picker': case 'wizard':
       return 'agents';
-    case 'server': case 'serverPending': case 'serverNodes': case 'serverNodeDetail': case 'logs':
+    case 'server': case 'serverPending': case 'serverDaemon': case 'serverNodes': case 'serverNodeDetail': case 'logs':
     case 'hubSkills': case 'hubTokens': case 'hubEnv': case 'hubProviders':
       return 'server';
     case 'taskDetail':

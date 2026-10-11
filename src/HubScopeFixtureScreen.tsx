@@ -25,6 +25,7 @@ const PLACEHOLDER_LABEL: Partial<Record<ServerSection, string>> = {
   skills: 'server.pendingTitle.skills',
   tokens: 'server.pendingTitle.tokens',
   provider: 'server.pendingTitle.provider',
+  daemon: 'server.integrations.daemon',
 };
 
 export function readHubScopeFixture(): { theme: 'dark' | 'light'; section: HubSection } | null {

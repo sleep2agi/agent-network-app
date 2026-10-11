@@ -11,10 +11,10 @@ import { displayHubAddress } from './mask-hub-address';
 import { badgeOffsetCentered, labelClearanceMargin } from './badge-anchor';
 import { ds } from './ui-scale';
 import { useTranslation } from './i18n-react';
-import { PendingSegmentedTabs, type PendingTab } from './backend-pending-ui';
+import { PendingSegmentedTabs, pendingUiStyles, type PendingTab } from './backend-pending-ui';
 import { HUB_NAV, type HubScreen, type HubSection } from './hub-scope-demo';
 
-export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs' | PendingTab | HubScreen;
+export type ServerSection = 'overview' | 'nodes' | 'create' | 'logs' | PendingTab | 'daemon' | HubScreen;
 
 const MANAGEMENT: Array<{ key: 'overview' | 'nodes' | 'create' | 'logs'; label: string; icon: keyof typeof Ionicons.glyphMap }> = [
   { key: 'overview', label: 'server.overview', icon: 'grid-outline' },
@@ -116,6 +116,19 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
             onChange={tab => onSelect(tab)}
             testID="server-pending-tabs"
             t={t}
+            after={(
+              <Pressable
+                testID="server-nav-daemon"
+                accessibilityRole="button"
+                accessibilityState={{ selected: active === 'daemon' }}
+                accessibilityLabel={t('server.navLabel', { label: t('server.integrations.daemon') })}
+                onPress={() => onSelect('daemon')}
+                style={({ pressed }) => [pendingUiStyles.stackedItem, active === 'daemon' && pendingUiStyles.stackedItemOn, pressed && { opacity: 0.65 }]}
+              >
+                <Ionicons name="hardware-chip-outline" size={18} color={active === 'daemon' ? colors.accent : colors.textSecondary} />
+                <Text style={[pendingUiStyles.stackedText, active === 'daemon' && pendingUiStyles.stackedTextOn]} numberOfLines={1}>{t('server.integrations.daemon')}</Text>
+              </Pressable>
+            )}
           />
         </View>
 
