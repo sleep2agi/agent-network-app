@@ -24,6 +24,8 @@ import { listHubProfiles, type HubProfile } from './storage';
 import { colors, mixHex, onThemeChange, radius, spacing, type, weight } from './theme';
 import { usePoll } from './usePoll';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
+import { useTranslation } from './i18n-react';
+import './i18n-hub-provider-management';
 
 // 服务器页(手机 / 安卓折叠屏 / 桌面「服务器管理 → 概览」共用)。
 //
@@ -53,6 +55,7 @@ export default function ServerScreen({
   onOpenNodes,
   onCreateNode,
   onOpenScheduled,
+  onOpenProviders,
   onOpenDaemon,
   onSwitchProfile,
   onAddServer,
@@ -67,6 +70,7 @@ export default function ServerScreen({
   onOpenNodes?: () => void;
   onCreateNode?: () => void;
   onOpenScheduled?: () => void;
+  onOpenProviders?: () => void;
   /** 点机器行:这台机器上有 host_supervisor ⇒ 进守护进程管理页(与 Daemon 会话路由一致,传 alias)。 */
   onOpenDaemon?: (alias: string) => void;
   /** 有多个已保存的服务器时显示「切换服务器」(目前只有桌面端会存多个)。 */
@@ -75,6 +79,7 @@ export default function ServerScreen({
   /** 手机:从 设置 → 服务器 推进来的二级页,左上角「‹」回设置(Vincent 2026-09-29 底部 tab 换成 任务)。宽屏 / 桌面不传。 */
   onBack?: () => void;
 }) {
+  const { t } = useTranslation();
   const [sessions, setSessions] = useState<Session[]>([]);
   const [version, setVersion] = useState<string | undefined>();
   const [reachable, setReachable] = useState<boolean | null>(null);
@@ -371,6 +376,7 @@ export default function ServerScreen({
     { key: 'nodes', label: '节点管理', icon: 'git-network-outline' as const, onPress: onOpenNodes },
     { key: 'create', label: '新建节点', icon: 'add-circle-outline' as const, onPress: onCreateNode },
     { key: 'scheduled', label: '定时任务', icon: 'time-outline' as const, onPress: onOpenScheduled },
+    { key: 'providers', label: t('hubProvider.title'), icon: 'options-outline' as const, onPress: onOpenProviders },
     { key: 'logs', label: '事件与日志', icon: 'pulse-outline' as const, onPress: onOpenLogs },
   ].filter(a => a.onPress);
 

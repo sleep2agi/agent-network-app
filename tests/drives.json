@@ -5,6 +5,10 @@
       "kind": "manual",
       "why": "Dedicated provider-create.yml builds the actual export and runs this synthetic wizard in Docker after core checks, not shared stub shards."
     },
+    "hub-provider-management/drive.mjs": {
+      "kind": "manual",
+      "why": "Dedicated hub-provider-core.yml builds tests/hub-provider-management/Dockerfile and runs actual exported React with synthetic Hub/native HTTP in Docker; not the shared stub shards."
+    },
     "daemon-provider-login/drive.mjs": {
       "kind": "stub",
       "secs": 15

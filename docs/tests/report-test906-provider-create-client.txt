@@ -40,3 +40,17 @@ Image configc43650a4c9e5edf260b1148c62e174127249e98682c131c5a75215e14951091b.
 Network-none container removed; cached image retained. Browser12/12 from the
 unchanged production source above is reused, not rerun or counted as new proof.
 This local corrective result does not mean the new-head Windows CI has passed.
+Incremental composition, observed2026-10-11T12:06Z:
+Merged maincc84654c6b85ae0344c3cd3876da6bd10f721fce into creation branch
+(pre-merge head8e039d91f0d768ef875398e17087d75ea16f701c).
+Only conflict was drives.json; preserve both creation and Hub Provider entries.
+Production files merged cleanly, unchanged by conflict resolution.
+Dedicated Docker core3/3,request27/27,workdir57/57,registry12/12,
+full client tsc exit0. Core config:
+7d8ee494cae65d274e1b130c46046a7c60623c7a23f7ff7a41ad56a5cba42ec4.
+Fresh actual Expo export+Chromium creation UI12/12 PASS on desktop/light and
+phone/dark preference. Browser config:
+87d31e9cdf9f4d7327d4e5692783ebfaed2021a594803d544ed8861ee8577424.
+No rendered-palette or native installation claim. Both --rm containers removed;
+synthetic Hub/state only, local images cached, no production/OAuth/inference.
+
