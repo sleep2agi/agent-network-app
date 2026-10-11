@@ -1,0 +1,9 @@
+# TEST-ONLY. web is an explicit named context containing a SHA-bound CI export.
+FROM mcr.microsoft.com/playwright:v1.58.2-noble@sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d
+WORKDIR /app
+RUN npm install --no-audit --no-fund --ignore-scripts playwright@1.58.2
+COPY --from=web / /web/
+COPY tests/test-layout-sweep/harness.mjs tests/test-layout-sweep/harness.mjs
+COPY tests/daemon-provider-scope/drive.mjs tests/daemon-provider-scope/drive.mjs
+ENV WEB_DIR=/web
+CMD ["node", "tests/daemon-provider-scope/drive.mjs"]

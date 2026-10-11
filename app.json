@@ -2,7 +2,7 @@
   "expo": {
     "name": "ANet",
     "slug": "agent-network-app",
-    "version": "0.2.232",
+    "version": "0.2.233",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -81,7 +81,7 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.agentnetworkapp",
-      "versionCode": 2232,
+      "versionCode": 2233,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.POST_NOTIFICATIONS",
