@@ -89,6 +89,14 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersio
         <Text style={{ color: colors.textSecondary }}>Codex · {t(`providerManagement.installation.${snapshot.codex_inventory.installation?.status ?? 'unknown'}`)} · {snapshot.codex_inventory.installation?.version ?? '—'}</Text>
         {!snapshot.codex_inventory.rows.length ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.inventoryEmpty')}</Text> : null}
         {snapshot.codex_inventory.rows.map(row => <DaemonCodexInventoryRow key={`${identity}:${row.node_id}`} row={row} />)}
+        <View testID="daemon-codex-local-discovery" style={{ gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md }}>
+          <Text style={{ color: colors.text, fontWeight: '600' }}>{t('providerManagement.discoveryTitle')}</Text>
+          <Text style={{ color: colors.textSecondary }}>{t('providerManagement.discoveryBoundary')}</Text>
+          <Text style={{ color: colors.textSecondary }}>{t(`providerManagement.discovery.${snapshot.codex_inventory.local_discovery?.status ?? 'unsupported'}`)}</Text>
+          {snapshot.codex_inventory.local_discovery?.rows.map(row => <DaemonCodexInventoryRow key={`${identity}:local:${row.node_id}`} row={row} />)}
+          {snapshot.codex_inventory.local_discovery?.status === 'observed' && !snapshot.codex_inventory.local_discovery.rows.length
+            ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.discoveryEmpty')}</Text> : null}
+        </View>
       </>}
     </PendingPanelCard> : null}
     {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} cfg={cfg} /> : null}

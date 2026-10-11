@@ -7,14 +7,16 @@ export const PROVIDER_VERIFIED_VERSIONS = {
   hub: '0.9.0-preview.121', cli: '2.3.0-preview.163', runtime: '2.5.0-preview.129',
 } as const;
 import { validCodexInventory } from './codex-inventory';
-export type CodexInventory = { observed_at: number; scope: 'hub_bound_nodes'; installation?: { status: 'found' | 'missing' | 'unknown'; version: string | null }; rows: Array<{
+export type CodexInventoryRow = {
   node_id: string; alias: string; status: 'observed' | 'unavailable' | 'not_codex';
   runtime?: string | null; home_ref?: string; home_source?: string; config_status?: string;
   configured_provider?: string | null; configured_model?: string | null; node_configured_model?: string | null;
   config_revision?: string | null;
   provider_ids?: string[]; auth_kind?: string; credential_status?: string; account_fingerprint?: string | null;
   verification?: 'not_checked'; effective_state?: 'not_checked';
-}> };
+};
+export type CodexInventory = { observed_at: number; scope: 'hub_bound_nodes'; installation?: { status: 'found' | 'missing' | 'unknown'; version: string | null };
+  rows: CodexInventoryRow[]; local_discovery?: { status: 'observed' | 'unavailable' | 'limit'; rows: CodexInventoryRow[] } };
 export type ProviderAuth = { id: string; kind: 'chatgpt' | 'api_key'; models: string[];
   baseUrl?: string; account_id?: string; credential_present: boolean; verification: 'not_checked'; application: 'not_applied' };
 export type ManagedProvider = { id: string; label: string; enabled: boolean;

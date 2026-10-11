@@ -45,7 +45,7 @@ export function readManagedProviders(cfg: HubConfig, daemonId: string, signal: A
         Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-03-26' },
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: {
         name: 'daemon_provider_snapshot', arguments: { action: write && action === 'refresh' ? 'put' : action,
-          id, network_id: cfg.networkId, ...(write && action === 'refresh' ? write : {}) },
+          id, network_id: cfg.networkId, ...(action === 'read' ? { include_discovery: true } : {}), ...(write && action === 'refresh' ? write : {}) },
       } }),
     }, !!write && action === 'refresh');
     return parseProviderRpc(response.status, response.ok ? await response.text() : '');

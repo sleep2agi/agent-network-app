@@ -245,4 +245,22 @@ await test('enable/disable writes preserve profiles, omit secrets and carry expe
   (write.provider as any).runtimes[0].auth[0].models.push('no-aliasing');
   assert.deepEqual(current.providers[0].runtimes[0].auth[0].models, JSON.parse(before).providers[0].runtimes[0].auth[0].models);
 });
+await test('local discovery is readable but never a provider application target', () => {
+  const row = { node_id: 'n_manual', alias: 'manual-codex', status: 'observed', runtime: 'codex-app-server',
+    home_ref: '1234567890abcdef', home_source: 'node-codex-home', config_status: 'read',
+    configured_provider: 'openai', configured_model: 'codex-local', node_configured_model: 'codex-local',
+    provider_ids: ['openai'], auth_kind: 'chatgpt', credential_status: 'present', account_fingerprint: null,
+    verification: 'not_checked', effective_state: 'not_checked', config_revision: null };
+  const value: any = { ...snapshot(), codex_inventory: { observed_at: 1000, scope: 'hub_bound_nodes', rows: [],
+    local_discovery: { status: 'observed', rows: [row] } } };
+  const parsed = parseProviderSnapshot(value, scope)!;
+  assert(parsed); assert.equal(parsed.codex_inventory?.local_discovery?.rows[0].alias, 'manual-codex');
+  assert.equal(providerSelectionOptions(parsed, EMPTY_PROVIDER_SELECTION).nodes.length, 0);
+  assert.equal(providerApplicationWrite(parsed, { nodeId: 'n_manual', providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' }, true), null);
+  value.codex_inventory.local_discovery.rows[0].config_revision = 'a'.repeat(64);
+  assert.equal(parseProviderSnapshot(value, scope), null);
+  value.codex_inventory.local_discovery.rows[0].config_revision = null;
+  value.codex_inventory.local_discovery.rows[0].token = 'TEST-ONLY-secret';
+  assert.equal(parseProviderSnapshot(value, scope), null);
+});
 console.log(`${passed}/${passed} passed`);

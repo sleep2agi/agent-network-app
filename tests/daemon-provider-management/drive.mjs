@@ -60,7 +60,11 @@ try {
           config_status: 'read', configured_provider: 'configured-custom', configured_model: 'existing-model', node_configured_model: 'node-model', provider_ids: ['configured-custom'],
           auth_kind: 'api_key', credential_status: 'unknown', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked',
           ...(window.__providerApplyEnabled ? { config_revision: 'a'.repeat(64) } : {}),
-        }] } };
+        }], local_discovery: { status: 'observed', rows: [{
+          node_id: 'n_manual', alias: 'manual-codex', status: 'observed', runtime: 'codex-app-server', home_ref: '2234567890abcdef', home_source: 'node-codex-home',
+          config_status: 'read', configured_provider: 'openai', configured_model: 'manual-model', node_configured_model: 'manual-model', provider_ids: ['openai'],
+          auth_kind: 'chatgpt', credential_status: 'present', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked', config_revision: null,
+        }] } } };
         if (window.__providerMode === 'empty') value.providers = [];
         if (window.__providerMode === 'ready') {
           value.revision = window.__providerRevision;
@@ -88,6 +92,21 @@ try {
     const inventory = await page.getByTestId('daemon-codex-inventory').innerText();
     assert(inventory.includes('existing-codex') && inventory.includes('existing-model') && inventory.includes('0.133.0')); passed++;
     assert(inventory.includes('凭据状态未知') && inventory.includes('不重启')); passed++;
+    const discovery = await page.getByTestId('daemon-codex-local-discovery').innerText();
+    assert(discovery.includes('manual-codex') && discovery.includes('manual-model') && discovery.includes('未绑定')); passed++;
+    assert(discovery.includes('不复制登录') && discovery.includes('不能直接切换')); passed++;
+    const discoveryCalls = await page.evaluate(() => window.__providerCalls);
+    assert(discoveryCalls.some(c => c.arguments.action === 'read' && c.arguments.include_discovery === true)); passed++;
+    if (process.env.CORE_DISCOVERY_ONLY === '1') {
+      await page.screenshot({ path: '/output/codex-discovery.png', fullPage: true });
+      await page.getByTestId('daemon-provider-select-nodeId').click();
+      await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_existing').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_manual').count(), 0); passed++;
+      assert.equal(await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_existing').count(), 1); passed++;
+      await page.screenshot({ path: '/output/codex-discovery-selection.png', fullPage: true });
+      assert.deepEqual(errors, []); passed++;
+      await ctx.close(); continue;
+    }
     for (const [field, id] of Object.entries({ nodeId: 'n_existing', providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' })) {
       const control = `daemon-provider-select-${field}`;
       await page.getByTestId(control).click();
@@ -158,5 +177,7 @@ try {
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(`PASS daemon Provider management UI ${passed}/${passed} (inventory, save, enable/disable, application, exact version guidance, unsupported and timeout; synthetic Hub, no real runtime)`);
+  console.log(process.env.CORE_DISCOVERY_ONLY === '1'
+    ? `PASS existing Codex discovery UI ${passed}/${passed} (bound/manual readback, opt-in request, read-only boundary, selection exclusion; synthetic Hub, no real runtime)`
+    : `PASS daemon Provider management UI ${passed}/${passed} (inventory, save, enable/disable, application, exact version guidance, unsupported and timeout; synthetic Hub, no real runtime)`);
 } finally { await browser.close(); web.close(); }
