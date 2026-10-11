@@ -33,6 +33,7 @@ import HubPendingScreen from './src/HubPendingScreen';
 import HubDaemonEntryScreen from './src/HubDaemonEntryScreen';
 import type { PendingTab } from './src/backend-pending-ui';
 import HubScopeScreen from './src/HubScopeScreen';
+import HubTokenManagementScreen from './src/HubTokenManagementScreen';
 import HubProviderManagementScreen from './src/HubProviderManagementScreen';
 import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
 import DaemonOverviewFixtureScreen, { readDaemonOverviewFixture } from './src/DaemonOverviewFixtureScreen';
@@ -136,7 +137,7 @@ type Screen =
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — 会话行菜单「节点详情」(以前是直接长按); back returns to agents
   | { name: 'logs' }                        // row 6 — network event stream leaf reached from Server tab; back returns to server
   | { name: 'hubSkills' }                   // 服务器管理侧栏 · Hub SKILLS（演示壳）
-  | { name: 'hubTokens' }                   // 服务器管理侧栏 · Hub 令牌（演示壳）
+  | { name: 'hubTokens' }                   // 服务器管理侧栏 · Hub API 密钥库
   | { name: 'hubEnv' }                      // 服务器管理侧栏 · Hub 环境变量（演示壳，不是 #909 三层）
   | { name: 'hubProviders' }                // 当前网络的真实 Hub Provider 配置及显式 Daemon 下发
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
@@ -1385,6 +1386,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
   : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen(screen.back ?? { name: 'picker' })} onExit={() => setScreen(screen.back ?? { name: 'serverNodes' })} desktop />
   : screen.name === 'hubProviders' ? <HubProviderManagementScreen cfg={cfg} />
+  : screen.name === 'hubTokens' ? <HubTokenManagementScreen cfg={cfg} />
   : hubSectionForScreen(screen.name) ? <HubScopeScreen key={screen.name} section={hubSectionForScreen(screen.name)!} />
   : (
     <View style={desktopStyles.empty}>

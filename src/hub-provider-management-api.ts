@@ -22,6 +22,7 @@ async function rpc(cfg: HubConfig, name: string, args: Record<string, unknown>, 
   return parseProviderRpc(response.status, response.ok ? await response.text() : '');
   })()]); } finally { clearTimeout(timer); signal.removeEventListener('abort', cancel); ctrl.abort(); }
 }
+export { rpc as hubManagementRpc };
 export async function readHubProviderCatalog(cfg: HubConfig, signal: AbortSignal) {
   try {
     const result = await rpc(cfg, 'daemon_provider_snapshot', { action: 'hub_read', id: 'hub' }, signal);

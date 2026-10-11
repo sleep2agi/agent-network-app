@@ -1,0 +1,19 @@
+import { registerTranslations } from './i18n';
+registerTranslations({
+  'hubToken.title': ['Hub 令牌 · API 密钥库', 'Hub tokens · API key vault'],
+  'hubToken.boundary': ['当前网络的共享 API 密钥，加密保存在 Hub，只显示名称。不是 Hub 登录令牌或节点身份令牌。', 'Shared API keys for this network, encrypted in the Hub. Only names are shown. These are not Hub login or node identity tokens.'],
+  'hubToken.catalog': ['已保存的密钥名称', 'Saved key names'],
+  'hubToken.empty': ['暂无密钥，请添加。', 'No keys yet. Add one below.'],
+  'hubToken.form': ['添加或替换 · 需网络所有者权限', 'Add or replace · Network owner access required'],
+  'hubToken.name': ['密钥名称（例如 DEEPSEEK_API_KEY）', 'Key name (for example DEEPSEEK_API_KEY)'],
+  'hubToken.value': ['新密钥值（保存后清空，不回显）', 'New key value (cleared after saving, never read back)'],
+  'hubToken.save': ['保存到 Hub', 'Save to Hub'],
+  'hubToken.replace': ['替换此密钥', 'Replace this key'],
+  'hubToken.new': ['添加新密钥', 'Add new key'],
+  'hubToken.refresh': ['刷新', 'Refresh'],
+  'hubToken.saving': ['正在等待 Hub 保存回执…', 'Waiting for Hub save receipt…'],
+  'hubToken.saved': ['Hub 已确认保存。未自动下发或切换节点。', 'Hub confirmed the save. No automatic distribution or node switching.'],
+  'hubToken.failed': ['未确认成功，请刷新或重试。保存需网络所有者权限；连接失败或旧 Hub 不算成功。', 'Not confirmed. Refresh or retry. Saving requires network owner access; connection failures or older Hubs are not success.'],
+  'hubToken.usage': ['Provider 页可配置共享 Provider 并显式下发给所选 Daemon。此处的密钥名称复用正在接入，不会把存入密钥库当作所有节点已可调用。', 'Configure shared providers on the Provider page and explicitly distribute to selected daemons. Reusing these key names is being connected; saving to the vault does not mean every node can already call a model.'],
+  'hubToken.noDelete': ['本片支持添加和替换，不提供删除或明文读取。密钥轮换后，已有 Daemon 副本不会自动更新。', 'This slice supports adding and replacing, not deletion or plaintext reads. Rotating a key does not automatically update existing daemon copies.'],
+});
