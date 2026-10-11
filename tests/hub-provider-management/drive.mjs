@@ -9,9 +9,10 @@ const browser = await chromium.launch({ headless: true, executablePath: findChro
 let passed = 0;
 try {
   for (const [theme, viewport] of [['light', { width: 1200, height: 900 }], ['dark', { width: 390, height: 844 }]]) {
-    const ctx = await browser.newContext({ locale: TEST_LOCALE, viewport }); const page = await ctx.newPage();
+    const ctx = await browser.newContext({ locale: TEST_LOCALE, viewport, colorScheme: theme }); const page = await ctx.newPage();
     const errors = []; page.on('pageerror', e => errors.push(String(e)));
     await page.addInitScript({ content: `(${initScript.toString().replace('http://mock-hub.invalid', 'http://127.0.0.1:9200')})({theme:${JSON.stringify(theme)}});` });
+    await page.addInitScript(value => localStorage.setItem('theme_mode_v1', value), theme);
     await page.addInitScript(() => {
       const envelope = value => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(value) }] } });
       window.__hubProviders = []; window.__hubWrites = []; window.__hubBindings = []; window.__receiptMode = 'ok';
@@ -62,6 +63,8 @@ try {
       console.log('Synthetic page diagnostic', JSON.stringify({ errors, body: (await page.locator('body').innerText()).slice(0, 1200) }));
       throw error;
     });
+    assert.equal(await page.getByTestId('hub-providers-real').evaluate(el => getComputedStyle(el).backgroundColor),
+      theme === 'dark' ? 'rgb(17, 17, 19)' : 'rgb(246, 247, 249)'); passed++;
     for (const [field, value] of Object.entries({ id: 'shared', label: 'Shared fixture', baseUrl: 'https://api.example.test/v1', models: 'model-a, model-b', key: 'TEST-ONLY-hub-key' })) await page.getByTestId(`hub-provider-field-${field}`).fill(value);
     await page.getByTestId('hub-provider-save').click();
     await page.getByTestId('hub-provider-row-shared').waitFor();
@@ -88,5 +91,5 @@ try {
     await page.screenshot({ path: `/tmp/hub-provider-screenshots/${theme}.png`, fullPage: true });
     await ctx.close();
   }
-  console.log(`PASS Hub Provider real page: ${passed}/17 assertions, desktop/light + phone/dark`);
+  console.log(`PASS Hub Provider real page: ${passed}/19 assertions, desktop/light + phone/dark (palette asserted)`);
 } finally { await browser.close(); web.close(); }
