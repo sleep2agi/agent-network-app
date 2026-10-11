@@ -59,8 +59,19 @@ const bodyWithKinds = (kinds) => {
   return [...lines.slice(0, at + 1), ...kinds.map(k => `- ${KIND_ITEMS[k].bullet}`), '', ...lines.slice(end)].join('\n');
 };
 const BODY = bodyWithKinds(KIND_CASES.mixed);
-const [maj, min, pat] = APP_VERSION.split('.').map(Number);
-const PREV = `${maj}.${min}.${pat - 1}`, PREV2 = `${maj}.${min}.${pat - 2}`;
+// Release versions can have gaps (for example, an unpublished failed draft).
+// Derive the expected cards from the supplied notes, not patch-number arithmetic
+// or the rendered DOM; still require the complete list in numeric version order.
+const NOTE_VERSIONS = [...BODY.matchAll(/^What's new in (\d+\.\d+\.\d+):$/gm)]
+  .map(match => match[1])
+  .sort((a, b) => {
+    const av = a.split('.').map(Number), bv = b.split('.').map(Number);
+    return bv[0] - av[0] || bv[1] - av[1] || bv[2] - av[2];
+  });
+if (NOTE_VERSIONS.length < 3 || NOTE_VERSIONS[0] !== APP_VERSION) {
+  throw new Error('changelog fixture needs the running version and two older releases');
+}
+const [, PREV, PREV2] = NOTE_VERSIONS;
 // What the running version's card must show, read from the same notes (not hard-coded: every release changes them —
 // the drive used to expect 「任务仪表盘」 and exactly 新功能 / 修复, true for one release only). The first bullet's text
 // (minus a 新功能：/修复：/提速： prefix), first 8 characters.
@@ -206,7 +217,7 @@ async function run({ phone }) {
 
   // 2 list
   const versions = await page.locator('[data-testid^="changelog-version-"]').evaluateAll(els => els.map(e => e.textContent));
-  ck(`${vp}: versions newest first, running version on top`, versions[0] === `v${APP_VERSION}` && versions[1] === `v${PREV}` && versions.length > 50, `${versions.slice(0, 3).join(',')} … (${versions.length})`);
+  ck(`${vp}: versions newest first, running version on top`, versions.length > 50 && versions.length === NOTE_VERSIONS.length && versions.every((v, i) => v === `v${NOTE_VERSIONS[i]}`), `${versions.slice(0, 3).join(',')} … (${versions.length})`);
   const v0 = await paintedText(page, tid(`changelog-version-${APP_VERSION}`));
   const d0 = await paintedText(page, tid(`changelog-date-${APP_VERSION}`));
   ck(`${vp}: version + date painted`, painted(v0) && painted(d0) && /^\d{4}-\d{2}-\d{2}$/.test(d0?.text ?? ''), `${pw(v0)} / ${d0?.text} ${pw(d0)}`);
