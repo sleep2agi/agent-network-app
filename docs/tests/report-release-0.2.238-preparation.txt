@@ -49,3 +49,14 @@ Unchanged full QA/E2E reruns for our doc/deployment-only merges were cancelled
 to keep the core release focused; cancellations are not PASS evidence.
 No business Agent was restarted. Public client remains .237 until the final
 exact package pin, one fallback install check and main-bound signing complete.
+
+2026-10-11 16:36 +08 increment:
+CLI .164 corrected main package is now anonymously available; four formal
+publication gates PASS, tag target equals bbc7035155c8b49bc977cf7f103bd1ecdddaa78f,
+public download matches artifact11696519273. Final installer SHA256 pin
+2c0d292b095005f35e28d1bde77ac23ee502c4d80a299729ab9e8e075a570453.
+Single existing Docker registry-failure fallback test PASS (1/1, 19 filtered).
+All three exact packages are available; CLI npm publish is still queued but
+the validated public fallback is sufficient for the core install path.
+Final candidate is ready for normal merge and full40-main-bound signing.
+No signed client artifact or updater activation is claimed by this report.

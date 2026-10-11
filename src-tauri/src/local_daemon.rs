@@ -33,7 +33,7 @@ pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
 const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.164";
 // Same bytes as the formal main release, independent of npm processing delays.
 const ANET_TARBALL_URL: &str = "https://github.com/sleep2agi/agent-network/releases/download/cli-v2.3.0-preview.164/sleep2agi-agent-network-2.3.0-preview.164.tgz";
-const ANET_TARBALL_SHA256: &str = "039aa14205b307b0693b8676acef30902428c1fb9023898ecf9577c4a54dd449";
+const ANET_TARBALL_SHA256: &str = "2c0d292b095005f35e28d1bde77ac23ee502c4d80a299729ab9e8e075a570453";
 /// Desktop features require the preview runtime, not npm's older `latest` tag.
 const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@2.5.0-preview.130";
 const MIN_HUB_VERSION: &str = "0.9.0-preview.122";
