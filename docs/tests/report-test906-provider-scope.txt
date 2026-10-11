@@ -45,3 +45,15 @@ Image pins Playwright v1.58.2-noble digest
 sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d.
 drive.mjs is registered in tests/drives.json for subsequent per-head CI bundles.
 This adds rendered UI coverage; native package / live Hub E2E / release remain unproven.
+
+Increment 2026-10-11 08:06 +08: prepare patch 0.2.233 for this slice only.
+Preflight: main still 7fe4af6c1b7e6740faa7f77a1fb9bf9565051d9f; latest published
+desktop-v0.2.232; no draft or tag claimed desktop-v0.2.233 at this observation.
+All eight version locations and Android versionCode updated together. Cargo.lock
+changes only the agent-network-desktop version. User-facing release notes and
+generated offline changelog describe only daemon catalog scope (not Provider CRUD).
+Docker image anet-provider-scope:test906-release completed exit 0, network none:
+scope 34/34, provider options 43/43, OpenCode options PASS; version consistency,
+bundled changelog and release-note hygiene all passed. No signing/release dispatched.
+No native binaries or production data touched; --rm removed the test container.
+New-head CI/rendering and main-only signed release gates still required.

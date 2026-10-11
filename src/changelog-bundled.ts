@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.233:",
+  "- 修复创建节点时的模型目录范围：只展示所选 Daemon 已上报的 Provider 和模型，不再把网络级目录当成本机可用模型。",
+  "- 切换到尚未上报目录的 Daemon 时保留升级提示，避免沿用其他机器的模型列表。",
+  "",
   "What's new in 0.2.232:",
   "- Codex 节点可编辑思考程度与自动执行权限，配置经 Hub 下发到节点。",
   "- Daemon 设置新增「全览」：探测本机 CPU/内存/磁盘、工具链与各 Agent 运行时就绪状态，缺口提供可复制安装命令。",
