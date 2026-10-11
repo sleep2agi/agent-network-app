@@ -500,6 +500,7 @@ export default function DaemonManagementScreen({
   ) : pendingSection === 'provider' ? (
     <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
       <DaemonProvidersPane cfg={cfg} alias={alias} daemonId={daemon?.node_id}
+        daemonVersion={daemonSession?.node_id === daemon?.node_id ? daemonSession?.version : undefined}
         offline={isDaemonOffline(daemonStatus)} />
     </ScrollView>
   ) : pendingSection ? (

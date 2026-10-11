@@ -3,6 +3,9 @@ import { readFileSync } from 'node:fs';
 import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, providerEnabledWrite, scopedProviderSave, type ProviderRpc } from './daemon-provider-management';
 import { changeProviderSelection, EMPTY_PROVIDER_SELECTION, providerSelectionOptions, resolveProviderSelection, providerApplicationWrite } from './daemon-provider-selection';
 import { runProviderApplication } from './daemon-provider-application';
+import { PROVIDER_VERIFIED_VERSIONS } from './daemon-provider-management';
+import { t, setLanguagePreference } from './i18n';
+import './i18n-provider-management';
 let passed = 0;
 const test = async (name: string, run: () => void | Promise<void>) => { await run(); passed++; console.log(`PASS ${name}`); };
 const scope = { networkId: 'net-fixture', daemonId: 'daemon-a' };
@@ -15,6 +18,18 @@ const snapshot = () => ({ network_id: scope.networkId, daemon_node_id: scope.dae
 const pending = () => ({ kind: 'payload' as const, value: { ok: true, request_id: requestId, status: 'pending', daemon_node_id: scope.daemonId } });
 const receipt = () => ({ kind: 'payload' as const, value: { ...pending().value, status: 'succeeded', snapshot: snapshot(), observed_at: 1000 } });
 const rpcBody = (v: unknown) => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(v) }] } });
+await test('version guidance names the published components in both languages without diagnosing timeouts as old versions', () => {
+  for (const language of ['zh', 'en'] as const) {
+    setLanguagePreference(language);
+    const targets = t('providerManagement.verifiedVersions', PROVIDER_VERIFIED_VERSIONS);
+    for (const version of Object.values(PROVIDER_VERIFIED_VERSIONS)) assert(targets.includes(version));
+    assert(!targets.includes('{'));
+    assert.match(t('providerManagement.timeout'), /超时不能证明版本过旧|timeout does not prove an outdated version/);
+    assert.match(t('providerManagement.unsupported'), /路由|routing/);
+    assert.match(targets, /无需降级|do not downgrade/);
+  }
+  setLanguagePreference('system');
+});
 await test('application submits once, accepts only exact receipt and never treats timeout as rollback', async () => {
   const applicationId = 'dpa_00000000-0000-0000-0000-000000000001';
   const write = { revision: 2, provider: { node_id: 'n_a', node_revision: 'a'.repeat(64), provider_id: 'deepseek', auth_id: 'work', model: 'deepseek-chat', confirm_restart: true as const } };
