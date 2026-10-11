@@ -11,6 +11,7 @@ import './i18n-provider-management';
 import { colors, spacing, type, radius } from './theme';
 import DaemonProviderSelection from './DaemonProviderSelection';
 import { PROVIDER_VERIFIED_VERSIONS } from './daemon-provider-management';
+import DaemonCodexAccounts from './DaemonCodexAccounts';
 
 export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersion, offline = false }: {
   cfg: HubConfig; daemonId?: string; alias: string; daemonVersion?: string | null; offline?: boolean;
@@ -100,6 +101,8 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersio
       </>}
     </PendingPanelCard> : null}
     {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} cfg={cfg} /> : null}
+    {snapshot && daemonId ? <DaemonCodexAccounts key={identity} cfg={cfg} daemonId={daemonId}
+      scope={JSON.stringify([cfg.serverUrl, cfg.networkId, cfg.token, daemonId])} /> : null}
     {snapshot ? <PendingPanelCard testID="daemon-provider-key-form">
       <PendingCardTitle title={t('providerManagement.keyForm')} />
       <Text style={{ color: colors.textSecondary }}>{t('providerManagement.writeHint')}</Text>
