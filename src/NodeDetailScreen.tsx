@@ -95,7 +95,7 @@ import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, runtimeSummaryFacts, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
@@ -151,12 +151,22 @@ function NodeActionButton({
   );
 }
 
-/** 概览网格里的一格:小号灰色标签在上,值在下;空值显示「—」(分得清「没上报」和「坏了」)。 */
+/** 概览网格里的一格:小号灰色标签在上,值在下;空值显示「—」(分得清「没上报」和「坏了」)。
+ *  wrap 的格子(session-id)不截成两行省略:整段留在格子里,桌面可划选,手机换行可读。 */
 function FactCell({ fact, columns }: { fact: NodeInfoFact; columns: number }) {
   return (
     <View style={{ width: `${100 / columns}%`, paddingVertical: spacing.sm, paddingRight: spacing.lg, gap: 2 }}>
       <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{fact.label}</Text>
-      <Text style={{ color: colors.text, fontSize: typeScale.body }} selectable numberOfLines={2}>{factText(fact.value)}</Text>
+      <Text
+        testID={fact.testID}
+        style={[
+          { color: colors.text, fontSize: typeScale.body },
+          fact.wrap ? ({ overflowWrap: 'anywhere', wordBreak: 'break-all' } as any) : null,
+        ]}
+        selectable
+        // 0 is not "unlimited" on web / Android (line-clamp 0 hides the text). Omit the cap instead.
+        {...(fact.wrap ? {} : { numberOfLines: 2 })}
+      >{factText(fact.value)}</Text>
     </View>
   );
 }
@@ -471,7 +481,7 @@ export default function NodeDetailScreen({
   const guardLeave = (go: () => void) => { if (needConfirm) setPendingLeave(() => go); else go(); };
   const chrome = nodePageChrome({ section, keyboardVisible });
   const pageScrolls = nodePageScrolls(section);
-  const runtimeFacts = facts.filter(f => ['Runtime', 'Agent', '模型', '版本', '节点类型'].includes(f.label));
+  const runtimeFacts = runtimeSummaryFacts(facts);
 
   // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
   const headerCard = (

@@ -24,6 +24,12 @@ export interface Session {
   ip?: string | null;
   project_dir?: string | null;
   version?: string | null;
+  /**
+   * Resumeable runtime session id on the full `/api/status` row (Claude Code
+   * `--resume`, Codex thread, and the same idea on other runtimes). Older hubs
+   * omit it; the node page still renders the cell and shows 「—」.
+   */
+  session_id?: string | null;
   model?: string | null;
   runtime?: string | null;
   /** Explicit runtime-reported OS identity only. Never infer this from project_dir. */
@@ -190,7 +196,7 @@ export const fetchStatus = (cfg: HubConfig) =>
 
 /** Full, authenticated status projection for the one-node details screen.
  * List/chat polling stays on `?light=1`; this opt-in read is where legacy
- * Hubs may omit newer nullable facts such as `os_user`.
+ * Hubs may omit newer nullable facts such as `os_user` and `session_id`.
  *
  * `alias` asks the hub for that one agent's rows (`/api/status?alias=`): the
  * full projection of a whole network is ~533 KB (94 KB gzip) on the
