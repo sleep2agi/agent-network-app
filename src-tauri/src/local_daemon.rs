@@ -31,6 +31,9 @@ use super::{app_root, ensure_private_dir, write_private_atomic};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
 const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.163";
+// Same bytes as the formal main release, independent of npm processing delays.
+const ANET_TARBALL_URL: &str = "https://github.com/sleep2agi/agent-network/releases/download/cli-v2.3.0-preview.163/sleep2agi-agent-network-2.3.0-preview.163.tgz";
+const ANET_TARBALL_SHA256: &str = "15f498ac22663bb948743fefbc93906751e4aaf493990a484e799a38a5837c58";
 /// Desktop features require the preview runtime, not npm's older `latest` tag.
 const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@2.5.0-preview.129";
 const MIN_HUB_VERSION: &str = "0.9.0-preview.121";
@@ -279,6 +282,32 @@ pub fn looks_like_registry_failure(text: &str) -> bool {
     ]
     .iter()
     .any(|needle| lower.contains(needle))
+}
+
+fn cli_package_unavailable(text: &str) -> bool {
+    let lower = text.to_ascii_lowercase();
+    looks_like_registry_failure(text)
+        || ["etarget", "e404", "no matching version"].iter().any(|s| lower.contains(s))
+}
+
+fn verify_cli_tarball(bytes: &[u8], expected: &str) -> Result<(), String> {
+    if bytes.is_empty() || bytes.len() > 16 * 1024 * 1024 {
+        return Err("CLI 下载大小不符合预期".into());
+    }
+    if format!("{:x}", Sha256::digest(bytes)) != expected {
+        return Err("CLI SHA256 校验失败，未安装下载包".into());
+    }
+    Ok(())
+}
+
+fn fetch_verified_cli_tarball() -> Result<Vec<u8>, String> {
+    let response = reqwest::blocking::Client::new().get(ANET_TARBALL_URL)
+        .timeout(Duration::from_secs(60)).send()
+        .and_then(|r| r.error_for_status()).map_err(|e| e.to_string())?;
+    let mut bytes = Vec::new();
+    response.take(16 * 1024 * 1024 + 1).read_to_end(&mut bytes).map_err(|e| e.to_string())?;
+    verify_cli_tarball(&bytes, ANET_TARBALL_SHA256)?;
+    Ok(bytes)
 }
 
 fn private_node_dir() -> Result<PathBuf, String> {
@@ -568,6 +597,10 @@ fn supervisor_ready(body: &serde_json::Value, node_id: &str) -> Result<bool, Str
 }
 
 pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String> {
+    install_with_cli_download(session, fetch_verified_cli_tarball)
+}
+
+pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli: fn() -> Result<Vec<u8>, String>) -> Result<DaemonInstallReport, String> {
     let mut steps: Vec<StepReport> = Vec::new();
     let fail = |steps: Vec<StepReport>, error: String| {
         Ok(DaemonInstallReport {
@@ -654,6 +687,30 @@ pub fn install(session: &LocalHubSession) -> Result<DaemonInstallReport, String>
         let primary = run_shell(&install_cmd(None), Some(&daemon_dir), &[], Duration::from_secs(600))?;
         let mut output = primary.output.clone();
         let mut ok = primary.code == Some(0);
+        // A registry 404/ETARGET is not repaired by retrying an equally stale mirror.
+        // Download the exact formal main tarball, check its pinned hash, then use
+        // the same private prefix and the unchanged runtime pairing below.
+        if !ok && !primary.timed_out && cli_package_unavailable(&primary.output) {
+            output.push_str("\n--- exact CLI package via GitHub release ---\n");
+            match download_cli().and_then(|bytes| {
+                verify_cli_tarball(&bytes, ANET_TARBALL_SHA256)?;
+                let file = daemon_dir.join("anet-cli-2.3.0-preview.163.tgz");
+                write_private_atomic(&file, &bytes)?;
+                let cmd = with_path(&format!("{} install -g --prefix {} {}",
+                    shell_quote(&npm_bin.display().to_string()),
+                    shell_quote(&anet_prefix.display().to_string()), shell_quote(&file.display().to_string())));
+                let result = run_shell(&cmd, Some(&daemon_dir), &[], Duration::from_secs(600));
+                let _ = fs::remove_file(&file);
+                result
+            }) {
+                Ok(result) => {
+                    output.push_str("CLI SHA256 已校验\n");
+                    output.push_str(&result.output);
+                    ok = result.code == Some(0);
+                }
+                Err(error) => output.push_str(&format!("独立下载未完成: {error}\n")),
+            }
+        }
         if !ok && !primary.timed_out && looks_like_registry_failure(&primary.output) {
             let mirror = run_shell(&install_cmd(Some(NPM_MIRROR)), Some(&daemon_dir), &[], Duration::from_secs(600))?;
             output.push_str("\n--- retry via npmmirror ---\n");
