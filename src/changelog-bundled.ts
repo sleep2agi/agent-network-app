@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.240:",
+  "- Codex TUI 共存节点详情新增 Daemon Provider、认证方式与模型选择；聊天中的节点信息也可直接操作，不必返回 Daemon 设置。",
+  "- 选择仅针对当前节点，确认后才应用；未绑定 Daemon 时显示管理引导，不会自动收编。列表只展示该 Daemon 已管理的配置，扫描到的配置不会自动收录。",
+  "- 配置与实际模型权限分开显示；真实账号登录和模型调用仍取决于供应商，选择或保存不等于调用成功。",
+  "",
   "What's new in 0.2.239:",
   "- Daemon Provider 页可只读发现工作区及已登记子工作区中已有的 Codex，展示模型、Provider、认证方式和扫描时间；不复制账号、不导入配置、不自动重启。",
   "- 未绑定的 Codex 使用独立区域展示，不会误出现在 Provider 切换目标中。旧目录布局也可读取状态，无法读取时明确提示，不再误显示为没有 Codex。",
