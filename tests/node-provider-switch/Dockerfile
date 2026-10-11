@@ -5,7 +5,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
-CMD ["sh", "-c", "bun src/node-provider-target.test.ts && bun src/node-model-change.test.ts && npm run typecheck"]
+CMD ["sh", "-c", "bun src/node-provider-target.test.ts && bun src/node-model-change.test.ts && bun src/node-codex-reasoning.test.ts && npm run typecheck"]
 
 FROM core AS web
 ENV CI=1 EXPO_NO_TELEMETRY=1

@@ -43,3 +43,13 @@ same check to require both the Codex daemon control and other-runtime legacy
 control branches. Docker reran only these differences: target2/2 groups with
 9 assertions and model-change39/39 PASS; candidate typecheck follows. Original
 UI5/5 evidence is unchanged, not counted as a new native application test.
+
+18:31+08 exact5efe12a CI differential: Ubuntu and Windows each finished
+399/400 test files. The only failure was node-codex-reasoning's old literal
+`{node ? <NodeModelSection` source check. Updated the same assertion to
+require BOTH legacy-model and daemon-Provider mounting, and prohibit readOnly
+gating for either. All8 reasoning assertions remain; no product change or
+permission relaxation. The dedicated core Dockerfile now includes this
+reasoning suite. Docker narrow rerun completed18:32+08: target2/2 groups
+(9 assertions), model-change39/39, reasoning8/8 and candidate typecheck PASS.
+UI product code is unchanged from the earlier5/5 Chromium run.
