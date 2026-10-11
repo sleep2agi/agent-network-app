@@ -10,6 +10,7 @@
 import { codexYoloFlagsForCreate, describeCodexExecutionFlagError } from './codex-execution-posture';
 import { normalizeNodeName } from './node-name';
 import { opencodeCreateFlags, type OpenCodeGeneration } from './opencode-create-options';
+import { validCreateProviderReference, type CreateProviderReference } from './daemon-provider-create';
 
 /** 只有这些 runtime 发 flags.copresence:true。Hub 对其它 runtime 会回 flag_not_applicable_to_runtime。 */
 export const COPRESENCE_FLAG_RUNTIMES: readonly string[] = ['codex-app-server'];
@@ -76,6 +77,7 @@ export interface CreateNodeSpecInput {
   opencodeUnsafeTools?: boolean;
   /** Codex SDK / TUI 共存:默认 true,与 `codexSdkYoloFlags()` 对齐。 */
   codexAutoExecute?: boolean;
+  daemonProvider?: CreateProviderReference;
 }
 
 export interface CreateNodeSpec {
@@ -88,7 +90,8 @@ export interface CreateNodeSpec {
 
 export function buildCreateNodeSpec(i: CreateNodeSpecInput): CreateNodeSpec {
   const numOrUndef = (v: string) => (v.trim() === '' ? undefined : Number(v));
-  const model = i.model || i.runtimeModels[0];
+  if (i.daemonProvider && (i.runtimeId !== 'codex-app-server' || !validCreateProviderReference(i.daemonProvider))) throw new Error('invalid_daemon_provider_create');
+  const model = i.daemonProvider?.model || i.model || i.runtimeModels[0];
   // #591 —— 只发这个 runtime 真会读的设置(向导第 4 步也只显示这些)。用户先在 Claude 下填了
   // maxTurns 再切到 Codex,那个值不能跟着溜进请求。
   const params = wizardParamsFor(i.runtimeId);
@@ -99,6 +102,7 @@ export function buildCreateNodeSpec(i: CreateNodeSpecInput): CreateNodeSpec {
     ...copresenceFlags(i.runtimeId),
     ...codexYoloFlagsForCreate(i.runtimeId, i.codexAutoExecute !== false),
     ...opencodeCreateFlags({ ...i, model: model ?? '' }),
+    ...(i.daemonProvider ? { daemonProvider: { ...i.daemonProvider } } : {}),
   };
   return {
     // #652 —— Hub 存的是 trim + NFC 后的名字(normalizeNodeName,与 Hub/daemon 同一个函数)。

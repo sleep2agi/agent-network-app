@@ -17,6 +17,8 @@ import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_V2_WARNING, 
 import CodexProviderFields from './CodexProviderFields';
 import { ProviderConfigDemo } from './BackendPendingDemo';
 import DaemonRuntimeProviders from './DaemonRuntimeProviders';
+import DaemonCreateProvider from './DaemonCreateProvider';
+import type { CreateProviderReference } from './daemon-provider-create';
 import OpenCodeProviderNote from './OpenCodeProviderNote';
 import { readListProviders } from './daemon-provider-read';
 import type { TaggedProvider } from './daemon-runtime-providers';
@@ -142,6 +144,11 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [providerResetHint, setProviderResetHint] = useState('');
   const [daemonProviderRows, setDaemonProviderRows] = useState<TaggedProvider[]>([]);
   const [daemonProviderRead, setDaemonProviderRead] = useState<'pending' | 'ok' | 'unsupported' | 'error'>('pending');
+  const managedIdentity = JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, daemon.daemon_node_id, runtimeId]);
+  const [managedModeState, setManagedModeState] = useState('');
+  const [managedSelectionState, setManagedSelectionState] = useState<{ identity: string; value: CreateProviderReference } | null>(null);
+  const managedMode = runtimeId === 'codex-app-server' && managedModeState === managedIdentity;
+  const managedSelection = managedMode && managedSelectionState?.identity === managedIdentity ? managedSelectionState.value : null;
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
@@ -297,14 +304,14 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     hasUsableRuntime &&
     (
       (cur === 'name' && nameValid && !folderErr) ||
-      (cur === 'runtime' && isRuntimeAllowed(runtimeId) && (runtimeId !== 'opencode-cli' || opencodeGeneration !== 'v2' || opencodeUnsafeTools) && providerIssues.length === 0) ||
+      (cur === 'runtime' && isRuntimeAllowed(runtimeId) && (runtimeId !== 'opencode-cli' || opencodeGeneration !== 'v2' || opencodeUnsafeTools) && providerIssues.length === 0 && (!managedMode || !!managedSelection)) ||
       (cur === 'model' && !openCodeError) || cur === 'params'
     );
   const busy = phase === 'creating' || phase === 'awaiting_register';
   // 确认页上显式改过完整路径(workdirEdited)优先;否则 <root>/<文件夹>。
   const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, folder) : '');
   const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
-  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId);
+  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId) && (!managedMode || !!managedSelection);
 
   // ── handlers (no hooks below this line) ────────────────────────────
   // One runtime choice row. `nested` = it lives inside a 「高级」 disclosure:
@@ -330,6 +337,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             if (allowed) {
               const nextForm = reconcileProviderForm(runtimeId, r.id, providerForm);
               setRuntimeId(r.id);
+              setManagedModeState(''); setManagedSelectionState(null);
               setOpenCodeGeneration('v1');
               setOpenCodeUnsafeTools(false);
               // Reset model to the FIRST of the new runtime
@@ -407,6 +415,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       permissionMode, maxTurns, budget,
       opencodeGeneration, opencodeUnsafeTools,
       codexAutoExecute,
+      ...(managedSelection ? { daemonProvider: managedSelection } : {}),
       workdirField: workdirForRequest(workdirRoot, workdir),
     });
     submittedSpec.current = node_spec;
@@ -652,14 +661,18 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                     <Text style={styles.hint}>关闭后创建节点不会下发 approvalPolicy / sandboxMode;行为接近 `anet node create --no-yolo`。</Text>
                   ) : null}
                 </View>
-                <CodexProviderFields
+                {runtimeId === 'codex-app-server' ? <DaemonCreateProvider key={managedIdentity} cfg={cfg}
+                  daemonId={daemon.daemon_node_id} identity={managedIdentity} enabled={managedMode}
+                  onMode={enabled => { setManagedModeState(enabled ? managedIdentity : ''); setManagedSelectionState(null); setProviderForm(EMPTY_PROVIDER_FORM); }}
+                  onSelection={value => setManagedSelectionState(value ? { identity: managedIdentity, value } : null)} /> : null}
+                {!managedMode ? <CodexProviderFields
                   runtimeId={runtimeId}
                   value={providerForm}
                   issues={providerIssues}
                   transportOk={transportOk}
                   hubBlocked={providerForm.choice !== 'none' && providerIssues.length === 0}
                   onChange={next => { setProviderForm(next); setProviderResetHint(''); }}
-                />
+                /> : null}
               </>
             ) : null}
             <DaemonRuntimeProviders
@@ -790,7 +803,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 <><Divider /><SummaryRow k="代际" v={opencodeGeneration === 'v2' ? 'V2 · 实验性 TUI 共存' : 'V1 · 兼容默认'} /></>
               ) : null}
               <Divider />
-              <SummaryRow k="模型" v={model || runtime.models[0] || '跟随宿主登录'} />
+              <SummaryRow k="模型" v={managedSelection?.model || model || runtime.models[0] || '跟随宿主登录'} />
+              {managedSelection ? <><Divider /><SummaryRow k={t('providerManagement.create.summary')}
+                v={`${managedSelection.provider_id} · ${managedSelection.auth_id} · r${managedSelection.revision}`} /></> : null}
               {surface.kind === 'codex' && providerForm.choice !== 'none' ? (
                 <>
                   <Divider />
