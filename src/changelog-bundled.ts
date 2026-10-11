@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.238:",
+  "- Daemon Provider 页新增托管 ChatGPT 账号登录与账号列表；登录需由本人在官方页面完成。可明确选择账号和模型，确认后只重启所选 Codex TUI 共存节点并保留会话。",
+  "- 账号登录与 API-key Provider 分开管理；新登录能力需要 Hub 0.9.0-preview.122、CLI 2.3.0-preview.164、runtime 2.5.0-preview.130，旧版本显示明确升级目标。",
+  "- 已有 Codex 状态拆分为清晰卡片；修复设置头像区深色说明文字、输入框和主次按钮配色。",
+  "- 本地核心链路已验证；真实 OAuth 登录及模型权限由账户服务端决定，配置保存不等于远端模型可用。",
+  "",
   "What's new in 0.2.237:",
   "- Provider 页面显示所选 Daemon 的实际 runtime 版本；遇到接口缺失或回读异常时，列出明确的 Hub、CLI、runtime 已验证升级目标和处理步骤。",
   "- 超时、离线与接口缺失分别提示，不再把超时等同版本过旧；较新版本无需降级。修正 API-key 节点应用已支持的说明，ChatGPT 账号切换仍在开发中。",

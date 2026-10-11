@@ -1,0 +1,21 @@
+0.2.238 preparation — not a published release
+Base main ccf611a29ffdd3e0ed2792491af90dca52264cd5.
+Includes merged managed-account UI (PR836) and avatar-theme correction (PR839).
+
+2026-10-11: version metadata and bundled release notes prepared.
+Readonly Docker check in anet-app:provider-hierarchy-web, --rm --network none:
+  bun src/version-consistency.test.ts: 14 checks PASS
+  bun src/changelog-bundled.test.ts: 7/7 PASS
+No native package build or publication is claimed by these metadata tests.
+
+Still required before release:
+- Publish and verify downloadable main-built Hub .122, runtime .130 and CLI .164.
+- Replace installer/sidecar exact pins and integrity from those verified bytes.
+  Current .163/.129/.121 pins remain unchanged while the new packages are pending.
+- Merge final candidate, bind macOS/Windows/Android builds to full40 main SHA,
+  verify actual signed artifacts and download/update paths before announcing.
+- Old business-node runtime upgrades are not a prerequisite. Upgrade software
+  and selected daemon management capability without bulk node restarts.
+
+Existing evidence is preserved separately in report-test906-provider-login-client.txt
+and report-test963-settings-avatar-colors.txt; no unchanged core sample rerun.
