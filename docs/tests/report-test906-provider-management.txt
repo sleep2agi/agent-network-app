@@ -198,3 +198,23 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
   native DeepSeek endpoint inference or official ChatGPT account switching.
   Runtime .129 / CLI .163 publication still must finish before desktop release.
   This is release preparation, not a signed installer or public desktop release.
+
+2026-10-11 11:15 CST: reserve 0.2.235 after .234 dependency-availability failure.
+  Base/main: 330bb0b6ade51cfe55b1a4ee717be4458375082b, fresh clean worktree.
+  Signed release run38106877580 macOS job114374166996 produced .234 assets,
+  then failed packaged local-daemon installation: npm ETARGET for exact CLI
+  2.3.0-preview.163 (primary registry and mirror). CLI upload had succeeded but
+  its publish-visible verification was still running and registry returned 404.
+  Starting desktop packaging concurrently with that pending publication was
+  premature. Do not replay until the CLI exact version is actually available.
+  Draft409372832 remains unpublished and is titled DO NOT PUBLISH; its signed
+  assets are retained, not overwritten. Remaining run requested cancelled.
+  Per desktop-release-sop section8 use a new patch version after assets exist.
+  Only version authorities, Android code2235 and bundled notes changed; the
+  CLI/runtime/Hub pair and product logic are unchanged. Cargo.lock changes only
+  the agent-network-desktop package version.
+  Docker --rm --network none, readonly mount, anet-provider-panel:test906:
+  version consistency14 and changelog7 PASS. git diff --check PASS.
+  Container removed; no new business/native sample, production change or release.
+  Next formal build must use the merged .235 main SHA, after exact CLI registry
+  availability; keep all install and signing gates. No reuse of .234 assets.

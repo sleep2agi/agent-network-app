@@ -5,7 +5,7 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
-  "What's new in 0.2.234:",
+  "What's new in 0.2.235:",
   "- Daemon 的 Provider 页接入实际配置，展示已有 Codex 节点状态，支持管理 API-key Provider 和模型。",
   "- 可将所选 Provider 和模型应用到一个已有 Codex TUI 共存节点；确认后重启该节点、保留原会话，并展示本次应用结果。",
   "- 本版 API-key 路径使用 Responses 兼容接口，配置成功不代表供应商端点可用；ChatGPT 登录账号切换暂不支持。远程 Hub 与 Daemon 需要升级后使用。",
