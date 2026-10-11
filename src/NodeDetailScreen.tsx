@@ -102,7 +102,7 @@ import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { elevated } from './elevation';
 import { actionMessageTone, dangerActions, START_OUTCOME_MESSAGE, START_SUBMITTED_MESSAGE, START_WAIT_MS, startErrorMessage, startWatchOutcome } from './node-danger-actions';
 import CloneNodeDialog, { CloneNodeButton } from './CloneNodeDialog';
-import { cloneAvailability, cloneResultMessageKey } from './node-clone';
+import { cloneAvailability, cloneNoticeMessage } from './node-clone';
 import { isHostSupervisorNode } from './daemon-node';
 import './i18n-node-clone';
 
@@ -349,7 +349,7 @@ export default function NodeDetailScreen({
   const [adoptOpen, setAdoptOpen] = useState(false);
   const [knownNames, setKnownNames] = useState<string[]>([]);
   const [cloneOpen, setCloneOpen] = useState(false);
-  const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; text: string } | null>(null);
+  const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; pending: boolean; text: string } | null>(null);
   const onOverviewTab = activeSection === 'overview';
   useEffect(() => {
     setHostDaemons(undefined);
@@ -619,7 +619,7 @@ export default function NodeDetailScreen({
                 <Text testID="node-clone-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t(cloneGate.reasonKey)}</Text>
               ) : null}
               {cloneNotice ? (
-                <Text testID="node-clone-message" style={{ color: cloneNotice.demo ? colors.blocked : colors.running, fontSize: typeScale.small, lineHeight: 18 }}>{cloneNotice.text}</Text>
+                <Text testID="node-clone-message" style={{ color: cloneNotice.demo || cloneNotice.pending ? colors.blocked : colors.running, fontSize: typeScale.small, lineHeight: 18 }}>{cloneNotice.text}</Text>
               ) : null}
             </View>
           </View>
@@ -891,7 +891,7 @@ export default function NodeDetailScreen({
           takenNames={knownNames}
           onClose={() => setCloneOpen(false)}
           onDone={outcome => {
-            setCloneNotice({ demo: outcome.demo, text: t(cloneResultMessageKey(outcome), { name: outcome.name }) });
+            setCloneNotice({ demo: outcome.demo, pending: outcome.pending, text: cloneNoticeMessage(outcome, t) });
           }}
         />
       ) : null}

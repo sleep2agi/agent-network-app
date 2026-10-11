@@ -7,9 +7,12 @@ import { cloneNode, type HubConfig } from './api';
 import { describeNodeNameRejection } from './node-name';
 import {
   CLONE_NOTE_KEYS,
+  CLONE_WORKDIR_POLICIES,
   cloneDraft,
   suggestCloneName,
+  type CloneDialogResult,
   type CloneSource,
+  type CloneWorkdirPolicy,
 } from './node-clone';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
@@ -61,17 +64,18 @@ export default function CloneNodeDialog({
   source: CloneSource;
   takenNames: readonly string[];
   onClose: () => void;
-  onDone: (outcome: { demo: boolean; name: string; copySession: boolean }) => void;
+  onDone: (outcome: CloneDialogResult) => void;
 }) {
   useTranslation();
   const [name, setName] = useState(() => suggestCloneName(source.name || source.alias, takenNames));
   const [copySession, setCopySession] = useState(true);
+  const [workdirPolicy, setWorkdirPolicy] = useState<CloneWorkdirPolicy>('new_empty');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [demo, setDemo] = useState(false);
-  const draft = cloneDraft({ source, name, copySession, taken: takenNames });
+  const draft = cloneDraft({ source, name, copySession, workdirPolicy, taken: takenNames });
 
-  const finish = (outcome: { demo: boolean; name: string; copySession: boolean }) => {
+  const finish = (outcome: CloneDialogResult) => {
     onDone(outcome);
     onClose();
   };
@@ -86,7 +90,14 @@ export default function CloneNodeDialog({
     const result = await cloneNode(cfg, draft.request);
     setBusy(false);
     if (result.ok) {
-      finish({ demo: false, name: draft.request.name, copySession });
+      finish({
+        demo: false,
+        pending: true,
+        name: result.child_name,
+        copySession: result.copy_session,
+        workdirPolicy: result.workdir_policy,
+        sessionDetail: result.sessionDetail,
+      });
       return;
     }
     if (result.demo) {
@@ -122,7 +133,7 @@ export default function CloneNodeDialog({
             accessibilityRole="button"
             disabled={busy || (!demo && !draft.ok)}
             onPress={() => {
-              if (demo) finish({ demo: true, name: draft.ok ? draft.request.name : name.trim(), copySession });
+              if (demo) finish({ demo: true, pending: false, name: draft.ok ? draft.request.name : name.trim(), copySession, workdirPolicy, sessionDetail: null });
               else void submit();
             }}
             style={({ pressed }) => [buttonStyle('primary'), (busy || (!demo && !draft.ok)) && { opacity: 0.4 }, pressed && { opacity: 0.85 }]}
@@ -149,6 +160,39 @@ export default function CloneNodeDialog({
           />
           {error ? <Text testID="clone-node-error" style={{ color: colors.failed, fontSize: typeScale.small, lineHeight: 18 }}>{error}</Text> : null}
           {!error && !draft.ok ? <Text testID="clone-node-name-hint" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t(draft.messageKey)}</Text> : null}
+        </View>
+        <View testID="clone-node-workdir" accessibilityRole="radiogroup" style={{ gap: spacing.xs }}>
+          <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('nodeClone.workdirLabel')}</Text>
+          <View style={{ flexDirection: 'row', padding: 2, borderRadius: radius.control, backgroundColor: colors.subtleFill, borderWidth: 1, borderColor: colors.border, gap: 2 }}>
+            {CLONE_WORKDIR_POLICIES.map(policy => {
+              const on = workdirPolicy === policy;
+              return (
+                <Pressable
+                  key={policy}
+                  testID={`clone-node-workdir-${policy}`}
+                  accessibilityRole="radio"
+                  accessibilityState={{ selected: on, disabled: busy || demo }}
+                  disabled={busy || demo}
+                  onPress={() => setWorkdirPolicy(policy)}
+                  style={({ pressed }) => [{
+                    flex: 1,
+                    minHeight: 36,
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    borderRadius: radius.item,
+                    borderWidth: 1,
+                    borderColor: on ? colors.accent : 'transparent',
+                    backgroundColor: on ? colors.tonalBg : colors.card,
+                    paddingHorizontal: spacing.sm,
+                    paddingVertical: spacing.xs,
+                  }, pressed && !(busy || demo) && { opacity: 0.85 }]}
+                >
+                  <Text style={{ color: on ? colors.accent : colors.textSecondary, fontSize: typeScale.small, fontWeight: on ? weight.strong : weight.regular }}>{t(`nodeClone.workdir.${policy}`)}</Text>
+                </Pressable>
+              );
+            })}
+          </View>
+          <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t(`nodeClone.workdir.hint.${workdirPolicy}`)}</Text>
         </View>
         <View style={{ backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: spacing.md, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <View style={{ flex: 1, minWidth: 0, gap: 2 }}>

@@ -63,7 +63,7 @@ import { pointerUi } from './pointer-ui';
 import DialogFrame from './DialogFrame';
 import { SettingsGroup, SettingsRow } from './settings-kit';
 import CloneNodeDialog, { CloneNodeButton } from './CloneNodeDialog';
-import { cloneResultMessageKey } from './node-clone';
+import { cloneNoticeMessage } from './node-clone';
 import './i18n-node-clone';
 
 const CONFIRM_TITLE: Record<NodeActionId, string> = {
@@ -139,7 +139,7 @@ export default function DaemonManagementScreen({
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
   const [cloneRowId, setCloneRowId] = useState<string | null>(null);
-  const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; text: string } | null>(null);
+  const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; pending: boolean; text: string } | null>(null);
   const [section, setSectionRaw] = useState<DaemonSection>(initialSection);
   // Phone only: start on the menu unless the caller deep-linked a section.
   const [menuOpen, setMenuOpen] = useState(initialSection === 'overview');
@@ -369,7 +369,7 @@ export default function DaemonManagementScreen({
         </>
       ) : null}
       {message ? <Text testID="daemon-mgmt-message" style={{ color: messageTone(message), fontSize: type.small, lineHeight: 18 }}>{message}</Text> : null}
-      {cloneNotice ? <Text testID="daemon-mgmt-clone-message" style={{ color: cloneNotice.demo ? colors.blocked : colors.running, fontSize: type.small, lineHeight: 18 }}>{cloneNotice.text}</Text> : null}
+      {cloneNotice ? <Text testID="daemon-mgmt-clone-message" style={{ color: cloneNotice.demo || cloneNotice.pending ? colors.blocked : colors.running, fontSize: type.small, lineHeight: 18 }}>{cloneNotice.text}</Text> : null}
     </View>
   );
 
@@ -597,8 +597,8 @@ export default function DaemonManagementScreen({
           takenNames={(nodes ?? []).flatMap(item => [item.alias, item.node_name ?? ''].map(value => value.trim()).filter(Boolean))}
           onClose={() => setCloneRowId(null)}
           onDone={outcome => {
-            setCloneNotice({ demo: outcome.demo, text: t(cloneResultMessageKey(outcome), { name: outcome.name }) });
-            if (!outcome.demo) void load();
+            setCloneNotice({ demo: outcome.demo, pending: outcome.pending, text: cloneNoticeMessage(outcome, t) });
+            if (outcome.pending) void load();
           }}
         />
       ) : null}

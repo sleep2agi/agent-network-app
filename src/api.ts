@@ -1768,13 +1768,14 @@ export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promis
   }
 };
 
-/** Hub MCP `clone_node`. Same doorbell style as create_node. Tool missing → demo, no node created. */
+/** Hub MCP `clone_node` (agent-network 5f8961c8). ok:true inserts a pending row; the child is not registered yet. A missing tool is the only demo path. */
 export async function cloneNode(cfg: HubConfig, req: CloneNodeArgs): Promise<ReturnType<typeof interpretCloneReply>> {
   const preview: CloneNodeArgs = {
     daemon_node_id: req.daemon_node_id,
     source_node_id: req.source_node_id,
     name: req.name,
     copy_session: req.copy_session,
+    workdir_policy: req.workdir_policy,
   };
   try {
     const networkId = req.network_id ?? cfg.networkId ?? (await fetchNetworkId(cfg));
@@ -1809,7 +1810,7 @@ export async function cloneNode(cfg: HubConfig, req: CloneNodeArgs): Promise<Ret
       }
     }
     const parsed = parseMcpToolResponse(raw);
-    if (parsed.kind === 'malformed') return interpretCloneReply({ kind: 'unsupported' }, preview);
+    if (parsed.kind === 'malformed') return interpretCloneReply({ kind: 'error', error: 'clone_node response was not a tool result' }, preview);
     if (parsed.kind === 'jsonRpcError') {
       return interpretCloneReply(isCloneToolMissing(parsed.message) ? { kind: 'unsupported' } : { kind: 'error', error: parsed.message }, preview);
     }
