@@ -731,7 +731,6 @@ function Row({ row, selected, compact, opensChat, onPress, onClone }: {
   const dot = row.status.online === null ? colors.rest : statusColor(row.status.text, row.status.online);
   return (
     <View
-      testID={`daemon-mgmt-row-${row.nodeId}`}
       style={{
         flexDirection: 'row',
         alignItems: 'center',
@@ -742,6 +741,7 @@ function Row({ row, selected, compact, opensChat, onPress, onClone }: {
       }}
     >
       <Pressable
+        testID={`daemon-mgmt-row-${row.nodeId}`}
         accessibilityRole="button"
         accessibilityState={{ selected }}
         accessibilityLabel={`${row.name}, ${statusLabel(row.status)}, ${runtimeLabel(row.runtime)}, ${nodeTypeLabel(row.type)}${opensChat ? `, ${t('daemon.mgmt.openChat')}` : ''}`}

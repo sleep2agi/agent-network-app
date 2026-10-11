@@ -75,12 +75,14 @@ ck('zh and en both have the demo mark, workdir modes, and the three notes', node
 setLanguagePreference('en');
 
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
-const daemon = readFileSync(new URL('./DaemonManagementScreen.tsx', import.meta.url), 'utf8');
+// Windows checkout is CRLF; the row assertion is anchored on the newline after <Pressable>.
+const daemon = readFileSync(new URL('./DaemonManagementScreen.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 const dialog = readFileSync(new URL('./CloneNodeDialog.tsx', import.meta.url), 'utf8');
 ck('node detail overview has the clone card and dialog', detail.includes('testID="node-clone-card"') && detail.includes('testID="node-clone-open"') && detail.includes('<CloneNodeDialog') && detail.includes('!readOnly') && detail.includes('cloneNoticeMessage'));
 ck('daemon node list and selected node both open the same dialog', daemon.includes('testID={`daemon-mgmt-clone-${row.nodeId}`}') && daemon.includes('testID="daemon-mgmt-clone"') && daemon.includes('<CloneNodeDialog') && daemon.includes('daemonNodeId: daemon.node_id') && daemon.includes('outcome.pending'));
 ck('list row still opens chat from its own press', daemon.includes('onOpenManagedChat?.(row.alias)'));
+ck('managed row test id stays on the chat pressable, beside the clone button', /<Pressable\n\s+testID=\{`daemon-mgmt-row-\$\{row\.nodeId\}`\}[\s\S]*?onPress=\{onPress\}/.test(daemon) && daemon.includes('<CloneNodeButton testID={`daemon-mgmt-clone-${row.nodeId}`} onPress={onClone} />'));
 ck('client calls clone_node with the preview and only a missing tool is a demo', api.includes("params: { name: 'clone_node', arguments: preview }") && api.includes('workdir_policy: req.workdir_policy') && api.includes('isCloneToolMissing') && api.includes('interpretCloneReply') && api.includes("if (parsed.kind === 'malformed') return interpretCloneReply({ kind: 'error', error: 'clone_node response was not a tool result' }, preview);"));
 ck('dialog shows the name, the session switch defaulting on, workdir modes, and the notes', dialog.includes('testID="clone-node-name"') && dialog.includes('useState(true)') && dialog.includes("useState<CloneWorkdirPolicy>('new_empty')") && dialog.includes('testID="clone-node-copy-session"') && dialog.includes('testID="clone-node-workdir"') && dialog.includes('testID={`clone-node-workdir-${policy}`}') && dialog.includes('testID="clone-node-notes"') && dialog.includes('testID="clone-node-demo"') && dialog.includes('colors.card') && dialog.includes('colors.accent') && dialog.includes('colors.tonalBg') && dialog.includes('pending: true'));
 
