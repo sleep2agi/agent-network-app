@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.237:",
+  "- Provider 页面显示所选 Daemon 的实际 runtime 版本；遇到接口缺失或回读异常时，列出明确的 Hub、CLI、runtime 已验证升级目标和处理步骤。",
+  "- 超时、离线与接口缺失分别提示，不再把超时等同版本过旧；较新版本无需降级。修正 API-key 节点应用已支持的说明，ChatGPT 账号切换仍在开发中。",
+  "",
   "What's new in 0.2.236:",
   "- 本机 Daemon 安装遇到 npm 版本暂不可下载时，改用同版本的 GitHub 正式包，校验固定 SHA256 后再安装，避免一直卡在 npm 重试。",
   "- 延续 Daemon Provider 管理与已有 Codex 状态展示；ChatGPT 登录账号切换仍在开发中，本版不宣称支持。",

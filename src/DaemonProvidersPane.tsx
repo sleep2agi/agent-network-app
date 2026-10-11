@@ -10,9 +10,10 @@ import { useTranslation } from './i18n-react';
 import './i18n-provider-management';
 import { colors, spacing, type, radius } from './theme';
 import DaemonProviderSelection from './DaemonProviderSelection';
+import { PROVIDER_VERIFIED_VERSIONS } from './daemon-provider-management';
 
-export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = false }: {
-  cfg: HubConfig; daemonId?: string; alias: string; offline?: boolean;
+export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersion, offline = false }: {
+  cfg: HubConfig; daemonId?: string; alias: string; daemonVersion?: string | null; offline?: boolean;
 }) {
   const { t } = useTranslation();
   const [tick, refresh] = useState(0);
@@ -60,8 +61,15 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
       <PendingCardTitle title={t('providerManagement.title')} />
       <Text style={{ color: colors.textSecondary }}>{alias} · {daemonId ?? '—'}</Text>
       <Text style={{ color: colors.textSecondary }}>{t('providerManagement.boundary')}</Text>
+      <Text testID="daemon-provider-current-version" style={{ color: colors.textSecondary }}>
+        {t('providerManagement.currentVersion', { runtime: daemonVersion?.trim() || t('providerManagement.versionUnknown') })}
+      </Text>
       {reason === 'loading' ? <ActivityIndicator color={colors.accent} /> : null}
       {reason !== 'ready' ? <Text testID="daemon-providers-state" style={{ color: colors.textSecondary }}>{t(`providerManagement.${reason}`)}</Text> : null}
+      {['unsupported', 'timeout', 'error'].includes(reason) || (snapshot && !snapshot.codex_inventory) ? <View testID="daemon-provider-upgrade-guidance" style={{ gap: spacing.xs }}>
+        <Text style={{ color: colors.textSecondary }}>{t('providerManagement.verifiedVersions', PROVIDER_VERIFIED_VERSIONS)}</Text>
+        <Text style={{ color: colors.textSecondary }}>{t(`providerManagement.${reason === 'unsupported' ? 'upgradeHubAction' : 'checkDaemonAction'}`)}</Text>
+      </View> : null}
       {counts ? <>
         <Text testID="daemon-providers-counts" style={{ color: colors.text }}>{t('providerManagement.counts', counts)}</Text>
         <Text style={{ color: colors.textSecondary }}>{t('providerManagement.observed', { revision: snapshot!.revision, time: new Date(value!.kind === 'ready' ? value!.observedAt : 0).toLocaleString() })}</Text>

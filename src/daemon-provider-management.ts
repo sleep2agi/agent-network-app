@@ -1,6 +1,11 @@
 // #906: explicit daemon readback, never a network-wide Provider catalog.
 // This module contains no native imports and never returns untrusted error text.
 export type ProviderScope = { networkId: string; daemonId: string };
+// Published, verified #906 deployment pair (not a claimed minimum or a reason
+// to downgrade a newer installation). CLI is not reported by Hub heartbeats.
+export const PROVIDER_VERIFIED_VERSIONS = {
+  hub: '0.9.0-preview.121', cli: '2.3.0-preview.163', runtime: '2.5.0-preview.129',
+} as const;
 import { validCodexInventory } from './codex-inventory';
 export type CodexInventory = { observed_at: number; scope: 'hub_bound_nodes'; installation?: { status: 'found' | 'missing' | 'unknown'; version: string | null }; rows: Array<{
   node_id: string; alias: string; status: 'observed' | 'unavailable' | 'not_codex';

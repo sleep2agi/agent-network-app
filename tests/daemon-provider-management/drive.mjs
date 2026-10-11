@@ -19,7 +19,7 @@ try {
       const envelope = payload => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } });
       window.__routeOverride = (url, text) => {
         if (url.pathname === '/api/nodes') return { nodes: [daemon] };
-        if (url.pathname === '/api/status') return { sessions: [{ ...daemon, status: 'idle', updated_at: new Date().toISOString() }] };
+        if (url.pathname === '/api/status') return { sessions: [{ ...daemon, version: '2.5.0-preview.129', status: 'idle', updated_at: new Date().toISOString() }] };
         if (url.pathname === '/api/host-supervisors') return { ok: true, daemons: [{ daemon_node_id: daemon.node_id, alias: daemon.alias, online: true, runtimes_supported: ['codex-app-server'] }] };
         if (url.pathname !== '/mcp') return;
         const params = JSON.parse(text || '{}').params;
@@ -46,6 +46,7 @@ try {
         }
         if (window.__providerMode === 'forbidden') return envelope({ ok: false, error: 'provider_admin_required' });
         if (window.__providerMode === 'unsupported') return { jsonrpc: '2.0', id: 1, error: { message: 'Unknown tool daemon_provider_snapshot' } };
+        if (window.__providerMode === 'timeout') return envelope({ ok: true, request_id: requestId, daemon_node_id: daemon.node_id, status: 'pending' });
         if (params.arguments.action === 'refresh') return envelope({ ok: true, request_id: requestId, status: 'pending' });
         const value = { network_id: 'net-sweep', daemon_node_id: window.__providerMode === 'foreign' ? 'daemon-b' : 'daemon-a', source: 'daemon', revision: 3, providers: [
           { id: 'deepseek', label: 'DeepSeek', enabled: true, runtimes: [{ runtime: 'codex-tui', auth: [
@@ -82,6 +83,8 @@ try {
     assert((await panel.innerText()).includes('deepseek-chat')); passed++;
     assert((await panel.innerText()).includes('未验证')); passed++;
     assert((await panel.innerText()).includes('尚未应用')); passed++;
+    assert((await page.getByTestId('daemon-provider-current-version').innerText()).includes('2.5.0-preview.129')); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-upgrade-guidance').count(), 0); passed++;
     const inventory = await page.getByTestId('daemon-codex-inventory').innerText();
     assert(inventory.includes('existing-codex') && inventory.includes('existing-model') && inventory.includes('0.133.0')); passed++;
     assert(inventory.includes('凭据状态未知') && inventory.includes('不重启')); passed++;
@@ -138,8 +141,22 @@ try {
     assert.equal(applied.length, 1); assert.equal(applied[0].arguments.revision, 6);
     assert.deepEqual(applied[0].arguments.provider, { node_id: 'n_existing', node_revision: 'a'.repeat(64), provider_id: 'deepseek', auth_id: 'work', model: 'deepseek-chat', confirm_restart: true }); passed++;
     assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), true); passed++;
+    await page.evaluate(() => { window.__providerMode = 'unsupported'; });
+    await page.getByTestId('daemon-providers-refresh').click();
+    await page.getByTestId('daemon-provider-upgrade-guidance').waitFor();
+    assert((await page.getByTestId('daemon-providers-state').innerText()).includes('路由配置')); passed++;
+    const targets = await page.getByTestId('daemon-provider-upgrade-guidance').innerText();
+    for (const version of ['0.9.0-preview.121', '2.3.0-preview.163', '2.5.0-preview.129']) assert(targets.includes(version));
+    assert(targets.includes('无需降级')); passed++;
+    if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/provider-upgrade-targets.png`, fullPage: true });
+    await page.evaluate(() => { window.__providerMode = 'timeout'; });
+    await page.getByTestId('daemon-providers-refresh').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-providers-state"]')?.textContent?.includes('超时不能证明'), undefined, { timeout: 25000 });
+    assert((await page.getByTestId('daemon-provider-upgrade-guidance').innerText()).includes('不要反复升级')); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-deepseek').count(), 0); passed++;
+    if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/provider-timeout-not-version.png`, fullPage: true });
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(`PASS daemon Provider management UI ${passed}/18 (one inventory, save, enable/disable and confirmed application receipt flow; synthetic Hub, no real runtime)`);
+  console.log(`PASS daemon Provider management UI ${passed}/${passed} (inventory, save, enable/disable, application, exact version guidance, unsupported and timeout; synthetic Hub, no real runtime)`);
 } finally { await browser.close(); web.close(); }
