@@ -1,0 +1,43 @@
+TEST #1018 — login-independent update entry
+OBSERVED_AT: 2026-10-11T14:22:49Z (22:22:49 Asia/Shanghai)
+Base main: d826e5e2553426b78d3917403805f16c750a1163
+TEST ONLY images; no public installation or production Hub access.
+
+Source Git blobs tested:
+App.tsx 4f11c08b1ddf939ff594086524c40762fb5f0b56
+src/PreloginUpdateCheck.tsx 9348314acc690f4ada96c03ec8a9fba31679091a
+src/prelogin-update.test.ts a90646aae76fa81737c2a736092756da428fe0a0
+tests/test1018-prelogin-update/drive.mjs 0c69e0524abfb29c25b27976f336ea0d894b6b63
+
+Environment: independently pinned public Dockerfile and package-lock.json.
+All commands via sg docker. Runs --rm --init --network none.
+Core image manifest sha256:f4ca0c3d9b51de090a4e6e72ef1e90f318e0f2bf45a3ccb424c5ea6132eb41e8
+Browser image manifest sha256:60be8b0492881fb03067e2b2b8144cd62e87a8bde5fdf5ba02236f900c34d9ce
+
+Layer 1 core: PASS 9 assertions (both entry mounts; no credential dependency;
+Android/desktop dispatch; idle/checking/error/new-version state descriptions).
+Existing desktop-updater-offline.test.ts: PASS 5 assertions (available update,
+offline result published, stale staged update cleared, retry recovery).
+TypeScript build typecheck: PASS exit 0.
+
+Layer 2 exported UI: PASS exit 0. Actual production App export + Chromium;
+synthetic Tauri IPC, empty account storage, only loopback static web server.
+First-run update button -> already-current result.
+Login page with Hub/user/password all empty -> update check works.
+Empty login submit sends no authentication or Hub HTTP call.
+Offline check -> visible error -> retry -> already-current result.
+Login page persists; no account save or page errors.
+Synthetic available version -> existing desktop-update-card installer prompt.
+
+First browser attempt failed on Playwright isDisabled() for RN Web's div-based
+login Pressable, not updater behavior. Corrected only the test to assert the
+actual no-login-request behavior on a DOM click; product constraints unchanged.
+Final drive was mounted read-only onto the exported UI image, whose App/component
+blobs match above. No repeated whole-app test suite.
+
+Limits: native updater IPC is mocked; this does not claim macOS/Windows signed
+installation, Android device interaction, real manifest download or release.
+Existing updater/backend/install/signature behavior is reused, not modified.
+Credentials, production data, local global packages and business nodes untouched.
+Cleanup: both test containers removed automatically; static server/browser closed;
+only TEST ONLY Docker cache images retained. No new persistent running service.

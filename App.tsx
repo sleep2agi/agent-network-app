@@ -79,6 +79,7 @@ import { badgeOffsetCentered } from './src/badge-anchor';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { desktopPromptMode } from './src/update-prompt-model';
 import AndroidUpdatePrompt from './src/AndroidUpdatePrompt';
+import PreloginUpdateCheck from './src/PreloginUpdateCheck';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import { requestOpenTask } from './src/task-open-request';
 import DesktopNotifier from './src/DesktopNotifier';
@@ -1206,6 +1207,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
           <Ionicons name="globe-outline" size={17} color={colors.textSecondary} />
           <Text style={entryStyles.secondaryText}>使用已有 Hub 登录</Text>
         </Pressable>
+        <PreloginUpdateCheck />
       </View>
       </ScrollView>
     </View>
@@ -1790,7 +1792,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
       ) : null}
       {/* Version on the login page so device screenshots are
           unambiguous about which build is installed (tg 692). */}
-      <View style={loginStyles.securityNote}><Text style={loginStyles.version}>v{APP_VERSION}</Text></View>
+      <PreloginUpdateCheck />
       </View>
       </ScrollView>
     </KeyboardAvoidingView>
