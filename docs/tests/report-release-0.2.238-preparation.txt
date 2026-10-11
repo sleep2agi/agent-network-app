@@ -24,3 +24,15 @@ and report-test963-settings-avatar-colors.txt; no unchanged core sample rerun.
 d9ef6aa685462c90f72f02e0b7bef7b4bceaf036 (PR831 same-daemon node clone).
 Release notes include that merged feature; no rollback of concurrent main work.
 Hub .122 formal run 38121256184 remains queued, not a published dependency.
+
+2026-10-11 16:14 +08 increment (supersedes earlier pending package facts):
+Hub .122 is formally published with exact CI-byte GitHub download and registry
+readback SUCCESS. Client lock now uses that available download and verified SRI.
+Runtime .130 all four gates PASS and same-byte GitHub package public; original
+npm publish job remains queued. Native daemon pair .164/.130 draft pins added,
+core initialization/upgrade/identity-preserving repair checked in Docker only.
+CLI .164 old-source publication is stopped after a real documentation stamp
+failure. Backend PR2589 corrects only two guide candidate references/stamps;
+final exact main-built CLI bytes/hash and public download must replace the draft
+hash before this client can be released. Details, including environment failures,
+are in report-release-0.2.238-core-package-pins.txt. No signed .238 claimed.

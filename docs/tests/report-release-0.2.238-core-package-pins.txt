@@ -1,0 +1,51 @@
+0.2.238 core package pins — TEST ONLY, not a client release
+Observed 2026-10-11 16:08 +08
+
+Hub source: main ancestor 231bf8c9711aacd9b2f78afce7c58a1873f3d280.
+Formal CI run 38121256184: build and all four publication gates SUCCESS.
+Same CI tarball publicly downloadable from:
+https://github.com/sleep2agi/agent-network/releases/download/commhub-server-v0.9.0-preview.122/sleep2agi-commhub-server-0.9.0-preview.122.tgz
+1212456 bytes; SHA256 a47a12d03db41fbf5bd2a95a0c0f4a2107d771c17aa3487c58c490fb000c553a.
+Public download cmp against original artifact: identical. No local rebuild.
+
+Docker-only targeted client delta check, --rm, readonly source mount,
+image anet-app:release-platform-selection:
+- local-hub-sidecar.test.ts: 14/14 PASS for exact .122 pin.
+- npm ci --ignore-scripts on complete sidecar lock: 99 packages installed;
+  exact .122 GitHub source and SHA512 integrity accepted.
+- production build-local-hub-sidecar.mjs: compiled .122, 96290944 bytes,
+  manifest sourceIntegrity matches lock; pre-bundle SHA256
+  7917554c5662964742f3b24cb91cb6c146ba8baaed8958c52aa6f30be5c3171f.
+- existing local-hub-runtime run.mjs: actual compiled binary health .122/v3,
+  secured startup, register/auth-me, SIGTERM, persisted DB/restart/login PASS.
+  Expected version is supplied explicitly; legacy .29 default preserved.
+No production database, credentials, global npm, or business-node process touched.
+This Linux container checks the common sidecar core; not a Linux release or
+macOS/Windows signed-package claim. Unchanged UI samples were not rerun.
+
+16:14 +08 increment:
+Hub formal npm publish/registry readback run38121256184 completed SUCCESS.
+Runtime .130 build and four gates SUCCESS; original artifact11696151921
+published as agent-node-v2.5.0-preview.130, public download cmp identical.
+585476 bytes; SHA2564160d36aab60d379c6236bb6515d69811b3f63ca9951461f10c59ff224f73f80.
+Runtime npm publish still queued; no registry visibility inferred.
+
+CLI .164 original run38123039322 gate4 FAILURE: two documentation candidate
+claims still .163. Only documentation updated in backend PR2589; exact main
+source must change/rebuild, so old internal CLI hash is a provisional draft
+pin and must be replaced by the final published main package before release.
+
+Docker targeted native installer core on draft pair .164/.130 and Hub .122:
+initialization_upgrades_old_packages_and_stops_before_overwriting_config PASS
+(1 test, 19 unchanged samples filtered out). Checks real Rust installer with
+fixture npm/Hub: old package upgrade, stop-before-write, private runtime path,
+successful supervisor readback, repeated repair keeps original daemon identity.
+First run without --init failed on orphan fixture PID still alive during the
+second repair. Docker --init corrected container child reaping; same source,
+assertions and test then passed. No relaxed stop/config-preservation contract.
+Image anet-app:daemon-pair164130 built from exact draft source. --rm --init
+--network none, no production credentials/processes. CLI registry/GitHub
+fallback installation of final package still pending its public availability.
+
+Signed client release remains pending; old shipping client is .237.
+Production Hub remains .121; this is not an activation receipt.
