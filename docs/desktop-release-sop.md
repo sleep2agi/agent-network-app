@@ -618,8 +618,11 @@ before opening the PR. Do not edit the page before the mirror has the version:
 the 线路一 buttons would 404.
 
 **Linux card, only after that version's `.deb` is on the mirror.**
-When Linux is deferred, retain the last verified Linux download/version on the
-static page; do not relabel it as the new primary release or invent a `.deb` URL.
+When Linux is deferred, the current `/download` catalog reports that this
+release has no Linux package. The previous verified package remains available
+through release history; do not relabel it as the new primary release or invent
+a `.deb` URL. The static-card instructions below apply only to legacy landing
+page sections, not to the current catalog's version or artifact selection.
 Do not overwrite the new update manifest with Linux entries from an older build.
 The dynamic
 updater endpoint already forwards every platform in the release `latest.json`,
