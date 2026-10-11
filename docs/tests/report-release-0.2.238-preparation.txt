@@ -20,7 +20,7 @@ Still required before release:
 Existing evidence is preserved separately in report-test906-provider-login-client.txt
 and report-test963-settings-avatar-colors.txt; no unchanged core sample rerun.
 
-2026-10-11 15:36 +08: preparation branch incorporates main
+2026-10-11 15:34 +08: preparation branch incorporates main
 d9ef6aa685462c90f72f02e0b7bef7b4bceaf036 (PR831 same-daemon node clone).
 Release notes include that merged feature; no rollback of concurrent main work.
 Hub .122 formal run 38121256184 remains queued, not a published dependency.
