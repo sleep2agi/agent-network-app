@@ -28,3 +28,20 @@ authenticated Hub integration, real model calls, native package acceptance or re
 Full Docker E2E and CI remain required before merge. No claim that custom DeepSeek
 creation or either P0 parent task is finished. No credential distribution implemented.
 Cleanup: disposable containers removed by --rm; test images retained for reproduction.
+
+Increment 2026-10-11 08:04 +08: Docker rendered regression, 16/16 assertions.
+Real Chromium against production Expo web export from CI run 38096534816,
+exact product source b29dbfdd9be60e58488bcc924a25d7e79e0f36f8. Only test/report files
+changed after that commit. Hub/Tauri transport is page-local fixture, NOT live auth.
+Phone 390x844 and desktop 1200x850: own Codex/OpenCode catalog visible; runtime-tagged
+network model absent; switching to daemon-b removes daemon-a model; planted key
+absent; no page errors. Initial harness attempt omitted safeAreaSim test hook and
+timed out before testing product behavior. Added the existing required query hook;
+no product/guard/assertion weakened. Corrected harness passed all 16 assertions.
+
+Reproduce rendered check with a separately verified, exact-SHA web export:
+sg docker -c 'docker build --build-context web=./dist -f tests/daemon-provider-scope/Dockerfile.ui -t anet-provider-scope:test906-ui . && docker run --rm --network none anet-provider-scope:test906-ui'
+Image pins Playwright v1.58.2-noble digest
+sha256:6446946a1d9fd62d9ae501312a2d76a43ee688542b21622056a372959b65d63d.
+drive.mjs is registered in tests/drives.json for subsequent per-head CI bundles.
+This adds rendered UI coverage; native package / live Hub E2E / release remain unproven.
