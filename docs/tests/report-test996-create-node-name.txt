@@ -1,0 +1,44 @@
+TEST ONLY — #996 editable node name / #906 summary regression
+Observed: 2026-10-11 20:17:34 Asia/Shanghai
+Source: main 5ce451af3f04d9465603c83d745bb579014cc515 + this narrow change.
+
+Request: creation should allow a node name. Existing first-step input already
+does; the confirmation page now offers an accessible 修改节点名字 button.
+It returns to that same input without resetting the chosen Daemon Provider.
+No node identity, credential, or runtime launch implementation changes.
+The supplied screenshot is a TMWork session view, not a missing-input repro.
+
+Core: Docker only, pinned tests/provider-create/Dockerfile, sg docker.
+  docker build --target core -t anet-app:test996-name-core -f tests/provider-create/Dockerfile .
+  docker run --rm --network none anet-app:test996-name-core
+Exit 0. Image config SHA256:
+9cc656135296eadb2080b068fcb2a541828e77a935cf10f86d90ecb92f94d2f0
+wizard runtime checks 27/27; Provider creation groups 3/3;
+request checks 27/27; workdir checks 57/57; drive registry 12/12;
+full application TypeScript check PASS.
+
+CI correction: PR851 accda1ed Windows jobs 114465885386 / 114465877690
+failed the obsolete exact JSX summary string in wizard-runtimes.test.ts.
+The actual managedSelection-first expression retains legacy fallbacks.
+The replacement evaluates the actual expression and asserts managed model,
+explicit legacy model, runtime first model, and host-login fallback separately.
+No assertion is dropped and no environmental failure is claimed.
+
+Actual freshly exported Expo UI in isolated Chromium: 16/16 PASS, exit 0.
+Desktop 1200x900/light and phone 390x844/dark preference. Both exercise:
+fill original name -> select managed Provider/auth/model -> confirmation ->
+edit name -> re-confirm -> synthetic create request with edited Chinese name
+and the same model/profile/revision. Pending registration is not called online.
+No real native runtime, TLS model call, device install, or palette assertion.
+  docker build --target browser -t anet-app:test996-name-ui -f tests/provider-create/Dockerfile .
+  docker run --rm --network none anet-app:test996-name-ui
+Browser image config SHA256:
+4b05a6b793864c28e3278e49479ec87e8e4475ee9744144879a47a8855d39025
+Public native build/release: not performed; branch images are test-only.
+
+Recovery impact: no new service, port, proxy, tunnel, schema or key source.
+Existing repository desktop/Android build and version rollback apply.
+UI code is rebuilt from the repository; existing Hub/node state still comes
+from documented backups, not this client change. No production writes,
+node creation, package registry publication or global installation.
+Both containers removed (--rm); cached test images retained for reproduction.

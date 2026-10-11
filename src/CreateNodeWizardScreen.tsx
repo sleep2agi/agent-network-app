@@ -796,7 +796,17 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             <View style={styles.summaryCard}>
               <SummaryRow k="服务器" v={`${daemon.alias} (${daemon.hostname || '—'})`} />
               <Divider />
-              <SummaryRow k="名字" v={normalizeNodeName(name) || '—'} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryKey}>名字</Text>
+                <View style={styles.summaryValWithAction}>
+                  <Text style={styles.summaryVal} numberOfLines={2} testID="create-name-summary">{normalizeNodeName(name) || '—'}</Text>
+                  <Pressable testID="create-name-edit" accessibilityRole="button" accessibilityLabel="修改节点名字"
+                    hitSlop={8} onPress={() => setStep('name')}
+                    style={({ pressed }) => [styles.summaryEdit, pressed && { opacity: 0.6 }]}>
+                    <Text style={styles.summaryEditText}>修改</Text>
+                  </Pressable>
+                </View>
+              </View>
               <Divider />
               <SummaryRow k="Runtime" v={runtimeDisplayLabel(RUNTIMES, runtime)} />
               {runtimeId === 'opencode-cli' ? (

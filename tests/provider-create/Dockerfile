@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
-CMD ["sh", "-c", "bun src/daemon-provider-create.test.ts && bun src/create-node-request.test.ts && bun src/create-node-workdir.test.ts && bun src/drive-registry.test.ts && npm run typecheck"]
+CMD ["sh", "-c", "bun src/wizard-runtimes.test.ts && bun src/daemon-provider-create.test.ts && bun src/create-node-request.test.ts && bun src/create-node-workdir.test.ts && bun src/drive-registry.test.ts && npm run typecheck"]
 FROM core AS web
 ENV CI=1 EXPO_NO_TELEMETRY=1
 RUN npx --no-install expo export -p web --output-dir /web

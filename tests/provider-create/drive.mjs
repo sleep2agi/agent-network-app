@@ -51,17 +51,27 @@ try {
     await page.getByTestId('create-node-next').click();
     await page.getByTestId('create-node-submit').waitFor();
     assert((await page.getByTestId('create-step-body').innerText()).includes('configured-model')); passed++;
+    assert.equal(await page.getByTestId('create-name-summary').innerText(), 'provider-fixture'); passed++;
+    await page.getByTestId('create-name-edit').click();
+    assert.equal(await page.getByTestId('create-name-input').inputValue(), 'provider-fixture');
+    const editedName = `创建演示-${theme}`;
+    await page.getByTestId('create-name-input').fill(editedName);
+    await page.getByTestId('create-node-next').click();
+    await page.getByTestId('create-node-next').click();
+    await page.getByTestId('create-node-submit').waitFor();
+    assert.equal(await page.getByTestId('create-name-summary').innerText(), editedName); passed++;
     await page.getByTestId('create-node-submit').click();
     await page.waitForFunction(() => window.__createCalls.length === 1);
     const args = await page.evaluate(() => window.__createCalls[0]);
     assert.equal(args.daemon_node_id, 'd_fixture');
+    assert.equal(args.node_spec.name, editedName);
     assert.equal(args.node_spec.model, 'configured-model');
     assert.deepEqual(args.node_spec.flags.daemonProvider, { revision: 7, provider_id: 'custom', auth_id: 'work', model: 'configured-model' });
     assert(!JSON.stringify(args).includes('baseUrl')); passed++;
-    assert.equal(await page.getByText('✓ provider-fixture 已上线', { exact: true }).count(), 0); passed++;
+    assert.equal(await page.getByText(`✓ ${editedName} 已上线`, { exact: true }).count(), 0); passed++;
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  assert.equal(passed, 12);
-  console.log('PASS Provider creation wizard12/12, desktop/light + phone/dark; pending is not running');
+  assert.equal(passed, 16);
+  console.log('PASS Provider creation wizard16/16, name edit + selected profile preserved, desktop/light + phone/dark; pending is not running');
 } finally { await browser.close(); web.close(); }
