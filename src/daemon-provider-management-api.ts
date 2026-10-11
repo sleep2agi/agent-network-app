@@ -1,6 +1,7 @@
 import { appFetch } from './app-fetch';
 import type { HubConfig } from './api';
 import { loadProviderSnapshot, parseProviderRpc } from './daemon-provider-management';
+import { runProviderApplication, type ProviderApplicationWrite } from './daemon-provider-application';
 
 export function providerWriteTransportAllowed(serverUrl: string): boolean {
   try { const u = new URL(serverUrl); return !u.username && !u.password &&
@@ -30,6 +31,19 @@ export function readManagedProviders(cfg: HubConfig, daemonId: string, signal: A
           id, network_id: cfg.networkId, ...(write && action === 'refresh' ? write : {}) },
       } }),
     }, !!write && action === 'refresh');
+    return parseProviderRpc(response.status, response.ok ? await response.text() : '');
+  }, signal);
+}
+
+export function applyManagedProvider(cfg: HubConfig, daemonId: string, write: ProviderApplicationWrite, signal: AbortSignal) {
+  if (!providerWriteTransportAllowed(cfg.serverUrl)) return Promise.resolve({ kind: 'unconfirmed' as const });
+  return runProviderApplication({ networkId: cfg.networkId ?? '', daemonId }, write, async (action, id, requestSignal) => {
+    const response = await providerFetch(`${cfg.serverUrl.replace(/\/$/, '')}/mcp`, {
+      method: 'POST', signal: requestSignal,
+      headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', Accept: 'application/json, text/event-stream', 'MCP-Protocol-Version': '2025-03-26' },
+      body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'daemon_provider_snapshot',
+        arguments: { action, id, network_id: cfg.networkId, ...(action === 'apply' ? write : {}) } } }),
+    }, action === 'apply');
     return parseProviderRpc(response.status, response.ok ? await response.text() : '');
   }, signal);
 }

@@ -91,7 +91,7 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
         </View>)}
       </>}
     </PendingPanelCard> : null}
-    {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} /> : null}
+    {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} cfg={cfg} /> : null}
     {snapshot ? <PendingPanelCard testID="daemon-provider-key-form">
       <PendingCardTitle title={t('providerManagement.keyForm')} />
       <Text style={{ color: colors.textSecondary }}>{t('providerManagement.writeHint')}</Text>

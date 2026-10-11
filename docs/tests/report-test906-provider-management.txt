@@ -143,3 +143,22 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
   Existing selection test extended, not reported as extra independent tests.
   No UI changes or browser rerun; application button remains unavailable until
   real daemon lifecycle integration. No native build, production or release.
+
+2026-10-11 10:00 CST: confirmed single-node Provider application UI (TEST-ONLY).
+  Base aa55b14d7f1ffecb613e618162325d0f6168675a plus this working tree.
+  Core Docker: 23/23 PASS (new application test includes exact receipt,
+  foreign scope/wrong model and hung-request timeout); full client TypeScript
+  PASS before addition of that test. No second full typecheck result implied.
+  Web export/build PASS; browser Docker --rm --network none: 18/18 PASS,
+  synthetic Hub. Versioned node selection, explicit confirmation, no premature
+  POST, single apply request, exact revision/selection and daemon receipt shown.
+  Leaving page/timeout does NOT promise cancellation/rollback; UI retains an
+  unconfirmed state and does not automatically retry a state-changing request.
+  Web image:
+    e34e5eaa5e75c5a46ed3d0b38015abdd1b1cd3d3a63fb7c377cd3f0fe92d3a79
+  Browser image:
+    890d64ae174e66a3c2a2a9d220d1336bf4b3a3c7c421e8bb10743eb9a0aa7bdc
+  Build input uses Docker web-export output as named web build context, not the
+  full build image filesystem. No native installer or real Codex validation here.
+  Containers removed (--rm); test-only images and temporary web export retained.
+  No production changes, merge or public release.

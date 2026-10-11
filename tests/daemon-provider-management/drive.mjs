@@ -13,6 +13,7 @@ try {
     await page.addInitScript({ content: `(${initScript.toString().replace('http://mock-hub.invalid', 'http://127.0.0.1:9200')})({theme:'light'});` });
     await page.addInitScript(() => {
       window.__providerMode = 'ready'; window.__providerCalls = []; window.__savedProviders = {}; window.__providerRevision = 3;
+      window.__providerApplyEnabled = false; window.__applicationIntent = null;
       const daemon = { node_id: 'daemon-a', alias: 'daemon-a', role: 'host_supervisor', lifecycle_state: 'running', config_snapshot: { role: 'host_supervisor' } };
       const requestId = 'dps_00000000-0000-0000-0000-000000000001';
       const envelope = payload => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } });
@@ -24,6 +25,19 @@ try {
         const params = JSON.parse(text || '{}').params;
         if (params?.name !== 'daemon_provider_snapshot') return;
         window.__providerCalls.push(params);
+        const applicationId = 'dpa_00000000-0000-0000-0000-000000000002';
+        if (params.arguments.action === 'apply') {
+          window.__applicationIntent = params.arguments;
+          return envelope({ ok: true, request_id: applicationId, status: 'pending' });
+        }
+        if (params.arguments.action === 'read' && params.arguments.id === applicationId) {
+          const intent = window.__applicationIntent;
+          return envelope({ ok: true, request_id: applicationId, daemon_node_id: 'daemon-a', status: 'succeeded', application: {
+            status: 'applied', request_id: applicationId, node_id: intent.provider.node_id, provider_id: intent.provider.provider_id,
+            auth_id: intent.provider.auth_id, model: intent.provider.model, runtime_provider: 'anet_' + 'b'.repeat(20),
+            node_revision: 'c'.repeat(64), provider_revision: intent.revision, verification: 'runtime_confirmed', applied_at: Date.now(),
+          } });
+        }
         if (params.arguments.action === 'put') {
           if (params.arguments.revision !== window.__providerRevision) return envelope({ ok: false, error: 'revision_conflict' });
           window.__savedProviders[params.arguments.provider.id] = params.arguments.provider;
@@ -44,6 +58,7 @@ try {
           node_id: 'n_existing', alias: 'existing-codex', status: 'observed', runtime: 'codex-app-server', home_ref: '1234567890abcdef', home_source: 'node-codex-home',
           config_status: 'read', configured_provider: 'configured-custom', configured_model: 'existing-model', node_configured_model: 'node-model', provider_ids: ['configured-custom'],
           auth_kind: 'api_key', credential_status: 'unknown', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked',
+          ...(window.__providerApplyEnabled ? { config_revision: 'a'.repeat(64) } : {}),
         }] } };
         if (window.__providerMode === 'empty') value.providers = [];
         if (window.__providerMode === 'ready') {
@@ -105,11 +120,26 @@ try {
     await page.getByTestId('daemon-provider-toggle-submit-custom').click();
     await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-custom"]')?.textContent?.includes('已启用配置'));
     assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').at(-1).arguments.revision), 5); passed++;
+    await page.evaluate(() => { window.__providerApplyEnabled = true; });
     await page.getByTestId('daemon-providers-refresh').click();
     await page.getByTestId('daemon-provider-custom').waitFor();
     assert.equal(await page.getByTestId('daemon-provider-save-status').count(), 0); passed++;
+    for (const [field, id] of Object.entries({ nodeId: 'n_existing', providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' })) {
+      const control = `daemon-provider-select-${field}`;
+      await page.getByTestId(control).click();
+      await page.getByTestId(`${control}-menu-search`).fill(id);
+      await page.getByTestId(`${control}-menu-opt-${id}`).click();
+    }
+    await page.getByTestId('daemon-provider-apply').click();
+    assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), 0); passed++;
+    await page.getByTestId('daemon-provider-apply-confirm').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-application-status"]')?.textContent?.includes('已确认所选'));
+    const applied = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply'));
+    assert.equal(applied.length, 1); assert.equal(applied[0].arguments.revision, 6);
+    assert.deepEqual(applied[0].arguments.provider, { node_id: 'n_existing', node_revision: 'a'.repeat(64), provider_id: 'deepseek', auth_id: 'work', model: 'deepseek-chat', confirm_restart: true }); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), true); passed++;
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(`PASS daemon Provider management UI ${passed}/15 (one inventory, selection, save, enable/disable and refreshed receipt flow; synthetic Hub; application unavailable)`);
+  console.log(`PASS daemon Provider management UI ${passed}/18 (one inventory, save, enable/disable and confirmed application receipt flow; synthetic Hub, no real runtime)`);
 } finally { await browser.close(); web.close(); }

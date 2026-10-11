@@ -2,6 +2,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, providerEnabledWrite, scopedProviderSave, type ProviderRpc } from './daemon-provider-management';
 import { changeProviderSelection, EMPTY_PROVIDER_SELECTION, providerSelectionOptions, resolveProviderSelection, providerApplicationWrite } from './daemon-provider-selection';
+import { runProviderApplication } from './daemon-provider-application';
 let passed = 0;
 const test = async (name: string, run: () => void | Promise<void>) => { await run(); passed++; console.log(`PASS ${name}`); };
 const scope = { networkId: 'net-fixture', daemonId: 'daemon-a' };
@@ -14,6 +15,21 @@ const snapshot = () => ({ network_id: scope.networkId, daemon_node_id: scope.dae
 const pending = () => ({ kind: 'payload' as const, value: { ok: true, request_id: requestId, status: 'pending', daemon_node_id: scope.daemonId } });
 const receipt = () => ({ kind: 'payload' as const, value: { ...pending().value, status: 'succeeded', snapshot: snapshot(), observed_at: 1000 } });
 const rpcBody = (v: unknown) => JSON.stringify({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(v) }] } });
+await test('application submits once, accepts only exact receipt and never treats timeout as rollback', async () => {
+  const applicationId = 'dpa_00000000-0000-0000-0000-000000000001';
+  const write = { revision: 2, provider: { node_id: 'n_a', node_revision: 'a'.repeat(64), provider_id: 'deepseek', auth_id: 'work', model: 'deepseek-chat', confirm_restart: true as const } };
+  for (const mode of ['ok', 'foreign', 'wrong-model', 'hang'] as const) {
+    let submits = 0;
+    const result = await runProviderApplication(scope, write, async action => {
+      if (action === 'apply') { submits++; return { kind: 'payload', value: { status: 'pending', request_id: applicationId } }; }
+      if (mode === 'hang') return new Promise(() => {});
+      return { kind: 'payload', value: { status: 'succeeded', request_id: applicationId, daemon_node_id: mode === 'foreign' ? 'another' : scope.daemonId,
+        application: { status: 'applied', request_id: applicationId, node_id: 'n_a', provider_id: 'deepseek', auth_id: 'work', model: mode === 'wrong-model' ? 'wrong' : 'deepseek-chat',
+          runtime_provider: 'anet_' + 'b'.repeat(20), node_revision: 'c'.repeat(64), provider_revision: 2, verification: 'runtime_confirmed', applied_at: Date.now() } } };
+    }, new AbortController().signal, { timeoutMs: 25, pollMs: 0 });
+    assert.equal(result.kind, mode === 'ok' ? 'applied' : 'unconfirmed'); assert.equal(submits, 1);
+  }
+});
 await test('valid snapshot detached and configured is not healthy', () => {
   const v = snapshot(); const parsed = parseProviderSnapshot(v, scope)!;
   assert(parsed); v.providers[0].label = 'changed'; assert.equal(parsed.providers[0].label, 'DeepSeek');
