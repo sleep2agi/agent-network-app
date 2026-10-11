@@ -66,6 +66,15 @@ try {
     const inventory = await page.getByTestId('daemon-codex-inventory').innerText();
     assert(inventory.includes('existing-codex') && inventory.includes('existing-model') && inventory.includes('0.133.0')); passed++;
     assert(inventory.includes('凭据状态未知') && inventory.includes('不重启')); passed++;
+    for (const [field, id] of Object.entries({ nodeId: 'n_existing', providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' })) {
+      const control = `daemon-provider-select-${field}`;
+      await page.getByTestId(control).click();
+      await page.getByTestId(`${control}-menu-search`).fill(id);
+      await page.getByTestId(`${control}-menu-opt-${id}`).click();
+    }
+    const selection = await page.getByTestId('daemon-provider-selection-summary').innerText();
+    assert(selection.includes('n_existing') && selection.includes('deepseek-chat') && selection.includes('work'));
+    assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), true); passed++;
     assert((await page.getByTestId('daemon-providers-counts').innerText()).includes('2')); passed++;
     const calls = await page.evaluate(() => window.__providerCalls);
     assert.equal(calls[0].arguments.id, 'daemon-a'); assert.equal(calls[0].arguments.network_id, 'net-sweep'); passed++;
@@ -77,11 +86,12 @@ try {
     assert((await page.getByTestId('daemon-provider-custom').innerText()).includes('model-save'));
     assert.equal(await page.getByTestId('daemon-provider-input-key').inputValue(), '');
     assert(!(await panel.innerText()).includes('TEST-ONLY-UI-KEY')); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-selection-summary').count(), 0); passed++;
     await page.getByTestId('daemon-providers-refresh').click();
     await page.getByTestId('daemon-provider-custom').waitFor();
     assert.equal(await page.getByTestId('daemon-provider-save-status').count(), 0); passed++;
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(`PASS daemon Provider management UI ${passed}/10 (one inventory, save and refreshed receipt flow; synthetic Hub)`);
+  console.log(`PASS daemon Provider management UI ${passed}/12 (one inventory, selection, save and refreshed receipt flow; synthetic Hub; application unavailable)`);
 } finally { await browser.close(); web.close(); }

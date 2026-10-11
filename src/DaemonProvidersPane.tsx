@@ -9,6 +9,7 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-provider-management';
 import { colors, spacing, type, radius } from './theme';
+import DaemonProviderSelection from './DaemonProviderSelection';
 
 export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = false }: {
   cfg: HubConfig; daemonId?: string; alias: string; offline?: boolean;
@@ -87,6 +88,7 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
         </View>)}
       </>}
     </PendingPanelCard> : null}
+    {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} /> : null}
     {snapshot ? <PendingPanelCard testID="daemon-provider-key-form">
       <PendingCardTitle title={t('providerManagement.keyForm')} />
       <Text style={{ color: colors.textSecondary }}>{t('providerManagement.writeHint')}</Text>

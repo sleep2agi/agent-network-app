@@ -90,3 +90,23 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
     b53a287ec2b5ea357dadcb72e4795d21bfa0b2caace3dc6257bc332875728fa2
   Existing Dockerfiles/commands above; TEST-ONLY images retained, --rm runs
   completed. No production credentials, release, or native model-switch claim.
+
+2026-10-11 09:24 CST: real configuration selection (on 26b39470).
+  Added searchable target node -> enabled Provider -> account/key profile ->
+  model selectors using only this daemon's parsed inventory and saved config.
+  Codex SDK/unavailable/foreign nodes are not substituted for Codex TUI nodes;
+  disabled providers are excluded. Changing parent choices clears children.
+  A changed scope, snapshot revision or scan timestamp invalidates selections.
+  Selecting does NOT send a mutation. Application remains explicitly disabled
+  until the backend operation contract is implemented and wired. ChatGPT
+  profiles still display unverified login, never an inferred account session.
+  This is frontend preparation for the full P0 flow, not feature completion.
+  Docker core checks 21/21 PASS, TypeScript exit 0. One Chromium exported-Web
+  inventory/searchable-selection/save/refresh flow 12/12 PASS, synthetic Hub.
+  Includes disabled apply control and clearing selection on revised receipt.
+  Export contains current product source; test drive extended after export.
+  Web manifest list:
+    59766c44995955cd37e76177e38938d063615117091c2db7aa5dc3948bec8ede
+  Browser manifest list:
+    259fa7b13e3bb1d2bb1e0256c50cb00d53595d47b3492a3d686b8035982f5021
+  No production changes, running test containers, or native package claim.

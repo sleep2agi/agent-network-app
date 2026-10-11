@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, scopedProviderSave, type ProviderRpc } from './daemon-provider-management';
+import { changeProviderSelection, EMPTY_PROVIDER_SELECTION, providerSelectionOptions, resolveProviderSelection } from './daemon-provider-selection';
 let passed = 0;
 const test = async (name: string, run: () => void | Promise<void>) => { await run(); passed++; console.log(`PASS ${name}`); };
 const scope = { networkId: 'net-fixture', daemonId: 'daemon-a' };
@@ -148,5 +149,30 @@ await test('save status never crosses Hub, credential, network, daemon or refres
   const pane = readFileSync(new URL('./DaemonProvidersPane.tsx', import.meta.url), 'utf8');
   assert(pane.includes('scopedProviderSave(saveState, identity)'));
   assert(pane.includes("const saving = saveNote === 'saving'"));
+});
+await test('selection is scoped to scanned TUI nodes and enabled provider/auth/model tuples', () => {
+  const v = parseProviderSnapshot(snapshot(), scope)!;
+  v.codex_inventory = { observed_at: 1000, scope: 'hub_bound_nodes', rows: [
+    { node_id: 'n_a', alias: 'a', status: 'observed', runtime: 'codex-app-server' },
+    { node_id: 'n_sdk', alias: 'sdk', status: 'observed', runtime: 'codex-sdk' },
+    { node_id: 'n_unknown', alias: 'unknown', status: 'unavailable' },
+  ] };
+  const selected = { nodeId: 'n_a', providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' };
+  assert.deepEqual(providerSelectionOptions(v, selected).nodes.map(n => n.node_id), ['n_a']);
+  const resolved = resolveProviderSelection(v, selected)!;
+  assert.equal(resolved.daemonId, scope.daemonId); assert.equal(resolved.providerRevision, 2);
+  assert.equal(resolved.authKind, 'api_key'); assert.equal('key' in resolved, false);
+  for (const change of [{ nodeId: 'foreign' }, { providerId: 'foreign' }, { authId: 'foreign' }, { model: 'foreign' }]) {
+    assert.equal(resolveProviderSelection(v, { ...selected, ...change }), null);
+  }
+  v.providers[0].enabled = false; assert.equal(resolveProviderSelection(v, selected), null);
+  v.providers[0].enabled = true; delete v.codex_inventory; assert.equal(resolveProviderSelection(v, selected), null);
+});
+await test('changing node/provider/auth clears dependent selections without inferring a default', () => {
+  const selected = { nodeId: 'n_a', providerId: 'deepseek', authId: 'work', model: 'shared-model' };
+  assert.deepEqual(changeProviderSelection(selected, 'nodeId', 'n_b'), { ...EMPTY_PROVIDER_SELECTION, nodeId: 'n_b' });
+  assert.deepEqual(changeProviderSelection(selected, 'providerId', 'new'), { ...selected, providerId: 'new', authId: '', model: '' });
+  assert.deepEqual(changeProviderSelection(selected, 'authId', 'new'), { ...selected, authId: 'new', model: '' });
+  assert.deepEqual(changeProviderSelection(selected, 'model', 'new'), { ...selected, model: 'new' });
 });
 console.log(`${passed}/${passed} passed`);

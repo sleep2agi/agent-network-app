@@ -1,5 +1,16 @@
 import { registerTranslations } from './i18n';
 registerTranslations({
+  'providerManagement.select.title': ['选择节点配置 · codex-tui', 'Select node configuration · codex-tui'],
+  'providerManagement.select.boundary': ['候选来自此 Daemon 的扫描与托管配置。选择不会修改节点；配置模型不代表已验证可调用。', 'Choices come from this daemon inventory and managed configuration. Selection does not change nodes; configured models are not verified callable.'],
+  'providerManagement.select.nodeId': ['目标 Codex TUI 节点', 'Target Codex TUI node'],
+  'providerManagement.select.providerId': ['Provider', 'Provider'],
+  'providerManagement.select.authId': ['账号 / 密钥配置', 'Account / key profile'],
+  'providerManagement.select.model': ['模型（支持搜索）', 'Model (searchable)'],
+  'providerManagement.select.choose': ['请选择', 'Choose'],
+  'providerManagement.select.clear': ['清除选择', 'Clear selection'],
+  'providerManagement.select.noNodes': ['暂无已扫描的 Codex TUI 节点，请先刷新扫描；不会从其他 Daemon 补入候选。', 'No scanned Codex TUI nodes. Refresh the inventory; nodes from other daemons are not substituted.'],
+  'providerManagement.select.unavailable': ['节点应用接口尚未接通，暂不能提交切换。已有保存与扫描功能不受影响。', 'Node application is not connected yet; switching is unavailable. Existing save and inventory remain functional.'],
+  'providerManagement.select.apply': ['应用到所选节点', 'Apply to selected node'],
   'providerManagement.inventoryTitle': ['已有 Codex 节点', 'Existing Codex nodes'],
   'providerManagement.installation.found': ['Daemon 启动路径中可执行', 'Executable on daemon launch PATH'],
   'providerManagement.installation.missing': ['Daemon 启动路径中不可执行', 'Not executable on daemon launch PATH'],
