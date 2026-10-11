@@ -1,6 +1,6 @@
 // Board #908 — management page for one host_supervisor daemon.
 // Replaces the chat empty-state. Lists nodes the Hub already scopes to this daemon
-// and calls the existing create / start / stop / restart / delete paths.
+// and calls the existing create / start / stop / restart / delete paths, plus clone on this daemon.
 // Runtime logs stay on the node page (same handoff the old notice used).
 // Unconnected provider, skills, key, and env entries stay a local demo on this page.
 // That panel does not replace create, start, stop, restart, delete, or the disabled Probe button.
@@ -62,6 +62,9 @@ import { PANE_BACK_TEST_ID } from './pane-header';
 import { pointerUi } from './pointer-ui';
 import DialogFrame from './DialogFrame';
 import { SettingsGroup, SettingsRow } from './settings-kit';
+import CloneNodeDialog, { CloneNodeButton } from './CloneNodeDialog';
+import { cloneNoticeMessage } from './node-clone';
+import './i18n-node-clone';
 
 const CONFIRM_TITLE: Record<NodeActionId, string> = {
   start: 'daemon.mgmt.confirmStart',
@@ -135,6 +138,8 @@ export default function DaemonManagementScreen({
   const [confirmAlias, setConfirmAlias] = useState('');
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState('');
+  const [cloneRowId, setCloneRowId] = useState<string | null>(null);
+  const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; pending: boolean; text: string } | null>(null);
   const [section, setSectionRaw] = useState<DaemonSection>(initialSection);
   // Phone only: start on the menu unless the caller deep-linked a section.
   const [menuOpen, setMenuOpen] = useState(initialSection === 'overview');
@@ -167,6 +172,7 @@ export default function DaemonManagementScreen({
   const daemon = daemonNodeOf(nodes, alias);
   const rows = managedRows(nodes, statusUnread ? null : sessions, alias);
   const selected = rows.find(row => row.nodeId === selectedId) ?? null;
+  const cloneRow = rows.find(row => row.nodeId === cloneRowId) ?? null;
   const lookup = lookupSupervisor(supervisors, daemon ? { node_id: daemon.node_id, alias: daemon.alias } : { alias });
   const create = createAction(lookup, !!onCreate);
   const probe = probeAction();
@@ -357,9 +363,13 @@ export default function DaemonManagementScreen({
             ))}
           </View>
           <ActionNotes actions={actions.filter(action => action.visible)} />
+          <View style={{ flexDirection: 'row' }}>
+            <CloneNodeButton testID="daemon-mgmt-clone" onPress={() => { setCloneNotice(null); setCloneRowId(selected.nodeId); }} />
+          </View>
         </>
       ) : null}
       {message ? <Text testID="daemon-mgmt-message" style={{ color: messageTone(message), fontSize: type.small, lineHeight: 18 }}>{message}</Text> : null}
+      {cloneNotice ? <Text testID="daemon-mgmt-clone-message" style={{ color: cloneNotice.demo || cloneNotice.pending ? colors.blocked : colors.running, fontSize: type.small, lineHeight: 18 }}>{cloneNotice.text}</Text> : null}
     </View>
   );
 
@@ -377,6 +387,7 @@ export default function DaemonManagementScreen({
           setSelectedId(row.nodeId);
           onOpenManagedChat?.(row.alias);
         }}
+        onClone={() => { setSelectedId(row.nodeId); setCloneNotice(null); setCloneRowId(row.nodeId); }}
       />
     ))
   );
@@ -579,6 +590,18 @@ export default function DaemonManagementScreen({
           </View>
         </DialogFrame>
       ) : null}
+      {cloneRow && daemon?.node_id ? (
+        <CloneNodeDialog
+          cfg={cfg}
+          source={{ nodeId: cloneRow.nodeId, alias: cloneRow.alias, name: cloneRow.name, daemonNodeId: daemon.node_id }}
+          takenNames={(nodes ?? []).flatMap(item => [item.alias, item.node_name ?? ''].map(value => value.trim()).filter(Boolean))}
+          onClose={() => setCloneRowId(null)}
+          onDone={outcome => {
+            setCloneNotice({ demo: outcome.demo, pending: outcome.pending, text: cloneNoticeMessage(outcome, t) });
+            if (outcome.pending) void load();
+          }}
+        />
+      ) : null}
     </View>
   );
 }
@@ -697,39 +720,47 @@ function MgmtButton({ action, onPress, testID, busy, tone }: {
   );
 }
 
-function Row({ row, selected, compact, opensChat, onPress }: {
+function Row({ row, selected, compact, opensChat, onPress, onClone }: {
   row: ReturnType<typeof managedRows>[number];
   selected: boolean;
   compact?: boolean;
   opensChat?: boolean;
   onPress: () => void;
+  onClone: () => void;
 }) {
   const dot = row.status.online === null ? colors.rest : statusColor(row.status.text, row.status.online);
   return (
-    <Pressable
-      testID={`daemon-mgmt-row-${row.nodeId}`}
-      accessibilityRole="button"
-      accessibilityState={{ selected }}
-      accessibilityLabel={`${row.name}, ${statusLabel(row.status)}, ${runtimeLabel(row.runtime)}, ${nodeTypeLabel(row.type)}${opensChat ? `, ${t('daemon.mgmt.openChat')}` : ''}`}
-      onPress={onPress}
-      style={({ pressed }) => [{
+    <View
+      style={{
+        flexDirection: 'row',
+        alignItems: 'center',
+        gap: spacing.sm,
         paddingHorizontal: spacing.lg,
         paddingVertical: spacing.md,
-        gap: spacing.xs,
         backgroundColor: selected ? colors.rowActive : 'transparent',
-      }, pressed && { backgroundColor: colors.rowHover }]}
+      }}
     >
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: dot }} />
-        <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong, flex: 1 }} numberOfLines={1}>{row.name}</Text>
-      </View>
-      {row.name !== row.alias ? <Text style={{ color: colors.textMuted, fontSize: type.small, paddingLeft: 15 }} numberOfLines={1}>{row.alias}</Text> : null}
-      <Text style={{ color: colors.textSecondary, fontSize: type.small, paddingLeft: 15 }} numberOfLines={compact ? 1 : 3}>
-        {compact
-          ? `${statusLabel(row.status)} · ${nodeTypeLabel(row.type)}`
-          : `${t('daemon.mgmt.field.status')} ${statusLabel(row.status)}\n${t('daemon.mgmt.field.runtime')} ${runtimeLabel(row.runtime)}\n${t('daemon.mgmt.field.type')} ${nodeTypeLabel(row.type)}`}
-      </Text>
-    </Pressable>
+      <Pressable
+        testID={`daemon-mgmt-row-${row.nodeId}`}
+        accessibilityRole="button"
+        accessibilityState={{ selected }}
+        accessibilityLabel={`${row.name}, ${statusLabel(row.status)}, ${runtimeLabel(row.runtime)}, ${nodeTypeLabel(row.type)}${opensChat ? `, ${t('daemon.mgmt.openChat')}` : ''}`}
+        onPress={onPress}
+        style={({ pressed }) => [{ flex: 1, minWidth: 0, gap: spacing.xs }, pressed && { opacity: 0.75 }]}
+      >
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: dot }} />
+          <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong, flex: 1 }} numberOfLines={1}>{row.name}</Text>
+        </View>
+        {row.name !== row.alias ? <Text style={{ color: colors.textMuted, fontSize: type.small, paddingLeft: 15 }} numberOfLines={1}>{row.alias}</Text> : null}
+        <Text style={{ color: colors.textSecondary, fontSize: type.small, paddingLeft: 15 }} numberOfLines={compact ? 1 : 3}>
+          {compact
+            ? `${statusLabel(row.status)} · ${nodeTypeLabel(row.type)}`
+            : `${t('daemon.mgmt.field.status')} ${statusLabel(row.status)}\n${t('daemon.mgmt.field.runtime')} ${runtimeLabel(row.runtime)}\n${t('daemon.mgmt.field.type')} ${nodeTypeLabel(row.type)}`}
+        </Text>
+      </Pressable>
+      <CloneNodeButton testID={`daemon-mgmt-clone-${row.nodeId}`} onPress={onClone} />
+    </View>
   );
 }
 
