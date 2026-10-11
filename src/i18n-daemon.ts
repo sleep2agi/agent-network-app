@@ -19,7 +19,7 @@ export const daemonTranslations = {
   'daemon.mgmt.domainSettings': ['Daemon / 虚拟机域设置', 'Daemon / VM domain settings'],
   'daemon.mgmt.domainSettingsHint': ['此虚拟机上的 SKILLS、令牌与 Provider', 'SKILLS, tokens, and providers on this virtual machine'],
   'daemon.mgmt.openChat': ['对话', 'Chat'],
-  'daemon.mgmt.intro': ['在这里创建节点、打开托管 Agent 的对话，并对它们执行启动 / 停止 / 重启 / 删除。（守护进程本身不是聊天对象。）', 'Create nodes here, open chats with managed agents, and run start / stop / restart / delete. (The daemon itself is not a chat target.)'],
+  'daemon.mgmt.intro': ['在这里创建节点、复制节点、打开托管 Agent 的对话，并对它们执行启动 / 停止 / 重启 / 删除。（守护进程本身不是聊天对象。）', 'Create or clone nodes here, open chats with managed agents, and run start / stop / restart / delete. (The daemon itself is not a chat target.)'],
   'daemon.mgmt.logs': ['运行日志', 'Runtime logs'],
   'daemon.mgmt.logsUnavailable': ['这个窗口打不开运行日志。', 'Runtime logs cannot be opened from this window.'],
   'daemon.mgmt.create': ['新建节点', 'Create node'],

@@ -101,6 +101,10 @@ import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { elevated } from './elevation';
 import { actionMessageTone, dangerActions, START_OUTCOME_MESSAGE, START_SUBMITTED_MESSAGE, START_WAIT_MS, startErrorMessage, startWatchOutcome } from './node-danger-actions';
+import CloneNodeDialog, { CloneNodeButton } from './CloneNodeDialog';
+import { cloneAvailability, cloneNoticeMessage } from './node-clone';
+import { isHostSupervisorNode } from './daemon-node';
+import './i18n-node-clone';
 
 // board #694 —— 只读页(节点信息)唯一放开的两个变更:概览卡片里的重启 / 停止。删除 / 启动仍只在节点详情。
 const OVERVIEW_ACTIONS: readonly NodeLifecycleAction[] = ['restart_node', 'stop_node'];
@@ -293,7 +297,12 @@ export default function NodeDetailScreen({
     // 拉取失败时**保留上一次的 node**:否则一次超时就让操作区/规则区整块消失,
     // 文案还会说「没有权威节点 ID」,和上面显示的 ID 自相矛盾(Vincent 09-03 截图)。
     void fetchHubNodes(cfg)
-      .then(result => { setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null); setNodeListState('loaded'); })
+      .then(result => {
+        const list = result.nodes ?? [];
+        setNode(list.find(candidate => candidate.alias === alias) ?? null);
+        setKnownNames(list.flatMap(item => [item.alias, item.node_name ?? ''].map(value => value.trim()).filter(Boolean)));
+        setNodeListState('loaded');
+      })
       .catch(() => setNodeListState('failed'));
     try {
       const data = await fetchNodeStatus(cfg, alias);
@@ -338,6 +347,9 @@ export default function NodeDetailScreen({
   // undefined = 读取中 / 读失败 ⇒ 卡片不下结论。只在概览、且节点是手动启动时读一次。
   const [hostDaemons, setHostDaemons] = useState<HostSupervisorDaemon[] | undefined>(undefined);
   const [adoptOpen, setAdoptOpen] = useState(false);
+  const [knownNames, setKnownNames] = useState<string[]>([]);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; pending: boolean; text: string } | null>(null);
   const onOverviewTab = activeSection === 'overview';
   useEffect(() => {
     setHostDaemons(undefined);
@@ -545,6 +557,15 @@ export default function NodeDetailScreen({
   );
 
   const card = { backgroundColor: colors.card, borderRadius: radius.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm } as const;
+  const cloneGate = cloneAvailability({
+    pending: nodeListState === 'loading',
+    nodeId: node?.node_id,
+    daemonNodeId: node?.lifecycle_daemon_node_id,
+    hostSupervisor: node ? isHostSupervisorNode(node) : false,
+  });
+  const cloneSource = node?.node_id && node.lifecycle_daemon_node_id && !isHostSupervisorNode(node)
+    ? { nodeId: node.node_id, alias: node.alias, name: node.node_name?.trim() || node.alias, daemonNodeId: node.lifecycle_daemon_node_id }
+    : null;
 
   const content = (() => {
     if (section === 'overview') return (
@@ -584,6 +605,23 @@ export default function NodeDetailScreen({
                 <Text testID="node-control-action-message" style={{ color: { ok: colors.running, warn: colors.blocked, error: colors.failed }[actionMessageTone(actionMessage)], fontSize: typeScale.small, lineHeight: 18 }}>{actionMessage}</Text>
               ) : null}
             />
+          </View>
+        ) : null}
+        {!readOnly ? (
+          <View>
+            <SectionTitle title={t('nodeClone.title')} hint={t('nodeClone.sectionHint')} />
+            <View testID="node-clone-card" style={[card, { paddingVertical: spacing.md, gap: spacing.sm }]}>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.body, lineHeight: 20 }}>{t('nodeClone.cardBody')}</Text>
+              <View style={{ flexDirection: 'row' }}>
+                <CloneNodeButton testID="node-clone-open" disabled={!cloneGate.enabled} onPress={() => { setCloneNotice(null); setCloneOpen(true); }} />
+              </View>
+              {cloneGate.reasonKey ? (
+                <Text testID="node-clone-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t(cloneGate.reasonKey)}</Text>
+              ) : null}
+              {cloneNotice ? (
+                <Text testID="node-clone-message" style={{ color: cloneNotice.demo || cloneNotice.pending ? colors.blocked : colors.running, fontSize: typeScale.small, lineHeight: 18 }}>{cloneNotice.text}</Text>
+              ) : null}
+            </View>
           </View>
         ) : null}
         <View>
@@ -845,6 +883,18 @@ export default function NodeDetailScreen({
         </View>
         </ModalKeyboardAvoider>
       </Modal>
+
+      {cloneOpen && cloneSource ? (
+        <CloneNodeDialog
+          cfg={cfg}
+          source={cloneSource}
+          takenNames={knownNames}
+          onClose={() => setCloneOpen(false)}
+          onDone={outcome => {
+            setCloneNotice({ demo: outcome.demo, pending: outcome.pending, text: cloneNoticeMessage(outcome, t) });
+          }}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

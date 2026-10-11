@@ -35,6 +35,7 @@ import type { PendingTab } from './src/backend-pending-ui';
 import HubScopeScreen from './src/HubScopeScreen';
 import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
 import DaemonOverviewFixtureScreen, { readDaemonOverviewFixture } from './src/DaemonOverviewFixtureScreen';
+import CloneNodeFixtureScreen, { readCloneNodeFixture } from './src/CloneNodeFixtureScreen';
 import { hubSectionForScreen, screenForHubSection, type HubSection } from './src/hub-scope-demo';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
@@ -280,6 +281,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <DaemonOverviewFixtureScreen theme={daemonOverviewFixture.theme} mode={daemonOverviewFixture.mode} />
+      </SafeAreaProvider>
+    );
+  }
+
+  const cloneNodeFixture = readCloneNodeFixture();
+  if (cloneNodeFixture) {
+    if (themeMode() !== cloneNodeFixture.theme) setThemeMode(cloneNodeFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <CloneNodeFixtureScreen />
       </SafeAreaProvider>
     );
   }
