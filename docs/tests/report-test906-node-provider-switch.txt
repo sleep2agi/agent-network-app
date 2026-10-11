@@ -34,3 +34,12 @@ Not included in client239; this branch has not been merged or released.
 
 Cleanup: all tests use --rm; browser test uses --network none. No production
 restart, credentials copied, published artifacts or local global npm changes.
+
+18:26+08 CI differential: the repository runs each test as `bun file.ts`, so
+the new bun:test-only file failed before assertions. Converted to the existing
+script/assert style, retaining all9 assertions. The old source-wiring check
+expected every known node to mount the legacy model section; updated that
+same check to require both the Codex daemon control and other-runtime legacy
+control branches. Docker reran only these differences: target2/2 groups with
+9 assertions and model-change39/39 PASS; candidate typecheck follows. Original
+UI5/5 evidence is unchanged, not counted as a new native application test.

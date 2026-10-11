@@ -56,7 +56,10 @@ check('section polls fetchNodeConfig while restarting and applies afterPoll', se
 check('section disables the control from modelControlAvailability and shows its hint', section.includes('modelControlAvailability(') && section.includes('availability.hint'));
 check('section offers suggested models plus a custom id input', section.includes('suggestedModels(') && section.includes('TextInput'));
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
-check('detail screen mounts the model section whenever node_id is known', detail.includes('<NodeModelSection cfg={cfg} node={node} />') && detail.includes('{node ? <NodeModelSection'));
+check('known node mounts daemon Provider control for co-presence and legacy model control for other runtimes',
+  detail.includes('{node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} />')
+  && detail.includes('{node && daemonProviderNodeRuntime(node.runtime) ? (')
+  && detail.includes('<NodeDaemonProviderSection cfg={cfg} node={node}'));
 
 // stale-catalog resilience (2026-09-23: mimo-v2.5-free withdrawn from OpenCode Zen while still listed)
 check('catalog no longer lists the withdrawn opencode/mimo-v2.5-free', !Object.values(RUNTIME_MODEL_SUGGESTIONS).flat().includes('opencode/mimo-v2.5-free'));
