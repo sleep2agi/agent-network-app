@@ -1,0 +1,200 @@
+ANet #906 — Daemon Provider management client increment
+2026-10-11 09:06 CST. Development only; no release/native package assertion.
+Base main: 1bffce047d7278f1c4368ab2b9c9021d91c1a67f.
+
+Implemented:
+  Daemon management Provider tab now calls daemon_provider_snapshot, not demo
+  data or network list_providers. Provider -> codex-tui -> auth -> model hierarchy.
+  Counts explicitly mean configured, not verified/available. Key is never read
+  back. ChatGPT metadata is explicitly not an authenticated login.
+  API-key add/edit sends a revision-bound put to the selected daemon and waits
+  for its public receipt. Other auth profiles are preserved. Endpoint change
+  requires a fresh key; same endpoint edits may retain the old one.
+  Navigation abort + render-time scope barrier; 20-second limit; no silent
+  fallback. A save timeout is unconfirmed, not success or automatic replay.
+  Secret POST requires HTTPS/loopback and disallows redirects. Desktop uses
+  the bundled HTTP plugin maxRedirections=0 for secret POST (pooled transport
+  has no per-request redirect policy); other requests keep existing transport.
+
+Verification, all in Docker:
+  Unit first run: 16/16 plus existing entry/catalog regressions 64/64+34/34,
+  typecheck exit 0. These old regressions were not repeatedly rerun.
+  Add/edit increment: 17/17 + typecheck exit 0. One source-string test initially
+  expected the old cleanup syntax; updated it to assert BOTH read/write aborts.
+  Latest no-redirect transport: typecheck exit 0.
+  Browser: real exported React UI in Chromium, ONE desktop core save flow,
+  7/7 checks. Hub is a page-local synthetic fixture, not authenticated Hub E2E.
+  Original harness used daemon-section-provider and timed out; actual navigation
+  ID is daemon-section-tabs-provider. Corrected harness, same app, then passed.
+  Web export image: sha256:21069f1909e8af7f9b6b4cde9dc002d714ec4f0f270d04a0fefa7e023cc80fac.
+  Export predates the explicit no-redirect helper; UI did not change after export.
+  Browser image: sha256:13e7b90611fb89e835b7d88a3d92f55798655498252967bc59c18de69c661003;
+  current drive mounted read-only to correct the selector and limit core scope.
+  No native transport/package/login/model-call claim from this fixture.
+
+Reproduce:
+  sg docker -c 'docker build --target test -f tests/daemon-provider-management/Dockerfile -t provider-core . && docker run --rm --network none provider-core'
+  sg docker -c 'docker build --target web-export -f tests/daemon-provider-management/Dockerfile -t provider-web .'
+  sg docker -c 'docker build --build-context web=docker-image://provider-web -f tests/daemon-provider-management/Dockerfile.ui -t provider-ui . && docker run --rm --network none provider-ui'
+  Browser drive registered in tests/drives.json; existing unit discovery includes
+  daemon-provider-management.test.ts. No new independent Hub/product task.
+
+Operational/recovery boundary:
+  No new daemon, port, reverse proxy, or background process. Client calls existing
+  /mcp on its selected Hub; backend increment is agent-network PR2575.
+  Hub requires existing secure injection of ANET_HUB_SECRET_VAULT_KEY; key values
+  and user Provider data are NOT recoverable from Git. Keep encrypted data backup
+  and its vault key from the deployment's existing secrets authority.
+  Backend design/recovery source: agent-network docs/design/906-daemon-provider-management.md.
+  Publish only from an exact merged main SHA. Pending writes must finish before
+  downgrade. Client rollback does not revert saved daemon config. This increment
+  has not deployed anything or performed a production recovery drill.
+  Containers --rm; only TEST-ONLY credentials/fixtures; no user login/key access.
+
+NOT DONE: choosing a stored profile for node creation/edit; applying to live
+  Codex and proving actual selected model; official ChatGPT account login/switch;
+  remove/in-use guard; native release. Entire #906 remains doing/P0.
+
+2026-10-11 09:14 CST: existing Codex inventory increment (on ffe1e57d).
+  Added same-daemon readback of Hub-bound Codex nodes, configured Provider/model,
+  home source/opaque reference, key-free authentication facts and daemon PATH
+  CLI status/version. Shows unknown/unreadable distinctly; no account-validity
+  inference, no node mutation. Managed Provider counts remain separate.
+  Docker core parser/forms: 18/18 PASS; TypeScript PASS.
+  One real Chromium production-web flow: inventory display + existing save
+  interaction 9/9 PASS. Hub is synthetic; this is NOT native/package acceptance.
+  web-export manifest 380b473ebf7506d911df0714807cea87d69c8273057c8bce750aaba4bf6cb11e;
+  UI image 045aafb2614e470bba8e4f8eaa524ad53ded630d1670e8e06daec3d6c255cc59.
+  Existing PR Windows failure independently read from job114355569694:
+  394/395 files passed, only radius-tokens failed. Fixed the new Provider form's
+  numeric borderRadius to radius.control, keeping the guard unchanged.
+  Targeted radius gate in Docker: 30/30 PASS. This final style-only correction
+  postdates the web export above; no repeat of the full browser suite.
+  Runtime model/account switching and unbound host inventory still pending.
+  No production changes or formal release; containers --rm, test images retained.
+
+2026-10-11 09:20 CST: save-receipt scope correction (on f75511c3).
+  Existing config/form were scope-bound, but saveNote/saving were plain React
+  state cleared only by an effect. The first render after changing Hub, auth,
+  network, daemon, offline state or refresh could still display the old receipt.
+  Bound all three save phases to the same in-memory identity as the readback;
+  render-time filtering now also hides old saving/success/unconfirmed notices.
+  No API change, daemon mutation or fabricated apply/login capability.
+  Docker core client checks 19/19 PASS; full client TypeScript exit 0.
+  Real Chromium production export: one inventory/save/refresh flow, 10/10 PASS;
+  synthetic Hub only. The extra browser check verifies refresh discards the
+  old success note; the pure guard checks all identity dimensions.
+  Web export manifest list:
+    cae5f0bfa723d4732628fac9a4f48f30bd1e52fdf024fa33b92c8c4de8ce3a0f
+  Browser manifest list:
+    b53a287ec2b5ea357dadcb72e4795d21bfa0b2caace3dc6257bc332875728fa2
+  Existing Dockerfiles/commands above; TEST-ONLY images retained, --rm runs
+  completed. No production credentials, release, or native model-switch claim.
+
+2026-10-11 09:24 CST: real configuration selection (on 26b39470).
+  Added searchable target node -> enabled Provider -> account/key profile ->
+  model selectors using only this daemon's parsed inventory and saved config.
+  Codex SDK/unavailable/foreign nodes are not substituted for Codex TUI nodes;
+  disabled providers are excluded. Changing parent choices clears children.
+  A changed scope, snapshot revision or scan timestamp invalidates selections.
+  Selecting does NOT send a mutation. Application remains explicitly disabled
+  until the backend operation contract is implemented and wired. ChatGPT
+  profiles still display unverified login, never an inferred account session.
+  This is frontend preparation for the full P0 flow, not feature completion.
+  Docker core checks 21/21 PASS, TypeScript exit 0. One Chromium exported-Web
+  inventory/searchable-selection/save/refresh flow 12/12 PASS, synthetic Hub.
+  Includes disabled apply control and clearing selection on revised receipt.
+  Export contains current product source; test drive extended after export.
+  Web manifest list:
+    59766c44995955cd37e76177e38938d063615117091c2db7aa5dc3948bec8ede
+  Browser manifest list:
+    259fa7b13e3bb1d2bb1e0256c50cb00d53595d47b3492a3d686b8035982f5021
+  No production changes, running test containers, or native package claim.
+
+2026-10-11 09:39 CST: Provider enable/disable increment (on dddeb8da).
+  Added explicit confirmation and revision-bound writes for managed availability.
+  No optimistic success; refresh receipt determines displayed enabled state.
+  Existing auth/model siblings retained; no credential resent or revoked.
+  This does not stop running nodes and does not implement runtime application.
+  Docker core checks 22/22 PASS and full client TypeScript PASS.
+  One Chromium exported-Web flow 15/15 PASS using a synthetic Hub, including
+  disable/enable confirmation, exact revision, secret omission and readback.
+  Core image manifest list:
+    1bb880348cc30c0a33ac07d8ccd7fb75ccf37f723ae6ee57346ee09e53aaed52
+  Web image manifest list:
+    f4cf2e3b5004a4c1eede9d9daab73a25e4d59f672f21629abd09844f4ea190cc
+  Browser image manifest list:
+    314c443909b1d614b854aade0144a18d75eaaf111ec0e7fcc34e532a7849aa48
+  Commands: same pinned Dockerfiles above; browser build-context web is the
+  Docker web-export target output. Browser run --rm --network none.
+  Containers completed/removed. TEST-ONLY images/export retained; no production
+  daemon, real account, native package, runtime-switch or release claim.
+
+2026-10-11 09:51 CST: carry scanned node revision into explicit application intent.
+  Base ce69c3847efb5f24ebe12d363fc42b4131f30c01 plus working tree.
+  Reviewed exact Expo v56 reference before editing per AGENTS.md.
+  Existing inventory without config_revision remains readable. Application
+  construction requires explicit restart confirmation, API-key selection and
+  both daemon-store and node-config revisions; never contains endpoint/key/path.
+  CLI/Hub/node/client inventory validators match byte-for-byte (cmp exit0).
+  Docker --rm --network none, test906-toggle-core image
+    sha256:1bb880348cc30c0a33ac07d8ccd7fb75ccf37f723ae6ee57346ee09e53aaed52,
+  current src read-only mounted: 22/22 core PASS, full client TypeScript PASS.
+  Existing selection test extended, not reported as extra independent tests.
+  No UI changes or browser rerun; application button remains unavailable until
+  real daemon lifecycle integration. No native build, production or release.
+
+2026-10-11 10:00 CST: confirmed single-node Provider application UI (TEST-ONLY).
+  Base aa55b14d7f1ffecb613e618162325d0f6168675a plus this working tree.
+  Core Docker: 23/23 PASS (new application test includes exact receipt,
+  foreign scope/wrong model and hung-request timeout); full client TypeScript
+  PASS before addition of that test. No second full typecheck result implied.
+  Web export/build PASS; browser Docker --rm --network none: 18/18 PASS,
+  synthetic Hub. Versioned node selection, explicit confirmation, no premature
+  POST, single apply request, exact revision/selection and daemon receipt shown.
+  Leaving page/timeout does NOT promise cancellation/rollback; UI retains an
+  unconfirmed state and does not automatically retry a state-changing request.
+  Web image:
+    e34e5eaa5e75c5a46ed3d0b38015abdd1b1cd3d3a63fb7c377cd3f0fe92d3a79
+  Browser image:
+    890d64ae174e66a3c2a2a9d220d1336bf4b3a3c7c421e8bb10743eb9a0aa7bdc
+  Build input uses Docker web-export output as named web build context, not the
+  full build image filesystem. No native installer or real Codex validation here.
+  Containers removed (--rm); test-only images and temporary web export retained.
+  No production changes, merge or public release.
+
+2026-10-11 10:21 CST: desktop 0.2.234 release preparation (not publication).
+  Base 29988c789d6577f7e2afc0d3f229d747ae3aa653 plus version/installer pins.
+  Eight version authorities agree; Android versionCode 2234. Private daemon
+  installer pair is CLI .163 / agent-node .129; the installer fixture assertion
+  follows that exact pair without changing stop/reuse semantics. User-facing
+  bundled notes explicitly exclude official ChatGPT account switching.
+  Docker --rm --network none, readonly repository mount over existing
+  anet-provider-panel:test906 image:
+    version consistency: 14 checks PASS;
+    bundled changelog: 7/7 PASS;
+    local-daemon TS installer checks: 34 PASS; exit0.
+  No native installer execution, Rust rerun or new business sample claimed.
+  Container removed, retained TEST-ONLY image unchanged; no production changes.
+  This preparation is not ready for release yet: bundled Hub .120 and its
+  supervisor/minimum-version pins must move together to .121 after its actual
+  registry artifact exists. Update the sidecar lock using registry integrity,
+  never fabricated metadata. Commit locally; push consolidated client changes
+  after that dependency is published, then main-SHA build/sign/package gates.
+
+2026-10-11 10:43 CST: bind desktop release to actual Hub .121 registry artifact.
+  Backend merged main: b4413131b73c52c286beec46509773716698d89f.
+  Registry now returns @sleep2agi/commhub-server@0.9.0-preview.121;
+  integrity sha512-iuDcA+oagXdSrmwFDzJWEVm95RRbG4ITGfgFgUux/4PpJ2nsE3tc9YEM3bBuAspwt9ed2hyCdRi7FI0Bcb9o9w==.
+  npm --package-lock-only --ignore-scripts in isolated Docker regenerated the
+  sidecar lock. Only the direct Hub version, URL and integrity changed; no
+  transitive updates. Supervisor/minimum-version pins and positive installer
+  fixtures now agree on .121. Old incompatible fixture remains unchanged.
+  Existing Docker image anet-provider-panel:test906, readonly repository mount,
+  --rm --network none: sidecar 14, version 14, changelog 7, installer TS 34
+  checks PASS; git diff --check PASS. No business sample or native Rust rerun.
+  Both containers removed. No production restart or global package changes.
+  Notes state API-key endpoints require Responses compatibility; no claim of
+  native DeepSeek endpoint inference or official ChatGPT account switching.
+  Runtime .129 / CLI .163 publication still must finish before desktop release.
+  This is release preparation, not a signed installer or public desktop release.

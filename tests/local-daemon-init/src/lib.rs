@@ -111,7 +111,7 @@ mod regression {
 
     #[test]
     fn initialization_upgrades_old_packages_and_stops_before_overwriting_config() {
-        let f = Fixture::new("0.9.0-preview.120");
+        let f = Fixture::new("0.9.0-preview.121");
         f.seed();
         let old_pid = f.old_process();
         let scan = local_daemon::scan(Some(&f.session)).unwrap();
@@ -125,7 +125,7 @@ mod regression {
         assert!(cfg["daemonExtraPath"].as_array().unwrap().iter().any(|v| v.as_str().unwrap().ends_with("/tools")));
         let events = fs::read_to_string(f.root.path().join("events")).unwrap();
         assert!(events.starts_with("stop old-daemon\n"), "{events}");
-        assert!(events.contains("agent-network@2.3.0-preview.162") && events.contains("agent-node@2.5.0-preview.128"), "{events}");
+        assert!(events.contains("agent-network@2.3.0-preview.163") && events.contains("agent-node@2.5.0-preview.129"), "{events}");
         assert!(!events.contains("@latest"));
         let start_env = fs::read_to_string(f.root.path().join("start-env")).unwrap();
         assert!(start_env.ends_with("agent-node/dist/cli.js"), "{start_env}");
@@ -143,7 +143,7 @@ mod regression {
     #[test]
     fn stop_failure_or_a_still_live_process_keeps_original_configuration() {
         for mode in ["fail", "lie"] {
-            let f = Fixture::new("0.9.0-preview.120");
+            let f = Fixture::new("0.9.0-preview.121");
             f.seed();
             f.old_process();
             fs::write(f.root.path().join("stop-mode"), mode).unwrap();
@@ -171,7 +171,7 @@ mod regression {
 
     #[test]
     fn successful_npm_exit_with_old_package_is_rejected() {
-        let f = Fixture::new("0.9.0-preview.120");
+        let f = Fixture::new("0.9.0-preview.121");
         f.seed();
         fs::write(f.root.path().join("npm-mode"), "old-version").unwrap();
         let before = fs::read(f.profile()).unwrap();

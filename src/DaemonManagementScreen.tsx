@@ -19,6 +19,7 @@ import RuntimeSupportPane from './RuntimeSupportScreen';
 import type { RuntimeHostContext } from './runtime-support';
 import DaemonOverviewSection from './DaemonOverviewSection';
 import DaemonSkillsPane from './DaemonSkillsPane';
+import DaemonProvidersPane from './DaemonProvidersPane';
 import type { ListingKind } from './daemon-overview';
 import {
   fetchHostSupervisors,
@@ -491,10 +492,15 @@ export default function DaemonManagementScreen({
       <RuntimeSupportPane layer="daemon" host={runtimeHost} cfg={cfg} />
     </ScrollView>
   ) : pendingSection === 'skills' ? (
-    // 真数据:这台 daemon 自己的 SKILLS。令牌 / Provider 仍是下面的演示壳。
+    // 真数据:这台 daemon 自己的 SKILLS。
     <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
       <Text style={screenStyles.pageTitle}>{t(INTEGRATION_TITLE.skills)}</Text>
       <DaemonSkillsPane cfg={cfg} alias={alias} node={daemon} supervisorOnline={lookup.kind === 'ready' ? lookup.daemon?.online : undefined} />
+    </ScrollView>
+  ) : pendingSection === 'provider' ? (
+    <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
+      <DaemonProvidersPane cfg={cfg} alias={alias} daemonId={daemon?.node_id}
+        offline={isDaemonOffline(daemonStatus)} />
     </ScrollView>
   ) : pendingSection ? (
     <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">

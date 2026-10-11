@@ -30,10 +30,10 @@ use sha2::{Digest, Sha256};
 use super::{app_root, ensure_private_dir, write_private_atomic};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
-const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.162";
+const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.163";
 /// Desktop features require the preview runtime, not npm's older `latest` tag.
-const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@2.5.0-preview.128";
-const MIN_HUB_VERSION: &str = "0.9.0-preview.120";
+const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@2.5.0-preview.129";
+const MIN_HUB_VERSION: &str = "0.9.0-preview.121";
 static INSTALL_LOCK: Mutex<()> = Mutex::new(());
 const NPM_MIRROR: &str = "https://registry.npmmirror.com";
 /// 私有 Node 运行时:缺 Node 或版本太低时从 nodejs.org 下 v22 最新 LTS 到 ~/.anet/app/local-daemon/node,
@@ -912,8 +912,8 @@ mod tests {
         let info = |version: &str| ToolInfo { path: "/fixture/package".into(), version: Some(version.into()) };
         assert!(!package_compatible(Some(&info("2.3.0-preview.76")), ANET_PACKAGE));
         assert!(!package_compatible(Some(&info("2.5.0-preview.58")), AGENT_NODE_PACKAGE));
-        assert!(package_compatible(Some(&info("2.3.0-preview.162")), ANET_PACKAGE));
-        assert!(package_compatible(Some(&info("2.5.0-preview.128")), AGENT_NODE_PACKAGE));
+        assert!(package_compatible(Some(&info("2.3.0-preview.163")), ANET_PACKAGE));
+        assert!(package_compatible(Some(&info("2.5.0-preview.129")), AGENT_NODE_PACKAGE));
         assert!(package_compatible(Some(&info("2.5.0-preview.129")), AGENT_NODE_PACKAGE));
         assert!(package_compatible(Some(&info("2.5.0")), AGENT_NODE_PACKAGE));
         assert!(!package_compatible(Some(&info("2.5.0-preview.12")), AGENT_NODE_PACKAGE));
