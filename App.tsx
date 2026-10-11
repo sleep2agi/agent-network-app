@@ -33,6 +33,7 @@ import HubPendingScreen from './src/HubPendingScreen';
 import HubDaemonEntryScreen from './src/HubDaemonEntryScreen';
 import type { PendingTab } from './src/backend-pending-ui';
 import HubScopeScreen from './src/HubScopeScreen';
+import HubProviderManagementScreen from './src/HubProviderManagementScreen';
 import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
 import DaemonOverviewFixtureScreen, { readDaemonOverviewFixture } from './src/DaemonOverviewFixtureScreen';
 import CloneNodeFixtureScreen, { readCloneNodeFixture } from './src/CloneNodeFixtureScreen';
@@ -136,7 +137,7 @@ type Screen =
   | { name: 'hubSkills' }                   // 服务器管理侧栏 · Hub SKILLS（演示壳）
   | { name: 'hubTokens' }                   // 服务器管理侧栏 · Hub 令牌（演示壳）
   | { name: 'hubEnv' }                      // 服务器管理侧栏 · Hub 环境变量（演示壳，不是 #909 三层）
-  | { name: 'hubProviders' }                // 服务器管理侧栏 · Hub Provider（演示壳，不是 daemon runtime 供应商）
+  | { name: 'hubProviders' }                // 当前网络的真实 Hub Provider 配置及显式 Daemon 下发
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
   | { name: 'wizard'; daemon: HostSupervisorDaemon; back?: Screen };  // back: 从某台 daemon 的管理页进来时,返回回到那一页
 
@@ -1112,8 +1113,11 @@ function AppRoot() {
                       onOpenNodes={() => setScreen({ name: 'agents' })}
                       onCreateNode={() => setScreen({ name: 'picker' })}
                       onOpenScheduled={() => setScreen({ name: 'scheduled' })}
+                      onOpenProviders={() => setScreen({ name: 'hubProviders' })}
                       onBack={phoneSettingsBackTarget(layout, screen.name) ? () => setScreen({ name: 'settings' }) : undefined}
                     />
+                  ) : screen.name === 'hubProviders' || (screen.name === 'serverPending' && screen.tab === 'provider') ? (
+                    <HubProviderManagementScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
                   ) : screen.name === 'serverDaemon' ? (
                     <HubDaemonEntryScreen
                       cfg={cfg}
@@ -1375,6 +1379,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
   : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen(screen.back ?? { name: 'picker' })} onExit={() => setScreen(screen.back ?? { name: 'serverNodes' })} desktop />
+  : screen.name === 'hubProviders' ? <HubProviderManagementScreen cfg={cfg} />
   : hubSectionForScreen(screen.name) ? <HubScopeScreen key={screen.name} section={hubSectionForScreen(screen.name)!} />
   : (
     <View style={desktopStyles.empty}>

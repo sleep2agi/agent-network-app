@@ -10,7 +10,7 @@ export function providerWriteTransportAllowed(serverUrl: string): boolean {
     (u.protocol === 'https:' || (u.protocol === 'http:' && ['localhost', '127.0.0.1', '[::1]'].includes(u.hostname))); }
   catch { return false; }
 }
-async function providerFetch(url: string, init: RequestInit, containsKey: boolean): Promise<Response> {
+export async function providerFetch(url: string, init: RequestInit, containsKey: boolean): Promise<Response> {
   if (!containsKey) return appFetch(url, init);
   // The pooled desktop client predates per-request redirect policy. Use the
   // bundled native HTTP plugin with zero redirects for this secret-bearing POST.
