@@ -25,3 +25,22 @@ No branch public artifact, npm publication or updater channel change. Full
 main-based formal publication remains a separate step. Older Hub catalogs remain
 readable; saved-key mode requires opt-in Hub capability, release target125.
 Other runtime adapters/automatic rotation remain open under parent #907.
+
+Increment OBSERVED_AT=2026-10-11T15:02:28Z / 23:02 Asia/Shanghai
+Original e74929c CI Ubuntu job114497757331: actual job logs show 404/405 files,
+sole failure src/ui-scale-wiring.test.ts from base PreloginUpdateCheck raw Text.
+The initial gh cached log was partial; the exact jobs/<id>/logs endpoint supplied
+the terminal failure. No Provider-reference core assertion failed in that job.
+Merged current main83b02824241880f460d2a4ae9197b6adcc594c10 into the original
+feature branch (merge17b58568ea33c8f2ed8b1b69cff591d2533b4567), reusing its
+existing scaled Text correction without relaxing the guard or duplicating it.
+
+Independent source Docker image rebuilt:
+sha256:3f880e03f85f8dd15f65ace8e0e62c6950b6099bc35937378f8f46868b712b97.
+--rm --init --network none: reference core4/4 PASS, UI scaling48/48 PASS,
+npm run typecheck exit0. A premature attempt before image export finished exited
+125 (image unavailable); it was setup-only, not test execution or a product FAIL.
+The finished-image run above is the accepted result. No unchanged browser drive
+or native installer suite rerun; their earlier evidence remains scoped to e749.
+Containers removed, no production calls. New cloud head must earn its own CI;
+this report does not inherit old successes or establish formal publication.
