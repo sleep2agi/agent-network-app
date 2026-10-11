@@ -11,16 +11,22 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 import { colors, spacing, radius } from './theme';
 import { useTranslation } from './i18n-react';
 import './i18n-provider-login';
+import type { ProviderSnapshot } from './daemon-provider-management';
+import { providerAccountWrite } from './daemon-provider-account-binding';
 
 // Only opaque ceremony IDs, scoped to the current credential and daemon. No codes
 // or credentials are persisted. A panel refresh can resume the same ceremony.
 const ceremonies = new Map<string, string>();
-export default function DaemonCodexAccounts({ cfg, daemonId, scope }: { cfg: HubConfig; daemonId: string; scope: string }) {
+export default function DaemonCodexAccounts({ cfg, daemonId, scope, snapshot, bind, binding }: {
+  cfg: HubConfig; daemonId: string; scope: string; snapshot: ProviderSnapshot;
+  bind: (write: NonNullable<ReturnType<typeof providerAccountWrite>>) => Promise<void>; binding: boolean;
+}) {
   const { t } = useTranslation();
   const [session, setSession] = useState<string | null>(() => ceremonies.get(scope) ?? null);
   const [view, setView] = useState<LoginView | null>(null);
   const [accounts, setAccounts] = useState<SavedLoginAccount[] | null>(null);
   const [label, setLabel] = useState('');
+  const [models, setModels] = useState('');
   const [note, setNote] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const running = useRef(false), request = useRef<AbortController | null>(null);
@@ -60,8 +66,8 @@ export default function DaemonCodexAccounts({ cfg, daemonId, scope }: { cfg: Hub
     } catch { setNote('unconfirmed'); }
   };
   const button = (id: string, title: string, action: () => void, disabled = false) =>
-    <Pressable testID={`daemon-login-${id}`} accessibilityRole="button" disabled={busy || !secure || disabled}
-      onPress={action} style={[buttonStyle('secondary'), (busy || !secure || disabled) && { opacity: 0.45 }]}>
+    <Pressable testID={`daemon-login-${id}`} accessibilityRole="button" disabled={busy || binding || !secure || disabled}
+      onPress={action} style={[buttonStyle('secondary'), (busy || binding || !secure || disabled) && { opacity: 0.45 }]}>
       <Text style={buttonTextStyle('secondary')}>{t(`providerLogin.${title}`)}</Text>
     </Pressable>;
   return <PendingPanelCard testID="daemon-login-card">
@@ -87,9 +93,18 @@ export default function DaemonCodexAccounts({ cfg, daemonId, scope }: { cfg: Hub
       {button('cancel', 'cancel', () => { void run({ action: 'cancel', session_id: session }); })}
     </View> : button('start', 'start', start)}
     {button('refresh', 'refresh', () => { void run({ action: 'accounts' }); })}
+    {accounts?.length ? <>
+      <Text style={{ color: colors.textSecondary }}>{t('providerLogin.bindHint')}</Text>
+      <TextInput testID="daemon-login-models" accessibilityLabel={t('providerLogin.models')} placeholder={t('providerLogin.models')}
+        value={models} onChangeText={setModels} editable={!busy && !binding}
+        style={{ color: colors.text, padding: spacing.sm, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control }} />
+    </> : null}
     {accounts ? accounts.length ? accounts.map(account => <View key={account.account_id} style={{ gap: spacing.xs }}>
       <Text style={{ color: colors.text }}>{account.label}</Text>
       <Text style={{ color: colors.textSecondary }}>{t('providerLogin.stored')} · {account.account_id.slice(0, 8)}</Text>
+      {button(`bind-${account.account_id}`, 'bind', () => {
+        const write = providerAccountWrite(snapshot, account.account_id, models); if (write) void bind(write);
+      }, !providerAccountWrite(snapshot, account.account_id, models))}
     </View>) : <Text testID="daemon-login-empty" style={{ color: colors.textSecondary }}>{t('providerLogin.empty')}</Text> : null}
   </PendingPanelCard>;
 }

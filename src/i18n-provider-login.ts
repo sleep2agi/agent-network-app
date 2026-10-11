@@ -1,5 +1,8 @@
 import { registerTranslations } from './i18n';
 registerTranslations({
+  'providerLogin.models': ['模型 ID（逗号分隔）', 'Model IDs (comma-separated)'],
+  'providerLogin.bind': ['保存到 OpenAI / codex-tui 模型配置', 'Save to OpenAI / codex-tui model configuration'],
+  'providerLogin.bindHint': ['填写要管理的模型 ID，再绑定到所选账号。配置不代表账号有模型权限，也不会切换节点。', 'Enter model IDs and bind them to a saved account. Configuration does not prove model access or switch a node.'],
   'providerLogin.title': ['OpenAI → codex-tui → ChatGPT 账号', 'OpenAI → codex-tui → ChatGPT accounts'],
   'providerLogin.boundary': ['账号保存在所选 Daemon。网页登录需本人完成；保存账号不会切换或重启节点。离开页面只停止等待，登录约 10 分钟后过期。', 'Accounts stay on the selected daemon. Complete browser sign-in yourself; saving does not switch or restart nodes. Leaving stops observation only; login expires after about 10 minutes.'],
   'providerLogin.insecure': ['账号操作需要 HTTPS 或本机回环连接。', 'Account operations require HTTPS or a loopback connection.'],

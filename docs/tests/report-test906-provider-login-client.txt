@@ -53,3 +53,15 @@ Release/recovery boundaries:
 - Remaining #906 work: bind saved account to Provider/runtime/model, apply to the
   selected node with exact readback and rollback; human OAuth acceptance; release
   compatible backend/client from exact merged main SHAs. Do not mark #906 done.
+
+2026-10-11 14:18 +08 binding increment:
+- Saved-account card now accepts configured model IDs and binds the chosen opaque
+  account_id under OpenAI/codex-tui using existing revisioned Provider writes.
+- Provider parser accepts only UUID refs on ChatGPT profiles, not API-key ones.
+  Existing enable/disable and API-key profile edits preserve account references.
+- Docker binding command cases: 5/5 PASS; current-source typecheck exit 0.
+- Fresh Expo export (1224 modules) + Chromium UI core PASS, including a single
+  bind write and public model readback after saving the account. No real OAuth,
+  model entitlement test, node application or native-package claim.
+- Model IDs are explicitly configured, not advertised as discovered entitlement.
+  Dynamic account model discovery and node switch/rollback remain separate work.

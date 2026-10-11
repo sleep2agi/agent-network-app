@@ -16,7 +16,7 @@ export type CodexInventory = { observed_at: number; scope: 'hub_bound_nodes'; in
   verification?: 'not_checked'; effective_state?: 'not_checked';
 }> };
 export type ProviderAuth = { id: string; kind: 'chatgpt' | 'api_key'; models: string[];
-  baseUrl?: string; credential_present: boolean; verification: 'not_checked'; application: 'not_applied' };
+  baseUrl?: string; account_id?: string; credential_present: boolean; verification: 'not_checked'; application: 'not_applied' };
 export type ManagedProvider = { id: string; label: string; enabled: boolean;
   runtimes: { runtime: 'codex-tui'; auth: ProviderAuth[] }[] };
 export type ProviderSnapshot = { network_id: string; daemon_node_id: string; revision: number;
@@ -52,13 +52,16 @@ export function parseProviderSnapshot(v: unknown, scope: ProviderScope): Provide
       if (!fields(r, ['runtime', 'auth']) || r.runtime !== 'codex-tui'
         || !list(r.auth, 32) || !unique(r.auth, 'id')) return null;
       for (const a of r.auth) {
-        if (!fields(a, ['id', 'kind', 'models', 'baseUrl', 'credential_present', 'verification', 'application'])
+        if (!fields(a, ['id', 'kind', 'models', 'baseUrl', 'account_id', 'credential_present', 'verification', 'application'])
           || !id(a.id) || a.verification !== 'not_checked' || a.application !== 'not_applied'
           || !list(a.models, 200) || new Set(a.models).size !== a.models.length
           || a.models.some((m: unknown) => typeof m !== 'string' || !/^[A-Za-z0-9][A-Za-z0-9._:-]{0,199}$/.test(m))) return null;
         if (a.kind === 'chatgpt') {
-          if (p.id !== 'openai' || a.baseUrl !== undefined || a.credential_present !== false) return null;
+          if (p.id !== 'openai' || a.baseUrl !== undefined || typeof a.credential_present !== 'boolean') return null;
+          if (a.account_id !== undefined && (typeof a.account_id !== 'string' || !/^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i.test(a.account_id))) return null;
+          if (a.credential_present && !a.account_id) return null;
         } else if (a.kind === 'api_key') {
+          if (a.account_id !== undefined) return null;
           if (a.credential_present !== true || typeof a.baseUrl !== 'string' || a.baseUrl.length > 2048) return null;
           try {
             const u = new URL(a.baseUrl);
@@ -114,7 +117,7 @@ export function providerEnabledWrite(snapshot: ProviderSnapshot, providerId: str
   return { revision: snapshot.revision, provider: {
     id: old.id, label: old.label, enabled,
     runtimes: old.runtimes.map(r => ({ runtime: r.runtime, auth: r.auth.map(a => ({
-      id: a.id, kind: a.kind, models: [...a.models], ...(a.baseUrl ? { baseUrl: a.baseUrl } : {}),
+      id: a.id, kind: a.kind, models: [...a.models], ...(a.baseUrl ? { baseUrl: a.baseUrl } : {}), ...(a.account_id ? { account_id: a.account_id } : {}),
     })) })),
   } };
 }
@@ -124,7 +127,7 @@ export function providerKeyWrite(snapshot: ProviderSnapshot, form: ProviderKeyFo
   if (!id(form.id) || !id(form.authId) || !form.label.trim()) return null;
   const old = snapshot.providers.find(p => p.id === form.id);
   const provider: any = old ? { ...old, runtimes: old.runtimes.map(r => ({ runtime: r.runtime, auth: r.auth.map(a => ({
-    id: a.id, kind: a.kind, models: [...a.models], ...(a.baseUrl ? { baseUrl: a.baseUrl } : {}),
+    id: a.id, kind: a.kind, models: [...a.models], ...(a.baseUrl ? { baseUrl: a.baseUrl } : {}), ...(a.account_id ? { account_id: a.account_id } : {}),
   })) })) } : { id: form.id, label: form.label.trim(), enabled: true, runtimes: [{ runtime: 'codex-tui', auth: [] }] };
   provider.label = form.label.trim();
   const runtime = provider.runtimes.find((r: any) => r.runtime === 'codex-tui');

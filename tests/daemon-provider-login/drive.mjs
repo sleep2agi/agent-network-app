@@ -13,7 +13,8 @@ try {
     const snapshotId = 'dps_00000000-0000-0000-0000-000000000001';
     const loginId = 'dpl_00000000-0000-0000-0000-000000000002';
     const accountId = '00000000-0000-0000-0000-000000000003';
-    let intent, accounts = [];
+    let intent, accounts = [], providers = [], revision = 0;
+    window.__bindCalls = [];
     window.__loginCalls = []; window.__loginConfirmed = false;
     const envelope = payload => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } });
     window.__routeOverride = (url, text) => {
@@ -24,6 +25,14 @@ try {
       const params = JSON.parse(text || '{}').params;
       if (params?.name !== 'daemon_provider_snapshot') return;
       const a = params.arguments;
+      if (a.action === 'put') {
+        window.__bindCalls.push(a);
+        if (a.revision !== revision) return envelope({ ok: false, error: 'revision_conflict' });
+        providers = [{ ...a.provider, runtimes: a.provider.runtimes.map(r => ({ ...r, auth: r.auth.map(profile => ({
+          ...profile, credential_present: true, verification: 'not_checked', application: 'not_applied',
+        })) })) }]; revision++;
+        return envelope({ ok: true, request_id: snapshotId, status: 'pending' });
+      }
       if (a.action === 'login') {
         window.__loginCalls.push(a); intent = a.provider;
         return envelope({ ok: true, request_id: loginId, status: 'pending' });
@@ -40,7 +49,7 @@ try {
         return envelope({ ok: true, request_id: loginId, daemon_node_id: 'daemon-a', status: 'succeeded', login });
       }
       if (a.action === 'refresh') return envelope({ ok: true, request_id: snapshotId, status: 'pending' });
-      return envelope({ ok: true, request_id: snapshotId, daemon_node_id: 'daemon-a', status: 'succeeded', observed_at: Date.now(), snapshot: { network_id: 'net-sweep', daemon_node_id: 'daemon-a', source: 'daemon', revision: 0, providers: [] } });
+      return envelope({ ok: true, request_id: snapshotId, daemon_node_id: 'daemon-a', status: 'succeeded', observed_at: Date.now(), snapshot: { network_id: 'net-sweep', daemon_node_id: 'daemon-a', source: 'daemon', revision, providers } });
     };
   });
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
@@ -60,6 +69,13 @@ try {
   await page.getByTestId('daemon-login-card').getByText('Work account', { exact: true }).waitFor();
   assert((await page.getByTestId('daemon-login-card').innerText()).includes('Work account'));
   assert.equal(await page.getByTestId('daemon-login-code').count(), 0);
+  await page.getByTestId('daemon-login-models').fill('model-fixture');
+  await page.getByTestId('daemon-login-bind-00000000-0000-0000-0000-000000000003').click();
+  await page.getByTestId('daemon-provider-openai').waitFor();
+  assert((await page.getByTestId('daemon-provider-openai').innerText()).includes('model-fixture'));
+  const bindings = await page.evaluate(() => window.__bindCalls);
+  assert.equal(bindings.length, 1); assert.equal(bindings[0].revision, 0);
+  assert.equal(bindings[0].provider.runtimes[0].auth[0].account_id, '00000000-0000-0000-0000-000000000003');
   await page.evaluate(() => { window.__loginConfirmed = false; });
   await page.getByTestId('daemon-login-start').click();
   await page.getByTestId('daemon-login-code').waitFor();
@@ -72,5 +88,5 @@ try {
   assert.equal(calls.filter(c => c.provider.action === 'save').length, 1);
   assert.equal(calls.filter(c => c.provider.action === 'cancel').length, 1);
   assert.deepEqual(errors, []);
-  console.log('PASS managed-login rendered core: start/code/manual-check/save/scoped-list/cancel; no real OAuth or node switch');
+  console.log('PASS managed-login rendered core: start/code/manual-check/save/scoped-list/bind-model/cancel; no real OAuth or node switch');
 } finally { await browser.close(); web.close(); }

@@ -102,7 +102,7 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, daemonVersio
     </PendingPanelCard> : null}
     {snapshot ? <DaemonProviderSelection snapshot={snapshot} identity={identity} cfg={cfg} /> : null}
     {snapshot && daemonId ? <DaemonCodexAccounts key={identity} cfg={cfg} daemonId={daemonId}
-      scope={JSON.stringify([cfg.serverUrl, cfg.networkId, cfg.token, daemonId])} /> : null}
+      scope={JSON.stringify([cfg.serverUrl, cfg.networkId, cfg.token, daemonId])} snapshot={snapshot} bind={save} binding={saving} /> : null}
     {snapshot ? <PendingPanelCard testID="daemon-provider-key-form">
       <PendingCardTitle title={t('providerManagement.keyForm')} />
       <Text style={{ color: colors.textSecondary }}>{t('providerManagement.writeHint')}</Text>
