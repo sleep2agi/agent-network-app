@@ -72,6 +72,9 @@ if (NOTE_VERSIONS.length < 3 || NOTE_VERSIONS[0] !== APP_VERSION) {
   throw new Error('changelog fixture needs the running version and two older releases');
 }
 const [, PREV, PREV2] = NOTE_VERSIONS;
+// Unpublished drafts sit in the notes without a bundled date. The geometry check
+// below must use cards that actually have one, not the two newest neighbors.
+const KNOWN_DATES = new Set([...bundledSrc.matchAll(/"(\d+\.\d+\.\d+)":\s*"20/g)].map(match => match[1]));
 // What the running version's card must show, read from the same notes (not hard-coded: every release changes them —
 // the drive used to expect 「任务仪表盘」 and exactly 新功能 / 修复, true for one release only). The first bullet's text
 // (minus a 新功能：/修复：/提速： prefix), first 8 characters.
@@ -254,10 +257,22 @@ async function run({ phone }) {
     ck(`${vp}: 复制 touch target ≥ 36 high`, heads.every(h => h.copy.h >= 36), heads.map(h => h.copy.h).join('/'));
   } else {
     ck(`${vp}: check · version · date · 复制 centred on one line`, heads.every(h => [h.check, h.ver, h.date].filter(Boolean).every(b => Math.abs(cy(b) - cy(h.copy)) <= 1)), heads.map(h => [h.check, h.ver, h.date].filter(Boolean).map(b => (cy(b) - cy(h.copy)).toFixed(1)).join(',')).join(' / '));
-    // The running version carries a 当前版本 badge between version and date; compare the other cards with each other.
+    // The running version carries a 当前版本 badge between version and date.
+    // Neighbors may be unpublished and have no date; compare dated cards instead.
     const gap = (h) => h.date.x - h.ver.x - h.ver.w;
-    const dated = heads.slice(1).filter(h => h.date);
-    ck(`${vp}: date right after the version (same gap each dated card)`, dated.length > 0 && dated.every(h => Math.abs(gap(h) - gap(dated[0])) <= 0.5) && gap(dated[0]) > 0 && gap(heads[0]) > gap(dated[0]), heads.filter(h => h.date).map(h => gap(h).toFixed(1)).join('/'));
+    let dated = heads.slice(1).filter(h => h.date);
+    if (dated.length === 0) {
+      dated = [];
+      for (const v of NOTE_VERSIONS) {
+        if (v === APP_VERSION || !KNOWN_DATES.has(v)) continue;
+        const ver = await box(page, tid(`changelog-version-${v}`));
+        const dateText = await paintedText(page, tid(`changelog-date-${v}`));
+        const date = painted(dateText) ? await box(page, tid(`changelog-date-${v}`)) : null;
+        if (ver && date) dated.push({ v, ver, date });
+        if (dated.length === 2) break;
+      }
+    }
+    ck(`${vp}: date right after the version (same gap each dated card)`, dated.length > 0 && dated.every(h => Math.abs(gap(h) - gap(dated[0])) <= 0.5) && gap(dated[0]) > 0 && (!heads[0].date || gap(heads[0]) > gap(dated[0])), [...(heads[0].date ? [`current ${gap(heads[0]).toFixed(1)}`] : []), ...dated.map(h => `${h.v} ${gap(h).toFixed(1)}`)].join('/'));
   }
 
   // 4 single-version preview in each format
