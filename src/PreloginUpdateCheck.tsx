@@ -1,5 +1,6 @@
 import { useSyncExternalStore } from 'react';
-import { ActivityIndicator, Platform, Pressable, Text, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
+import { Text } from './ui-text';
 import { APP_VERSION } from './version';
 import { colors } from './theme';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';

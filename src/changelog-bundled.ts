@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.242:",
+  "- 首次打开和登录页面也可检查客户端更新，无需先填写 Hub、用户名或密码；使用原有更新提示与安装流程。",
+  "- Hub 令牌页接入真实共享 API 密钥库，支持查看名称、添加和替换；密钥加密保存在 Hub，提交后清空，不回显明文。",
+  "- 密钥保存需当前网络所有者权限，失败可刷新重试；不会自动下发、替换节点身份令牌或切换已有节点。Provider 对已存密钥名称的引用复用仍在接入。",
+  "",
   "What's new in 0.2.241:",
   "- 修复改密码后重新登录又被旧请求踢回登录页，以及账号仍显示需要重新登录的状态竞争；真正失效的新凭据仍会要求验证。",
   "- Hub Provider 可配置并明确绑定到所选 Daemon；首个应用链路支持 Codex Responses/API-key，不会自动给所有节点复制账号或凭据。",
@@ -1068,6 +1073,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.241": "2026-10-11T14:35:01Z",
   "0.2.240": "2026-10-11T11:30:52Z",
   "0.2.239": "2026-10-11T10:21:39Z",
   "0.2.238": "2026-10-11T08:59:54Z",
