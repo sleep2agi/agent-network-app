@@ -44,3 +44,21 @@ main installer; it must not delete distributed keys as an assumed rollback.
 Core Docker parser/typecheck and actual exported React/synthetic Hub drive live
 under `tests/hub-provider-management/`. This is not native-package, real Hub,
 live login or model-call evidence; formal release gates remain independent.
+
+## Saved Hub key reuse (#1020)
+
+The credential source now offers a new key or an existing Hub key name. Names
+come from `list_network_secrets`; no key value is retrieved or persisted. Saving
+the latter sends only `secretKeyRef` and requires the same reference in the
+metadata receipt. Distribution remains the separate review/confirm action.
+The reference does not switch a node or prove model entitlement.
+
+The client explicitly requests reference capability metadata. Old Hub responses
+still render their original Provider catalog and allow ordinary key entry, but
+the saved-key choice is disabled. The required backend release target is Hub
+`0.9.0-preview.125`; publish/upgrade instructions must use the formal exact-main
+release after it exists. CLI166/runtime132 use the unchanged distribution wire
+format, so no additional fleet/runtime upgrade is implied by this UI feature.
+Named-key rotation affects future confirmed distribution, not installed copies.
+Rollback/recovery retain the existing vault master key, catalog and encrypted
+backups described above; no new client persistence or service is introduced.

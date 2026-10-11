@@ -1,6 +1,12 @@
 import { registerTranslations } from './i18n';
 registerTranslations({
   'hubProvider.title': ['Hub Provider', 'Hub Provider'],
+  'hubProvider.credentialSource': ['密钥来源', 'Credential source'],
+  'hubProvider.newKey': ['填写新密钥', 'Enter a new key'],
+  'hubProvider.savedKey': ['选择已存 Hub 密钥', 'Use a saved Hub key'],
+  'hubProvider.referenceUpgrade': ['复用已存密钥需要 Hub 0.9.0-preview.125 或更新版本；当前仍可填写新密钥。', 'Saved-key reuse requires Hub 0.9.0-preview.125 or newer. Entering a new key remains available.'],
+  'hubProvider.referenceHint': ['仅选择密钥名称，不读取明文；保存后仍需确认下发到 Daemon。', 'Select the key name only, without reading plaintext. Daemon distribution still requires confirmation.'],
+  'hubProvider.noSavedKeys': ['暂无已存密钥，请先在 Hub 令牌页添加后刷新。', 'No saved keys. Add one in Hub tokens, then refresh.'],
   'hubProvider.back': ['返回', 'Back'],
   'hubProvider.models': ['个配置模型', 'configured models'],
   'hubProvider.distributionFinished': ['下发等待已结束，请逐台查看回执；已有节点仍需确认应用。', 'Distribution observation finished. Check each receipt; existing nodes still require explicit application.'],

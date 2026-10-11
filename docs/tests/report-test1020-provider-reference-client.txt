@@ -1,0 +1,27 @@
+Saved Hub key → Provider → explicit Daemon selection (TEST ONLY)
+OBSERVED_AT=2026-10-11T14:50Z / 22:50 Asia/Shanghai
+Base main 15756698b9cc9b3e6a760959b2a730ece9352c8c; refs #1020 / #907.
+
+All tests in independent tests/hub-provider-management/Dockerfile, pinned public
+Bun/Node/Playwright bases and repo npm lockfile. No host package installation.
+Core image sha256:65e1f9a3f81203983fb7861a5876c61613db8a84b29842b2eb01d41d9e64d7a6:
+4/4 parser/form/routes groups PASS; npm run typecheck exit0.
+Core backend dependency passed separately in agent-network PR2607, actual Hub
+registered handler + vault + daemon queue + pinned CLI store, 6/6,43 assertions.
+
+Exported React Chromium image
+sha256:062b86a9818b6e49de980194e9741c9a7fb9ec9a262752b1e4760dafec53fc3f:
+25/25 assertions PASS, desktop/light and phone/dark. Synthetic HTTP/native IPC
+fixture checks new-key save, key clearing, no automatic bind, confirmed exact
+Daemon receipt, wrong-target failure, name-only saved-key selection, absent
+plaintext field, reference-only write and separate confirmed bind. Theme palette
+and no page errors asserted. This is not a real native installation, live Hub
+credential read, vendor/model entitlement or inference proof.
+
+Commands: sg docker build --target core/browser; docker run --rm --init
+--network none (browser --shm-size=1g). No production write/restart/node mutation.
+Cleanup: containers removed; screenshots remain only within removed containers.
+No branch public artifact, npm publication or updater channel change. Full
+main-based formal publication remains a separate step. Older Hub catalogs remain
+readable; saved-key mode requires opt-in Hub capability, release target125.
+Other runtime adapters/automatic rotation remain open under parent #907.

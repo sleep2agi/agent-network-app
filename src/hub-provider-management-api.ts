@@ -23,12 +23,16 @@ async function rpc(cfg: HubConfig, name: string, args: Record<string, unknown>, 
   })()]); } finally { clearTimeout(timer); signal.removeEventListener('abort', cancel); ctrl.abort(); }
 }
 export { rpc as hubManagementRpc };
-export async function readHubProviderCatalog(cfg: HubConfig, signal: AbortSignal) {
+export async function readHubProviderCatalogInfo(cfg: HubConfig, signal: AbortSignal) {
   try {
-    const result = await rpc(cfg, 'daemon_provider_snapshot', { action: 'hub_read', id: 'hub' }, signal);
+    const result = await rpc(cfg, 'daemon_provider_snapshot', { action: 'hub_read', id: 'hub', provider: { include_secret_refs: true } }, signal);
     if (result.kind !== 'payload') return null;
-    return parseHubProviderCatalog(result.value, cfg.networkId ?? '');
+    const providers = parseHubProviderCatalog(result.value, cfg.networkId ?? '');
+    return providers ? { providers, secretReferences: result.value.secret_reference_supported === true } : null;
   } catch { return null; }
+}
+export async function readHubProviderCatalog(cfg: HubConfig, signal: AbortSignal) {
+  return (await readHubProviderCatalogInfo(cfg, signal))?.providers ?? null;
 }
 export async function saveHubProviderConfig(cfg: HubConfig, form: HubProviderForm, signal: AbortSignal) {
   const input = hubProviderInput(form); if (!input || !providerWriteTransportAllowed(cfg.serverUrl)) return null;
@@ -38,7 +42,8 @@ export async function saveHubProviderConfig(cfg: HubConfig, form: HubProviderFor
     const saved = parseHubProvider(result.value.provider);
     if (!saved || saved.id !== input.id || saved.revision !== form.revision + 1 || saved.label !== input.label
       || saved.protocol !== input.protocol || saved.baseUrl !== input.baseUrl || saved.enabled !== input.enabled
-      || !saved.credential_present || JSON.stringify(saved.models) !== JSON.stringify(input.models)) return null;
+      || !saved.credential_present || JSON.stringify(saved.models) !== JSON.stringify(input.models)
+      || (input.secretKeyRef && saved.secret_key_ref !== input.secretKeyRef)) return null;
     return saved;
   } catch { return null; }
 }

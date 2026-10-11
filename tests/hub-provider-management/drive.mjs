@@ -26,13 +26,14 @@ try {
       window.__routeOverride = (url, text) => {
         if (url.pathname !== '/mcp') return;
         const { name, arguments: a } = JSON.parse(text || '{}').params || {};
+        if (name === 'list_network_secrets') return envelope({ ok: true, keys: ['SHARED_API_KEY'] });
         if (name === 'daemon_provider_snapshot' && a.action.startsWith('hub_')) {
-          if (a.action === 'hub_read') return envelope({ ok: true, network_id: a.network_id, source: 'hub', providers: window.__hubProviders });
+          if (a.action === 'hub_read') return envelope({ ok: true, network_id: a.network_id, source: 'hub', secret_reference_supported: true, providers: window.__hubProviders });
           if (a.action === 'hub_put') {
-            window.__hubWrites.push({ network_id: a.network_id, revision: a.revision, id: a.provider.id });
-            const { key, ...publicConfig } = a.provider;
+            window.__hubWrites.push({ network_id: a.network_id, revision: a.revision, id: a.provider.id, secretKeyRef: a.provider.secretKeyRef, hadKey: Object.hasOwn(a.provider, 'key') });
+            const { key, secretKeyRef, ...publicConfig } = a.provider;
             const saved = { ...publicConfig, revision: a.revision + 1, updated_at: Date.now(), source: 'hub', credential_present: true,
-              verification: 'not_checked', compatible_runtimes: a.provider.protocol === 'openai-responses' ? ['codex-tui'] : [] };
+              verification: 'not_checked', compatible_runtimes: a.provider.protocol === 'openai-responses' ? ['codex-tui'] : [], ...(secretKeyRef ? { secret_key_ref: secretKeyRef } : {}) };
             window.__hubProviders = [saved]; return envelope({ ok: true, network_id: a.network_id, provider: saved });
           }
           if (a.action === 'hub_bind') {
@@ -87,9 +88,23 @@ try {
       assert((await receipt.innerText()).includes('未确认')); passed++;
     }
     assert.deepEqual(errors, []); passed++;
+    await page.getByTestId('hub-provider-credential-reference').click();
+    await page.getByTestId('hub-provider-secret-SHARED_API_KEY').click();
+    assert.equal(await page.getByTestId('hub-provider-field-key').count(), 0); passed++;
+    await page.getByTestId('hub-provider-save').click();
+    await page.waitForFunction(() => window.__hubWrites.length === 2);
+    assert.deepEqual(await page.evaluate(() => window.__hubWrites[1]), { network_id: 'net-sweep', revision: 1, id: 'shared', secretKeyRef: 'SHARED_API_KEY', hadKey: false }); passed++;
+    await page.getByTestId('hub-provider-choose-shared').click();
+    await page.getByTestId('hub-provider-target-d_sweep_1').click();
+    await page.getByTestId('hub-provider-review-distribution').click();
+    const bindingCount = await page.evaluate(() => window.__hubBindings.length);
+    await page.evaluate(() => { window.__receiptMode = 'ok'; });
+    await page.getByTestId('hub-provider-confirm-distribution').click();
+    await page.waitForFunction(n => window.__hubBindings.length === n + 1, bindingCount);
+    await page.waitForFunction(() => document.querySelector('[data-testid="hub-provider-receipt-d_sweep_1"]')?.textContent.includes('未应用到节点')); passed++;
     mkdirSync('/tmp/hub-provider-screenshots', { recursive: true });
     await page.screenshot({ path: `/tmp/hub-provider-screenshots/${theme}.png`, fullPage: true });
     await ctx.close();
   }
-  console.log(`PASS Hub Provider real page: ${passed}/19 assertions, desktop/light + phone/dark (palette asserted)`);
+  console.log(`PASS Hub Provider real page: ${passed}/25 assertions, desktop/light + phone/dark (palette asserted)`);
 } finally { await browser.close(); web.close(); }
