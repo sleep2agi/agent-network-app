@@ -48,4 +48,19 @@ Image anet-app:daemon-pair164130 built from exact draft source. --rm --init
 fallback installation of final package still pending its public availability.
 
 Signed client release remains pending; old shipping client is .237.
-Production Hub remains .121; this is not an activation receipt.
+The preceding checks were not an activation receipt.
+
+16:25 +08 increment (deployment observation, not a new product test):
+Runtime .130 formal run38123037968 completed SUCCESS, including npm publication
+and exact registry readback. CLI documentation repair PR2589 merged normally
+as main bbc7035155c8b49bc977cf7f103bd1ecdddaa78f; corrected formal .164 run
+38124619816 is queued. The provisional CLI archive hash is still NOT final.
+Hub deployment profile PR2590 merged normally as main
+e80a1af396009e3077fc546bb07feea809195f88 after ten required guards passed.
+Only commhub-hub was restarted. Real listening PID2824768 uses
+runtime-v106-preview122; /health reads .122 with 318 sessions. Running Bun
+SHA25633d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b
+matches the offline preflight executable. Fresh post-cutover heartbeat observed
+from daemon-vdev, TMA cloud storage, TMAI dog and TMA client nodes.
+Old .121 runtime and owner-only consistent DB/launcher backups retained.
+No business node restart, account login, credentials copy or inference performed.

@@ -36,3 +36,16 @@ failure. Backend PR2589 corrects only two guide candidate references/stamps;
 final exact main-built CLI bytes/hash and public download must replace the draft
 hash before this client can be released. Details, including environment failures,
 are in report-release-0.2.238-core-package-pins.txt. No signed .238 claimed.
+
+2026-10-11 16:26 +08 increment:
+Runtime .130 formal npm publication and registry readback completed SUCCESS.
+Hub .122 is now activated: deployment PR2590/main e80a1af396009e3077fc546bb07feea809195f88,
+actual listener PID2824768/runtime-v106-preview122, 318 sessions preserved,
+107 fresh post-cutover node heartbeats; task delivery/start/reply continues.
+CLI documentation PR2589 is merged as main
+bbc7035155c8b49bc977cf7f103bd1ecdddaa78f. Corrected formal .164 run38124619816
+is waiting for its build runner. Do not use the old failed run's draft hash.
+Unchanged full QA/E2E reruns for our doc/deployment-only merges were cancelled
+to keep the core release focused; cancellations are not PASS evidence.
+No business Agent was restarted. Public client remains .237 until the final
+exact package pin, one fallback install check and main-bound signing complete.
