@@ -14,12 +14,14 @@ try {
     await page.addInitScript(() => {
       window.__providerMode = 'ready'; window.__providerCalls = []; window.__savedProviders = {}; window.__providerRevision = 3;
       window.__providerApplyEnabled = false; window.__applicationIntent = null;
+      window.__nodeBinding = 'daemon-a';
       const daemon = { node_id: 'daemon-a', alias: 'daemon-a', role: 'host_supervisor', lifecycle_state: 'running', config_snapshot: { role: 'host_supervisor' } };
       const requestId = 'dps_00000000-0000-0000-0000-000000000001';
       const envelope = payload => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } });
       window.__routeOverride = (url, text) => {
-        if (url.pathname === '/api/nodes') return { nodes: [daemon] };
-        if (url.pathname === '/api/status') return { sessions: [{ ...daemon, version: '2.5.0-preview.129', status: 'idle', updated_at: new Date().toISOString() }] };
+        const existing = { node_id: 'n_existing', alias: 'existing-codex', runtime: 'codex-app-server', model: 'existing-model', lifecycle_daemon_node_id: window.__nodeBinding };
+        if (url.pathname === '/api/nodes') return { nodes: [daemon, existing] };
+        if (url.pathname === '/api/status') return { sessions: [daemon, existing].map(n => ({ ...n, version: '2.5.0-preview.129', status: 'idle', updated_at: new Date().toISOString() })) };
         if (url.pathname === '/api/host-supervisors') return { ok: true, daemons: [{ daemon_node_id: daemon.node_id, alias: daemon.alias, online: true, runtimes_supported: ['codex-app-server'] }] };
         if (url.pathname !== '/mcp') return;
         const params = JSON.parse(text || '{}').params;
@@ -80,6 +82,34 @@ try {
     });
     await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
     await page.waitForFunction(() => !!window.__anetLayoutSweep);
+    if (process.env.CORE_NODE_SWITCH === '1') {
+      await page.evaluate(() => { window.__providerApplyEnabled = true; window.__anetLayoutSweep.setScreen({ name: 'nodeInfo', alias: 'existing-codex' }); });
+      await page.getByTestId('node-section-nav').getByText('模型与运行时', { exact: true }).click();
+      await page.getByTestId('daemon-provider-select-providerId').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-select-nodeId').count(), 0); passed++;
+      for (const [field, id] of Object.entries({ providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' })) {
+        const control = `daemon-provider-select-${field}`;
+        await page.getByTestId(control).click();
+        await page.getByTestId(`${control}-menu-opt-${id}`).click();
+      }
+      await page.getByTestId('daemon-provider-apply').click();
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), 0); passed++;
+      await page.getByTestId('daemon-provider-apply-confirm').click();
+      await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-application-status"]')?.textContent?.includes('已确认所选'));
+      const applied = await page.evaluate(() => window.__applicationIntent);
+      assert.equal(applied.provider.node_id, 'n_existing');
+      assert.equal(applied.provider.provider_id, 'deepseek');
+      assert.equal(applied.provider.model, 'deepseek-chat'); passed++;
+      await page.evaluate(() => { window.__nodeBinding = null; window.__anetLayoutSweep.setScreen({ name: 'agents' }); });
+      await page.getByTestId('node-daemon-provider').waitFor({ state: 'detached' });
+      await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'nodeInfo', alias: 'existing-codex' }));
+      await page.getByTestId('node-section-nav').getByText('模型与运行时', { exact: true }).click();
+      await page.getByTestId('node-provider-manage-binding').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-apply').count(), 0); passed++;
+      assert.deepEqual(errors, []); passed++;
+      if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/node-provider-binding.png`, fullPage: true });
+      await ctx.close(); continue;
+    }
     await page.getByTestId('desktop-workspace-sidebar').waitFor();
     assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 1); passed++;
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: 'daemon-a', daemonMgmt: true }));
@@ -183,7 +213,9 @@ try {
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(process.env.CORE_DISCOVERY_ONLY === '1'
+  console.log(process.env.CORE_NODE_SWITCH === '1'
+    ? `PASS node Provider switch UI ${passed}/${passed} (node-info target lock, selection, confirmed submit/receipt, unbound refusal, zero page errors; synthetic Hub, no real runtime)`
+    : process.env.CORE_DISCOVERY_ONLY === '1'
     ? `PASS existing Codex discovery UI ${passed}/${passed} (bound/manual readback, opt-in request, read-only boundary, selection exclusion; synthetic Hub, no real runtime)`
     : `PASS daemon Provider management UI ${passed}/${passed} (inventory, save, enable/disable, application, exact version guidance, unsupported and timeout; synthetic Hub, no real runtime)`);
 } finally { await browser.close(); web.close(); }

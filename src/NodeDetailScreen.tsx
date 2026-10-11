@@ -82,6 +82,8 @@ import NodeModelSection from './NodeModelSection';
 import NodeCodexExecutionSection from './NodeCodexExecutionSection';
 import NodeCodexReasoningSection from './NodeCodexReasoningSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
+import NodeDaemonProviderSection from './NodeDaemonProviderSection';
+import { daemonProviderNodeRuntime } from './node-provider-target';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
 import { NodeSecretPendingSection } from './BackendPendingDemo';
@@ -652,14 +654,17 @@ export default function NodeDetailScreen({
           </Pressable>
         ) : null}
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
-        {node ? <NodeModelSection cfg={cfg} node={node} /> : null}
+        {node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} /> : null}
+        {node && daemonProviderNodeRuntime(node.runtime) ? (
+          <NodeDaemonProviderSection cfg={cfg} node={node} onManageBinding={() => setActiveSection('overview')} />
+        ) : null}
         {node && (node.runtime === 'codex-app-server' || node.runtime === 'codex-sdk') ? (
           <>
             <NodeCodexExecutionSection cfg={cfg} node={node} />
             <NodeCodexReasoningSection cfg={cfg} node={node} />
           </>
         ) : null}
-        {!readOnly && node && isCodexRuntime(node.runtime) ? (
+        {!readOnly && node && isCodexRuntime(node.runtime) && !daemonProviderNodeRuntime(node.runtime) ? (
           <NodeCodexProviderSection runtimeId={node.runtime} serverUrl={cfg.serverUrl} />
         ) : null}
       </View>

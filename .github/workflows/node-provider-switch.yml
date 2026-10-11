@@ -1,0 +1,26 @@
+name: Node Provider switch core
+on:
+  pull_request:
+    paths:
+      - 'src/NodeDaemonProviderSection.tsx'
+      - 'src/node-provider-target*'
+      - 'src/DaemonProviderSelection.tsx'
+      - 'src/NodeDetailScreen.tsx'
+      - 'tests/node-provider-switch/**'
+      - 'tests/daemon-provider-management/drive.mjs'
+      - '.github/workflows/node-provider-switch.yml'
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Node scope, apply request and typecheck (Docker)
+        run: |
+          sg docker -c 'docker build --target core -f tests/node-provider-switch/Dockerfile -t anet-app:node-provider-core .'
+          sg docker -c 'docker run --rm --network none anet-app:node-provider-core'
+      - name: Exported node detail selection, submit and receipt (Docker fixture)
+        run: |
+          sg docker -c 'docker build --target browser -f tests/node-provider-switch/Dockerfile -t anet-app:node-provider-browser .'
+          sg docker -c 'docker run --rm --network none anet-app:node-provider-browser'

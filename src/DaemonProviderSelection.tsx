@@ -14,12 +14,12 @@ import type { ProviderApplicationResult } from './daemon-provider-application';
 import { changeProviderSelection, EMPTY_PROVIDER_SELECTION, providerSelectionOptions, resolveProviderSelection, providerApplicationWrite, type ProviderSelection } from './daemon-provider-selection';
 
 /** Single-node confirmed application; configuration counts remain unverified. */
-export default function DaemonProviderSelection({ snapshot, identity, cfg }: { snapshot: ProviderSnapshot; identity: string; cfg: HubConfig }) {
+export default function DaemonProviderSelection({ snapshot, identity, cfg, nodeId }: { snapshot: ProviderSnapshot; identity: string; cfg: HubConfig; nodeId?: string }) {
   const { t } = useTranslation();
   const { width } = useWindowDimensions();
-  const scope = JSON.stringify([identity, snapshot.revision, snapshot.codex_inventory?.observed_at]);
+  const scope = JSON.stringify([identity, snapshot.revision, snapshot.codex_inventory?.observed_at, nodeId]);
   const [state, setState] = useState<{ scope: string; selection: ProviderSelection } | null>(null);
-  const selection = state?.scope === scope ? state.selection : EMPTY_PROVIDER_SELECTION;
+  const selection = state?.scope === scope ? state.selection : { ...EMPTY_PROVIDER_SELECTION, nodeId: nodeId ?? '' };
   const options = providerSelectionOptions(snapshot, selection);
   const resolved = resolveProviderSelection(snapshot, selection);
   const [confirmation, setConfirmation] = useState('');
@@ -49,7 +49,7 @@ export default function DaemonProviderSelection({ snapshot, identity, cfg }: { s
   return <PendingPanelCard testID="daemon-provider-selection">
     <PendingCardTitle title={t('providerManagement.select.title')} />
     <Text style={{ color: colors.textSecondary }}>{t('providerManagement.select.boundary')}</Text>
-    {field('nodeId', options.nodes.map(n => ({ id: n.node_id, label: n.alias, sub: n.node_id })))}
+    {!nodeId ? field('nodeId', options.nodes.map(n => ({ id: n.node_id, label: n.alias, sub: n.node_id }))) : null}
     {!options.nodes.length ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.select.noNodes')}</Text> : null}
     {field('providerId', options.providers.map(p => ({ id: p.id, label: p.label, sub: p.id })), !selection.nodeId)}
     {field('authId', options.auth.map(a => ({ id: a.id, label: a.id, sub: t(`providerManagement.${a.kind}`) })), !selection.providerId)}
