@@ -13,7 +13,10 @@ try {
     const snapshotId = 'dps_00000000-0000-0000-0000-000000000001';
     const loginId = 'dpl_00000000-0000-0000-0000-000000000002';
     const accountId = '00000000-0000-0000-0000-000000000003';
+    const applicationId = 'dpa_00000000-0000-0000-0000-000000000004';
     let intent, accounts = [], providers = [], revision = 0;
+    let application;
+    window.__applyCalls = [];
     window.__bindCalls = [];
     window.__loginCalls = []; window.__loginConfirmed = false;
     const envelope = payload => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } });
@@ -25,6 +28,17 @@ try {
       const params = JSON.parse(text || '{}').params;
       if (params?.name !== 'daemon_provider_snapshot') return;
       const a = params.arguments;
+      if (a.action === 'apply') {
+        window.__applyCalls.push(a); application = a;
+        return envelope({ ok: true, request_id: applicationId, status: 'pending' });
+      }
+      if (a.action === 'read' && a.id === applicationId) return envelope({ ok: true, request_id: applicationId,
+        daemon_node_id: 'daemon-a', status: 'succeeded', application: {
+          status: 'applied', request_id: applicationId, node_id: application.provider.node_id,
+          provider_id: application.provider.provider_id, auth_id: application.provider.auth_id, account_id: application.provider.account_id,
+          model: application.provider.model, runtime_provider: 'openai', node_revision: 'b'.repeat(64),
+          provider_revision: application.revision, verification: 'runtime_confirmed', applied_at: Date.now(),
+        } });
       if (a.action === 'put') {
         window.__bindCalls.push(a);
         if (a.revision !== revision) return envelope({ ok: false, error: 'revision_conflict' });
@@ -49,7 +63,16 @@ try {
         return envelope({ ok: true, request_id: loginId, daemon_node_id: 'daemon-a', status: 'succeeded', login });
       }
       if (a.action === 'refresh') return envelope({ ok: true, request_id: snapshotId, status: 'pending' });
-      return envelope({ ok: true, request_id: snapshotId, daemon_node_id: 'daemon-a', status: 'succeeded', observed_at: Date.now(), snapshot: { network_id: 'net-sweep', daemon_node_id: 'daemon-a', source: 'daemon', revision, providers } });
+      return envelope({ ok: true, request_id: snapshotId, daemon_node_id: 'daemon-a', status: 'succeeded', observed_at: Date.now(), snapshot: {
+        network_id: 'net-sweep', daemon_node_id: 'daemon-a', source: 'daemon', revision, providers,
+        codex_inventory: { observed_at: Date.now(), scope: 'hub_bound_nodes', rows: [
+          { node_id: 'node-fixture', alias: 'Fixture', status: 'observed', runtime: 'codex-app-server', config_revision: 'a'.repeat(64),
+            home_ref: '1234567890abcdef', home_source: 'node-codex-home', config_status: 'read',
+            configured_provider: 'openai', configured_model: 'model-fixture', node_configured_model: 'model-fixture',
+            provider_ids: ['openai'], auth_kind: 'unknown', credential_status: 'unknown', account_fingerprint: null,
+            verification: 'not_checked', effective_state: 'not_checked' },
+        ] },
+      } });
     };
   });
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
@@ -76,6 +99,21 @@ try {
   const bindings = await page.evaluate(() => window.__bindCalls);
   assert.equal(bindings.length, 1); assert.equal(bindings[0].revision, 0);
   assert.equal(bindings[0].provider.runtimes[0].auth[0].account_id, '00000000-0000-0000-0000-000000000003');
+  for (const [field, id] of Object.entries({ nodeId: 'node-fixture', providerId: 'openai',
+    authId: '00000000-0000-0000-0000-000000000003', model: 'model-fixture' })) {
+    const control = `daemon-provider-select-${field}`;
+    await page.getByTestId(control).click();
+    await page.getByTestId(`${control}-menu-search`).fill(id);
+    await page.getByTestId(`${control}-menu-opt-${id}`).click();
+  }
+  await page.getByTestId('daemon-provider-apply').click();
+  assert.equal(await page.evaluate(() => window.__applyCalls.length), 0);
+  await page.getByTestId('daemon-provider-apply-confirm').click();
+  await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-application-status"]')?.textContent?.includes('已确认所选'));
+  const applied = await page.evaluate(() => window.__applyCalls);
+  assert.equal(applied.length, 1); assert.equal(applied[0].revision, 1);
+  assert.equal(applied[0].provider.account_id, '00000000-0000-0000-0000-000000000003');
+  assert.equal(applied[0].provider.node_id, 'node-fixture');
   await page.evaluate(() => { window.__loginConfirmed = false; });
   await page.getByTestId('daemon-login-start').click();
   await page.getByTestId('daemon-login-code').waitFor();
@@ -88,5 +126,5 @@ try {
   assert.equal(calls.filter(c => c.provider.action === 'save').length, 1);
   assert.equal(calls.filter(c => c.provider.action === 'cancel').length, 1);
   assert.deepEqual(errors, []);
-  console.log('PASS managed-login rendered core: start/code/manual-check/save/scoped-list/bind-model/cancel; no real OAuth or node switch');
+  console.log('PASS managed-login rendered core: start/code/manual-check/save/scoped-list/bind-model/confirm-apply/exact-receipt/cancel; synthetic receipts, no real OAuth or node switch');
 } finally { await browser.close(); web.close(); }

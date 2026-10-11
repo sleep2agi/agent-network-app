@@ -30,16 +30,18 @@ export function resolveProviderSelection(snapshot: ProviderSnapshot, selection: 
   return {
     networkId: snapshot.network_id, daemonId: snapshot.daemon_node_id, providerRevision: snapshot.revision,
     ...selection, runtime: 'codex-tui' as const, authKind: options.profile.kind, nodeRevision: node.config_revision ?? null,
+    accountId: options.profile.account_id, credentialPresent: options.profile.credential_present,
   };
 }
 
 /** A readable legacy scan is not permission to mutate; require both CAS tokens. */
 export function providerApplicationWrite(snapshot: ProviderSnapshot, selection: ProviderSelection, confirmed: boolean) {
   const resolved = resolveProviderSelection(snapshot, selection);
-  if (!confirmed || !resolved || resolved.authKind !== 'api_key' || !resolved.nodeRevision
+  if (!confirmed || !resolved || (resolved.authKind === 'chatgpt' && (!resolved.accountId || !resolved.credentialPresent)) || !resolved.nodeRevision
     || !/^[a-f0-9]{64}$/.test(resolved.nodeRevision)) return null;
   return { revision: resolved.providerRevision, provider: {
     node_id: resolved.nodeId, node_revision: resolved.nodeRevision, provider_id: resolved.providerId,
     auth_id: resolved.authId, model: resolved.model, confirm_restart: true as const,
+    ...(resolved.authKind === 'chatgpt' ? { account_id: resolved.accountId! } : {}),
   } };
 }

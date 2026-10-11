@@ -212,6 +212,23 @@ await test('changing node/provider/auth clears dependent selections without infe
   assert.deepEqual(changeProviderSelection(selected, 'authId', 'new'), { ...selected, authId: 'new', model: '' });
   assert.deepEqual(changeProviderSelection(selected, 'model', 'new'), { ...selected, model: 'new' });
 });
+await test('official application requires a saved present account and sends its exact opaque reference', () => {
+  const v = parseProviderSnapshot(snapshot(), scope)!;
+  const accountId = 'aaaaaaaa-1111-4111-8111-111111111111';
+  v.providers = [{ id: 'openai', label: 'OpenAI', enabled: true, runtimes: [{ runtime: 'codex-tui', auth: [
+    { id: 'saved', kind: 'chatgpt', account_id: accountId, models: ['official-model'], credential_present: true, verification: 'not_checked', application: 'not_applied' },
+  ] }] }];
+  v.codex_inventory = { observed_at: 1000, scope: 'hub_bound_nodes', rows: [
+    { node_id: 'n_a', alias: 'a', status: 'observed', runtime: 'codex-app-server', config_revision: 'a'.repeat(64) },
+  ] };
+  const selected = { nodeId: 'n_a', providerId: 'openai', authId: 'saved', model: 'official-model' };
+  assert.equal(providerApplicationWrite(v, selected, true)?.provider.account_id, accountId);
+  v.providers[0].runtimes[0].auth[0].credential_present = false;
+  assert.equal(providerApplicationWrite(v, selected, true), null);
+  v.providers[0].runtimes[0].auth[0].credential_present = true;
+  delete v.providers[0].runtimes[0].auth[0].account_id;
+  assert.equal(providerApplicationWrite(v, selected, true), null);
+});
 await test('enable/disable writes preserve profiles, omit secrets and carry expected revision', () => {
   const current = parseProviderSnapshot(snapshot(), scope)!;
   const before = JSON.stringify(current);

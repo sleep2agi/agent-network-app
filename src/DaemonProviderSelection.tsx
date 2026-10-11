@@ -57,7 +57,7 @@ export default function DaemonProviderSelection({ snapshot, identity, cfg }: { s
     {resolved ? <Text testID="daemon-provider-selection-summary" style={{ color: colors.textSecondary }}>
       {resolved.nodeId} · {resolved.providerId} · {resolved.authId} · {resolved.model}
     </Text> : null}
-    {resolved?.authKind === 'chatgpt' ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.loginUnverified')}</Text> : null}
+    {resolved?.authKind === 'chatgpt' ? <Text style={{ color: colors.textSecondary }}>{t(write ? 'providerManagement.savedLoginApply' : 'providerManagement.loginUnverified')}</Text> : null}
     {!write ? <Text testID="daemon-provider-apply-unavailable" style={{ color: colors.textSecondary }}>{t('providerManagement.select.unavailable')}</Text> : null}
     {status ? <Text testID="daemon-provider-application-status" style={{ color: colors.textSecondary }}>{t(`providerManagement.apply.${status.kind}`)}{'requestId' in status ? ` · ${status.requestId ?? ''}` : ''}</Text> : null}
     {confirmation === selectionKey && canApply ? <View style={{ gap: spacing.sm }}>

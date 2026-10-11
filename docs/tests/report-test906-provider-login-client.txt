@@ -65,3 +65,21 @@ Release/recovery boundaries:
   model entitlement test, node application or native-package claim.
 - Model IDs are explicitly configured, not advertised as discovered entitlement.
   Dynamic account model discovery and node switch/rollback remain separate work.
+2026-10-11 14:28 +08 — managed-account application UI increment, not released:
+- Saved present account/model can be selected for one scanned versioned Codex node.
+  Selection carries exact opaque account_id, no path or credentials. An unbound or
+  absent account remains disabled. Two-step confirmation explains the target-node
+  restart, credential update and exclusive refresh-chain binding.
+- Public receipt validation requires the same account_id with built-in openai,
+  exact model/node/provider revision. API-key protocol remains compatible.
+- Docker current src mounted read-only: management/selection/application 25/25 PASS;
+  npm run typecheck PASS. No local dependency installs or production calls.
+- Expo export: 1224 modules. Chromium real rendered UI PASS:
+  start/code/manual-check/save/scoped-list/bind-model/select/confirm-apply/exact-receipt/
+  cancel. Exactly one apply after confirmation. Hub/account/application are synthetic
+  fixtures, NOT real OAuth, real node restart, or native macOS/Windows/Android proof.
+- First expanded UI attempt failed before login because the new fixture inventory
+  omitted required observed-row fields. Fixed the fixture to the real strict schema;
+  no product parser/guard relaxation. Only the failed UI drive rerun; final PASS.
+- Image: anet-app:provider-account-apply-ui using provider-account-apply-web export.
+  Containers --rm; build caches retained. No new release/version bump.
