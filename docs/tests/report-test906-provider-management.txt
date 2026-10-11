@@ -1,0 +1,56 @@
+ANet #906 — Daemon Provider management client increment
+2026-10-11 09:06 CST. Development only; no release/native package assertion.
+Base main: 1bffce047d7278f1c4368ab2b9c9021d91c1a67f.
+
+Implemented:
+  Daemon management Provider tab now calls daemon_provider_snapshot, not demo
+  data or network list_providers. Provider -> codex-tui -> auth -> model hierarchy.
+  Counts explicitly mean configured, not verified/available. Key is never read
+  back. ChatGPT metadata is explicitly not an authenticated login.
+  API-key add/edit sends a revision-bound put to the selected daemon and waits
+  for its public receipt. Other auth profiles are preserved. Endpoint change
+  requires a fresh key; same endpoint edits may retain the old one.
+  Navigation abort + render-time scope barrier; 20-second limit; no silent
+  fallback. A save timeout is unconfirmed, not success or automatic replay.
+  Secret POST requires HTTPS/loopback and disallows redirects. Desktop uses
+  the bundled HTTP plugin maxRedirections=0 for secret POST (pooled transport
+  has no per-request redirect policy); other requests keep existing transport.
+
+Verification, all in Docker:
+  Unit first run: 16/16 plus existing entry/catalog regressions 64/64+34/34,
+  typecheck exit 0. These old regressions were not repeatedly rerun.
+  Add/edit increment: 17/17 + typecheck exit 0. One source-string test initially
+  expected the old cleanup syntax; updated it to assert BOTH read/write aborts.
+  Latest no-redirect transport: typecheck exit 0.
+  Browser: real exported React UI in Chromium, ONE desktop core save flow,
+  7/7 checks. Hub is a page-local synthetic fixture, not authenticated Hub E2E.
+  Original harness used daemon-section-provider and timed out; actual navigation
+  ID is daemon-section-tabs-provider. Corrected harness, same app, then passed.
+  Web export image: sha256:21069f1909e8af7f9b6b4cde9dc002d714ec4f0f270d04a0fefa7e023cc80fac.
+  Export predates the explicit no-redirect helper; UI did not change after export.
+  Browser image: sha256:13e7b90611fb89e835b7d88a3d92f55798655498252967bc59c18de69c661003;
+  current drive mounted read-only to correct the selector and limit core scope.
+  No native transport/package/login/model-call claim from this fixture.
+
+Reproduce:
+  sg docker -c 'docker build --target test -f tests/daemon-provider-management/Dockerfile -t provider-core . && docker run --rm --network none provider-core'
+  sg docker -c 'docker build --target web-export -f tests/daemon-provider-management/Dockerfile -t provider-web .'
+  sg docker -c 'docker build --build-context web=docker-image://provider-web -f tests/daemon-provider-management/Dockerfile.ui -t provider-ui . && docker run --rm --network none provider-ui'
+  Browser drive registered in tests/drives.json; existing unit discovery includes
+  daemon-provider-management.test.ts. No new independent Hub/product task.
+
+Operational/recovery boundary:
+  No new daemon, port, reverse proxy, or background process. Client calls existing
+  /mcp on its selected Hub; backend increment is agent-network PR2575.
+  Hub requires existing secure injection of ANET_HUB_SECRET_VAULT_KEY; key values
+  and user Provider data are NOT recoverable from Git. Keep encrypted data backup
+  and its vault key from the deployment's existing secrets authority.
+  Backend design/recovery source: agent-network docs/design/906-daemon-provider-management.md.
+  Publish only from an exact merged main SHA. Pending writes must finish before
+  downgrade. Client rollback does not revert saved daemon config. This increment
+  has not deployed anything or performed a production recovery drill.
+  Containers --rm; only TEST-ONLY credentials/fixtures; no user login/key access.
+
+NOT DONE: choosing a stored profile for node creation/edit; applying to live
+  Codex and proving actual selected model; official ChatGPT account login/switch;
+  remove/in-use guard; native release. Entire #906 remains doing/P0.
