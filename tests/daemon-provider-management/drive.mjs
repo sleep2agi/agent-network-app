@@ -38,7 +38,11 @@ try {
           { id: 'openai', label: 'OpenAI', enabled: false, runtimes: [{ runtime: 'codex-tui', auth: [
             { id: 'personal', kind: 'chatgpt', models: ['model-fixture'], credential_present: false, verification: 'not_checked', application: 'not_applied' },
           ] }] },
-        ] };
+        ], codex_inventory: { observed_at: Date.now(), scope: 'hub_bound_nodes', installation: { status: 'found', version: '0.133.0' }, rows: [{
+          node_id: 'n_existing', alias: 'existing-codex', status: 'observed', runtime: 'codex-app-server', home_ref: '1234567890abcdef', home_source: 'node-codex-home',
+          config_status: 'read', configured_provider: 'configured-custom', configured_model: 'existing-model', node_configured_model: 'node-model', provider_ids: ['configured-custom'],
+          auth_kind: 'api_key', credential_status: 'unknown', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked',
+        }] } };
         if (window.__providerMode === 'empty') value.providers = [];
         if (window.__savedProvider && window.__providerMode === 'ready') {
           const p = window.__savedProvider;
@@ -59,6 +63,9 @@ try {
     assert((await panel.innerText()).includes('deepseek-chat')); passed++;
     assert((await panel.innerText()).includes('未验证')); passed++;
     assert((await panel.innerText()).includes('尚未应用')); passed++;
+    const inventory = await page.getByTestId('daemon-codex-inventory').innerText();
+    assert(inventory.includes('existing-codex') && inventory.includes('existing-model') && inventory.includes('0.133.0')); passed++;
+    assert(inventory.includes('凭据状态未知') && inventory.includes('不重启')); passed++;
     assert((await page.getByTestId('daemon-providers-counts').innerText()).includes('2')); passed++;
     const calls = await page.evaluate(() => window.__providerCalls);
     assert.equal(calls[0].arguments.id, 'daemon-a'); assert.equal(calls[0].arguments.network_id, 'net-sweep'); passed++;
@@ -73,5 +80,5 @@ try {
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(`PASS daemon Provider management UI ${passed}/7 (one core save flow; synthetic Hub)`);
+  console.log(`PASS daemon Provider management UI ${passed}/9 (one inventory and core save flow; synthetic Hub)`);
 } finally { await browser.close(); web.close(); }

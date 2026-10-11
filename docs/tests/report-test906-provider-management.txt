@@ -54,3 +54,21 @@ Operational/recovery boundary:
 NOT DONE: choosing a stored profile for node creation/edit; applying to live
   Codex and proving actual selected model; official ChatGPT account login/switch;
   remove/in-use guard; native release. Entire #906 remains doing/P0.
+
+2026-10-11 09:14 CST: existing Codex inventory increment (on ffe1e57d).
+  Added same-daemon readback of Hub-bound Codex nodes, configured Provider/model,
+  home source/opaque reference, key-free authentication facts and daemon PATH
+  CLI status/version. Shows unknown/unreadable distinctly; no account-validity
+  inference, no node mutation. Managed Provider counts remain separate.
+  Docker core parser/forms: 18/18 PASS; TypeScript PASS.
+  One real Chromium production-web flow: inventory display + existing save
+  interaction 9/9 PASS. Hub is synthetic; this is NOT native/package acceptance.
+  web-export manifest 380b473ebf7506d911df0714807cea87d69c8273057c8bce750aaba4bf6cb11e;
+  UI image 045aafb2614e470bba8e4f8eaa524ad53ded630d1670e8e06daec3d6c255cc59.
+  Existing PR Windows failure independently read from job114355569694:
+  394/395 files passed, only radius-tokens failed. Fixed the new Provider form's
+  numeric borderRadius to radius.control, keeping the guard unchanged.
+  Targeted radius gate in Docker: 30/30 PASS. This final style-only correction
+  postdates the web export above; no repeat of the full browser suite.
+  Runtime model/account switching and unbound host inventory still pending.
+  No production changes or formal release; containers --rm, test images retained.

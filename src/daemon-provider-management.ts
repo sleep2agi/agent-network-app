@@ -1,12 +1,20 @@
 // #906: explicit daemon readback, never a network-wide Provider catalog.
 // This module contains no native imports and never returns untrusted error text.
 export type ProviderScope = { networkId: string; daemonId: string };
+import { validCodexInventory } from './codex-inventory';
+export type CodexInventory = { observed_at: number; scope: 'hub_bound_nodes'; installation?: { status: 'found' | 'missing' | 'unknown'; version: string | null }; rows: Array<{
+  node_id: string; alias: string; status: 'observed' | 'unavailable' | 'not_codex';
+  runtime?: string | null; home_ref?: string; home_source?: string; config_status?: string;
+  configured_provider?: string | null; configured_model?: string | null; node_configured_model?: string | null;
+  provider_ids?: string[]; auth_kind?: string; credential_status?: string; account_fingerprint?: string | null;
+  verification?: 'not_checked'; effective_state?: 'not_checked';
+}> };
 export type ProviderAuth = { id: string; kind: 'chatgpt' | 'api_key'; models: string[];
   baseUrl?: string; credential_present: boolean; verification: 'not_checked'; application: 'not_applied' };
 export type ManagedProvider = { id: string; label: string; enabled: boolean;
   runtimes: { runtime: 'codex-tui'; auth: ProviderAuth[] }[] };
 export type ProviderSnapshot = { network_id: string; daemon_node_id: string; revision: number;
-  source: 'daemon'; providers: ManagedProvider[] };
+  source: 'daemon'; providers: ManagedProvider[]; codex_inventory?: CodexInventory };
 export type ProviderRead = { kind: 'ready'; snapshot: ProviderSnapshot; observedAt: number }
   | { kind: 'unsupported' | 'forbidden' | 'error' | 'timeout' | 'cancelled' };
 
@@ -18,10 +26,11 @@ const unique = (xs: any[], key: string) => xs.every(record) && new Set(xs.map(x 
 
 /** Fail closed on foreign scope, unsupported shapes or secret-bearing additions. */
 export function parseProviderSnapshot(v: unknown, scope: ProviderScope): ProviderSnapshot | null {
-  if (!record(v) || !fields(v, ['network_id', 'daemon_node_id', 'revision', 'source', 'providers'])
+  if (!record(v) || !fields(v, ['network_id', 'daemon_node_id', 'revision', 'source', 'providers', 'codex_inventory'])
     || v.network_id !== scope.networkId || v.daemon_node_id !== scope.daemonId || v.source !== 'daemon'
     || !Number.isSafeInteger(v.revision) || v.revision < 0 || !Array.isArray(v.providers)
     || v.providers.length > 100 || !unique(v.providers, 'id')) return null;
+  if (v.codex_inventory !== undefined && !validCodexInventory(v.codex_inventory)) return null;
   for (const p of v.providers) {
     if (!fields(p, ['id', 'label', 'enabled', 'runtimes']) || !id(p.id)
       || typeof p.label !== 'string' || !p.label.trim() || p.label.length > 100

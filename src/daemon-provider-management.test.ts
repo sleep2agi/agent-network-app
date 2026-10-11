@@ -123,4 +123,14 @@ await test('API key edit preserves sibling auth; endpoint change needs key; save
   assert.equal(providerKeyWrite(current, { ...form, baseUrl: 'https://other.example.test' }), null);
   assert(providerKeyWrite(current, { ...form, id: 'another', key: 'FAKE-test-only-key' }));
 });
+await test('existing inventory stays separate, unknown credentials are not logout and secret additions fail closed', () => {
+  const v: any = { ...snapshot(), codex_inventory: { observed_at: 1000, scope: 'hub_bound_nodes', rows: [{
+    node_id: 'n_existing', alias: 'existing', status: 'observed', runtime: 'codex-app-server', home_ref: '1234567890abcdef', home_source: 'node-codex-home',
+    config_status: 'read', configured_provider: 'deepseek', configured_model: 'test-model', node_configured_model: null, provider_ids: ['deepseek'],
+    auth_kind: 'api_key', credential_status: 'unknown', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked',
+  }] } };
+  assert(parseProviderSnapshot(v, scope)); assert.equal(providerConfiguredCounts(parseProviderSnapshot(v, scope)!).providers, 1);
+  v.codex_inventory.rows[0].key = 'TEST-ONLY'; assert.equal(parseProviderSnapshot(v, scope), null);
+  delete v.codex_inventory.rows[0].key; v.codex_inventory.rows[0].effective_state = 'applied'; assert.equal(parseProviderSnapshot(v, scope), null);
+});
 console.log(`${passed}/${passed} passed`);
