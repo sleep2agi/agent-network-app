@@ -28,7 +28,7 @@ registerTranslations({
   'providerManagement.discovery.observed': ['扫描已完成；账号和模型调用未验证。', 'Scan completed; account and model access are not verified.'],
   'providerManagement.discovery.unavailable': ['本机目录无法安全读取；不是没有 Codex。', 'Local directories could not be read safely; this does not mean Codex is absent.'],
   'providerManagement.discovery.limit': ['本机节点超过扫描上限，未展示不完整列表。', 'Local nodes exceed the scan limit; an incomplete list is not displayed.'],
-  'providerManagement.discovery.unsupported': ['当前回读未提供本机发现能力；仍可查看上方已绑定节点。', 'This readback does not provide local discovery; bound nodes remain visible above.'],
+  'providerManagement.discovery.unsupported': ['当前回读未提供本机发现能力。需要 Hub 0.9.0-preview.123、CLI 2.3.0-preview.165、runtime 2.5.0-preview.131 或兼容新版本；先升级 Hub，再升级此 Daemon。上方已绑定节点仍可查看。', 'This readback does not provide local discovery. Requires Hub 0.9.0-preview.123, CLI 2.3.0-preview.165 and runtime 2.5.0-preview.131 or compatible newer versions. Upgrade the Hub, then this daemon; bound nodes remain visible above.'],
   'providerManagement.discoveryEmpty': ['未发现当前网络的其他未绑定 Codex 节点。', 'No additional unbound Codex nodes in this network were found.'],
   'providerManagement.inventoryModel': ['配置模型', 'Configured model'],
   'providerManagement.inventoryAuth': ['登录方式', 'Authentication'],

@@ -183,6 +183,13 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.239:
+            - Daemon Provider 页可只读发现工作区及已登记子工作区中已有的 Codex，展示模型、Provider、认证方式和扫描时间；不复制账号、不导入配置、不自动重启。
+            - 未绑定的 Codex 使用独立区域展示，不会误出现在 Provider 切换目标中。旧目录布局也可读取状态，无法读取时明确提示，不再误显示为没有 Codex。
+            - 本机发现需要 Hub 0.9.0-preview.123、CLI 2.3.0-preview.165、runtime 2.5.0-preview.131；缺少能力时显示具体升级版本和顺序。登录文件存在不代表账号或模型调用仍可用。
+            - 任务侧栏标签按当前显示的任务数量降序排列；同数量按名称排序，已选的零任务标签仍可取消筛选。
+            - 进入 Daemon 管理时收起无关的 Agent/人员/消息列表，保留 Daemon 设置导航；返回 Agents 时恢复列表。
+
             What's new in 0.2.238:
             - Daemon Provider 页新增托管 ChatGPT 账号登录与账号列表；登录需由本人在官方页面完成。可明确选择账号和模型，确认后只重启所选 Codex TUI 共存节点并保留会话。
             - 账号登录与 API-key Provider 分开管理；新登录能力需要 Hub 0.9.0-preview.122、CLI 2.3.0-preview.164、runtime 2.5.0-preview.130，旧版本显示明确升级目标。

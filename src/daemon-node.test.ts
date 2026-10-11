@@ -99,6 +99,7 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
   ck('ChatScreen re-renders when roles change', /useSyncExternalStore\(subscribeNodeRoles, nodeRolesVersion/.test(chat));
   ck('agent list rows go through agentRowBadge(…, isHostSupervisorAlias(alias))', /agentRowBadge\(rowBadgeWithManual\([^\n]*isHostSupervisorAlias\(alias\)\)/.test(agents));
   ck('App feeds the same /api/nodes poll into the role store', (app.match(/hydrateNodeRoles\(r\.nodes\)/g) ?? []).length === 2);
+  ck('Daemon workspace hides unrelated desktop conversation sidebar, keeps role updates and search navigation', app.includes('const daemonWorkspace =') && app.includes('screen.daemonMgmt || isHostSupervisorAlias(screen.alias)') && app.includes('{!daemonWorkspace ? <View testID="desktop-workspace-sidebar"') && app.includes('serverWorkspace || taskWorkspace || daemonWorkspace') && app.includes('useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion)'));
   ck('App wires the managed-nodes entry on phone and desktop', /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'mobile'\)/.test(app) && /onOpenAgents=\{filter => setScreen\(agentListScreen\(filter, 'desktop'\)/.test(app));
 }
 ck('notice copy says managed agents can chat (zh) and has an English column', chatTranslations['chat.daemon.notice'][0].includes('托管') && chatTranslations['chat.daemon.notice'][0].includes('对话') && !!chatTranslations['chat.daemon.notice'][1] && !!chatTranslations['chat.daemon.managed'][1]);

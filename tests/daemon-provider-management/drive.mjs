@@ -80,8 +80,11 @@ try {
     });
     await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
     await page.waitForFunction(() => !!window.__anetLayoutSweep);
+    await page.getByTestId('desktop-workspace-sidebar').waitFor();
+    assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 1); passed++;
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: 'daemon-a', daemonMgmt: true }));
     await page.getByTestId('daemon-section-tabs-provider').click();
+    assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 0); passed++;
     const panel = page.getByTestId('daemon-providers-real');
     await page.getByTestId('daemon-provider-deepseek').waitFor();
     assert((await panel.innerText()).includes('deepseek-chat')); passed++;
@@ -104,6 +107,9 @@ try {
       assert.equal(await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_manual').count(), 0); passed++;
       assert.equal(await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_existing').count(), 1); passed++;
       await page.screenshot({ path: '/output/codex-discovery-selection.png', fullPage: true });
+      await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'agents' }));
+      await page.getByTestId('desktop-workspace-sidebar').waitFor();
+      assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 1); passed++;
       assert.deepEqual(errors, []); passed++;
       await ctx.close(); continue;
     }
