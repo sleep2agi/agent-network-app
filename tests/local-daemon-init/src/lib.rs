@@ -125,7 +125,7 @@ mod regression {
         assert!(cfg["daemonExtraPath"].as_array().unwrap().iter().any(|v| v.as_str().unwrap().ends_with("/tools")));
         let events = fs::read_to_string(f.root.path().join("events")).unwrap();
         assert!(events.starts_with("stop old-daemon\n"), "{events}");
-        assert!(events.contains("agent-network@2.3.0-preview.162") && events.contains("agent-node@2.5.0-preview.128"), "{events}");
+        assert!(events.contains("agent-network@2.3.0-preview.163") && events.contains("agent-node@2.5.0-preview.129"), "{events}");
         assert!(!events.contains("@latest"));
         let start_env = fs::read_to_string(f.root.path().join("start-env")).unwrap();
         assert!(start_env.ends_with("agent-node/dist/cli.js"), "{start_env}");

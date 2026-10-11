@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.234:",
+  "- Daemon 的 Provider 页接入实际配置，展示已有 Codex 节点状态，支持管理 API-key Provider 和模型。",
+  "- 可将所选 Provider 和模型应用到一个已有 Codex TUI 共存节点；确认后重启该节点、保留原会话，并展示本次应用结果。",
+  "- 本版提供 API-key 配置路径；ChatGPT 登录账号切换暂不支持。远程 Hub 与 Daemon 需要升级后使用。",
+  "",
   "What's new in 0.2.233:",
   "- 修复创建节点时的模型目录范围：只展示所选 Daemon 已上报的 Provider 和模型，不再把网络级目录当成本机可用模型。",
   "- 切换到尚未上报目录的 Daemon 时保留升级提示，避免沿用其他机器的模型列表。",
@@ -1029,6 +1034,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.232": "2026-10-10T19:25:30Z",
   "0.2.231": "2026-10-10T16:26:18Z",
   "0.2.230": "2026-10-10T14:08:08Z",
   "0.2.229": "2026-10-10T10:52:24Z",

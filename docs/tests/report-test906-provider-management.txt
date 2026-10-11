@@ -162,3 +162,22 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
   full build image filesystem. No native installer or real Codex validation here.
   Containers removed (--rm); test-only images and temporary web export retained.
   No production changes, merge or public release.
+
+2026-10-11 10:21 CST: desktop 0.2.234 release preparation (not publication).
+  Base 29988c789d6577f7e2afc0d3f229d747ae3aa653 plus version/installer pins.
+  Eight version authorities agree; Android versionCode 2234. Private daemon
+  installer pair is CLI .163 / agent-node .129; the installer fixture assertion
+  follows that exact pair without changing stop/reuse semantics. User-facing
+  bundled notes explicitly exclude official ChatGPT account switching.
+  Docker --rm --network none, readonly repository mount over existing
+  anet-provider-panel:test906 image:
+    version consistency: 14 checks PASS;
+    bundled changelog: 7/7 PASS;
+    local-daemon TS installer checks: 34 PASS; exit0.
+  No native installer execution, Rust rerun or new business sample claimed.
+  Container removed, retained TEST-ONLY image unchanged; no production changes.
+  This preparation is not ready for release yet: bundled Hub .120 and its
+  supervisor/minimum-version pins must move together to .121 after its actual
+  registry artifact exists. Update the sidecar lock using registry integrity,
+  never fabricated metadata. Commit locally; push consolidated client changes
+  after that dependency is published, then main-SHA build/sign/package gates.
