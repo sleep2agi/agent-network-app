@@ -12,7 +12,7 @@ import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pre
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { HubConfig } from './api';
-import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, removeHubProfile, saveConfig, saveThemeMode, sessionIdOf } from './storage';
+import { DesktopStorageDiagnostics, HubProfile, getDesktopStorageDiagnostics, listHubProfiles, markHubProfileRequiresReauth, removeHubProfile, saveConfig, saveThemeMode, sessionIdOf } from './storage';
 import AccountSwitcher from './AccountSwitcher';
 import { ACCOUNT_TOAST_MS, AccountActionSheet, AccountEditDialog, AccountMoreMenu, AccountToast, accountName, copyAccountLine } from './AccountRowActions';
 import { accountMenuItems, accountRowActions, type AccountMenuItem, type AccountRowAction } from './account-row-actions';
@@ -57,7 +57,7 @@ import { canManageUsers, type AuthMe } from './user-admin';
 import { useLoginSessions } from './useLoginSessions';
 import { groupSubtitle, groupTestKey, memberSubtitle, sessionSubtitle, visibleSessions, SESSIONS_VISIBLE_DEFAULT, type DeviceKind, type LoginSession } from './login-sessions';
 import { probeSavedSessions } from './saved-session-probe';
-import { fetchAuthMe } from './user-admin-api';
+import { fetchAuthMe, forgetAuthMeFor } from './user-admin-api';
 import { pooledHttpEnabled, setPooledHttpEnabled } from './app-fetch';
 import { showPooledHttpDiagnostics, tapVersion, VERSION_TAPS_INITIAL } from './diagnostics-reveal';
 import { ChangelogPage } from './ChangelogScreen';
@@ -66,7 +66,7 @@ import ChangePasswordPanel from './ChangePasswordPanel';
 import UserAvatarEditor from './UserAvatarEditor';
 import { useChangePassword } from './useChangePassword';
 import { useWeakPassword, weakPasswordFlags } from './weak-password-flag';
-import { clearProfileUnauthorized } from './profile-auth-state';
+import { clearProfileUnauthorized, verifyProfileCredentialWith, profileAuthRevision } from './profile-auth-state';
 
 /** 设置里居中确认框的遮罩色(有键盘避让的那个画在 ModalKeyboardAvoider 上)。 */
 const MODAL_SCRIM = 'rgba(0,0,0,0.55)';
@@ -299,18 +299,39 @@ export default function SettingsScreen({
   }, [subPage, dialogOpen, detail]);
 
   useEffect(() => {
-    void Promise.all([listHubProfiles(), getDesktopStorageDiagnostics()]).then(([registry, diagnostics]) => {
+    let live = true;
+    void Promise.all([listHubProfiles(), getDesktopStorageDiagnostics()]).then(async ([registry, diagnostics]) => {
+      if (!live) return;
       setProfiles(registry.profiles);
       setStorageDiagnostics(diagnostics);
+      const current = sessionIdOf(cfg);
+      if (current && registry.profiles.some(p => p.profileId === current && p.requiresReauth)) {
+        await verifyProfileCredentialWith(current, cfg.token, async () => {
+          // A cached60-second identity answer is not proof the token is still valid.
+          forgetAuthMeFor(cfg);
+          const proof = await fetchAuthMe(cfg);
+          return live && typeof proof?.user?.username === 'string' && proof.user.username === cfg.username;
+        }, async revision => {
+          if (!live) return false;
+          const cleared = await markHubProfileRequiresReauth(current, false, cfg.token, revision);
+          if (!cleared || !live || profileAuthRevision(current) !== revision) return false;
+          clearProfileUnauthorized(current);
+          const next = await listHubProfiles();
+          if (live && profileAuthRevision(current) === revision) setProfiles(next.profiles);
+          return true;
+        });
+      }
+      if (!live) return;
       // 切换账号面板打开时顺手验一下别的已保存账号:登录已过期 / 被「退出其他设备」踢掉的,
       // 在面板里就显示「需要重新登录」,而不是点过去才发现是坏的。
       if (switcherOpen) {
         void probeSavedSessions(registry.profiles, sessionIdOf(cfg)).then(changed => {
-          if (changed) void listHubProfiles().then(next => setProfiles(next.profiles)).catch(() => {});
+          if (changed && live) void listHubProfiles().then(next => { if (live) setProfiles(next.profiles); }).catch(() => {});
         });
       }
-    }).catch(error => setProfileError(String(error)));
-  }, [cfg.profileId, cfg.serverUrl, cfg.username, switcherOpen]);
+    }).catch(error => { if (live) setProfileError(String(error)); });
+    return () => { live = false; };
+  }, [cfg.profileId, cfg.serverUrl, cfg.username, cfg.token, switcherOpen]);
 
   useEffect(() => {
     if (cfg.profileId !== LOCAL_HUB_PROFILE_ID && !profiles.some(profile => profile.profileId === LOCAL_HUB_PROFILE_ID)) return;

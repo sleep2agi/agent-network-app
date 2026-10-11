@@ -6,7 +6,7 @@ import { LEGACY_SESSION_ID, accountScopedFile as scopedFile, createSessionStore,
 import { loadDesktopThemeMode, loadDesktopUiScale, saveDesktopThemeMode, saveDesktopUiScale } from './desktop-theme-storage';
 export { onDesktopThemeStorageChange, onDesktopUiScaleStorageChange } from './desktop-theme-storage';
 import { UI_SCALE_STORAGE_KEY, parseStoredUiScale, serializeUiScale, type UiScalePrefs } from './ui-scale';
-import { acceptProfileCredential, serializeCredentialWrite } from './profile-auth-state';
+import { acceptProfileCredential, serializeCredentialWrite, profileAuthRevision } from './profile-auth-state';
 
 // Token + server persist in the platform keystore (Android Keystore /
 // iOS Keychain) so login survives app restarts. Vincent tg 683 known
@@ -184,9 +184,10 @@ export const removeHubProfile = async (profileId: string): Promise<void> => {
   await invoke('remove_desktop_profile', { profileId });
 };
 
-export const markHubProfileRequiresReauth = (profileId: string, required = true, requestToken?: string): Promise<boolean> => serializeCredentialWrite(async () => {
+export const markHubProfileRequiresReauth = (profileId: string, required = true, requestToken?: string, expectedAuthRevision?: number): Promise<boolean> => serializeCredentialWrite(async () => {
+  if (expectedAuthRevision !== undefined && profileAuthRevision(profileId) !== expectedAuthRevision) return false;
   // Read the persisted token too: another desktop window can have signed in.
-  if (required && requestToken) {
+  if (requestToken) {
     const current = await loadSavedProfileConfig(profileId);
     if (!current) return false;
     if (current.token !== requestToken) {
@@ -194,13 +195,14 @@ export const markHubProfileRequiresReauth = (profileId: string, required = true,
       return false;
     }
   }
+  if (expectedAuthRevision !== undefined && profileAuthRevision(profileId) !== expectedAuthRevision) return false;
   if (!isTauriDesktop()) {
     await mobileSessions.markReauth(profileId, required);
   } else {
     const { invoke } = await import('@tauri-apps/api/core');
     await invoke('mark_desktop_profile_requires_reauth', { profileId, required });
   }
-  return true;
+  return expectedAuthRevision === undefined || profileAuthRevision(profileId) === expectedAuthRevision;
 });
 
 /** 设置 → 账号 →「编辑」:原地改显示名 / Hub 地址,凭据不动、当前账号不变。调用前先 validateHubEdit。 */

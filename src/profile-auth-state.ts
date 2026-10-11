@@ -5,6 +5,8 @@ type Listener = (profileId: string, reason?: UnauthorizedReason) => void;
 const listeners = new Set<Listener>();
 const reported = new Set<string>();
 const reasons = new Map<string, UnauthorizedReason>();
+const authRevisions = new Map<string, number>();
+export const profileAuthRevision = (profileId: string): number => authRevisions.get(profileId) ?? 0;
 // A successful credential save supersedes requests sent before that sign-in.
 const acceptedTokens = new Map<string, string>();
 let credentialWrite: Promise<unknown> = Promise.resolve();
@@ -27,11 +29,24 @@ export const acceptProfileCredential = (profileId: string | undefined, token: st
 };
 
 export const reportProfileUnauthorized = (profileId?: string, reason?: UnauthorizedReason): void => {
-  if (!profileId || reported.has(profileId)) return;
+  if (!profileId) return;
+  authRevisions.set(profileId, profileAuthRevision(profileId) + 1);
+  if (reported.has(profileId)) return;
   reported.add(profileId);
   if (reason) reasons.set(profileId, reason);
   listeners.forEach(listener => listener(profileId, reason));
 };
+
+/** A fresh account proof may repair an old flag, never a later401 or another token. */
+export async function verifyProfileCredentialWith(profileId: string, token: string,
+  verify: () => Promise<boolean>, clear: (revision: number) => Promise<boolean>): Promise<boolean> {
+  const revision = profileAuthRevision(profileId);
+  try {
+    if (!await verify() || !isCurrentProfileCredential(profileId, token)
+      || profileAuthRevision(profileId) !== revision) return false;
+    return await clear(revision);
+  } catch { return false; }
+}
 
 // #653 修改密码:hub 在处理 POST /api/auth/password 时就吊销了这次请求用的令牌、另发一个新的。
 // 同一时刻在飞的轮询还拿着旧令牌,回来是 401 —— 那不是「这个账号的登录失效了」,app 马上就换上新令牌。

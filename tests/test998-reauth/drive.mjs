@@ -5,6 +5,41 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const web = await serveExport(process.env.WEB_DIR);
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
 try {
+  if (process.env.STALE_BADGE_ONLY === '1') {
+    const ctx = await browser.newContext({ locale: TEST_LOCALE, viewport: { width: 1100, height: 900 } });
+    const page = await ctx.newPage(), errors = [];
+    page.on('pageerror', e => errors.push(String(e)));
+    await page.addInitScript({ content: `(${initScript.toString()})({theme:'light'});` });
+    await page.addInitScript(() => {
+      const original = window.__TAURI_INTERNALS__.invoke;
+      const profile = { serverUrl: 'http://mock-hub.invalid', token: 'placeholder-token', username: 'tester', profileId: 'p-sweep', networkId: 'net-sweep' };
+      window.__badgeRequiresReauth = true; window.__badgeMarks = []; window.__badgeAuthReads = 0;
+      window.__TAURI_INTERNALS__.invoke = async (cmd, args) => {
+        if (cmd === 'list_desktop_profiles') return JSON.stringify({ schema_version: 1, active_profile_id: 'p-sweep', profiles: [
+          { ...profile, requiresReauth: window.__badgeRequiresReauth, createdAt: 1, updatedAt: 1 },
+          { ...profile, profileId: 'p-other', username: 'other', requiresReauth: true, createdAt: 1, updatedAt: 1 },
+        ] });
+        if (cmd === 'load_desktop_profile') return JSON.stringify(profile);
+        if (cmd === 'mark_desktop_profile_requires_reauth') { window.__badgeMarks.push(args); if (args.profileId === 'p-sweep') window.__badgeRequiresReauth = args.required; return null; }
+        if (cmd === 'plugin:http|fetch' && new URL(args.clientConfig.url).pathname === '/api/auth/me') window.__badgeAuthReads++;
+        return original(cmd, args);
+      };
+    });
+    await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+    await page.waitForFunction(() => !!window.__anetLayoutSweep);
+    await page.getByText('示例-A', { exact: true }).first().waitFor();
+    await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'settings' }));
+    const row = page.getByTestId('settings-profile-p-sweep'); await row.waitFor();
+    await page.waitForFunction(() => window.__badgeRequiresReauth === false, undefined, { timeout: 5000 });
+    assert(!(await row.innerText()).includes('需要重新登录'), 'freshly valid current account must not retain the warning');
+    assert.equal(await page.evaluate(() => window.__badgeAuthReads >= 2), true, 'verification must bypass the warm auth cache');
+    assert.deepEqual(await page.evaluate(() => window.__badgeMarks), [{ profileId: 'p-sweep', required: false }]);
+    assert((await page.getByTestId('settings-profile-p-other').innerText()).includes('需要重新登录'), 'other account remains unverified');
+    assert.equal(await page.getByTestId('login-screen').count(), 0);
+    assert.deepEqual(errors, []);
+    console.log('PASS current-account stale badge6/6: fresh verification, persisted clear, real settings row, other account unchanged');
+    await ctx.close();
+  } else {
   const ctx = await browser.newContext({ locale: TEST_LOCALE, viewport: { width: 390, height: 844 } });
   const page = await ctx.newPage(), errors = [];
   page.on('pageerror', e => errors.push(String(e)));
@@ -52,4 +87,5 @@ try {
   assert.deepEqual(errors, []);
   console.log('PASS exported mobile reauth8/8: old401→login→new persisted credential→late old401 ignored; clean account flag/no duplicate/no page errors');
   await ctx.close();
+  }
 } finally { await browser.close(); web.close(); }
