@@ -83,3 +83,12 @@ Release/recovery boundaries:
   no product parser/guard relaxation. Only the failed UI drive rerun; final PASS.
 - Image: anet-app:provider-account-apply-ui using provider-account-apply-web export.
   Containers --rm; build caches retained. No new release/version bump.
+
+2026-10-11 14:37 +08 — exact CI failures repaired (PR836, not a release)
+- Windows job114407293723 at 66539a65 failed 2/398 files: open-external and
+  theme-minimal. The login component bypassed the desktop opener and used 700.
+- Use the existing openExternal platform dispatcher, handle false/rejection,
+  and use the established 600 weight. No assertion or baseline was relaxed.
+- Docker --network none with current src mounted readonly: open-external 29/29,
+  theme-minimal 60/60 PASS. Image anet-app:provider-account-apply-web; --rm cleanup.
+- This is focused regression evidence, not a native desktop/browser OAuth test.

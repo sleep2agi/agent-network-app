@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Linking, Pressable, View } from 'react-native';
+import { ActivityIndicator, Pressable, View } from 'react-native';
+import { openExternal } from './open-external';
 import { randomUUID } from 'expo-crypto';
 import type { HubConfig } from './api';
 import { Text, TextInput } from './ui-text';
@@ -78,9 +79,9 @@ export default function DaemonCodexAccounts({ cfg, daemonId, scope, snapshot, bi
     {note ? <Text testID="daemon-login-note" style={{ color: colors.textSecondary }}>{t(`providerLogin.${note}`)}</Text> : null}
     {view ? <Text testID="daemon-login-state" style={{ color: colors.text }}>{t(`providerLogin.state.${view.account_id ? 'saved' : view.status}`)}</Text> : null}
     {view?.status === 'awaiting_user' && view.challenge && !note ? <View style={{ gap: spacing.sm }}>
-      <Text selectable testID="daemon-login-code" style={{ color: colors.text, fontSize: 24, fontWeight: '700' }}>{view.challenge.userCode}</Text>
+      <Text selectable testID="daemon-login-code" style={{ color: colors.text, fontSize: 24, fontWeight: '600' }}>{view.challenge.userCode}</Text>
       <Text style={{ color: colors.textSecondary }}>{t('providerLogin.instructions')}</Text>
-      {button('open', 'open', () => { void Linking.openURL(view.challenge!.verificationUrl).catch(() => setNote('openFailed')); })}
+      {button('open', 'open', () => { void openExternal(view.challenge!.verificationUrl).then(ok => { if (!ok) setNote('openFailed'); }).catch(() => setNote('openFailed')); })}
     </View> : null}
     {session ? <View style={{ gap: spacing.sm }}>
       {button('check', 'check', () => { void run({ action: 'read', session_id: session }); })}
