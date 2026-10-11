@@ -120,6 +120,22 @@ export function resolveActiveSection(active: NodeSectionKey, visible: readonly N
 /** 概览网格里默认露出的字段;其余放进「更多信息」折叠区。 */
 export const PRIMARY_FACT_LABELS: readonly string[] = ['节点 ID', '服务器', 'Hostname', '工作路径', '所属 team', '最后更新'];
 
+/**
+ * 「模型与运行时」摘要卡的字段,按两列网格的阅读顺序。
+ * session-id 紧挨在 版本 后面,所以常规两列时它落在版本右边那一格。
+ */
+export const RUNTIME_FACT_LABELS: readonly string[] = ['节点类型', 'Runtime', 'Agent', '模型', '版本', 'session-id'];
+
+/** 模型与运行时摘要:按 RUNTIME_FACT_LABELS 的顺序取,缺的标签不补行。 */
+export function modelSectionFacts(facts: readonly NodeInfoFact[]): NodeInfoFact[] {
+  const out: NodeInfoFact[] = [];
+  for (const label of RUNTIME_FACT_LABELS) {
+    const fact = facts.find(f => f.label === label);
+    if (fact) out.push(fact);
+  }
+  return out;
+}
+
 export function splitOverviewFacts(facts: readonly NodeInfoFact[]): { primary: NodeInfoFact[]; secondary: NodeInfoFact[] } {
   const primary: NodeInfoFact[] = [];
   const secondary: NodeInfoFact[] = [];
