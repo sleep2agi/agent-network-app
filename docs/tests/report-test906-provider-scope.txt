@@ -57,3 +57,27 @@ scope 34/34, provider options 43/43, OpenCode options PASS; version consistency,
 bundled changelog and release-note hygiene all passed. No signing/release dispatched.
 No native binaries or production data touched; --rm removed the test container.
 New-head CI/rendering and main-only signed release gates still required.
+
+Increment 2026-10-11 08:22 +08: CI evidence and test-navigation race correction.
+CI head d0ebc9bbfe44a97a7189fdb8739cf6784285691d, tested merge
+e973dd3394e41948207ed8065b1967bb18dc85c6. Ubuntu/Windows unit jobs succeeded;
+Ubuntu reports 393/393 test files. Linux run38097278481/job114345674977 succeeded
+through clean install, native startup/auth, real UI and wrong-source/architecture/
+early-exit/missed-click negative controls. Test artifact11686521468:
+ANet_0.2.233_amd64.deb SHA256
+7f40131aacb849f200f1e35ce77d3a3a492c9770a9c1ffd8fc82de7305a72c09
+recomputed and matched supplied SHA256SUMS. Manifest pins bundled Hub preview.120.
+Reviewed ordinary window screenshot (welcome) and native after.png (0.2.233 main
+screen). Native before.png is black, so it cannot verify the pre-click target;
+do not claim that image passed visual acceptance or that native Provider UI was tested.
+No installation or binary execution outside CI Docker; artifacts only read locally.
+
+UI shard7 run38097278425/job114346058575: 12/13 passed; scope drive timed out
+waiting for create-name-input at the SECOND open (daemon-b), line53->line38.
+The test's consecutive React setScreen hooks could batch without unmounting the
+first wizard, preserving its runtime step. Added a DOM detach barrier between
+the existing agents/wizard navigation calls. No product change, timeout increase,
+assertion removal, or retry. Fixed driver against that exact CI web artifact
+11686056639 passed 16/16 phone+desktop assertions in Docker image
+anet-provider-scope:test906-ci-fix, --rm --network none, exit0.
+New test-only commit needs fresh CI; previous head remains failed, not all-green.

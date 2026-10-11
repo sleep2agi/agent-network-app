@@ -27,6 +27,10 @@ try {
     await page.waitForFunction(() => !!window.__anetLayoutSweep);
     const open = async (id, local = false) => {
       await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'agents' }));
+      // setScreen is a React update, not a committed navigation. Wait for the old
+      // wizard to unmount before opening another daemon; otherwise React may batch
+      // both test-hook calls and keep the previous wizard's runtime step mounted.
+      await page.getByTestId('daemon-runtime-providers').waitFor({ state: 'detached' });
       await page.evaluate(({ id, local }) => window.__anetLayoutSweep.setScreen({ name: 'wizard', daemon: {
         daemon_node_id: id, alias: id, online: true, can_create_nodes: true,
         runtimes_supported: ['codex-app-server', 'opencode-cli'],
