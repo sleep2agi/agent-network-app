@@ -326,6 +326,10 @@ function mentionsProviderField(field: string | null | undefined, why: string): b
 export function describeProviderCreateError(e: { error?: string | null; field?: string | null }): string | null {
   const why = (e.error ?? '').trim();
   if (!why && !e.field) return null;
+  if ((why === 'flag_key_unknown' && e.field === 'daemonProvider')
+    || /\bflag_key_unknown[: ]+daemonProvider\b/.test(why)) {
+    return '当前管理端不支持使用已配置 Provider 创建节点。请先升级 Hub 至 0.9.0-preview.124，再将目标 Daemon 的 CLI 升至 2.3.0-preview.166、runtime 升至 2.5.0-preview.132；不会移除已选 Provider 后重试。';
+  }
   if ((why === 'flag_key_unknown' || why === 'unknown_field' || why === 'unknown-field') && mentionsProviderField(e.field, why)) {
     return PROVIDER_ISSUE_ZH.unsupported_hub;
   }
