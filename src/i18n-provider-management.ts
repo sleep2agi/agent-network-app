@@ -1,5 +1,11 @@
 import { registerTranslations } from './i18n';
 registerTranslations({
+  'providerManagement.enable': ['启用此配置', 'Enable configuration'],
+  'providerManagement.disable': ['停用此配置', 'Disable configuration'],
+  'providerManagement.confirmEnable': ['确认启用', 'Confirm enable'],
+  'providerManagement.confirmDisable': ['确认停用', 'Confirm disable'],
+  'providerManagement.cancelToggle': ['取消', 'Cancel'],
+  'providerManagement.toggleHint': ['仅改变此 Daemon 托管目录中的启用状态。停用后不再作为新选择的候选；不撤销密钥、不改写已有节点，也不会停止运行中的任务。当前运行绑定尚未核验。', 'Only changes the enabled state in this daemon’s managed catalog. Disabled configurations are excluded from new selections; keys are not revoked, existing nodes are not changed and running tasks are not stopped. Active bindings have not been verified.'],
   'providerManagement.select.title': ['选择节点配置 · codex-tui', 'Select node configuration · codex-tui'],
   'providerManagement.select.boundary': ['候选来自此 Daemon 的扫描与托管配置。选择不会修改节点；配置模型不代表已验证可调用。', 'Choices come from this daemon inventory and managed configuration. Selection does not change nodes; configured models are not verified callable.'],
   'providerManagement.select.nodeId': ['目标 Codex TUI 节点', 'Target Codex TUI node'],

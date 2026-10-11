@@ -110,3 +110,22 @@ NOT DONE: choosing a stored profile for node creation/edit; applying to live
   Browser manifest list:
     259fa7b13e3bb1d2bb1e0256c50cb00d53595d47b3492a3d686b8035982f5021
   No production changes, running test containers, or native package claim.
+
+2026-10-11 09:39 CST: Provider enable/disable increment (on dddeb8da).
+  Added explicit confirmation and revision-bound writes for managed availability.
+  No optimistic success; refresh receipt determines displayed enabled state.
+  Existing auth/model siblings retained; no credential resent or revoked.
+  This does not stop running nodes and does not implement runtime application.
+  Docker core checks 22/22 PASS and full client TypeScript PASS.
+  One Chromium exported-Web flow 15/15 PASS using a synthetic Hub, including
+  disable/enable confirmation, exact revision, secret omission and readback.
+  Core image manifest list:
+    1bb880348cc30c0a33ac07d8ccd7fb75ccf37f723ae6ee57346ee09e53aaed52
+  Web image manifest list:
+    f4cf2e3b5004a4c1eede9d9daab73a25e4d59f672f21629abd09844f4ea190cc
+  Browser image manifest list:
+    314c443909b1d614b854aade0144a18d75eaaf111ec0e7fcc34e532a7849aa48
+  Commands: same pinned Dockerfiles above; browser build-context web is the
+  Docker web-export target output. Browser run --rm --network none.
+  Containers completed/removed. TEST-ONLY images/export retained; no production
+  daemon, real account, native package, runtime-switch or release claim.

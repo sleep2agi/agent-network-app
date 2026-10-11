@@ -3,7 +3,7 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import type { HubConfig } from './api';
 import { readManagedProviders, providerWriteTransportAllowed } from './daemon-provider-management-api';
-import { providerConfiguredCounts, providerKeyWrite, scopedProviderSave, EMPTY_PROVIDER_KEY_FORM, type ProviderKeyForm, type ProviderRead, type ProviderSaveState } from './daemon-provider-management';
+import { providerConfiguredCounts, providerKeyWrite, providerEnabledWrite, scopedProviderSave, EMPTY_PROVIDER_KEY_FORM, type ProviderKeyForm, type ProviderRead, type ProviderSaveState } from './daemon-provider-management';
 import { PendingCardTitle, PendingPanelCard } from './backend-pending-ui';
 import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
@@ -21,6 +21,7 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
   const [result, setResult] = useState<{ identity: string; value: ProviderRead } | null>(null);
   const [editing, setEditing] = useState<{ identity: string; form: ProviderKeyForm } | null>(null);
   const [saveState, setSaveState] = useState<ProviderSaveState | null>(null);
+  const [toggleRequest, setToggleRequest] = useState<{ scope: string; providerId: string } | null>(null);
   const saveNote = scopedProviderSave(saveState, identity);
   const saving = saveNote === 'saving';
   const writeController = useRef<AbortController | null>(null);
@@ -42,12 +43,14 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
   const reason = !daemonId || !cfg.networkId ? 'noTarget' : offline ? 'offline' : value?.kind ?? 'loading';
   const write = snapshot ? providerKeyWrite(snapshot, form) : null;
   const secure = providerWriteTransportAllowed(cfg.serverUrl);
-  const save = async () => {
-    if (!write || !daemonId || !secure || saving) return;
+  const toggleScope = JSON.stringify([identity, snapshot?.revision]);
+  const save = async (requested = write) => {
+    if (!requested || !daemonId || !secure || saving) return;
     setSaveState({ identity, phase: 'saving' });
+    setToggleRequest(null);
     const ctrl = new AbortController(); writeController.current = ctrl;
     setEditing({ identity, form: { ...form, key: '' } });
-    const saved = await readManagedProviders(cfg, daemonId, ctrl.signal, write);
+    const saved = await readManagedProviders(cfg, daemonId, ctrl.signal, requested);
     if (ctrl.signal.aborted) return;
     setResult({ identity, value: saved });
     setSaveState({ identity, phase: saved.kind === 'ready' ? 'saved' : 'unconfirmed' });
@@ -109,6 +112,19 @@ export default function DaemonProvidersPane({ cfg, daemonId, alias, offline = fa
     {snapshot?.providers.map(provider => <PendingPanelCard key={provider.id} testID={`daemon-provider-${provider.id}`}>
       <PendingCardTitle title={provider.label} />
       <Text style={{ color: colors.textSecondary }}>{provider.id} · {t(provider.enabled ? 'providerManagement.enabled' : 'providerManagement.disabled')}</Text>
+      {toggleRequest?.scope === toggleScope && toggleRequest.providerId === provider.id ? <View testID={`daemon-provider-toggle-confirm-${provider.id}`} style={{ gap: spacing.sm }}>
+        <Text style={{ color: colors.textSecondary }}>{t('providerManagement.toggleHint')}</Text>
+        <Pressable testID={`daemon-provider-toggle-submit-${provider.id}`} accessibilityRole="button" disabled={saving || !secure}
+          onPress={() => { void save(providerEnabledWrite(snapshot, provider.id, !provider.enabled)); }} style={buttonStyle('secondary')}>
+          <Text style={buttonTextStyle('secondary')}>{t(provider.enabled ? 'providerManagement.confirmDisable' : 'providerManagement.confirmEnable')}</Text>
+        </Pressable>
+        <Pressable accessibilityRole="button" disabled={saving} onPress={() => setToggleRequest(null)}>
+          <Text style={{ color: colors.accent }}>{t('providerManagement.cancelToggle')}</Text>
+        </Pressable>
+      </View> : <Pressable testID={`daemon-provider-toggle-${provider.id}`} accessibilityRole="button" disabled={saving || !secure}
+        onPress={() => setToggleRequest({ scope: toggleScope, providerId: provider.id })}>
+        <Text style={{ color: colors.accent }}>{t(provider.enabled ? 'providerManagement.disable' : 'providerManagement.enable')}</Text>
+      </Pressable>}
       {provider.runtimes.map(runtime => <View key={runtime.runtime} style={{ gap: spacing.sm }}>
         <Text style={{ color: colors.text, fontWeight: '600' }}>{runtime.runtime}</Text>
         {runtime.auth.map(auth => <View key={auth.id} style={{ gap: spacing.xs, paddingLeft: spacing.sm }}>

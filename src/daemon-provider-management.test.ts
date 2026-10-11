@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, scopedProviderSave, type ProviderRpc } from './daemon-provider-management';
+import { loadProviderSnapshot, parseProviderRpc, parseProviderSnapshot, providerConfiguredCounts, providerKeyWrite, providerEnabledWrite, scopedProviderSave, type ProviderRpc } from './daemon-provider-management';
 import { changeProviderSelection, EMPTY_PROVIDER_SELECTION, providerSelectionOptions, resolveProviderSelection } from './daemon-provider-selection';
 let passed = 0;
 const test = async (name: string, run: () => void | Promise<void>) => { await run(); passed++; console.log(`PASS ${name}`); };
@@ -174,5 +174,21 @@ await test('changing node/provider/auth clears dependent selections without infe
   assert.deepEqual(changeProviderSelection(selected, 'providerId', 'new'), { ...selected, providerId: 'new', authId: '', model: '' });
   assert.deepEqual(changeProviderSelection(selected, 'authId', 'new'), { ...selected, authId: 'new', model: '' });
   assert.deepEqual(changeProviderSelection(selected, 'model', 'new'), { ...selected, model: 'new' });
+});
+await test('enable/disable writes preserve profiles, omit secrets and carry expected revision', () => {
+  const current = parseProviderSnapshot(snapshot(), scope)!;
+  const before = JSON.stringify(current);
+  current.providers[0].runtimes[0].auth.push({ ...current.providers[0].runtimes[0].auth[0], id: 'personal' });
+  const write = providerEnabledWrite(current, 'deepseek', false)!;
+  assert.equal(write.revision, 2);
+  assert.deepEqual(write.provider, { id: 'deepseek', label: 'DeepSeek', enabled: false, runtimes: [{ runtime: 'codex-tui', auth: [
+    { id: 'work', kind: 'api_key', models: ['deepseek-chat'], baseUrl: 'https://api.example.test/v1' },
+    { id: 'personal', kind: 'api_key', models: ['deepseek-chat'], baseUrl: 'https://api.example.test/v1' },
+  ] }] });
+  assert.equal(current.providers[0].enabled, true);
+  assert.equal(providerEnabledWrite(current, 'foreign', false), null);
+  assert.equal(providerEnabledWrite(current, 'deepseek', true), null);
+  (write.provider as any).runtimes[0].auth[0].models.push('no-aliasing');
+  assert.deepEqual(current.providers[0].runtimes[0].auth[0].models, JSON.parse(before).providers[0].runtimes[0].auth[0].models);
 });
 console.log(`${passed}/${passed} passed`);

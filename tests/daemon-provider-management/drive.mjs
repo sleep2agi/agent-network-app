@@ -12,7 +12,7 @@ try {
     const errors = []; page.on('pageerror', e => errors.push(String(e)));
     await page.addInitScript({ content: `(${initScript.toString().replace('http://mock-hub.invalid', 'http://127.0.0.1:9200')})({theme:'light'});` });
     await page.addInitScript(() => {
-      window.__providerMode = 'ready'; window.__providerCalls = []; window.__savedProvider = null;
+      window.__providerMode = 'ready'; window.__providerCalls = []; window.__savedProviders = {}; window.__providerRevision = 3;
       const daemon = { node_id: 'daemon-a', alias: 'daemon-a', role: 'host_supervisor', lifecycle_state: 'running', config_snapshot: { role: 'host_supervisor' } };
       const requestId = 'dps_00000000-0000-0000-0000-000000000001';
       const envelope = payload => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } });
@@ -25,7 +25,9 @@ try {
         if (params?.name !== 'daemon_provider_snapshot') return;
         window.__providerCalls.push(params);
         if (params.arguments.action === 'put') {
-          window.__savedProvider = params.arguments.provider;
+          if (params.arguments.revision !== window.__providerRevision) return envelope({ ok: false, error: 'revision_conflict' });
+          window.__savedProviders[params.arguments.provider.id] = params.arguments.provider;
+          window.__providerRevision++;
           return envelope({ ok: true, request_id: requestId, status: 'pending' });
         }
         if (window.__providerMode === 'forbidden') return envelope({ ok: false, error: 'provider_admin_required' });
@@ -44,12 +46,14 @@ try {
           auth_kind: 'api_key', credential_status: 'unknown', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked',
         }] } };
         if (window.__providerMode === 'empty') value.providers = [];
-        if (window.__savedProvider && window.__providerMode === 'ready') {
-          const p = window.__savedProvider;
-          value.revision = 4;
-          value.providers.push({ ...p, runtimes: p.runtimes.map(r => ({ ...r, auth: r.auth.map(({ key, ...a }) => ({ ...a,
-            credential_present: true, verification: 'not_checked', application: 'not_applied',
-          })) })) });
+        if (window.__providerMode === 'ready') {
+          value.revision = window.__providerRevision;
+          for (const p of Object.values(window.__savedProviders)) {
+            value.providers = value.providers.filter(old => old.id !== p.id);
+            value.providers.push({ ...p, runtimes: p.runtimes.map(r => ({ ...r, auth: r.auth.map(({ key, ...a }) => ({ ...a,
+              credential_present: a.kind === 'api_key', verification: 'not_checked', application: 'not_applied',
+            })) })) });
+          }
         }
         return envelope({ ok: true, request_id: requestId, daemon_node_id: 'daemon-a', status: 'succeeded', observed_at: Date.now(), snapshot: value });
       };
@@ -87,11 +91,25 @@ try {
     assert.equal(await page.getByTestId('daemon-provider-input-key').inputValue(), '');
     assert(!(await panel.innerText()).includes('TEST-ONLY-UI-KEY')); passed++;
     assert.equal(await page.getByTestId('daemon-provider-selection-summary').count(), 0); passed++;
+    const writesBefore = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').length);
+    await page.getByTestId('daemon-provider-toggle-custom').click();
+    assert((await page.getByTestId('daemon-provider-toggle-confirm-custom').innerText()).includes('不会停止'));
+    assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').length), writesBefore); passed++;
+    await page.getByTestId('daemon-provider-toggle-submit-custom').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-custom"]')?.textContent?.includes('已停用配置'));
+    const toggleWrite = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').at(-1).arguments);
+    assert.equal(toggleWrite.revision, 4); assert.equal(toggleWrite.provider.enabled, false);
+    assert.equal(toggleWrite.provider.runtimes[0].auth[0].key, undefined);
+    assert((await page.getByTestId('daemon-provider-custom').innerText()).includes('model-save')); passed++;
+    await page.getByTestId('daemon-provider-toggle-custom').click();
+    await page.getByTestId('daemon-provider-toggle-submit-custom').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-custom"]')?.textContent?.includes('已启用配置'));
+    assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').at(-1).arguments.revision), 5); passed++;
     await page.getByTestId('daemon-providers-refresh').click();
     await page.getByTestId('daemon-provider-custom').waitFor();
     assert.equal(await page.getByTestId('daemon-provider-save-status').count(), 0); passed++;
     assert.deepEqual(errors, []); passed++;
     await ctx.close();
   }
-  console.log(`PASS daemon Provider management UI ${passed}/12 (one inventory, selection, save and refreshed receipt flow; synthetic Hub; application unavailable)`);
+  console.log(`PASS daemon Provider management UI ${passed}/15 (one inventory, selection, save, enable/disable and refreshed receipt flow; synthetic Hub; application unavailable)`);
 } finally { await browser.close(); web.close(); }

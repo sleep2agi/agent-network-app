@@ -101,6 +101,18 @@ export type ProviderRpc = (action: 'refresh' | 'read', id: string, signal: Abort
 
 export type ProviderKeyForm = { id: string; label: string; authId: string; baseUrl: string; models: string; key: string };
 export const EMPTY_PROVIDER_KEY_FORM: ProviderKeyForm = { id: '', label: '', authId: 'default', baseUrl: '', models: '', key: '' };
+/** Change only availability in this daemon's managed catalog; never resend secrets. */
+export function providerEnabledWrite(snapshot: ProviderSnapshot, providerId: string, enabled: boolean): { revision: number; provider: unknown } | null {
+  const old = snapshot.providers.find(p => p.id === providerId);
+  if (!old || old.enabled === enabled) return null;
+  return { revision: snapshot.revision, provider: {
+    id: old.id, label: old.label, enabled,
+    runtimes: old.runtimes.map(r => ({ runtime: r.runtime, auth: r.auth.map(a => ({
+      id: a.id, kind: a.kind, models: [...a.models], ...(a.baseUrl ? { baseUrl: a.baseUrl } : {}),
+    })) })),
+  } };
+}
+
 /** Preserve every other runtime/auth profile when updating just one API-key profile. */
 export function providerKeyWrite(snapshot: ProviderSnapshot, form: ProviderKeyForm): { revision: number; provider: unknown } | null {
   if (!id(form.id) || !id(form.authId) || !form.label.trim()) return null;
