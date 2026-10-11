@@ -57,7 +57,7 @@ import WeakPasswordBanner from './src/WeakPasswordBanner';
 import { weakPasswordFlags } from './src/weak-password-flag';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, persistProfileNetworkId, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, sessionIdOf, switchHubProfile, type HubProfile } from './src/storage';
-import { clearProfileUnauthorized, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
+import { clearProfileUnauthorized, isCurrentProfileCredential, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
 import { loadDesktopThemeMode } from './src/desktop-theme-storage';
@@ -654,9 +654,12 @@ function AppRoot() {
   useEffect(() => onProfileUnauthorized(profileId => {
     if (!cfg || profileId !== sessionIdOf(cfg)) return;
     void (async () => {
+      let superseded = false;
       try {
-        await markHubProfileRequiresReauth(profileId);
+        superseded = !(await markHubProfileRequiresReauth(profileId, true, cfg.token));
       } finally {
+        // Credential persistence can finish while this old callback is waiting.
+        if (superseded || !isCurrentProfileCredential(profileId, cfg.token)) return;
         requestProfileReauth({ profileId, serverUrl: cfg.serverUrl, username: cfg.username ?? '', displayName: cfg.displayName });
       }
     })();

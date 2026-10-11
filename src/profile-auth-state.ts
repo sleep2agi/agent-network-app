@@ -5,6 +5,26 @@ type Listener = (profileId: string, reason?: UnauthorizedReason) => void;
 const listeners = new Set<Listener>();
 const reported = new Set<string>();
 const reasons = new Map<string, UnauthorizedReason>();
+// A successful credential save supersedes requests sent before that sign-in.
+const acceptedTokens = new Map<string, string>();
+let credentialWrite: Promise<unknown> = Promise.resolve();
+
+/** Keep a pending old reauth mark from overwriting the new sign-in's clean index. */
+export const serializeCredentialWrite = <T>(write: () => Promise<T>): Promise<T> => {
+  const next = credentialWrite.then(write);
+  credentialWrite = next.catch(() => {});
+  return next;
+};
+
+export const isCurrentProfileCredential = (profileId: string, token: string): boolean =>
+  !acceptedTokens.has(profileId) || acceptedTokens.get(profileId) === token;
+
+/** Call only after persistence succeeds, never after a failed login/save. */
+export const acceptProfileCredential = (profileId: string | undefined, token: string): void => {
+  if (!profileId) return;
+  acceptedTokens.set(profileId, token);
+  clearProfileUnauthorized(profileId);
+};
 
 export const reportProfileUnauthorized = (profileId?: string, reason?: UnauthorizedReason): void => {
   if (!profileId || reported.has(profileId)) return;
@@ -38,6 +58,7 @@ export const reportProfileAuthResponse = (status: number, profileId?: string, re
   // proves the saved bearer credential itself must be refreshed.
   if (status !== 401) return;
   if (isRetiringToken(profileId, token)) return;
+  if (profileId && token && !isCurrentProfileCredential(profileId, token)) return;
   reportProfileUnauthorized(profileId, reason);
 };
 

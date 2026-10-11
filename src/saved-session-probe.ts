@@ -27,7 +27,7 @@ export async function probeSavedSessions(profiles: readonly ProbeProfile[], curr
   const marked = await probeSavedSessionsWith(profiles, [currentId, LOCAL_HUB_PROFILE_ID], {
     load: loadSavedProfileConfig,
     status: authMeStatus,
-    mark: id => markHubProfileRequiresReauth(id, true),
+    mark: async (id, token) => { await markHubProfileRequiresReauth(id, true, token); },
   });
   return marked.length > 0;
 }

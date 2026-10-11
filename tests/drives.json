@@ -1,6 +1,10 @@
 {
   "//": "Every tests/*/drive.mjs and tests/*/run.mjs, and how CI runs it. stub = needs only the web export + Chromium (run by .github/workflows/drives.yml in shards; secs = measured runtime, used to balance shards); docker = builds its own bundle with its Dockerfile (nightly job); hub / manual = not in CI, with the reason. src/drive-registry.test.ts fails when a drive is missing here.",
   "drives": {
+    "test998-reauth/drive.mjs": {
+      "kind": "manual",
+      "why": "Focused tests/test998-reauth/Dockerfile core then actual exported mobile login with synthetic HTTP/localStorage; not a native device or live Hub test."
+    },
     "provider-create/drive.mjs": {
       "kind": "manual",
       "why": "Dedicated provider-create.yml builds the actual export and runs this synthetic wizard in Docker after core checks, not shared stub shards."
