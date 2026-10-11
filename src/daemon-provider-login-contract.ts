@@ -1,4 +1,9 @@
 // #906 managed login transport: only explicit actions and secret-free projections.
+// First protocol-bearing release targets; not a claim that registry publication
+// or remote account/model entitlement has already been verified.
+export const PROVIDER_LOGIN_REQUIRED_VERSIONS = {
+  hub: '0.9.0-preview.122', cli: '2.3.0-preview.164', runtime: '2.5.0-preview.130',
+} as const;
 export type LoginIntent = { action: 'start' | 'read' | 'cancel' | 'save' | 'accounts'; session_id?: string; label?: string };
 const uuid = /^[a-f0-9]{8}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{4}-[a-f0-9]{12}$/i;
 const object = (v: any) => v && typeof v === 'object' && !Array.isArray(v);

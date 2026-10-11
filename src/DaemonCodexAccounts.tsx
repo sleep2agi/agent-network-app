@@ -7,6 +7,7 @@ import { Text, TextInput } from './ui-text';
 import { managedProviderLogin, providerWriteTransportAllowed } from './daemon-provider-management-api';
 import type { LoginView, SavedLoginAccount } from './daemon-provider-login';
 import type { LoginIntent } from './daemon-provider-login-contract';
+import { PROVIDER_LOGIN_REQUIRED_VERSIONS } from './daemon-provider-login-contract';
 import { PendingPanelCard, PendingCardTitle } from './backend-pending-ui';
 import { buttonStyle, buttonTextStyle } from './elevation';
 import { colors, spacing, radius } from './theme';
@@ -77,6 +78,9 @@ export default function DaemonCodexAccounts({ cfg, daemonId, scope, snapshot, bi
     {!secure ? <Text style={{ color: colors.textSecondary }}>{t('providerLogin.insecure')}</Text> : null}
     {busy ? <View style={{ flexDirection: 'row', gap: spacing.sm }}><ActivityIndicator color={colors.accent} /><Text>{t('providerLogin.waiting')}</Text></View> : null}
     {note ? <Text testID="daemon-login-note" style={{ color: colors.textSecondary }}>{t(`providerLogin.${note}`)}</Text> : null}
+    {note === 'unsupported' || note === 'unconfirmed' ? <Text testID="daemon-login-versions" style={{ color: colors.textSecondary }}>
+      {t('providerLogin.requiredVersions', PROVIDER_LOGIN_REQUIRED_VERSIONS)}
+    </Text> : null}
     {view ? <Text testID="daemon-login-state" style={{ color: colors.text }}>{t(`providerLogin.state.${view.account_id ? 'saved' : view.status}`)}</Text> : null}
     {view?.status === 'awaiting_user' && view.challenge && !note ? <View style={{ gap: spacing.sm }}>
       <Text selectable testID="daemon-login-code" style={{ color: colors.text, fontSize: 24, fontWeight: '600' }}>{view.challenge.userCode}</Text>

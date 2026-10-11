@@ -48,6 +48,7 @@ try {
         return envelope({ ok: true, request_id: snapshotId, status: 'pending' });
       }
       if (a.action === 'login') {
+        if (window.__loginUnsupported) return { jsonrpc: '2.0', id: 1, error: { code: -32601, message: 'Unknown tool' } };
         window.__loginCalls.push(a); intent = a.provider;
         return envelope({ ok: true, request_id: loginId, status: 'pending' });
       }
@@ -133,6 +134,12 @@ try {
   assert.equal(calls.filter(c => c.provider.action === 'start').length, 2);
   assert.equal(calls.filter(c => c.provider.action === 'save').length, 1);
   assert.equal(calls.filter(c => c.provider.action === 'cancel').length, 1);
+  await page.evaluate(() => { window.__loginUnsupported = true; });
+  await page.getByTestId('daemon-login-refresh').click();
+  await page.getByTestId('daemon-login-versions').waitFor();
+  const upgrade = await page.getByTestId('daemon-login-versions').innerText();
+  for (const version of ['0.9.0-preview.122', '2.3.0-preview.164', '2.5.0-preview.130']) assert(upgrade.includes(version));
+  assert(upgrade.includes('不要降级'));
   assert.deepEqual(errors, []);
   console.log('PASS managed-login rendered core: start/code/manual-check/save/scoped-list/bind-model/confirm-apply/exact-receipt/cancel; synthetic receipts, no real OAuth or node switch');
 } finally { await browser.close(); web.close(); }

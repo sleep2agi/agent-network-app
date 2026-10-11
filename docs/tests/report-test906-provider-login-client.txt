@@ -105,4 +105,19 @@ Release/recovery boundaries:
   existing login/binding/confirm-apply/receipt/cancel path. Synthetic Hub only.
 - Captured and visually inspected light-theme inventory screenshot under
   /tmp/anet-provider-hierarchy-D6EV7Y (ephemeral evidence, not deployment input).
+
+2026-10-11 14:52 +08 — precise managed-login release targets:
+- Unsupported/unconfirmed account operations now show Hub 0.9.0-preview.122,
+  daemon CLI 2.3.0-preview.164 + runtime 2.5.0-preview.130 (or compatible newer).
+  Copy explicitly requires checking publication before upgrading, forbids
+  downgrading newer installations and directs qualifying versions to connection/
+  daemon logs instead of repeated upgrade/login attempts. These are protocol
+  release targets, not a claim that candidate artifacts are already available.
+- Docker current-source typecheck PASS, login command core 5/5 PASS; fresh Expo
+  export 1225 modules. Rendered core drive PASS including simulated unsupported
+  interface and exact three-version/no-downgrade text. Synthetic Hub receipts,
+  no real OAuth/native package acceptance. UI run exit0 and --rm cleanup.
+- Images: anet-app:provider-login-version-web / provider-login-version-ui.
+  Existing API-key verified version guidance and installer pins remain unchanged
+  until new backend publication and artifact download verification.
   Containers --rm, no production changes; no new release claimed.
