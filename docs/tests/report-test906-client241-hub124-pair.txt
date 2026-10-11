@@ -74,3 +74,20 @@ Formal CLI166 public download and final pin (2026-10-11T14:08Z)
 - Final CLI-pin-only delta: same cached Docker image, --rm --network none,
   candidate mounted read-only, original bun src/local-daemon.test.ts 34 checks
   PASS/exit0. Existing unchanged UI/sidecar checks were not rerun.
+
+Core actual installer delta (2026-10-11T14:13Z)
+- Updated original local-daemon-init positive Hub fixture .123 -> .124 and
+  exact package/path expectations CLI165/runtime131 -> CLI166/runtime132.
+  Old .66 incompatibility, installed-version readback, stop-before-init and
+  wrong-hash assertions remain unchanged; no assertion removed or weakened.
+- Original independent tests/local-daemon-init/Dockerfile, pinned Rust1.90
+  base digest3914072ca0c3b8aad871db9169a651ccfce30cf58303e5d6f2db16d1d8a7e58f;
+  image config SHA5f2fbd9931b934cb859d93f0bff2b3f15efa12f45a0efd0b60e451a361c2dcf3.
+- docker run --rm --init anet-app:test241-daemon-pair:20 passed/0 failed,
+  exit0,22.43 seconds. The production Rust installer was compiled directly.
+- Real anonymous public CLI166 archive HTTPS download/hash -> fixture npm
+  archive install -> paired runtime -> init/start succeeded. Stop and lying
+  stop preserve config; wrong archive digest never reaches npm/init/start.
+- Hub and npm execution are disposable fixture adapters, not a signed native
+  app install or real vendor account/model entitlement validation. --rm reaped
+  fixture children; no new persistent containers or host services remained.
