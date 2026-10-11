@@ -27,3 +27,9 @@ repair, tool PATH preservation and exact online/create-capable Hub acceptance.
 This isolates installer behavior; it does not certify Claude/Codex authentication
 or runtime execution. The existing packaged macOS install smoke remains the
 native platform gate.
+
+The #906 registry-delay case downloads the real public CLI release tarball over
+HTTPS and verifies the production-pinned hash before passing its local filename
+to the fixture npm adapter. It needs outbound HTTPS in the container. A separate
+wrong-digest case proves no archive install, init or start occurs. The adapters
+are not evidence of a signed app install or real Codex account authentication.

@@ -181,4 +181,35 @@ mod regression {
         assert!(!fs::read_to_string(f.root.path().join("events")).unwrap().contains("init"));
         println!("PASS: npm exit zero is insufficient; installed version must satisfy contract");
     }
+
+    #[test]
+    fn registry_etarget_uses_the_verified_main_archive_and_keeps_pairing() {
+        let f = Fixture::new("0.9.0-preview.121");
+        f.seed();
+        fs::write(f.root.path().join("npm-mode"), "unavailable").unwrap();
+        let report = local_daemon::install(&f.session).unwrap();
+        assert!(report.ok, "{:?}", report.error);
+        let events = fs::read_to_string(f.root.path().join("events")).unwrap();
+        assert!(events.contains("anet-cli-2.3.0-preview.163.tgz"), "{events}");
+        assert!(events.contains("agent-node@2.5.0-preview.129"), "{events}");
+        assert_eq!(events.matches("agent-network@2.3.0-preview.163").count(), 1);
+        assert!(!f.root.path().join("local-daemon/anet-cli-2.3.0-preview.163.tgz").exists());
+        assert!(report.steps.iter().any(|s| s.output.contains("CLI SHA256 已校验")));
+        println!("PASS: actual public main tarball download/hash -> npm archive path -> paired runtime -> init/start; npm/Hub are fixture adapters");
+    }
+
+    #[test]
+    fn wrong_archive_hash_is_never_installed_or_used_to_initialize() {
+        let f = Fixture::new("0.9.0-preview.121");
+        f.seed();
+        fs::write(f.root.path().join("npm-mode"), "unavailable").unwrap();
+        let before = fs::read(f.profile()).unwrap();
+        let report = local_daemon::install_with_cli_download(&f.session, || Ok(b"corrupted archive".to_vec())).unwrap();
+        assert!(!report.ok);
+        assert!(report.steps.iter().any(|s| s.output.contains("SHA256 校验失败")));
+        assert_eq!(fs::read(f.profile()).unwrap(), before);
+        let events = fs::read_to_string(f.root.path().join("events")).unwrap();
+        assert!(!events.contains(".tgz") && !events.contains("init"), "{events}");
+        println!("PASS: wrong digest never reaches npm archive install/init/start");
+    }
 }

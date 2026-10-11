@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).",
   "",
+  "What's new in 0.2.236:",
+  "- 本机 Daemon 安装遇到 npm 版本暂不可下载时，改用同版本的 GitHub 正式包，校验固定 SHA256 后再安装，避免一直卡在 npm 重试。",
+  "- 延续 Daemon Provider 管理与已有 Codex 状态展示；ChatGPT 登录账号切换仍在开发中，本版不宣称支持。",
+  "",
   "What's new in 0.2.235:",
   "- Daemon 的 Provider 页接入实际配置，展示已有 Codex 节点状态，支持管理 API-key Provider 和模型。",
   "- 可将所选 Provider 和模型应用到一个已有 Codex TUI 共存节点；确认后重启该节点、保留原会话，并展示本次应用结果。",
