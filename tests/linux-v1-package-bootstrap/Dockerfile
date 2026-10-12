@@ -11,9 +11,12 @@ RUN npm ci --ignore-scripts --no-audit --no-fund && npm run build && npm pack --
     mv /candidate/sleep2agi-agent-node-2.5.0-preview.128.tgz /candidate/TEST-ONLY-agent-node-ded59ce7.tgz
 COPY tests/linux-native-v1-candidate-runtime/manifest.mjs /candidate/manifest.mjs
 RUN node /candidate/manifest.mjs && \
-    npm install -g --prefix /fixture/exact-prefix --ignore-scripts --no-audit --no-fund @sleep2agi/agent-node@2.5.0-preview.128
+    npm install -g --prefix /fixture/exact-prefix --ignore-scripts --no-audit --no-fund \
+      @sleep2agi/agent-network@2.3.0-preview.162 @sleep2agi/agent-node@2.5.0-preview.128 && \
+    npm install -g --no-audit --no-fund opencode-ai@1.18.34 && test "$(opencode --version)" = 1.18.34
 COPY tests/linux-native-v1-candidate-runtime/prepare.py /fixture/prepare.py
 COPY tests/linux-v1-package-bootstrap/probe.ts /fixture/probe.ts
+COPY tests/linux-v1-package-bootstrap/launch.py /fixture/launch.py
 RUN cp -a /candidate /fixture/runtime-candidate && \
     useradd --uid 10001 --create-home smoke && mkdir /evidence && \
     chown -R smoke:smoke /fixture/exact-prefix /evidence && chmod 0700 /fixture/exact-prefix /evidence

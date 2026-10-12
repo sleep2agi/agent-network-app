@@ -46,3 +46,4 @@ writeFileSync('/evidence/package-bootstrap.json', JSON.stringify({
 console.log(`BOOTSTRAP: installed=${installedMode.toString(8)} archive=${archiveMode.toString(8)} prepared=${preparedMode.toString(8)} resolver=${reason}`);
 assert.equal(reason, 'accepted', 'production package resolver rejected actual candidate preparation');
 console.log('PASS: candidate preparation accepted by exact production package resolver; NO native/registration/model proof');
+execFileSync('python3', ['/fixture/launch.py'], { stdio: 'inherit' });

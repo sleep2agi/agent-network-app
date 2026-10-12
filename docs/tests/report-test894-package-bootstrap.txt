@@ -1,5 +1,5 @@
 #894 / original PR795: package-boundary atomic diagnosis
-OBSERVED_AT=2026-10-12 12:46+08
+OBSERVED_AT=2026-10-12 12:42+08
 PREPARATION ONLY; no new test pass or product fix claimed.
 
 Original native run38202449262 failed at startup capability; child output was
@@ -24,3 +24,18 @@ cannot clear the native registration failure. A refusal gives only a narrower
 package-boundary cause to fix and verify before the original native gate.
 Run is Docker in Actions, non-root UID10001, network none/cap-drop ALL at execution,
 always cleanup and TEST-ONLY artifact. No local test or production change.
+
+Actual result — 2026-10-12 12:44+08
+- run38204895184/job114666095733 locked01eb39bf9f2d7566b56f05a338e6f9a33255bd6a
+  SUCCESS04:43:37Z. Installed/archive/prepared mode755; production resolver accepted.
+  Permission hypothesis NOT REPRODUCED, no permission fix justified. Native failure
+  remains open; this success is not registration/model/native product acceptance.
+- Cleanup/upload succeeded. TEST-ONLY artifact11727405288,1135B, archive digest
+ 85350e82194001c52e2e331ff540ef5fc618d869a4e44130672e056fb8f2b702.
+  Three unrelated manual contract jobs SKIPPED, not newly passed.
+- Next bounded slice adds actual installed CLI162/OpenCode1.18.34 pre-Hub launch,
+  using source-candidate128 and the original safe/default created profile fields.
+  Its rejecting HTTP fixture is NOT a real Hub: only startup-to-request is observed,
+  no identity registration/SSE/model assertion. Output is constant reason enums,
+  process-lifetime and request counters, never raw diagnostic text/credentials.
+  This does not recompile desktop, change product or lower the native gate.
