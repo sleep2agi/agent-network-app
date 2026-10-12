@@ -10,7 +10,7 @@ export const BUNDLED_RELEASE_BODY: string = [
   "- 创建 Codex TUI 共存节点时，可选择目标机器已绑定的 API-key Provider，读取其配置与模型后继续创建，不再被“发现/扫描”入口挡住。",
   "- 修复当前账号验证成功后仍残留“需要重新登录”红字：重新核实有效凭据后刷新状态，真正失效的账号仍提示登录。",
   "- Hub / Daemon Provider 推荐 HTTPS，但允许明确配置 HTTP，并显示明文传输风险提示；保存、下发和切换仍需用户操作。",
-  "- 环境密钥与 HTTP 完整链路需要 Hub 0.9.0-preview.127、CLI 2.3.0-preview.169 / runtime 2.5.0-preview.135 配套升级；只更新客户端不会升级远端服务器或重启节点。",
+  "- 环境密钥与 HTTP 完整链路需要 Hub 0.9.0-preview.127、CLI 2.3.0-preview.169 / runtime 2.5.0-preview.136 配套升级；只更新客户端不会升级远端服务器或重启节点。",
   "",
   "What's new in 0.2.248:",
   "- 手机 Hub 页把管理入口放到标题下方，Provider 不再被长机器列表埋在页面底部。",

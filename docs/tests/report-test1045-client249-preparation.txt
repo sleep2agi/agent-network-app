@@ -1,6 +1,28 @@
 #998/#1045 client249 preparation checkpoint — NOT PUBLISHED
 OBSERVED_AT=2026-10-12 08:04+08
 
+2026-10-12 10:00+08 pin preparation — still NOT PUBLISHED
+- Formal main source31b0dbdae3192f471c8812574c118795658120f0 Hub127
+  release38193173842 all gates/publication SUCCESS. Anonymous npm tarball
+  is byte-identical to gated artifact:1232566B,
+  SHA256 ef9ed47cff0a1d6b65ef100dbf684f4e2c430e802ee75809bdb4db3c62fc6e54.
+- Hub125→127 sidecar package/lock/SRI and native version expectation updated.
+  Exact package dependency fields unchanged; no lock dependency churn.
+  Generated platform binary manifest is rebuilt by the existing Actions
+  sidecar build, not fabricated from the checked-in historical120 manifest.
+- CLI169 main release38193199217 four gates SUCCESS; inner artifact SHA256
+  0665ca5447487874d5ee17604e95e19b2f2449a6e5215e81521ac85dd5e05928,
+  2128700B. Existing main gated download workflow38193906192 pending.
+  Native CLI version/URL/hash and matching fixtures now pin those exact bytes.
+- Runtime135 publication succeeded but later cloud SDK legacy creation fails
+  with an empty source-marker network. Do not install it as fixed. Backend
+  PR2640@fcd7fd9f75a7867c5b162a246bc0e87919c3178e narrowly corrects the
+  marker with the token-bound Hub request network; runtime136 is replacement
+  candidate. Native installer/fixtures and249 notes now require136, not135.
+- No client merge/publication until corrected runtime formal bytes and CLI
+  public download are available. Testing only in GitHub Actions; no local
+  tests, generated binary build, host npm install or production activation.
+
 09:12+08 increment (separate from the older snapshot below)
 - Restacked release/client249-pair on exact app main
   8616ea5f358cce095e109b93d64da34f2807e28c, containing source merges PR885
