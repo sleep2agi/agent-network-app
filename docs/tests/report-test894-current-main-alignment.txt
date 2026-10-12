@@ -262,3 +262,18 @@ loopback service only; not vendor OAuth/entitlements or native UI task dispatch.
 Not clean package installation, model-switch/stop/restart, all-platform acceptance
 or public release. Earlier failures retain their exact outcomes. Successful V1
 run38211007236 remains separate. Report-only follow-up need not repeat this core.
+
+2026-10-12 15:08+08 review: preserve baseline, opt-in historical extension
+----------------------------------------------------------------------
+Current main already has the Linux package/native-auth workflow. Keep that
+baseline, source/hash/package checks, UI auth and publication rules unchanged.
+Only this PR's added migration/private162128/candidate/lifecycle extension is
+now explicitly manual full/v1-registration replay; its old120/162128/ded source
+inputs are not current acceptance. Assertions and cleanup-after-failure remain.
+The wiring contract checks the explicit selector and retained main baseline;
+all original eight mutations stay. Changed workflow selection needs its narrow
+Actions contract check, NOT a rerun of the already accepted native V1/V2 cores.
+Correct bundled contract README to actual127/main31b0/SHA256+lockSRI inputs.
+Read-only GitHub branch protection reports404 unprotected; rulesets list empty;
+required-check query reports none. No remote policy, bypass/admin or billing
+change. PR still Draft, current-head CI not yet terminal; no merge/publication.

@@ -1,4 +1,13 @@
-# Native V1 candidate CI wiring contract (TEST ONLY)
+# Historical V1 candidate CI wiring contract (TEST ONLY)
+
+Current registration acceptance is in `linux-native-current-v1` and
+`linux-native-current-v2`; their exact public-pair core results are recorded in
+report-test894-current-main-alignment.txt. Do not repeat them for report-only edits.
+The added old120/162/128 migration/model/lifecycle extension runs only on explicit
+manual full/v1-registration dispatch, not automatically on ready PRs. Its frozen
+source/installer inputs require a compatible historical app input before replay;
+it is not current-main acceptance. Main's existing package/native-auth baseline
+and all historical assertions/negative oracles remain present.
 
 The Linux package workflow now builds the V1 source candidate after the V2
 package gates, using backend commit

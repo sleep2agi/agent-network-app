@@ -43,6 +43,7 @@ def check(doc):
         assert 'tests/' + directory + '/**' in doc['on']['pull_request']['paths'], 'suite path trigger'
     job = doc['jobs']['linux-deb']
     assert job['env']['V1_REGISTRATION_ONLY'] == "${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'v1-registration' }}", 'focus only on explicit manual dispatch'
+    assert job['env']['HISTORICAL_EXTENDED'] == "${{ github.event_name == 'workflow_dispatch' && (inputs.focus == 'full' || inputs.focus == 'v1-registration') }}", 'historical extension only on explicit manual dispatch'
     assert job['needs'] == 'v1-ci-contract', 'contract prerequisite'
     steps = job['steps']
     names = [step.get('name', '') for step in steps]
@@ -53,6 +54,7 @@ def check(doc):
     selected = {name: steps[names.index(name)] for name in ordered}
     for name in ordered[:-1]:
         expected = "success() && env.V1_REGISTRATION_ONLY != 'true'" if name in ordered[3:9] else 'success()'
+        expected += " && env.HISTORICAL_EXTENDED == 'true'"
         assert selected[name].get('if', 'success()') == expected, 'fail-closed prerequisite'
         assert selected[name].get('continue-on-error', 'false') == 'false', 'no ignored prerequisite'
     checkout = selected[ordered[0]]['with']
@@ -80,11 +82,14 @@ def check(doc):
             assert not re.search(r'\|\||set \+e', run), 'positive must propagate failure'
     assert len(created) == len(set(created)) == 7, 'seven independent containers'
     registration = next(step for step in steps if step.get('name') == 'Native V1 registration only (manual diagnostic)')
-    assert registration['if'] == "success() && env.V1_REGISTRATION_ONLY == 'true'", 'manual registration only'
+    assert registration['if'] == "success() && env.V1_REGISTRATION_ONLY == 'true' && env.HISTORICAL_EXTENDED == 'true'", 'manual registration only'
     assert '-e TEST_V1_REGISTRATION_ONLY=1' in registration['run'], 'no model workload in manual registration'
     assert '--network none --cap-drop ALL --security-opt no-new-privileges' in registration['run'], 'isolated registration'
     cleanup = selected[ordered[-1]]
-    assert cleanup['if'] == 'always()', 'unconditional evidence cleanup'
+    assert cleanup['if'] == "always() && env.HISTORICAL_EXTENDED == 'true'", 'unconditional evidence cleanup'
+    baseline = ['Full source build in Ubuntu Docker (not a release)', 'Inspect complete package offline', 'Install on clean Ubuntu runtime (not the compiler image)', 'Ordinary-user native window probe offline (screenshot requires review)', 'Native startup and authentication atomic gate (before UI)', 'Real UI local workspace and native credential authentication']
+    for name in baseline:
+        assert 'HISTORICAL_EXTENDED' not in next(s for s in steps if s.get('name') == name).get('if', ''), 'main package/auth baseline retained'
     for container in created:
         assert container in cleanup['run'], 'all owned containers cleaned'
     assert 'native-v1-registration' in cleanup['run'], 'registration container cleaned'

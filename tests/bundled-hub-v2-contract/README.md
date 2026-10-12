@@ -11,11 +11,12 @@ sg docker -c 'docker build -t anet-bundled-hub-contract:test -f tests/bundled-hu
 sg docker -c 'docker run --rm --network none anet-bundled-hub-contract:test'
 ```
 
-The Dockerfile pins Bun by digest, downloads exact Hub preview.120 and verifies
-its npm SHA512 integrity before extraction. The non-root offline probe checks
+The Dockerfile pins Bun by digest, downloads exact Hub preview.127 and verifies
+its tarball SHA256 before extraction; the probe also checks npm SHA512 against
+the product lock. The non-root offline probe checks
 V1 argv, precise missing-consent refusal, exact V2 argv (unsafe opt-in is a
 **valueless** CLI switch), and the necessary launch-proof source contract.
-Four source files match main ancestor edc68a4ca87bbb7ca4944093e8ff113a17078624;
+Four source files match main ancestor31b0dbdae3192f471c8812574c118795658120f0;
 their SHA256 values are asserted. npm metadata did not expose gitHead: do not
 represent this limited file comparison as full release provenance verification.
 The separate `tests/bundled-hub-provenance` suite compares every shipped file;
