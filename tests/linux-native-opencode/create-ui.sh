@@ -36,9 +36,16 @@ xdotool mousemove --window "$window" 1080 650 click --repeat 9 --delay 100 5
 sleep 1
 import -window "$window" /evidence/create-consent.png
 # Explicit V2 unsafe-tools consent for this disposable fixture only.
-xdotool mousemove --window "$window" 472 668 click 1
+# Reviewed exact945 create-consent.png: the current Provider catalog note moves
+# consent to594. Keep the old package coordinates for historical replay.
+consent_y=668
+if [ "${TEST_CURRENT_V2_UI:-0}" = 1 ]; then consent_y=594; fi
+xdotool mousemove --window "$window" 472 "$consent_y" click 1
+sleep 1
+import -window "$window" /evidence/create-consent-accepted.png
 xdotool mousemove --window "$window" 1059 741 click 1
 sleep 1
+import -window "$window" /evidence/create-model.png
 xdotool mousemove --window "$window" 700 416 click 1 key ctrl+a
 xdotool type --clearmodifiers --delay 80 'stub/stub-model'
 sleep 1

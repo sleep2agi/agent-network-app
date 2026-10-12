@@ -184,3 +184,21 @@ instead of the inherited V1 executable. No public package/product changes.
 Source/fixture/deb identities stay separate, evidence/owned cleanup always run.
 At authoring: execution NOT STARTED, no new PASS or publication claim. Tests
 will run in Actions Docker only, not on the local machine or production.
+
+2026-10-12 14:36+08 current V2 first result and narrow fixture correction
+--------------------------------------------------------------------
+Run38212653443/current job114690270106 failed native creation at14:33:51;
+contract, package reuse/auth, public170/136 and real V2 auth/exact-model atomic
+steps SUCCESS. Historical matrix/V1/desktop compilation SKIPPED, not new PASS.
+Cleanup and artifact upload SUCCESS. Artifact11729772151 archive51,284,744B /
+digest24b0339f4c174b272025886386339ca4d7e2205e2e647f46299c351c480d2a9e.
+Downloaded exact inner deb50,367,088B/hash5e4e15b31aac772cc295132da4c5384982fe815e0a0532e02862a9c1c57f8256
+matches reused945 app; native container exited1/image5c4521919df2a262e78bc0604159a126922427a3de30117c997bfd8a5215c9e0 then removed.
+Personally reviewed runtime/consent/confirm/final screenshots: V2 selected at
+consent stage but unchecked checkbox now at594, not historical668. Next remains
+disabled; subsequent legacy clicks switched back toV1. Thus this run did not
+establish a V2 launch refusal or model reply after creation. Final screenshot
+remains runtime selection, not a spinning launch. No create-proof/bridge file.
+Fix only current-V2 fixture consent coordinate; keep historical default and
+original acceptance assertions. Capture accepted-consent/model screens before
+later input for exact current layout evidence. New run pending; not accepted.
