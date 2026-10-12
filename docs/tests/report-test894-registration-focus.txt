@@ -40,3 +40,26 @@ CI increment — 2026-10-12 12:16+08
   Default full guards remain;33 unrelated cases are conditional on the explicit
   manual focus, not counted as succeeded. No local execution or production work
   belongs to this test line. ETA12:20–12:35 assumes normal runner/build progress.
+
+Terminal increment — 2026-10-12 12:29+08
+- Same run38202449262:1 SUCCESS (wiring) /1 FAILURE (native diagnostic).
+  Native job114658659903 completed04:21:24Z; registration failed04:21:11Z,
+  statusruntime_capability_check_failed/error_codeunclassified. Existing failure
+  assertion propagated unchanged; no product root cause established.
+- Source-bound build/offline inspect/clean install/native startup/authentication,
+  private162/128 package prerequisite and real native Daemon registration passed.
+  V1 environment/auth/session prerequisite passed. Model/lifecycle/V2/upgrade
+  cases were skipped deliberately, not passed; no vendor inference executed.
+- Cleanup and evidence upload SUCCESS. Artifact11725099697 remains TEST-ONLY,
+ 151073633B, archive digest6687f709f535d27ea4d75f5aeb2249db6d83d13d9d5499e23522ea971dee73f7;
+  inner deb SHA256f289e6d7164903e30573ef02481339c58a21f9e3f4dd9ac3240c79b4adbe249a.
+  Archive digest is NOT deb digest. No branch artifact publicly released.
+- Diagnosis limitation: historical daemon reports prose, not an opaque error
+  code; the privacy-limited observer preserves status but classifies it as
+  unclassified. Post-spawn capability failure narrows the failing layer, not
+  whether startup binary/auth/model setup caused it. Model response steps were
+  not reached; this does not exclude model configuration during startup.
+- Do not repeat this build unchanged or guess an environmental failure. Next
+  minimal difference is bounded bootstrap diagnostic evidence, then only that
+  atomic gate. Current-main installer/Provider integration remains separate;
+  shipping249/170-136 does not inherit this historical candidate result.
