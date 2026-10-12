@@ -45,3 +45,25 @@ published merely because these inputs are aligned. Old native/diagnostic failure
 remain historical exact-source results, not reclassified or inherited.
 13:15 is source/CI-start checkpoint. Earliest native result13:35–14:00 if runner,
 source build and prerequisites work; final publication has no reliable ETA yet.
+
+Incremental CI receipt, OBSERVED_AT=2026-10-12T05:28:28Z (13:28+08):
+- Exact tested head903cd6431ba9544a6823d95461314679272a579f;
+  manual run38207129801/job114673078863 completed FAILURE13:25:26.
+- Bound desktop build/package validation SUCCESS13:24:15; native startup and
+  credential authentication prerequisite SUCCESS13:25:09. Contract prerequisite
+  SUCCESS independently. These results are not native registration acceptance.
+- Public CLI170/runtime136 archive checksum downloads both succeeded. The
+  current-prefix fixture then failed before executing either package: USER node
+  could not read root-owned Docker ADD /tmp/cli.tgz (npm EACCES, exit243).
+  Not an npm visibility error or a demonstrated product/Hub registration error.
+- Correct only the readability of the two public, hash-verified archives to0644
+  while still root, before the existing unprivileged install. Credentials,
+  package bytes/hash/version pins, product source and all downstream assertions
+  unchanged. No local tests; correction still requires its own Actions result.
+- Native fixture build, V1 atomic prerequisite and real UI registration were
+  SKIPPED after this failure, not PASS. Owned-container cleanup and artifact
+  upload SUCCESS; artifact11727639157 TEST-ONLY-current-v1-registration-903...
+  archive digest49d446bd3c5ff05575843772a74f45a9c126f6af998451ffde14e544522a29d5
+  is NOT the deb SHA. This node has not downloaded or reviewed its screenshots.
+- Previous13:35–14:00 result window is conditional and now depends on this
+  fixture correction and a new bound run; no merge/publication claim.
