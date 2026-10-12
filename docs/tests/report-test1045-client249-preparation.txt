@@ -1,6 +1,28 @@
 #998/#1045 client249 preparation checkpoint — NOT PUBLISHED
 OBSERVED_AT=2026-10-12 08:04+08
 
+09:12+08 increment (separate from the older snapshot below)
+- Restacked release/client249-pair on exact app main
+  8616ea5f358cce095e109b93d64da34f2807e28c, containing source merges PR885
+  (creation-time existing Provider) and PR888 (real Daemon/node secrets).
+- Updated249 workflow/bundled notes with those slices and the exact required
+  candidate family Hub127/CLI169/runtime135. Candidate dates not invented.
+- Mechanical checked-in generator --no-dates regenerated bundled notes.
+- Docker anet:test1053-portable, uid/gid1000, network none, candidate read-only:
+  version metadata14 checks, bundled notes7 checks, note hygiene9 checks pass.
+  These scripts assert at import time; Bun's final summary says0 registered
+  tests, not30 Bun test cases. All explicit checks and exit code are successful.
+- Initial browser-image invocation lacked bun; next non-owner uid could not
+  traverse the private candidate directory. Both setup attempts ran no checks;
+  corrected to actual source-capable Bun image and worktree owner uid1000.
+- Native installer remains CLI166/runtime132 and bundled Hub125. No PR,
+  publish or auto-update artifact dispatched from this incomplete candidate.
+  Update exact hashes/sidecar lock only after formal backend bytes are public.
+- No feature/UI suites repeated for notes-only metadata; reuse exact prior
+  feature/core reports. Reported next09:20 backend-gate checkpoint, conditional
+  earliest backend09:35–09:50 / selected client10:00–10:20, not a deadline.
+- All containers --rm; source/generator/report retained; no production writes.
+
 Source/scope
 - Base main d3705a8ca7f8d738cf399e1666ae574b38b176ae includes HTTP PR882 and
   current-account stale-flag PR883. Candidate branch release/client249-pair.
