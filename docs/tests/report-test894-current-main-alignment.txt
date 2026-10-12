@@ -235,3 +235,30 @@ before UI creation; public software will align the private child itself.
 Historical child-only preparation stays unchanged. No identity/token/profile
 is seeded. Original exact config/model/process/task assertions unchanged.
 Next Actions pending; no currentV2 creation/model response acceptance yet.
+
+2026-10-12 14:55+08 CURRENT V2 CORE ACCEPTED (TEST ONLY)
+----------------------------------------------------
+Run38214420529 / job114695803231 exact fixture089a425f6d040119a2b6131b609b2c9943915f30
+is SUCCESS: native V2 create/model step14:53:46, cleanup14:53:48, job14:53:53.
+Contract/native authentication/public170136/real V2 exact-model atomic gates
+SUCCESS; compilation/V1/historical matrix SKIPPED (no new build/V1 claim).
+Actual app945cecf3722b9daadeb8e32bd7a0bd7b9f1e7aae, inner deb50,367,088B /
+SHA2565e4e15b31aac772cc295132da4c5384982fe815e0a0532e02862a9c1c57f8256
+fully downloaded/rehashed. Same public backendmainf860 and Hub127/main31b0.
+Artifact11731261347 archive51,370,172B/digest
+25fbc359a04f18f4107bdc16b035bbabb617f0cb311ab37306b86d1f56840e9b
+is a ZIP digest, not the inner deb hash. App and fixture marker checked separately.
+Proof requestcr_b679e411-6fd7-4d08-953c-344d9e831d50 /
+node_b679e411-6fd7-4d08-953c-344d9e831d50/networknet_5ec05ea543c0:
+real native UI consent/create -> exact persistedV2/copresence/unsafe-tools,
+active child credential, daemon launch verdict/live bridge+serve+attach identities.
+One REST task returned [v2-native] ANSWER_NATIVE_CREATED894; provider journal
+has one matching chat/completions request, exact stub-model. No tool execution.
+Personally reviewed create-complete.png: v2-native green online and Done button,
+2/2 online, no spinner. Both containers exit0/image
+b4ab1abb06e8c5c4414d27dcf4fedeb1c95e951ca6ea15c3fc9331da14df685b then removed.
+No local tests/installation/production actions. Synthetic project provider and
+loopback service only; not vendor OAuth/entitlements or native UI task dispatch.
+Not clean package installation, model-switch/stop/restart, all-platform acceptance
+or public release. Earlier failures retain their exact outcomes. Successful V1
+run38211007236 remains separate. Report-only follow-up need not repeat this core.
