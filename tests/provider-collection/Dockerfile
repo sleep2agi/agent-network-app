@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
-CMD ["sh", "-c", "bun --no-install src/daemon-provider-management.test.ts && npm run typecheck"]
+CMD ["sh", "-c", "bun --no-install src/daemon-provider-management.test.ts && bun --no-install src/daemon-provider-create.test.ts && npm run typecheck"]
 
 FROM core AS web
 ENV CI=1 EXPO_NO_TELEMETRY=1

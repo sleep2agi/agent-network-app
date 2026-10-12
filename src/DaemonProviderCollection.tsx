@@ -10,9 +10,10 @@ import type { ProviderSnapshot } from './daemon-provider-management';
 import { collectionSourceOptions, collectionSourceForm, EMPTY_PROVIDER_COLLECTION, providerCollectionWrite,
   type ProviderCollectionForm, type ProviderCollectionWrite } from './daemon-provider-collection';
 
-export default function DaemonProviderCollection({ snapshot, identity, secure, busy, collect }: {
+export default function DaemonProviderCollection({ snapshot, identity, secure, busy, collect, context }: {
   snapshot: ProviderSnapshot; identity: string; secure: boolean; busy: boolean;
   collect: (write: ProviderCollectionWrite) => Promise<void>;
+  context?: 'create';
 }) {
   const { t } = useTranslation(); const { width } = useWindowDimensions();
   const scope = JSON.stringify([identity, snapshot.revision, snapshot.codex_inventory?.observed_at]);
@@ -32,7 +33,7 @@ export default function DaemonProviderCollection({ snapshot, identity, secure, b
       testID="daemon-provider-collect-source" onPick={nodeId => {
         setConfirmation(''); setState({ scope, form: collectionSourceForm(snapshot, nodeId ?? '') });
       }} />
-    {!rows.length ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.collect.noSource')}</Text> : null}
+    {!rows.length ? <Text style={{ color: colors.textSecondary }}>{t(context === 'create' ? 'providerManagement.create.noSource' : 'providerManagement.collect.noSource')}</Text> : null}
     {form.nodeId ? (['providerId', 'authId', 'label'] as const).map(field => <View key={field} style={{ gap: spacing.xs }}>
       <Text style={{ color: colors.textSecondary }}>{t(`providerManagement.collect.${field}`)}</Text>
       <TextInput testID={`daemon-provider-collect-${field}`} value={form[field]} editable={!busy} autoCorrect={false} autoCapitalize="none"
@@ -41,7 +42,7 @@ export default function DaemonProviderCollection({ snapshot, identity, secure, b
     </View>) : null}
     {!secure ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.insecure')}</Text> : null}
     {confirmation === confirmationKey && available ? <View style={{ gap: spacing.sm }}>
-      <Text style={{ color: colors.textSecondary }}>{t('providerManagement.collect.confirmHint')}</Text>
+      <Text style={{ color: colors.textSecondary }}>{t(context === 'create' ? 'providerManagement.create.collectConfirm' : 'providerManagement.collect.confirmHint')}</Text>
       <Pressable testID="daemon-provider-collect-confirm" accessibilityRole="button" onPress={() => {
         if (!write || !available) return; setConfirmation(''); void collect(write);
       }} style={buttonStyle('secondary')}><Text style={buttonTextStyle('secondary')}>{t('providerManagement.collect.confirm')}</Text></Pressable>

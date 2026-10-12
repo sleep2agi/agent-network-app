@@ -86,7 +86,7 @@ import NodeDaemonProviderSection from './NodeDaemonProviderSection';
 import { daemonProviderNodeRuntime } from './node-provider-target';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
-import { NodeSecretPendingSection } from './BackendPendingDemo';
+import ScopedSecretsSection from './ScopedSecretsSection';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
 import NodeLogsSection from './NodeLogsSection';
@@ -672,7 +672,7 @@ export default function NodeDetailScreen({
     if (section === 'secrets') return (
       <View>
         <SectionTitle title="密钥" />
-        <NodeSecretPendingSection />
+        <ScopedSecretsSection cfg={cfg} daemonId={node?.lifecycle_daemon_node_id} nodeId={node?.node_id} />
       </View>
     );
     if (section === 'rules') return (

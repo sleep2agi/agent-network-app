@@ -14,6 +14,7 @@ import './i18n-chat';
 import './i18n-daemon';
 import './i18n-backend-pending';
 import { BackendPendingIntegration } from './BackendPendingDemo';
+import ScopedSecretsSection from './ScopedSecretsSection';
 import { PendingPanelCard, PendingSegmentedTabs, type PendingTab } from './backend-pending-ui';
 import RuntimeSupportPane from './RuntimeSupportScreen';
 import type { RuntimeHostContext } from './runtime-support';
@@ -463,7 +464,7 @@ export default function DaemonManagementScreen({
         value={pendingSection}
         onChange={setSection}
         testID="daemon-section-tabs"
-        t={t}
+        t={key => t(key === 'backendPending.tab.tokens' ? 'scopedSecrets.title' : key)}
       />
     </View>
   );
@@ -527,6 +528,10 @@ export default function DaemonManagementScreen({
       <DaemonProvidersPane cfg={cfg} alias={alias} daemonId={daemon?.node_id}
         daemonVersion={daemonSession?.node_id === daemon?.node_id ? daemonSession?.version : undefined}
         offline={isDaemonOffline(daemonStatus)} />
+    </ScrollView>
+  ) : pendingSection === 'tokens' ? (
+    <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
+      <ScopedSecretsSection cfg={cfg} daemonId={daemon?.node_id ?? (lookup.kind === 'ready' ? lookup.daemon?.daemon_node_id : null)}/>
     </ScrollView>
   ) : pendingSection ? (
     <ScrollView style={screenStyles.content} contentContainerStyle={screenStyles.contentInner} keyboardShouldPersistTaps="handled">
