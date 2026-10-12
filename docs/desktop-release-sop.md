@@ -324,7 +324,7 @@ Then start the China mirror explicitly (section 10) — do not count on the
 
 ```bash
 gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app \
-  -f tag=desktop-v<version>
+  --ref main -f tag=desktop-v<version> -f commit=<40-character-release-main-SHA>
 ```
 
 `https://www.anet.sh/desktop/update/latest.json` is a dynamic endpoint. It
@@ -493,12 +493,19 @@ anet.sh endpoint). Re-syncing an old release never rolls it back.
 **Re-sync a past release** (idempotent; safe to repeat):
 
 ```bash
-gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app -f tag=desktop-v<version>
+gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app \
+  --ref main -f tag=desktop-v<version> -f commit=<40-character-release-main-SHA>
 ```
 
 Dispatch several tags one at a time: the workflow has one concurrency group and
 GitHub keeps only one pending run in it, so a third dispatch replaces the queued
 second one.
+
+The tag selects existing published bytes; it is not a build/source input.
+Manual mirroring requires the full source SHA. The workflow checks release
+metadata against the immutable tag object, checks out that exact SHA and verifies
+it remains an ancestor of main before uploading. Scheduled/release-event runs
+resolve the same full40 binding from the published release, not a floating branch.
 
 **Verify after a release** (no credentials — users have none):
 
