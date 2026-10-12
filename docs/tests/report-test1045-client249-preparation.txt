@@ -1,6 +1,29 @@
 #998/#1045 client249 preparation checkpoint — NOT PUBLISHED
 OBSERVED_AT=2026-10-12 08:04+08
 
+2026-10-12 10:33+08 main-built exact pair preparation — NOT PUBLISHED
+- Backend PR2640 normally merged to main f86012a30c75f59abeeed3221647f5d2847bd969.
+  Formal release runs38195512383(CLI170)/38195510631(runtime136) built their
+  main tarballs successfully; four release gates are queued, not passed.
+- Downloaded original gated-tarball artifacts (not a host build): CLI170
+  2113589B / SHA256 e1cef7f5b295ac27968782f07fda5b0e22b176b9b650d4fe9177b976f1121d60;
+  runtime136 591168B / SHA256 038bf75e2ade28d4b79efb5ee4d278862b0b1f2a4d34fd677f4475672aee2524.
+  These are inner tgz hashes, not the artifact ZIP digests. Package metadata
+  names/versions match. Native installer, fixture and249 notes now pair170/136.
+  Draft remains HOLD until formal public downloads match these exact bytes.
+- App889@744f4e06: Mac installer20/20 and Windows/Ubuntu unit jobs SUCCESS;
+  linux-deb TEST ONLY SUCCESS. Rollup32SUCCESS/1SKIPPED/1FAILURE/1IN_PROGRESS.
+  Failure is stub shard2 job114635423801, specifically the changelog desktop
+  dated-card geometry assertion. Seven other shards SUCCESS, upgrade pending.
+- Read actual cloud log and paintedText clipping behavior: neighbors248/247
+  are unpublished; known historical244/243 dates are outside the ScrollView
+  viewport. Fixture fallback never scrolls before requiring painted dates.
+  Narrow fixture repair scrolls actual dated cards into view, keeps positive
+  gap/equal spacing/current badge assertions, and requires TWO dated samples
+  instead of one. No fake publication date or product styling change.
+- Push only to existing draft PR; validation by existing GitHub Actions.
+  No local tests, Docker execution, global package install or production change.
+
 2026-10-12 10:08+08 cloud fixture alignment — NOT a passed replay
 - App889@e63278062f4b9c6635a5bf5d1f8e695a4ba9fdd4 cloud Mac regression
   run38193978755/job114632526787:15native unit cases PASS/5regression FAIL.

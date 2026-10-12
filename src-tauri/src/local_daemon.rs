@@ -30,10 +30,10 @@ use sha2::{Digest, Sha256};
 use super::{app_root, ensure_private_dir, write_private_atomic};
 
 pub const LOCAL_DAEMON_NAME: &str = "local-daemon";
-const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.169";
+const ANET_PACKAGE: &str = "@sleep2agi/agent-network@2.3.0-preview.170";
 // Same bytes as the formal main release, independent of npm processing delays.
-const ANET_TARBALL_URL: &str = "https://github.com/sleep2agi/agent-network/releases/download/cli-v2.3.0-preview.169/sleep2agi-agent-network-2.3.0-preview.169.tgz";
-const ANET_TARBALL_SHA256: &str = "0665ca5447487874d5ee17604e95e19b2f2449a6e5215e81521ac85dd5e05928";
+const ANET_TARBALL_URL: &str = "https://github.com/sleep2agi/agent-network/releases/download/cli-v2.3.0-preview.170/sleep2agi-agent-network-2.3.0-preview.170.tgz";
+const ANET_TARBALL_SHA256: &str = "e1cef7f5b295ac27968782f07fda5b0e22b176b9b650d4fe9177b976f1121d60";
 /// Desktop features require the preview runtime, not npm's older `latest` tag.
 const AGENT_NODE_PACKAGE: &str = "@sleep2agi/agent-node@2.5.0-preview.136";
 const MIN_HUB_VERSION: &str = "0.9.0-preview.127";
@@ -694,7 +694,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
             output.push_str("\n--- exact CLI package via GitHub release ---\n");
             match download_cli().and_then(|bytes| {
                 verify_cli_tarball(&bytes, ANET_TARBALL_SHA256)?;
-                let file = daemon_dir.join("anet-cli-2.3.0-preview.169.tgz");
+                let file = daemon_dir.join("anet-cli-2.3.0-preview.170.tgz");
                 write_private_atomic(&file, &bytes)?;
                 let cmd = with_path(&format!("{} install -g --prefix {} {}",
                     shell_quote(&npm_bin.display().to_string()),
@@ -969,7 +969,7 @@ mod tests {
         let info = |version: &str| ToolInfo { path: "/fixture/package".into(), version: Some(version.into()) };
         assert!(!package_compatible(Some(&info("2.3.0-preview.76")), ANET_PACKAGE));
         assert!(!package_compatible(Some(&info("2.5.0-preview.58")), AGENT_NODE_PACKAGE));
-        assert!(package_compatible(Some(&info("2.3.0-preview.169")), ANET_PACKAGE));
+        assert!(package_compatible(Some(&info("2.3.0-preview.170")), ANET_PACKAGE));
         assert!(!package_compatible(Some(&info("2.5.0-preview.135")), AGENT_NODE_PACKAGE));
         assert!(package_compatible(Some(&info("2.5.0-preview.136")), AGENT_NODE_PACKAGE));
         assert!(package_compatible(Some(&info("2.5.0")), AGENT_NODE_PACKAGE));

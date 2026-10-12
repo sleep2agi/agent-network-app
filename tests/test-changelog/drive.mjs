@@ -261,10 +261,13 @@ async function run({ phone }) {
     // Neighbors may be unpublished and have no date; compare dated cards instead.
     const gap = (h) => h.date.x - h.ver.x - h.ver.w;
     let dated = heads.slice(1).filter(h => h.date);
-    if (dated.length === 0) {
-      dated = [];
+    if (dated.length < 2) {
       for (const v of NOTE_VERSIONS) {
-        if (v === APP_VERSION || !KNOWN_DATES.has(v)) continue;
+        if (v === APP_VERSION || !KNOWN_DATES.has(v) || dated.some(h => h.v === v)) continue;
+        // Historical dates can be below the ScrollView's clipped viewport.
+        // Scroll to the real card before requiring its date to be painted;
+        // do not invent publication dates for the two unpublished neighbors.
+        await page.locator(tid(`changelog-date-${v}`)).scrollIntoViewIfNeeded();
         const ver = await box(page, tid(`changelog-version-${v}`));
         const dateText = await paintedText(page, tid(`changelog-date-${v}`));
         const date = painted(dateText) ? await box(page, tid(`changelog-date-${v}`)) : null;
@@ -272,7 +275,8 @@ async function run({ phone }) {
         if (dated.length === 2) break;
       }
     }
-    ck(`${vp}: date right after the version (same gap each dated card)`, dated.length > 0 && dated.every(h => Math.abs(gap(h) - gap(dated[0])) <= 0.5) && gap(dated[0]) > 0 && (!heads[0].date || gap(heads[0]) > gap(dated[0])), [...(heads[0].date ? [`current ${gap(heads[0]).toFixed(1)}`] : []), ...dated.map(h => `${h.v} ${gap(h).toFixed(1)}`)].join('/'));
+    ck(`${vp}: date right after the version (same gap each dated card)`, dated.length >= 2 && dated.every(h => Math.abs(gap(h) - gap(dated[0])) <= 0.5) && gap(dated[0]) > 0 && (!heads[0].date || gap(heads[0]) > gap(dated[0])), [...(heads[0].date ? [`current ${gap(heads[0]).toFixed(1)}`] : []), ...dated.map(h => `${h.v} ${gap(h).toFixed(1)}`)].join('/'));
+    await page.locator(tid(`changelog-card-${APP_VERSION}`)).scrollIntoViewIfNeeded();
   }
 
   // 4 single-version preview in each format
