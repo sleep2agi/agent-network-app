@@ -129,7 +129,7 @@ ck('daemon management uses a settings sidebar and full pending content pane', pa
 ck('daemon node action notes are deduplicated and hidden until selection', page.includes('new Set(actions.map(action => actionReason(action)).filter(Boolean))') && page.includes('{selected ? ('));
 ck('hub sidebar exposes SKILLS / 令牌 / Provider tabs', sidebar.includes('testID="server-pending-tabs"') && sidebar.includes('PendingSegmentedTabs'));
 ck('hub pending screen renders tab panels', hub.includes('HubPendingScreen') && hub.includes('BackendPendingIntegration'));
-ck('node keeps its section IA and adds only the key demo', nodeDetail.includes("section === 'secrets'") && nodeDetail.includes('<NodeSecretPendingSection') && !nodeDetail.includes('NodeIntegrationsSection'));
+ck('node keeps its section IA and uses the scoped key manager', nodeDetail.includes("section === 'secrets'") && nodeDetail.includes('<ScopedSecretsSection') && !nodeDetail.includes('<NodeSecretPendingSection') && !nodeDetail.includes('NodeIntegrationsSection'));
 ck('pending chrome reuses theme tokens (buttons + settings-style segments)', pendingUi.includes('buttonStyle') === false && pendingUi.includes('segmentSelected') && ui.includes('buttonStyle('));
 ck('pending forms use responsive field grids and compact catalog rows', ui.includes('demoStyles.fieldGrid') && ui.includes('<ProviderCatalogRow') && ui.includes('flexBasis: 220'));
 ck('provider catalog and fields use the compact treatment', ui.includes('demoStyles.providerCard') && ui.includes('demoStyles.providerFieldGrid') && ui.includes("minHeight: 50"));
