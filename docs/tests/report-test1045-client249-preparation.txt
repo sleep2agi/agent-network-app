@@ -1,0 +1,45 @@
+#998/#1045 client249 preparation checkpoint — NOT PUBLISHED
+OBSERVED_AT=2026-10-12 08:04+08
+
+Source/scope
+- Base main d3705a8ca7f8d738cf399e1666ae574b38b176ae includes HTTP PR882 and
+  current-account stale-flag PR883. Candidate branch release/client249-pair.
+- Candidate tree before this report:4b28645f8b029e6fb0aceb3bc84776d6277f2786.
+- Only eight version locations, Android code2249, workflow notes and mechanically
+  generated bundled notes. Cargo.lock changes only the desktop root package.
+- Anonymous tag/draft preflight found no desktop-v0.2.249 on08:04+08.
+- Candidate notes name Hub127/CLI169/runtime135 and clearly state that updating
+  the client does not upgrade a remote server.
+
+Docker metadata checks
+- Existing anet-app:mobile-provider-entry-core source/test image, candidate
+  source/manifests/native/.github/scripts read-only at /app, network none.
+- Version consistency14/14 PASS; actual Android notes generator for249 PASS.
+- Bundled changelog7/7 PASS; release-note hygiene9/9 PASS.
+- First harness used node --import tsx, but the image has Bun rather than tsx:
+  ERR_MODULE_NOT_FOUND setup failure before assertions. Corrected to the image's
+  installed Bun; no new dependency, modified assertion or product workaround.
+- Generator --no-dates preserves actual recorded dates and does not invent a
+  release timestamp for249.
+- Behavioral evidence remains report-test1045-provider-http.txt and
+  report-test998-current-account-flag.txt. No redundant full feature suite,
+  native account, OAuth or model inference performed for this version metadata.
+
+Not ready for formal release
+- Current native installer still references CLI166/runtime132; current bundled
+  Hub is125. These are not HTTP-capable release inputs.
+- Backend metadata PR2636 candidate335fa4d756551fc198fa37c81bdd5f746d7828c8
+  still needs required CI/main merge and formal Hub127/runtime135/CLI169 release.
+- After actual immutable package bytes are readable, update sidecar
+  package/lock/SRI, native Hub expectation and exact native installer
+  URL/SHA256/version fixtures in this candidate. No invented hashes.
+- This checkpoint is not a public package, native installer result or a
+  completed #1045. Build/sign/publication only from an exact full40 main SHA.
+- Primary platforms macOS/Windows/Android. Linux deferred; iOS last.
+
+Cleanup/recovery
+- Test containers --rm; no host/global install, production account, credentials,
+  service activation, schema or data changes. Owned branch/test images retained.
+- Existing docs/desktop-release-sop.md remains release/recovery authority.
+  No new startup/port/proxy/tunnel/secret source; retain old desktop/software and
+  protected profile/database backups. Git does not recreate production data.
