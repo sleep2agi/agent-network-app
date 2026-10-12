@@ -135,3 +135,37 @@ Failure-only diagnostic receipt, OBSERVED_AT=2026-10-12T06:06:00Z (14:06+08):
   reduced private-root or registration assertion, no new identity/model task.
   Diagnostic explains a reproducible pre-Hub refusal; it is not the original
   successful creation. Corrected real UI registration still must run in Actions.
+
+Accepted CURRENT public-pair core, OBSERVED_AT=2026-10-12T06:13:24Z (14:13+08):
+- Fixture dad7c42531586d65a766cf741d2c1be8edc6ff0b;
+  run38211007236/job114685042005 completed SUCCESS14:11:16.
+  Real native registration step SUCCESS14:11:11; cleanup SUCCESS14:11:12.
+  Contract prerequisite SUCCESS independently; historical linux-deb SKIPPED.
+- Actual app source945cecf3722b9daadeb8e32bd7a0bd7b9f1e7aae and reused deb
+  5e4e15b31aac772cc295132da4c5384982fe815e0a0532e02862a9c1c57f8256 remain
+  separate from fixture source. Full desktop compiler SKIPPED, not a new build
+  or release. Public CLI170/runtime136 from exact mainf860 unchanged; Hub127
+  from31b0 unchanged. No source-candidate overlay or npm visibility claim.
+- Native local profile/Secret Service/401 refusal, scan's zero registration,
+  native install/online daemon/actual readiness and actual UI create succeeded.
+  One request cr_8fdc1ea4-fb1b-4397-a183-10d7442d67c9 binds node
+  node_8fdc1ea4-fb1b-4397-a183-10d7442d67c9/network net_bbce2501859b,
+  private0600 V1 headless safe config, active token, matched API roster and
+  live worker PID546/start_ticks23405. Identity remained stable during observer.
+  Model selection opencode/mimo-v2.6-flash-free persisted; no model dispatch.
+- Downloaded artifact11728543877 (51,133,216B; ZIP digest
+  2d8cdaf078aa75bd5199f9cf0040c858b3972802e0deda0f29d4368eb6053972).
+  Recalculated actual deb hash matches above. Reviewed v1-complete.png: node
+  online2/2 and completion button, no loading state. Proof JSON source/hash match.
+  Both owned container snapshots exited0/image
+  sha256:ef492d47e4270de509343a4a768145940001a5d51acd8853d93773d05a530910,
+  then removed by successful cleanup. Failure-only replay was NOT executed.
+- This closes only current-pair native V1 registration core. Missing private
+  OS runtime directory was an actual fixture prerequisite: supplying0700 under
+  the same published gates now passes the original registration assertion.
+  Keep previous failing runs as separate history, not retrospective PASS.
+- NOT proved: external model/OAuth entitlements, ACP model reply, lifecycle,
+  V2 TUI/current native launch, fresh npm install, Windows/macOS native operation,
+  formal main merge/rebuilt publication or production activation. Original broad
+  checklist remains1/3 until those actual requested gates/review are reconciled.
+  Do not repeat this passing core merely to fill the next inspection window.
