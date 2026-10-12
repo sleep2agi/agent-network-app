@@ -9,7 +9,7 @@ workflow = yaml.load(Path('/fixture/workflow.yml').read_text(), Loader=yaml.Base
 source = 'ded59ce7417ed8b0d22290d9c6fcb6e5c3fb324a'
 suite_dirs = ['linux-native-opencode-v1', 'linux-native-v1-registration',
               'linux-native-v1-model', 'linux-native-v1-candidate-runtime',
-              'linux-native-v1-lifecycle', 'linux-native-v1-ci']
+              'linux-native-v1-lifecycle', 'linux-native-v1-ci', 'linux-native-current-v1']
 ordered = [
     'Checkout exact V1 backend candidate (TEST ONLY)',
     'Build source-bound V1 model and lifecycle fixtures (not registry acceptance)',
@@ -38,7 +38,7 @@ negatives = {
 def check(doc):
     assert doc['permissions'] == {'contents': 'read'}, 'read-only permissions'
     focus = doc['on']['workflow_dispatch']['inputs']['focus']
-    assert focus['default'] == 'full' and focus['options'] == ['full', 'v1-registration'], 'full default and bounded manual focus'
+    assert focus['default'] == 'full' and focus['options'] == ['full', 'v1-registration', 'current-v1-registration'], 'full default and bounded manual focus'
     for directory in suite_dirs:
         assert 'tests/' + directory + '/**' in doc['on']['pull_request']['paths'], 'suite path trigger'
     job = doc['jobs']['linux-deb']
@@ -98,6 +98,24 @@ def check(doc):
     for step in steps:
         if 'run' in step:
             subprocess.run(['bash', '-n'], input=step['run'], text=True, check=True)
+    current = doc['jobs']['current-v1-registration']
+    assert current['if'] == "github.event_name == 'workflow_dispatch' && inputs.focus == 'current-v1-registration'", 'current pair manual only'
+    assert current['needs'] == 'v1-ci-contract', 'current pair contract prerequisite'
+    current_steps = current['steps']
+    assert current_steps[0]['with']['persist-credentials'] == 'false'
+    assert all(s.get('continue-on-error', 'false') == 'false' for s in current_steps)
+    runs = [s['run'] for s in current_steps if 'run' in s]
+    assert '--target current-prefix' in runs[2], 'current public pair, not historical prefix'
+    assert 'linux-native-v1-candidate-runtime/Dockerfile' not in ''.join(runs), 'no source-candidate overlay'
+    assert '-e TEST_V1_REGISTRATION_ONLY=1' in runs[5], 'registration before any model/lifecycle'
+    for command in runs[4:6]:
+        assert '--network none --cap-drop ALL --security-opt no-new-privileges' in command
+    cleanup = current_steps[-2]
+    assert cleanup['if'] == 'always()' and 'docker rm -f "$name" || cleanup_failed=1' in cleanup['run']
+    assert all(name in cleanup['run'] for name in ['current-deb-artifacts', 'current-v1-atomic', 'current-v1-registration'])
+    assert current_steps[-1]['if'] == 'always()' and current_steps[-1]['with']['name'].startswith('TEST-ONLY-')
+    for command in runs:
+        subprocess.run(['bash', '-n'], input=command, text=True, check=True)
 
 
 check(workflow)

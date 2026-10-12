@@ -32,7 +32,7 @@ registerTranslations({
   'accounts.reauth': ['登录已失效，点一下重新验证', 'Signed out. Tap to sign in again.'],
   'accounts.local': ['本地工作区', 'Local workspace'],
   'accounts.addTitle': ['添加账号', 'Add an account'],
-  'accounts.addCopy': ['登录另一个账号或服务器。当前账号会保持登录，之后可在「设置 → 切换账号」里切回。', 'Sign in to another account or server. Your current account stays signed in; switch back from Settings → Switch account.'],
+  'accounts.addCopy': ['登录另一个账号或 Hub。当前账号会保持登录，之后可在「设置 → 切换账号」里切回。', 'Sign in to another account or Hub. Your current account stays signed in; switch back from Settings → Switch account.'],
   'accounts.cancelAdd': ['取消，返回当前账号', 'Cancel and go back'],
   // 每行账号的「复制」「编辑」(Vincent 2026-09-30「账号 支持一下复制 编辑」)。
   'accounts.copy': ['复制', 'Copy'],

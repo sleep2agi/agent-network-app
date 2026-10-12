@@ -1,0 +1,34 @@
+Client 0.2.242 release preparation (not publication)
+OBSERVED_AT=2026-10-11T14:38Z
+Base main=15756698b9cc9b3e6a760959b2a730ece9352c8c
+Feature evidence: #1018 report-test1018-prelogin-update.txt;
+#1020 report-test1020-hub-tokens.txt (actual source/exported UI already passed).
+
+Initial candidate changed only version/notes inputs. No repeated unchanged
+installer suite.
+Docker dependency environment: tests/test1020-hub-tokens/Dockerfile core image
+manifest sha256:0ba35baf164330fb5457219c60c321a75a237c4d65aa9125cbcf50c1d8b1c0c5.
+Current candidate source mounted read-only /candidate; all checks --rm --init
+--network none, no host/global npm or credentials written.
+
+version-consistency: 14/14 PASS (all eight version locations, Android 2242).
+release-notes-hygiene: 9/9 PASS.
+changelog-bundled: 7/7 PASS (generator output and real published dates).
+modelscope-mirror: 62/62 PASS, including current-version Android notes extraction.
+git diff --check PASS.
+
+No formal 0.2.242 build, tag, signed asset, public release or updater-channel write.
+Merge the bump only after existing unit CI passes; dispatch public workflows
+against the resulting full40 exact main SHA, never this feature branch.
+Priority platforms remain macOS/Windows/Android. Linux deferred.
+
+Increment 2026-10-11T14:49Z: Windows CI exact573374aa failed 404/405 files.
+The only failure was ui-scale-wiring: PreloginUpdateCheck imported raw RN Text.
+Changed only that import to the existing ui-text wrapper, preserving scaling
+criteria. Docker exact candidate ui-scale-wiring 48/48 PASS; no assertion changed.
+Login-before-update core 9 assertions PASS. Corrected-source Docker export image
+sha256:059212afaf714e18c8bc42e522fce444ce1ec286807ad4c7b392374d4d15d2d3:
+actual Chromium first-run/login entry, empty fields and disabled login,
+offline error/retry, no Hub auth calls, login retention, existing installer
+prompt all PASS. This is synthetic native IPC, not signed-package installation.
+Cloud CI must pass on the new head; old candidate results are not inherited.

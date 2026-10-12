@@ -9,7 +9,8 @@
     "tray-panel",
     "image-viewer",
     "settings",
-    "task-*"
+    "task-*",
+    "daemon-settings-*"
   ],
   "permissions": [
     "core:default",

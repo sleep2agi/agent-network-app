@@ -21,14 +21,24 @@ import { reconcileNetworkId, validateNewUser } from './src/user-admin';
 import './src/i18n-users';
 import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
 import { hydrateHubAvatars, initLocalAvatars } from './src/lib/avatars';
-import { hydrateNodeRoles } from './src/daemon-node';
+import { hydrateNodeRoles, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRoles } from './src/daemon-node';
 import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's App.tsx no longer imports it)
 import ChatScreen, { clearChatConversationCache } from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
 import ServerScreen from './src/ServerScreen';
 import { maskedHubHost, maskUrlsInText } from './src/mask-hub-address';
 import { agentListScreen, type AgentListFilter } from './src/server-stats';
-import ServerSidebar, { type ServerSection } from './src/ServerSidebar';
+import ServerSidebar, { isHubPendingSection, type ServerSection } from './src/ServerSidebar';
+import HubPendingScreen from './src/HubPendingScreen';
+import HubDaemonEntryScreen from './src/HubDaemonEntryScreen';
+import type { PendingTab } from './src/backend-pending-ui';
+import HubScopeScreen from './src/HubScopeScreen';
+import HubTokenManagementScreen from './src/HubTokenManagementScreen';
+import HubProviderManagementScreen from './src/HubProviderManagementScreen';
+import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
+import DaemonOverviewFixtureScreen, { readDaemonOverviewFixture } from './src/DaemonOverviewFixtureScreen';
+import CloneNodeFixtureScreen, { readCloneNodeFixture } from './src/CloneNodeFixtureScreen';
+import { hubSectionForScreen, screenForHubSection, type HubSection } from './src/hub-scope-demo';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
 import SettingsScreen from './src/SettingsScreen';
@@ -48,7 +58,7 @@ import WeakPasswordBanner from './src/WeakPasswordBanner';
 import { weakPasswordFlags } from './src/weak-password-flag';
 import type { HostSupervisorDaemon } from './src/api';
 import { clearConfig, listHubProfiles, loadConfig, loadHubProfile, loadLocalAvatars, loadOutbox, loadForwardOperations, saveForwardOperations, loadThemeMode, loadUiScalePrefs, markHubProfileRequiresReauth, onDesktopThemeStorageChange, persistProfileNetworkId, onDesktopUiScaleStorageChange, removeHubProfile, saveConfig, saveLocalAvatars, saveOutbox, sessionIdOf, switchHubProfile, type HubProfile } from './src/storage';
-import { clearProfileUnauthorized, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
+import { clearProfileUnauthorized, isCurrentProfileCredential, onProfileUnauthorized, profileUnauthorizedReason } from './src/profile-auth-state';
 import { initOutbox } from './src/outbox';
 import { createForwardPersistence, initForwardController } from './src/forward-controller';
 import { loadDesktopThemeMode } from './src/desktop-theme-storage';
@@ -70,6 +80,7 @@ import { badgeOffsetCentered } from './src/badge-anchor';
 import DesktopUpdatePrompt from './src/DesktopUpdatePrompt';
 import { desktopPromptMode } from './src/update-prompt-model';
 import AndroidUpdatePrompt from './src/AndroidUpdatePrompt';
+import PreloginUpdateCheck from './src/PreloginUpdateCheck';
 import DesktopMessageListener from './src/DesktopMessageListener';
 import { requestOpenTask } from './src/task-open-request';
 import DesktopNotifier from './src/DesktopNotifier';
@@ -81,6 +92,8 @@ import ImageViewerWindow from './src/ImageViewerWindow';
 import { readImageWindowRoute } from './src/image-window-model';
 import TaskWindow from './src/TaskWindow';
 import { readTaskWindowRoute } from './src/task-window-model';
+import { readDaemonSettingsWindow } from './src/daemon-settings-window';
+import DaemonSettingsWindow from './src/DaemonSettingsWindow';
 import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, followThemeInSettingsTitleBar, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsDetail, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
@@ -113,18 +126,33 @@ type Screen =
   | { name: 'scheduled'; open?: ScheduleOpenRequest; back?: Screen }  // open/back: 从节点页「定时任务」分区来 —— 落点 + 返回回节点页
   | { name: 'messages' }
   | { name: 'server' }
+  | { name: 'serverPending'; tab: PendingTab }
+  | { name: 'serverDaemon' }                // Hub 域集成 → Daemon：一台直接进管理页，多台先点选，点下去仍是 openDaemonFromHub
   | { name: 'serverNodes'; filter?: AgentListFilter }
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
-  | { name: 'chat'; alias: string; focusTaskId?: string; networkId?: string }  // focusTaskId: 定时任务「去会话」要定位的那条任务;networkId: #769 点的那行所在网络
+  | { name: 'chat'; alias: string; focusTaskId?: string; networkId?: string; daemonMgmt?: boolean }  // daemonMgmt: Hub 概览点机器进守护进程管理(角色未 hydrate 时也显示管理页)
   | { name: 'dm'; alias: string; userId: string; displayName?: string | null; avatarUrl?: string | null }  // 人与人私信(hub#2086);alias = 对方用户名
   | { name: 'group'; alias: string; groupName?: string }  // 群聊(RFC-042,Hub ≥ .93);alias = group_id
-  | { name: 'nodeInfo'; alias: string }
+  | { name: 'nodeInfo'; alias: string; daemonMgmt?: boolean }
   | { name: 'taskDetail'; taskId: string }   // full-screen (no tab bar) — hardware back returns to /tasks list
   | { name: 'nodeDetail'; alias: string }  // issue #8 row 4 (V1) — 会话行菜单「节点详情」(以前是直接长按); back returns to agents
   | { name: 'logs' }                        // row 6 — network event stream leaf reached from Server tab; back returns to server
+  | { name: 'hubSkills' }                   // 服务器管理侧栏 · Hub SKILLS（演示壳）
+  | { name: 'hubTokens' }                   // 服务器管理侧栏 · Hub API 密钥库
+  | { name: 'hubEnv' }                      // 服务器管理侧栏 · Hub 环境变量（演示壳，不是 #909 三层）
+  | { name: 'hubProviders' }                // 当前网络的真实 Hub Provider 配置及显式 Daemon 下发
   | { name: 'picker' }       // #338 RFC-026 §9.4 host_supervisor picker (modal-style, back returns to agents)
-  | { name: 'wizard'; daemon: HostSupervisorDaemon };  // #338 wizard rest (Plan B) — created after picker selects a daemon
+  | { name: 'wizard'; daemon: HostSupervisorDaemon; back?: Screen };  // back: 从某台 daemon 的管理页进来时,返回回到那一页
+
+/** Hub 服务器概览点机器行:进该 daemon 的管理域(节点设置 + 虚拟机域设置)。 */
+const openDaemonFromHub = (alias: string): Screen => ({ name: 'chat', alias, daemonMgmt: true });
+
+const nodeInfoFromChat = (chat: Extract<Screen, { name: 'chat' }>): Screen =>
+  ({ name: 'nodeInfo', alias: chat.alias, daemonMgmt: chat.daemonMgmt });
+
+const chatBackFromNodeInfo = (info: Extract<Screen, { name: 'nodeInfo' }>): Screen =>
+  ({ name: 'chat', alias: info.alias, daemonMgmt: info.daemonMgmt });
 
 // 跟微信的学一学 (Vincent tg 807): icon over small label, active tint.
 // Desktop keeps operational modules together and pins Settings to the bottom.
@@ -177,7 +205,7 @@ export default function App() {
   // 0.2.101「跟随系统」:先同步读系统配色并订阅它的变化(幂等,每个窗口的 JS 上下文装一次),
   // 再同步读用户偏好。存储里没有值(新装)= 跟随系统;旧版存的 light/dark 原样沿用。
   // undefined = 不是桌面壳(移动端),偏好等下面异步的 loadThemeMode() 再定。
-  installSystemThemeFollower({ subscribe: !(requestedSettingsWindow() && isWindowsTauriShell()) });
+  installSystemThemeFollower({ subscribe: !((requestedSettingsWindow() || readDaemonSettingsWindow()) && isWindowsTauriShell()) });
   {
     const early = loadDesktopThemeMode();
     if (early !== undefined) setThemePreference(parseStoredThemePreference(early));
@@ -225,6 +253,10 @@ export default function App() {
     );
   }
 
+  if (Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ && readDaemonSettingsWindow()) {
+    return <SafeAreaProvider><DaemonSettingsWindow /></SafeAreaProvider>;
+  }
+
   if (readFatalFixture()) {
     return (
       <SafeAreaProvider>
@@ -248,6 +280,36 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <UpdatePromptFixtureScreen fixture={updateFixture} />
+      </SafeAreaProvider>
+    );
+  }
+
+  const daemonOverviewFixture = readDaemonOverviewFixture();
+  if (daemonOverviewFixture) {
+    if (themeMode() !== daemonOverviewFixture.theme) setThemeMode(daemonOverviewFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <DaemonOverviewFixtureScreen theme={daemonOverviewFixture.theme} mode={daemonOverviewFixture.mode} />
+      </SafeAreaProvider>
+    );
+  }
+
+  const cloneNodeFixture = readCloneNodeFixture();
+  if (cloneNodeFixture) {
+    if (themeMode() !== cloneNodeFixture.theme) setThemeMode(cloneNodeFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <CloneNodeFixtureScreen />
+      </SafeAreaProvider>
+    );
+  }
+
+  const hubFixture = readHubScopeFixture();
+  if (hubFixture) {
+    if (themeMode() !== hubFixture.theme) setThemeMode(hubFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <HubScopeFixtureScreen theme={hubFixture.theme} section={hubFixture.section} />
       </SafeAreaProvider>
     );
   }
@@ -600,9 +662,12 @@ function AppRoot() {
   useEffect(() => onProfileUnauthorized(profileId => {
     if (!cfg || profileId !== sessionIdOf(cfg)) return;
     void (async () => {
+      let superseded = false;
       try {
-        await markHubProfileRequiresReauth(profileId);
+        superseded = !(await markHubProfileRequiresReauth(profileId, true, cfg.token));
       } finally {
+        // Credential persistence can finish while this old callback is waiting.
+        if (superseded || !isCurrentProfileCredential(profileId, cfg.token)) return;
         requestProfileReauth({ profileId, serverUrl: cfg.serverUrl, username: cfg.username ?? '', displayName: cfg.displayName });
       }
     })();
@@ -674,12 +739,12 @@ function AppRoot() {
       }
       // logs is a full-screen leaf under the Server tab — hardware back
       // returns to Server, not skipping past to Agents.
-      if (screen.name === 'logs') {
+      if (screen.name === 'logs' || screen.name === 'serverDaemon') {
         setScreen({ name: 'server' });
         return true;
       }
       if (screen.name === 'nodeInfo') {
-        setScreen({ name: 'chat', alias: screen.alias });
+        setScreen(chatBackFromNodeInfo(screen));
         return true;
       }
       // Phone: 服务器 is pushed from 设置 (no bottom tab any more) — back returns there.
@@ -689,6 +754,10 @@ function AppRoot() {
       }
       // 从节点页的「定时任务」分区点进来的:返回回到那个节点页,而不是跳回 Agents。
       if (screen.name === 'scheduled' && screen.back) {
+        setScreen(screen.back);
+        return true;
+      }
+      if (screen.name === 'wizard' && screen.back) {
         setScreen(screen.back);
         return true;
       }
@@ -756,8 +825,10 @@ function AppRoot() {
           <ChatScreen
             cfg={cfg}
             alias={detachedAlias}
+            daemonMgmt={screen.daemonMgmt}
             onBack={() => {}}
-            onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}
+            onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias, daemonMgmt: screen.daemonMgmt })}
+            onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias })}
             desktop
             windowChrome={windowChrome}
           />
@@ -765,7 +836,7 @@ function AppRoot() {
           <NodeDetailScreen
             cfg={cfg}
             alias={detachedAlias}
-            onBack={() => setScreen({ name: 'chat', alias: detachedAlias })}
+            onBack={() => setScreen(chatBackFromNodeInfo(screen))}
             readOnly
             windowChrome={windowChrome}
           />
@@ -924,11 +995,13 @@ function AppRoot() {
                         cfg={cfg}
                         alias={screen.alias}
                         networkId={screen.networkId}
+                        daemonMgmt={screen.daemonMgmt}
                         onBack={() => setScreen({ name: 'agents' })}
                         hideBack
-                        onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+                        onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
-                        onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
+                        onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId, daemonMgmt: screen.daemonMgmt } })}
+                        onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
                         onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                         focusTaskId={screen.focusTaskId}
                         pinned={mobilePins.includes(screen.alias)}
@@ -941,7 +1014,7 @@ function AppRoot() {
                     ) : screen.name === 'group' && cfg.networkId ? (
                       <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} hideBack />
                     ) : screen.name === 'nodeInfo' ? (
-                      <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+                      <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
                     ) : screen.name === 'nodeDetail' ? (
                       <NodeDetailScreen key={`nodeDetail:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
                     ) : (
@@ -960,10 +1033,12 @@ function AppRoot() {
                   cfg={cfg}
                   alias={screen.alias}
                   networkId={screen.networkId}
+                  daemonMgmt={screen.daemonMgmt}
                   onBack={() => setScreen({ name: 'agents' })}
-                  onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
+                  onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
-                  onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
+                  onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId, daemonMgmt: screen.daemonMgmt } })}
+                  onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
                   onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                   focusTaskId={screen.focusTaskId}
                   pinned={mobilePins.includes(screen.alias)}
@@ -977,7 +1052,7 @@ function AppRoot() {
                 // 手机:微信式推入的整页群聊,左上角返回会话列表。
                 <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} />
               ) : screen.name === 'nodeInfo' ? (
-                <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+                <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
               ) : screen.name === 'nodeDetail' ? (
                 // issue #8 row 4 (V1) — 会话行菜单(长按)里的「节点详情」
                 // opens this. Back returns to agents. Rendered as its own screen
@@ -1006,8 +1081,8 @@ function AppRoot() {
                 <CreateNodeWizardScreen
                   cfg={cfg}
                   daemon={screen.daemon}
-                  onBack={() => setScreen({ name: 'picker' })}
-                  onExit={() => setScreen({ name: 'agents' })}
+                  onBack={() => setScreen(screen.back ?? { name: 'picker' })}
+                  onExit={() => setScreen(screen.back ?? { name: 'agents' })}
                 />
               ) : screen.name === 'taskDetail' ? (
                 // Task detail — full-screen (no tab bar), matches the mobile
@@ -1045,10 +1120,20 @@ function AppRoot() {
                       cfg={cfg}
                       onOpenLogs={() => setScreen({ name: 'logs' })}
                       onOpenAgents={filter => setScreen(agentListScreen(filter, 'mobile') as Screen)}
+                      onOpenDaemon={alias => setScreen(openDaemonFromHub(alias))}
                       onOpenNodes={() => setScreen({ name: 'agents' })}
                       onCreateNode={() => setScreen({ name: 'picker' })}
                       onOpenScheduled={() => setScreen({ name: 'scheduled' })}
+                      onOpenProviders={() => setScreen({ name: 'hubProviders' })}
                       onBack={phoneSettingsBackTarget(layout, screen.name) ? () => setScreen({ name: 'settings' }) : undefined}
+                    />
+                  ) : screen.name === 'hubProviders' || (screen.name === 'serverPending' && screen.tab === 'provider') ? (
+                    <HubProviderManagementScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} />
+                  ) : screen.name === 'serverDaemon' ? (
+                    <HubDaemonEntryScreen
+                      cfg={cfg}
+                      onBack={() => setScreen({ name: 'server' })}
+                      onOpenDaemon={alias => setScreen(openDaemonFromHub(alias))}
                     />
                   ) : screen.name === 'settings' ? (
                     <SettingsScreen
@@ -1110,7 +1195,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
       <View style={[entryStyles.card, compact && entryStyles.cardCompact]}>
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <Text style={entryStyles.title}>ANet</Text>
-        <Text style={entryStyles.copy}>在这台电脑创建本地工作区，数据留在本机；也可以登录已有服务器。</Text>
+        <Text style={entryStyles.copy}>在这台电脑创建本地工作区，数据留在本机；也可以登录已有 Hub。</Text>
         {error ? <View style={entryStyles.errorBox}><Ionicons name="alert-circle-outline" size={17} color={colors.failed} /><Text style={entryStyles.error}>{maskUrlsInText(error)}</Text></View> : null}
         <Pressable
           accessibilityRole="button"
@@ -1127,8 +1212,9 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
         </Pressable>
         <Pressable accessibilityRole="button" disabled={busy} style={({ pressed }) => [entryStyles.secondary, pressed && entryStyles.secondaryPressed]} onPress={onRemote}>
           <Ionicons name="globe-outline" size={17} color={colors.textSecondary} />
-          <Text style={entryStyles.secondaryText}>使用已有服务器登录</Text>
+          <Text style={entryStyles.secondaryText}>使用已有 Hub 登录</Text>
         </Pressable>
+        <PreloginUpdateCheck />
       </View>
       </ScrollView>
     </View>
@@ -1201,8 +1287,13 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const notifyKey = notifyProfileKey(cfg);
   const mutedAliases = mutedAgents(notifySettings, notifyKey);
   const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
-  const serverWorkspace = ['server', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard'].includes(screen.name);
+  const serverWorkspace = ['server', 'serverPending', 'serverDaemon', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders'].includes(screen.name);
   const taskWorkspace = screen.name === 'tasks' || screen.name === 'taskDetail';
+  useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
+  // Daemon management has its own navigation; unrelated conversations should
+  // not take a second sidebar. Keep the rail so returning to Agents is one click.
+  const daemonWorkspace = (screen.name === 'chat' || screen.name === 'nodeInfo')
+    && (screen.daemonMgmt || isHostSupervisorAlias(screen.alias));
   // 设置 → 快捷键(src/shortcuts-model.ts):主窗口的全局键盘快捷键。组合可改,读的是最新存储;
   // 设置页正在录入新组合时不执行。⌘K:列表栏是服务器侧栏时先切回 Agents,再请求聚焦搜索框。
   const [shortcutToast, setShortcutToast] = useState<string | null>(null);
@@ -1214,7 +1305,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const serverWorkspaceRef = useRef(serverWorkspace);
   // 任务页的左栏也不是会话列表(TaskFilterSidebar):⌘K 同样先切回 Agents —— 除非任务页自己的搜索框接走了
   // (列表 / 看板 / 甘特图上 ⌘K 聚焦任务搜索,RequirementBoard 在 window 捕获阶段 preventDefault;派发记录上照旧)。
-  serverWorkspaceRef.current = serverWorkspace || taskWorkspace;
+  serverWorkspaceRef.current = serverWorkspace || taskWorkspace || daemonWorkspace;
   useEffect(() => {
     const doc = (globalThis as any).document;
     if (!doc?.addEventListener) return;
@@ -1253,9 +1344,11 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       cfg={cfg}
       alias={screen.alias}
       networkId={screen.networkId}
+      daemonMgmt={screen.daemonMgmt}
       onBack={() => setScreen({ name: 'agents' })}
-      onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}
-      onOpenAgents={filter => setScreen(agentListScreen(filter, 'desktop') as Screen)}
+      onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}
+      onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId, daemonMgmt: screen.daemonMgmt } })}
+      onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
       focusTaskId={screen.focusTaskId}
@@ -1279,6 +1372,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       cfg={cfg}
       onOpenLogs={() => setScreen({ name: 'logs' })}
       onOpenAgents={filter => setScreen(agentListScreen(filter, 'desktop') as Screen)}
+      onOpenDaemon={alias => setScreen(openDaemonFromHub(alias))}
       onOpenNodes={() => setScreen({ name: 'serverNodes' })}
       onCreateNode={() => setScreen({ name: 'picker' })}
       onOpenScheduled={() => setScreen({ name: 'scheduled' })}
@@ -1286,15 +1380,20 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onAddServer={onAddAccount}
     />
   )
+  : screen.name === 'serverPending' ? <HubPendingScreen cfg={cfg} tab={screen.tab} />
+  : screen.name === 'serverDaemon' ? <HubDaemonEntryScreen cfg={cfg} desktop onBack={() => setScreen({ name: 'server' })} onOpenDaemon={alias => setScreen(openDaemonFromHub(alias))} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} filter={screen.filter} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
   : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} onProfileEdited={onProfileEdited} />
   : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} desktop />
   : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
-  : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+  : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
-  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen({ name: 'picker' })} onExit={() => setScreen({ name: 'serverNodes' })} desktop />
+  : screen.name === 'wizard' ? <CreateNodeWizardScreen cfg={cfg} daemon={screen.daemon} onBack={() => setScreen(screen.back ?? { name: 'picker' })} onExit={() => setScreen(screen.back ?? { name: 'serverNodes' })} desktop />
+  : screen.name === 'hubProviders' ? <HubProviderManagementScreen cfg={cfg} />
+  : screen.name === 'hubTokens' ? <HubTokenManagementScreen cfg={cfg} />
+  : hubSectionForScreen(screen.name) ? <HubScopeScreen key={screen.name} section={hubSectionForScreen(screen.name)!} />
   : (
     <View style={desktopStyles.empty}>
       <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
@@ -1350,7 +1449,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
         {/* 连接状态(App战线①):不再是顶部全宽横幅,是版本号左边一个小圆点,悬停/点按看全文(ConnectivityIndicator)。 */}
         <ConnectivityIndicator placement="rail" label={`v${APP_VERSION}`} labelStyle={desktopStyles.railVersionText} style={desktopStyles.railVersion} />
       </View>
-      <View style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
+      {!daemonWorkspace ? <View testID="desktop-workspace-sidebar" style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
         {taskWorkspace ? (
           // 任务页的左栏是筛选(全部 / 我负责的 / 按节点 / 派发记录),不是会话列表。
           <TaskFilterSidebar onNavigate={() => { if (screen.name !== 'tasks') setScreen({ name: 'tasks' }); }} />
@@ -1359,12 +1458,18 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
             if (section === 'overview') setScreen({ name: 'server' });
             else if (section === 'nodes') setScreen({ name: 'serverNodes' });
             else if (section === 'create') setScreen({ name: 'picker' });
-            else setScreen({ name: 'logs' });
+            else if (section === 'logs') setScreen({ name: 'logs' });
+            else if (isHubPendingSection(section)) setScreen({ name: 'serverPending', tab: section });
+            else if (section === 'daemon') setScreen({ name: 'serverDaemon' });
+            else {
+              const hub = hubSectionForScreen(section);
+              if (hub) openHubSection(hub, setScreen);
+            }
           }} />
         ) : (
           <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || maskedHubHost(cfg.serverUrl)); }} onOpenChat={(alias, networkId) => setScreen({ name: 'chat', alias, networkId })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
-      </View>
+      </View> : null}
       <View style={desktopStyles.content}>
         {/* #653 弱密码横幅:右侧内容栏顶上;点了打开设置窗口的「修改密码」(没有桌面壳时嵌在主窗口)。 */}
         {screen.name !== 'settings' ? (
@@ -1424,7 +1529,15 @@ function RailButton({ tab, active, hovered, onHover, onPress, styles, extraStyle
   );
 }
 
+function openHubSection(section: HubSection, setScreen: (screen: Screen) => void) {
+  setScreen({ name: screenForHubSection(section) });
+}
+
 function serverSectionForScreen(screen: Screen): ServerSection {
+  if (screen.name === 'serverPending') return screen.tab;
+  if (screen.name === 'serverDaemon') return 'daemon';
+  const hub = hubSectionForScreen(screen.name);
+  if (hub) return screenForHubSection(hub);
   if (screen.name === 'serverNodes' || screen.name === 'serverNodeDetail') return 'nodes';
   if (screen.name === 'picker' || screen.name === 'wizard') return 'create';
   if (screen.name === 'logs') return 'logs';
@@ -1556,11 +1669,11 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
         <Image source={require('./assets/splash-icon.png')} style={entryStyles.logo} resizeMode="contain" />
         <View style={loginStyles.heading}>
           <Text style={entryStyles.title} testID={expired ? 'login-expired-title' : onCancelAdd && !initialProfile && !registering ? 'login-add-account-title' : undefined}>{expired ? t('sessions.expiredTitle') : initialProfile ? '重新验证账号' : registering ? t('login.registerTitle') : onCancelAdd ? t('accounts.addTitle') : '连接你的工作区'}</Text>
-          <Text style={entryStyles.copy}>{expired ? t('sessions.expiredCopy') : initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : registering ? t('login.registerCopy') : onCancelAdd ? t('accounts.addCopy') : '输入服务器和账号信息，继续与你的 Agent 协作。'}</Text>
+          <Text style={entryStyles.copy}>{expired ? t('sessions.expiredCopy') : initialProfile ? '登录状态已失效。重新验证只会更新这个账号，其他工作区不会受到影响。' : registering ? t('login.registerCopy') : onCancelAdd ? t('accounts.addCopy') : '输入 Hub 和账号信息，继续与你的 Agent 协作。'}</Text>
         </View>
         <View style={loginStyles.form}>
           <View style={loginStyles.field}>
-            <Text style={loginStyles.label}>服务器地址</Text>
+            <Text style={loginStyles.label}>Hub 地址</Text>
             <View style={loginStyles.inputShell}>
               <Ionicons name="server-outline" size={18} color={colors.textMuted} />
               <TextInput
@@ -1572,7 +1685,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
                 keyboardType="url"
                 value={serverUrl}
                 onChangeText={setServerUrl}
-                accessibilityLabel="服务器地址"
+                accessibilityLabel="Hub 地址"
               />
             </View>
           </View>
@@ -1687,7 +1800,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
       ) : null}
       {/* Version on the login page so device screenshots are
           unambiguous about which build is installed (tg 692). */}
-      <View style={loginStyles.securityNote}><Text style={loginStyles.version}>v{APP_VERSION}</Text></View>
+      <PreloginUpdateCheck />
       </View>
       </ScrollView>
     </KeyboardAvoidingView>

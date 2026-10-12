@@ -538,7 +538,7 @@ export default function AgentsScreen({
     return (
       <View style={styles.center}>
         <Text style={styles.errorTitle}>连接失败</Text>
-        <Text style={styles.errorHint}>网络不稳定或服务器未响应，请重试</Text>
+        <Text style={styles.errorHint}>网络不稳定或 Hub 未响应，请重试</Text>
         <Pressable
           style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
           onPress={() => {

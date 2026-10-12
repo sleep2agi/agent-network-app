@@ -4,6 +4,16 @@ import { maskedHubHost } from './mask-hub-address';
 export interface NodeInfoFact {
   label: string;
   value?: string | null;
+  /** Long opaque values wrap in full (no 2-line ellipsis) so they stay readable and selectable. */
+  wrap?: boolean;
+  testID?: string;
+}
+
+/** Full-status resume id. Non-strings and blank values are absent (the cell shows 「—」). */
+export function resumeSessionId(value: unknown): string | undefined {
+  if (typeof value !== 'string') return undefined;
+  const trimmed = value.trim();
+  return trimmed.length > 0 ? trimmed : undefined;
 }
 
 const TOKEN_SHAPE = /^(?:[aun]tok(?:[_\-.\s]|[A-Za-z0-9]{8})|bearer(?:\s|[_\-.])|sk[-_])\S*/i;
@@ -72,6 +82,9 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
     { label: 'Agent', value: session.agent },
     { label: '模型', value: session.model ?? node?.model ?? node?.config_snapshot?.model },
     { label: '版本', value: session.version },
+    // Resume id sits in the cell beside 版本 on 「模型与运行时」. Always emit the row:
+    // a missing / blank / non-string session_id is an empty value, and FactCell shows 「—」.
+    { label: 'session-id', value: resumeSessionId(session.session_id), wrap: true, testID: 'node-runtime-session-id' },
     { label: '状态', value: session.status },
   ];
 }

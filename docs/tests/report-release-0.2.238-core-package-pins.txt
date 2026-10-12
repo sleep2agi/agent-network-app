@@ -1,0 +1,98 @@
+0.2.238 core package pins — TEST ONLY, not a client release
+Observed 2026-10-11 16:08 +08
+
+Hub source: main ancestor 231bf8c9711aacd9b2f78afce7c58a1873f3d280.
+Formal CI run 38121256184: build and all four publication gates SUCCESS.
+Same CI tarball publicly downloadable from:
+https://github.com/sleep2agi/agent-network/releases/download/commhub-server-v0.9.0-preview.122/sleep2agi-commhub-server-0.9.0-preview.122.tgz
+1212456 bytes; SHA256 a47a12d03db41fbf5bd2a95a0c0f4a2107d771c17aa3487c58c490fb000c553a.
+Public download cmp against original artifact: identical. No local rebuild.
+
+Docker-only targeted client delta check, --rm, readonly source mount,
+image anet-app:release-platform-selection:
+- local-hub-sidecar.test.ts: 14/14 PASS for exact .122 pin.
+- npm ci --ignore-scripts on complete sidecar lock: 99 packages installed;
+  exact .122 GitHub source and SHA512 integrity accepted.
+- production build-local-hub-sidecar.mjs: compiled .122, 96290944 bytes,
+  manifest sourceIntegrity matches lock; pre-bundle SHA256
+  7917554c5662964742f3b24cb91cb6c146ba8baaed8958c52aa6f30be5c3171f.
+- existing local-hub-runtime run.mjs: actual compiled binary health .122/v3,
+  secured startup, register/auth-me, SIGTERM, persisted DB/restart/login PASS.
+  Expected version is supplied explicitly; legacy .29 default preserved.
+No production database, credentials, global npm, or business-node process touched.
+This Linux container checks the common sidecar core; not a Linux release or
+macOS/Windows signed-package claim. Unchanged UI samples were not rerun.
+
+16:14 +08 increment:
+Hub formal npm publish/registry readback run38121256184 completed SUCCESS.
+Runtime .130 build and four gates SUCCESS; original artifact11696151921
+published as agent-node-v2.5.0-preview.130, public download cmp identical.
+585476 bytes; SHA2564160d36aab60d379c6236bb6515d69811b3f63ca9951461f10c59ff224f73f80.
+Runtime npm publish still queued; no registry visibility inferred.
+
+CLI .164 original run38123039322 gate4 FAILURE: two documentation candidate
+claims still .163. Only documentation updated in backend PR2589; exact main
+source must change/rebuild, so old internal CLI hash is a provisional draft
+pin and must be replaced by the final published main package before release.
+
+Docker targeted native installer core on draft pair .164/.130 and Hub .122:
+initialization_upgrades_old_packages_and_stops_before_overwriting_config PASS
+(1 test, 19 unchanged samples filtered out). Checks real Rust installer with
+fixture npm/Hub: old package upgrade, stop-before-write, private runtime path,
+successful supervisor readback, repeated repair keeps original daemon identity.
+First run without --init failed on orphan fixture PID still alive during the
+second repair. Docker --init corrected container child reaping; same source,
+assertions and test then passed. No relaxed stop/config-preservation contract.
+Image anet-app:daemon-pair164130 built from exact draft source. --rm --init
+--network none, no production credentials/processes. CLI registry/GitHub
+fallback installation of final package still pending its public availability.
+
+Signed client release remains pending; old shipping client is .237.
+The preceding checks were not an activation receipt.
+
+16:25 +08 increment (deployment observation, not a new product test):
+Runtime .130 formal run38123037968 completed SUCCESS, including npm publication
+and exact registry readback. CLI documentation repair PR2589 merged normally
+as main bbc7035155c8b49bc977cf7f103bd1ecdddaa78f; corrected formal .164 run
+38124619816 is queued. The provisional CLI archive hash is still NOT final.
+Hub deployment profile PR2590 merged normally as main
+e80a1af396009e3077fc546bb07feea809195f88 after ten required guards passed.
+Only commhub-hub was restarted. Real listening PID2824768 uses
+runtime-v106-preview122; /health reads .122 with 318 sessions. Running Bun
+SHA25633d56b070be6a9e3da0ab013038b43d1645d0534ca811ecdba4472599117eb4b
+matches the offline preflight executable. Fresh post-cutover heartbeat observed
+from daemon-vdev, TMA cloud storage, TMAI dog and TMA client nodes.
+Old .121 runtime and owner-only consistent DB/launcher backups retained.
+No business node restart, account login, credentials copy or inference performed.
+
+16:32 +08 increment — candidate bytes, NOT yet public:
+Corrected formal build run38124619816/job114426300483 completed SUCCESS.
+Job log verifies checkout/RELEASE_COMMIT
+bbc7035155c8b49bc977cf7f103bd1ecdddaa78f, a verified main ancestor.
+Downloaded its gated-tarball artifact11696519273, exact package name/version:
+@sleep2agi/agent-network@2.3.0-preview.164, 2115928 bytes.
+SHA2562c0d292b095005f35e28d1bde77ac23ee502c4d80a299729ab9e8e075a570453.
+Integrity sha512-O34dtPBfeOkUPfMAPSPbyyZQsjljrWeFT9gmhK2SbcaQd8BuPSqAKT8jHPHWauil0X7tiixdLJRuE6exM1fqjg==.
+The installer draft pin now references these exact corrected bytes instead of
+the old failed run's provisional archive. All four release gates, public
+download, fallback install and signed client publication still remain pending.
+
+16:36 +08 increment — final core check:
+All four corrected CLI publication gates completed SUCCESS, including real
+TTY installation, Hub login and node-create wizard. Main ancestry rechecked.
+Published the unchanged gated artifact as cli-v2.3.0-preview.164, target
+bbc7035155c8b49bc977cf7f103bd1ecdddaa78f. Tag dereferences to that exact commit.
+Anonymous GitHub download cmp against CI tarball: identical SHA256 above.
+CLI npm publish job is still queued; public GitHub fallback is available now.
+
+Docker image anet-app:daemon-pair164130-final, --rm --init, no host mount or
+production credentials, one selected existing regression:
+registry_etarget_uses_the_verified_main_archive_and_keeps_pairing PASS
+(1 passed, 0 failed, 19 unchanged tests filtered out, 2.91 seconds).
+It uses real Rust product installer and the actual anonymous published CLI
+download/hash, then checks archive installation intent, paired .130 runtime,
+init/start and temporary-archive cleanup. npm and Hub are fixture adapters,
+not a claim of a second complete real Daemon or a real OAuth login.
+The formal CLI gate separately covers real package installation and startup.
+No full old UI/drive suite rerun. Test container removed; fixture processes
+stopped by its cleanup. Client signing/publication remains pending.

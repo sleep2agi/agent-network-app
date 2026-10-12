@@ -22,7 +22,7 @@ export type NavChrome = 'rail' | 'bottomTabs' | 'none';
  * existed; login never had navigation.
  */
 export const PHONE_LEAF_SCREENS: readonly string[] = [
-  'login', 'chat', 'dm', 'group', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs',
+  'login', 'chat', 'dm', 'group', 'nodeInfo', 'nodeDetail', 'picker', 'wizard', 'taskDetail', 'logs', 'serverDaemon',
 ];
 
 /**
@@ -50,7 +50,7 @@ export function navChromeFor(layout: AppLayout, screenName: string, inPageLeaf =
 export const PHONE_SETTINGS_PUSHED_SCREENS: readonly string[] = ['server'];
 
 /** The row 设置 shows at the top of its phone list to reach 服务器 (the page itself is unchanged). */
-export const PHONE_SETTINGS_SERVER_ENTRY = { key: 'server', label: '服务器', icon: 'server-outline' } as const;
+export const PHONE_SETTINGS_SERVER_ENTRY = { key: 'server', label: 'Hub', icon: 'server-outline' } as const;
 
 /** Where back (on-screen arrow or system back) goes from a screen pushed from 设置; null = not one. */
 export function phoneSettingsBackTarget(layout: AppLayout, screenName: string): 'settings' | null {
@@ -73,7 +73,8 @@ export function navActiveKey(screenName: string): string {
   switch (screenName) {
     case 'agents': case 'chat': case 'dm': case 'group': case 'nodeInfo': case 'nodeDetail': case 'picker': case 'wizard':
       return 'agents';
-    case 'server': case 'serverNodes': case 'serverNodeDetail': case 'logs':
+    case 'server': case 'serverPending': case 'serverDaemon': case 'serverNodes': case 'serverNodeDetail': case 'logs':
+    case 'hubSkills': case 'hubTokens': case 'hubEnv': case 'hubProviders':
       return 'server';
     case 'taskDetail':
       return 'tasks';

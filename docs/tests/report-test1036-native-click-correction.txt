@@ -1,0 +1,45 @@
+Test1036: bounded correction of the native welcome UI click fixture
+Observed: 2026-10-11T17:07Z / 2026-10-12 01:07 Asia/Shanghai.
+Product source unchanged by this correction; only fixture ui.sh/README change.
+
+Original PR868 head: 07795fc3ca69b8badc0881d492a2de163c6dbe3e.
+CI run38156879755/job114521571259: linux-deb FAILURE, only real UI step.
+Full source build, clean Ubuntu installation and native startup/auth atomic
+gate succeeded. The missed-click negative step was skipped, not accepted.
+Artifact11709006832 (TEST ONLY), actual tested merge source:
+83c4240e61cc798f87d2bdcdd49397fa998f97e9.
+Downloaded ANet_0.2.243_amd64.deb SHA256 independently recomputed:
+eba73ec49982d77ed056f8acec38d4243da85adb8619db14ecb4d26e52696638.
+This is not a 0.2.244 binary or a public installer.
+
+Inspected CI before/after screenshots: old600,470 hits the remote-login button.
+Before hash48fd2bf489993d9cc343df8851497f3741da77353297f0be564d39761e68908c;
+after hash01d52a70ec82681a4f3df29215c013d59458e772c134375bf0c030a81a2c7b01.
+The prelogin update section increases the welcome card height. Local-workspace
+button is at600,422 in this exact1200x800 layout. Change that positive target
+only; negative30,30, timeouts, native profile/keyring/API assertions unchanged.
+
+Reuse same downloaded deb with the repository linux-deb-install Dockerfile,
+SOURCE_COMMIT and DEB_SHA256 above; then linux-native-workspace/Dockerfile.
+No source/app recompilation, host installation, production credential or Hub.
+Resolved workspace test image manifest:
+5e38b011ea067f35c6d3d1ef2e4adb8555d18a46ad90a9f29830fe58a3cbf362.
+All docker commands through sg docker; --network none, ordinary uid10001,
+private keyring/Xvfb; no host home/keyring/display or published port.
+PASS prerequisite atomic gate: native startup/auth/status/task/restart/persistence.
+PASS positive UI: local profile saved, native Secret Service credential read,
+authenticated /api/auth/me and /api/status200; wrong token rejected401.
+PASS screenshot review: authenticated Agent list, not login/spinner/error.
+Corrected after screenshot hash:
+3754ee9ac74b0f3f03c61f523d9dbdfcca60cb9bfd7a679f86acb71f9e2371e2.
+PASS precise missed-click negative: exit1 and exact message
+FAIL: UI did not persist a local profile after click.
+PASS git diff --check.
+
+Cleanup: atomic/negative containers --rm; positive named container removed
+after copying only /evidence. Own diagnostic images and downloaded TEST ONLY
+artifact/evidence under /dev/shm/anet1036-linux-ci.cvHJYl retained. No profiles
+or native secrets exported. Original read-only gh watch stopped after failure.
+Independent new-head CI remains required before merge/public delivery. Prior
+brand/core/NSIS compile evidence reused, not rerun or counted as new coverage.
+No native Windows branding appearance or 0.2.244 delivery claimed here.

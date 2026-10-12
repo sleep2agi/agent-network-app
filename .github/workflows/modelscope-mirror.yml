@@ -24,6 +24,10 @@ on:
     - cron: '11,41 * * * *'
   workflow_dispatch:
     inputs:
+      commit:
+        description: 'Full40 main source SHA of the published release (required for manual mirroring)'
+        required: true
+        type: string
       tag:
         description: 'Release tag to (re)sync, e.g. desktop-v0.2.98. Empty = newest published desktop release.'
         required: false
@@ -47,7 +51,48 @@ jobs:
     runs-on: ubuntu-latest
     timeout-minutes: 75
     steps:
+      - name: Bind the published release to an immutable main source
+        id: source
+        env:
+          GH_TOKEN: ${{ github.token }}
+          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          if [ "$GITHUB_EVENT_NAME" = workflow_dispatch ]; then
+            [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          fi
+          if [ -z "$TAG" ]; then
+            TAG=$(gh api --paginate "repos/$GITHUB_REPOSITORY/releases?per_page=100" \
+              --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
+              | awk '/^desktop-v[0-9]+\.[0-9]+\.[0-9]+$/' | sort -V | tail -1)
+          fi
+          [[ "$TAG" =~ ^desktop-v[0-9]+\.[0-9]+\.[0-9]+$ ]]
+          release=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$TAG")
+          [[ $(jq -r .draft <<<"$release") == false ]]
+          source=$(jq -r .target_commitish <<<"$release")
+          [[ "$source" =~ ^[0-9a-f]{40}$ ]]
+          if [ -n "$REQUESTED_COMMIT" ]; then [[ "$source" == "$REQUESTED_COMMIT" ]]; fi
+          ref=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/tags/$TAG")
+          if [ "$(jq -r .object.type <<<"$ref")" = tag ]; then
+            ref=$(gh api "repos/$GITHUB_REPOSITORY/git/tags/$(jq -r .object.sha <<<"$ref")")
+          fi
+          [[ $(jq -r .object.type <<<"$ref") == commit ]]
+          [[ $(jq -r .object.sha <<<"$ref") == "$source" ]]
+          echo "commit=$source" >> "$GITHUB_OUTPUT"
+          echo "tag=$TAG" >> "$GITHUB_OUTPUT"
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          ref: ${{ steps.source.outputs.commit }}
+          fetch-depth: 0
+      - name: Verify the exact release source is still on main
+        env:
+          RELEASE_COMMIT: ${{ steps.source.outputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$(git rev-parse HEAD)" == "$RELEASE_COMMIT" ]]
+          git fetch origin main
+          git merge-base --is-ancestor "$RELEASE_COMMIT" origin/main
 
       - name: Install ModelScope SDK (pinned)
         run: |
@@ -64,7 +109,7 @@ jobs:
       - name: Plan and stage changed files
         env:
           GH_TOKEN: ${{ github.token }}
-          TAG: ${{ github.event.release.tag_name || inputs.tag }}
+          TAG: ${{ steps.source.outputs.tag }}
           WAIT_APK_MINUTES: ${{ github.event_name == 'release' && '30' || '0' }}
         run: |
           set -euo pipefail

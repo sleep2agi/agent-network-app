@@ -1,0 +1,56 @@
+TEST ONLY, observed 2026-10-11T11:51Z (19:51 Asia/Shanghai)
+Product base main18063db2e40b571576920c64b2b4cd036e3fdffd,
+product commit4b456a7593a1508dfe6351cc06eb2c0858289d40; test files in this change.
+All tests Docker through sg docker; no host npm/test/global changes.
+
+Core3/3 PASS: scoped enabled API-key choices, cascading selection reset,
+identifier-only create reference and selected model, unchanged legacy mode.
+Existing create-node-request27/27 and drive registry12/12 PASS.
+Full client TypeScript check PASS. Final core image config:
+658edff9d0635c1e32b27de670d75254a845c50ba2f9e76682f6111ba016a53c.
+Initial core failed because fixture contained an invalid missing-key profile
+and a credential-present ChatGPT profile without its required account_id.
+Corrected synthetic fixture to the existing read contract; parser unchanged.
+No browser layer was started before that correction/core/typecheck passed.
+
+Rebuilt actual Expo-exported wizard in Docker Chromium:12/12 PASS, desktop
+1200x900/light and phone390x844/dark preference. Each surface checks incomplete
+selection blocks next, complete selection unblocks, confirmation contains the
+configured model, actual create_node payload pins daemon/revision/profile/model
+without key/endpoint, pending is not running, no React errors.
+No rendered-palette assertion/screenshot audit claim for this creation suite.
+Browser image config:
+dafb6339437d2515d23ee3e2963e51149de3268d508d49b22dc5a44dca1be8c7.
+Containers removed; synthetic state only, local images cached for development.
+No real Hub/Daemon/native launch/OAuth/model access/inference/publication proof.
+Backend2600's actual compiled CLI initialization/doorbell suite is independent.
+Creation is NOT included in public client0.2.240.
+
+Incremental correction, observed2026-10-11T11:59Z (19:59+08):
+PR851 headfdbb905df79b103bd86f1508033f77f775c5749e Windows CI failed
+run38137170047/job114463303357 and push run38137136070/job114463204913.
+The job log identifies ReferenceError: managedMode is not defined in the
+source-expression contract of src/create-node-workdir.test.ts. This is a
+test-harness wiring failure, not a Windows dependency/environment failure.
+Supply the two new expression parameters; preserve all existing predicates
+and add incomplete/complete managed-selection cases. Production code unchanged.
+Rebuilt Docker core sequentially: creation3/3,request27/27,workdir57/57,
+registry12/12 and full client typecheck PASS (exit0).
+Image configc43650a4c9e5edf260b1148c62e174127249e98682c131c5a75215e14951091b.
+Network-none container removed; cached image retained. Browser12/12 from the
+unchanged production source above is reused, not rerun or counted as new proof.
+This local corrective result does not mean the new-head Windows CI has passed.
+Incremental composition, observed2026-10-11T12:06Z:
+Merged maincc84654c6b85ae0344c3cd3876da6bd10f721fce into creation branch
+(pre-merge head8e039d91f0d768ef875398e17087d75ea16f701c).
+Only conflict was drives.json; preserve both creation and Hub Provider entries.
+Production files merged cleanly, unchanged by conflict resolution.
+Dedicated Docker core3/3,request27/27,workdir57/57,registry12/12,
+full client tsc exit0. Core config:
+7d8ee494cae65d274e1b130c46046a7c60623c7a23f7ff7a41ad56a5cba42ec4.
+Fresh actual Expo export+Chromium creation UI12/12 PASS on desktop/light and
+phone/dark preference. Browser config:
+87d31e9cdf9f4d7327d4e5692783ebfaed2021a594803d544ed8861ee8577424.
+No rendered-palette or native installation claim. Both --rm containers removed;
+synthetic Hub/state only, local images cached, no production/OAuth/inference.
+

@@ -77,7 +77,7 @@ export function filesUnsupportedMessage(s: Extract<FilesSupport, { kind: 'unsupp
   const ver = s.version ? `（v${s.version}）` : '';
   switch (s.component) {
     case 'hub':
-      return `服务器版本还不支持查看项目文件夹，升级到 commhub-server ${s.minVersion} 或更新后可用`;
+      return `Hub 版本还不支持查看项目文件夹，升级到 commhub-server ${s.minVersion} 或更新后可用`;
     case 'agent-node': {
       // 版本认得出且已经不旧:那是还没重连上报(或 hub 没收到),不是版本问题。
       const c = compareNodeVersion(s.version, s.minVersion ?? '');
@@ -292,7 +292,7 @@ export function filesStatusMessage(status: 'pending' | 'in_progress' | 'done' | 
       return unknownOpMessage(error, session) ?? `节点读取失败:${friendlyNodeError(error)}`;
     case 'timeout':
       // 只对上报了 files_capable 的会话发请求,所以超时不是版本问题。
-      return '节点 60 秒内没有取走这次请求:多半是节点和服务器之间的实时连接断了,或节点卡住了;重启这个节点通常能恢复';
+      return '节点 60 秒内没有取走这次请求:多半是节点和 Hub 之间的实时连接断了,或节点卡住了;重启这个节点通常能恢复';
   }
 }
 

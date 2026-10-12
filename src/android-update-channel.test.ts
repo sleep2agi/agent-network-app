@@ -166,5 +166,25 @@ function makeDeps() {
   ck('both channels = installed → up-to-date', s2.kind === 'up-to-date' && s2.latest === '0.2.157');
 }
 
+
+// 7. 同版本但 desktop SHA256SUMS 没有 APK(0.2.230+ 只发 android/):必须走安卓通道,不能红字「正在同步」
+{
+  __resetAndroidUpdaterForTest(makeDeps().deps);
+  const desktopNoApk = {
+    [MIRROR_VERSION_URL]: { status: 200, body: '0.2.232\n' },
+    [mirrorSumsUrl('0.2.232')]: { status: 200, body: `${GOOD_SHA}  ANet_0.2.232_amd64.deb\n` }, // no APK line
+    [mirrorManifestUrl('0.2.232')]: { status: 200, json: { version: '0.2.232', notes: `What's new in 0.2.232:\n- desktop\n` } },
+    [`HEAD ${mirrorApkUrl('0.2.232')}`]: { status: 404 },
+  };
+  const f = makeFetch({ ...desktopNoApk, ...androidRoutes('0.2.232'), [ANDROID_LATEST_RELEASE_API]: GH_500 });
+  const s = await checkAndroidUpdate('0.2.228', { fetchImpl: f.fetchImpl, ...noSleep });
+  ck('tie + desktop SHA256SUMS missing APK → available from android channel (not syncing error)', s.kind === 'available' && s.version === '0.2.232' && s.apk.url === androidApk('0.2.232'));
+  ck('…GitHub not asked (android channel answered)', f.gh() === 0);
+  __resetAndroidUpdaterForTest(makeDeps().deps);
+  const f2 = makeFetch({ ...desktopNoApk, [ANDROID_VERSION]: { status: 200, body: '0.2.232\n' }, [ANDROID_LATEST_RELEASE_API]: { status: 200, json: { tag_name: 'desktop-v0.2.232', assets: [] } } });
+  const s2 = await checkAndroidUpdate('0.2.228', { fetchImpl: f2.fetchImpl, ...noSleep });
+  ck('tie + desktop incomplete + android sha missing + GH no APK → syncing error (not up-to-date)', s2.kind === 'error' && /0\.2\.232/.test(s2.message) && /同步|校验|安装包/.test(s2.message));
+}
+
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

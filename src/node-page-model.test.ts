@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { groupNodeTasks, isSelfTask } from './node-task-groups';
 import { partitionNodeTasks } from './node-tasks';
-import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
+import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) p++; else console.log(`  ✗ ${n}`); };
@@ -34,15 +34,15 @@ ck('空输入不炸', JSON.stringify(groupNodeTasks(null, A)) === JSON.stringify
 
 // ── 分区可见性 ───────────────────────────────────────
 const keys = NODE_SECTIONS.map(s => s.key).join(',');
-ck('分区顺序固定:概览/模型/规则/技能/项目文件夹/任务/定时任务/运行日志/权限/危险', keys === 'overview,model,rules,skills,files,tasks,schedules,logs,permissions,danger');
-ck('权限:Hub 说能改才出现,紧挨危险操作之前', visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true, permissionsAllowed: true }).join(',') === 'overview,model,rules,skills,files,tasks,schedules,logs,permissions,danger');
+ck('分区顺序固定:概览/模型/密钥/规则/技能/项目文件夹/任务/定时任务/运行日志/权限/危险', keys === 'overview,model,secrets,rules,skills,files,tasks,schedules,logs,permissions,danger');
+ck('权限:Hub 说能改才出现,紧挨危险操作之前', visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true, permissionsAllowed: true }).join(',') === 'overview,model,secrets,rules,skills,files,tasks,schedules,logs,permissions,danger');
 ck('权限:Hub 没说(旧 Hub)/ 说不能 → 不出现', !visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true }).includes('permissions') && !visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true, permissionsAllowed: false }).includes('permissions'));
 ck('权限:只读页不出现(只读页不放编辑控件)', !visibleNodeSections({ readOnly: true, hasRulesTarget: true, skillsCapable: true, permissionsAllowed: true }).includes('permissions'));
 ck('运行日志紧跟定时任务,图标 document-text-outline', NODE_SECTIONS.find(s => s.key === 'logs')?.label === '运行日志' && NODE_SECTIONS.find(s => s.key === 'logs')?.icon === 'document-text-outline');
 ck('运行日志分区整页不滚(工具条钉住,日志区自己滚)', !nodePageScrolls('logs') && nodePageScrolls('files'));
 ck('定时任务紧跟任务,图标 alarm-outline', NODE_SECTIONS.find(s => s.key === 'schedules')?.label === '定时任务' && NODE_SECTIONS.find(s => s.key === 'schedules')?.icon === 'alarm-outline');
-ck('可编辑 + 有规则目标 + 无技能:技能不出现,危险操作出现', visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: false }).join(',') === 'overview,model,rules,files,tasks,schedules,logs,danger');
-ck('只读页不出现危险操作,但其它有数据的分区都在', visibleNodeSections({ readOnly: true, hasRulesTarget: true, skillsCapable: true }).join(',') === 'overview,model,rules,skills,files,tasks,schedules,logs');
+ck('可编辑 + 有规则目标 + 无技能:技能不出现,危险操作出现', visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: false }).join(',') === 'overview,model,secrets,rules,files,tasks,schedules,logs,danger');
+ck('只读页不出现危险操作,但其它有数据的分区都在', visibleNodeSections({ readOnly: true, hasRulesTarget: true, skillsCapable: true }).join(',') === 'overview,model,secrets,rules,skills,files,tasks,schedules,logs');
 ck('没有规则目标 → 规则分区不出现', !visibleNodeSections({ readOnly: true, hasRulesTarget: false, skillsCapable: false }).includes('rules'));
 ck('选中的分区被隐藏 → 回到概览', resolveActiveSection('rules', ['overview', 'model', 'tasks']) === 'overview');
 ck('选中的分区还在 → 不变', resolveActiveSection('tasks', ['overview', 'tasks']) === 'tasks');
@@ -60,6 +60,18 @@ ck('其余字段进「更多信息」且不重复', split.secondary.length === f
 ck('头部标签:运行时 · 模型 · 版本 · 主机', JSON.stringify(headerChips(facts)) === JSON.stringify(['codex-sdk', 'gpt-5.5', 'v2.5.0-preview.83', 'devbox']));
 ck('头部标签:缺的不显示,版本不重复加 v', JSON.stringify(headerChips([{ label: '版本', value: 'v1.2' }])) === JSON.stringify(['v1.2']));
 ck('空值显示「—」', factText('') === '—' && factText(null) === '—' && factText('  ') === '—' && factText('x') === 'x');
+const runtime = modelSectionFacts([
+  { label: 'session-id', value: 'sess_01' },
+  { label: '状态', value: 'working' },
+  { label: '版本', value: '2.5.0-preview.126' },
+  { label: '模型', value: 'gpt-6-astra' },
+  { label: 'Agent', value: 'agent-node:codex-app-server' },
+  { label: 'Runtime', value: 'codex-app-server' },
+  { label: '节点类型', value: undefined },
+]);
+ck('模型与运行时:session-id 紧挨在版本后面(两列时落在版本右边)', runtime.map(f => f.label).join(',') === '节点类型,Runtime,Agent,模型,版本,session-id');
+ck('模型与运行时不带状态等其它字段', !runtime.some(f => f.label === '状态'));
+ck('没有 session-id 行时不补造', modelSectionFacts([{ label: '版本', value: '1' }]).map(f => f.label).join(',') === '版本');
 
 // 宽窗布局(Vincent 09-24「空了」)
 ck('内容列随窗口变宽', nodePageContentWidth(900, 24) === 852 && nodePageContentWidth(1100, 24) === 1052);

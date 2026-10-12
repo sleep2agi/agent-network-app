@@ -93,11 +93,11 @@ check('SHA256SUMS is sha256sum format, sorted, basenames only',
 check('installer alias drops the version', latestAliasName('Agent.Network_1.2.3_aarch64.dmg', '1.2.3') === 'Agent.Network_aarch64.dmg');
 check('updater bundles get no alias', latestAliasName('Agent.Network_1.2.3_aarch64.app.tar.gz', '1.2.3') === null);
 check('another version\'s file gets no alias', latestAliasName('Agent.Network_1.2.2_aarch64.dmg', '1.2.3') === null);
-for (const suffix of ['aarch64.dmg', 'x64-setup.exe', 'x64_en-US.msi', 'android-universal.apk']) {
+for (const suffix of ['aarch64.dmg', 'x64-setup.exe', 'x64_en-US.msi', 'android-universal.apk', 'amd64.deb']) {
   check(`ANet ${suffix} preserves the old fixed download link`, latestAliasName(`ANet_1.2.3_${suffix}`, '1.2.3') === `Agent.Network_${suffix}`);
 }
 check('ANet updater bundles and signatures get no installer alias',
-  ['aarch64.app.tar.gz', 'x64-setup.exe.sig'].every(s => latestAliasName(`ANet_1.2.3_${s}`, '1.2.3') === null));
+  ['aarch64.app.tar.gz', 'x64-setup.exe.sig', 'amd64.deb.sig'].every(s => latestAliasName(`ANet_1.2.3_${s}`, '1.2.3') === null));
 check('ANet wrong version and unrelated prefix get no alias',
   latestAliasName('ANet_1.2.2_aarch64.dmg', '1.2.3') === null && latestAliasName('Other_1.2.3_aarch64.dmg', '1.2.3') === null);
 
@@ -128,6 +128,16 @@ const renamedUpdate = JSON.parse(renamedPlan.get('desktop/latest/latest.json').s
 check('ANet manifest keeps signatures and uses original versioned ANet filenames',
   Object.entries(manifest.platforms).every(([k, v]) => renamedUpdate.platforms[k].signature === v.signature
     && renamedUpdate.platforms[k].url.startsWith(`${base}/desktop/1.2.3/ANet_1.2.3_`)));
+const withDeb = {
+  ...release,
+  assets: [...release.assets, asset(12, 'ANet_1.2.3_amd64.deb'), asset(13, 'ANet_1.2.3_amd64.deb.sig')],
+};
+const debPlan = planMirror({ release: withDeb, manifest, isNewest: true, baseUrl: base });
+check('linux deb gets the stable download alias and its signature does not',
+  debPlan.get('desktop/latest/Agent.Network_amd64.deb')?.source.asset.name === 'ANet_1.2.3_amd64.deb'
+  && debPlan.get('desktop/latest/Agent.Network_amd64.deb')?.sha256 === sha('ANet_1.2.3_amd64.deb')
+  && !debPlan.has('desktop/latest/Agent.Network_amd64.deb.sig')
+  && debPlan.get('desktop/1.2.3/SHA256SUMS').source.bytes.toString().includes(sha('ANet_1.2.3_amd64.deb')));
 check('renamed historical release cannot move latest', [...planMirror({ release: renamedRelease,
   manifest: renamedManifest, isNewest: false, baseUrl: base }).keys()].every(p => !p.startsWith('desktop/latest/')));
 check('old and new names cannot silently overwrite the same installer alias', throws(() => planMirror({

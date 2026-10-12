@@ -48,7 +48,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'nav.tab.tasks', group: 'nav', label: '切换到 任务', defaultCombo: 'Mod+2' },
   { id: 'nav.tab.scheduled', group: 'nav', label: '切换到 定时任务', defaultCombo: 'Mod+3' },
   { id: 'nav.tab.messages', group: 'nav', label: '切换到 消息', defaultCombo: 'Mod+4' },
-  { id: 'nav.tab.server', group: 'nav', label: '切换到 服务器', defaultCombo: 'Mod+5' },
+  { id: 'nav.tab.server', group: 'nav', label: '切换到 Hub', defaultCombo: 'Mod+5' },
   // 按着快捷键录音,放开键把识别文字插到输入框光标处(不发送);Esc 取消。见 voice-shortcut-model.ts。
   // 标签叫「按键说话」不叫「按住说话」:后者是手机的触摸手势说法(phone-only-ui 门),桌面说的是按着一个键。
   { id: 'input.voiceHold', group: 'input', label: '按键说话', defaultCombo: 'Mod+Shift+Space' },

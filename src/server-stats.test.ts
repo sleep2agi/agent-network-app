@@ -129,7 +129,7 @@ ck('compactId 长 id 压缩', compactId('net_adac2cb00437') === 'net_adac…0437
 ck('compactId 短 id 原样', compactId('net_abc') === 'net_abc');
 ck('compactId 空 → —', compactId(undefined) === '—' && compactId('  ') === '—');
 ck('failure 401 → 登录已失效', describeFailure(new Error('HTTP 401 on /api/status')).includes('登录已失效'));
-ck('failure 502 → 服务器内部错误', describeFailure(new Error('HTTP 502 on /api/status')).includes('服务器内部错误'));
+ck('failure 502 → Hub 内部错误', describeFailure(new Error('HTTP 502 on /api/status')).includes('Hub 内部错误'));
 ck('failure 404 → 拒绝', describeFailure(new Error('HTTP 404 on /api/status')).includes('拒绝'));
 {
   const abort = new Error('The operation was aborted.'); abort.name = 'AbortError';

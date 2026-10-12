@@ -1,0 +1,26 @@
+name: Hub token core
+on:
+  pull_request:
+    paths:
+      - 'App.tsx'
+      - 'src/HubPendingScreen.tsx'
+      - 'src/HubTokenManagementScreen.tsx'
+      - 'src/hub-token-management*'
+      - 'src/hub-provider-management-api.ts'
+      - 'tests/test1020-hub-tokens/**'
+      - '.github/workflows/hub-token-management.yml'
+permissions:
+  contents: read
+jobs:
+  core-and-page:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core contract and types (Docker)
+        run: |
+          sg docker -c 'docker build --target core -f tests/test1020-hub-tokens/Dockerfile -t anet-app:hub-token-core .'
+          sg docker -c 'docker run --rm --init --network none anet-app:hub-token-core'
+      - name: Actual exported page (Docker)
+        run: |
+          sg docker -c 'docker build --target browser -f tests/test1020-hub-tokens/Dockerfile -t anet-app:hub-token-ui .'
+          sg docker -c 'docker run --rm --init --network none anet-app:hub-token-ui'

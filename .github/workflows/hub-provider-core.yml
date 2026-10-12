@@ -1,0 +1,28 @@
+name: Hub Provider client core
+on:
+  pull_request:
+    paths:
+      - 'src/HubProviderManagementScreen.tsx'
+      - 'src/hub-provider-management*'
+      - 'src/i18n-hub-provider-management.ts'
+      - 'src/HubPendingScreen.tsx'
+      - 'src/ServerScreen.tsx'
+      - 'src/daemon-provider-management-api.ts'
+      - 'App.tsx'
+      - 'tests/hub-provider-management/**'
+      - '.github/workflows/hub-provider-core.yml'
+permissions:
+  contents: read
+jobs:
+  hub-provider:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Catalog parsing, scopes and full typecheck (Docker)
+        run: |
+          sg docker -c 'docker build --target core -f tests/hub-provider-management/Dockerfile -t anet-app:hub-provider-core .'
+          sg docker -c 'docker run --rm --network none anet-app:hub-provider-core'
+      - name: Exported real React page, explicit save, distribution and wrong receipt (Docker fixture)
+        run: |
+          sg docker -c 'docker build --target browser -f tests/hub-provider-management/Dockerfile -t anet-app:hub-provider-browser .'
+          sg docker -c 'docker run --rm --network none anet-app:hub-provider-browser'

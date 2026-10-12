@@ -15,7 +15,7 @@ function files(root, prefix = '') {
 }
 function verify(candidate, sourceRoot) {
   const shipped = files(candidate);
-  assert.equal(shipped.length, 320, 'exact pinned package must contain 320 files');
+  assert.equal(shipped.length, 342, 'exact pinned package must contain 342 files');
   const mismatches = [];
   for (const path of shipped) {
     const source = join(sourceRoot, path);
@@ -27,11 +27,11 @@ function verify(candidate, sourceRoot) {
   return shipped.length;
 }
 const count = verify('/candidate', '/source/server');
-console.log(`PASS: all ${count} published package files match exact main-ancestor server tree edc68a4ca87bbb7ca4944093e8ff113a17078624`);
+console.log(`PASS: all ${count} published package files match exact main-ancestor server tree31b0dbdae3192f471c8812574c118795658120f0`);
 const fixtures = [
   ['modified byte', path => writeFileSync(join(path, 'package.json'), 'modified'), /byte mismatch/],
-  ['missing file', path => rmSync(join(path, 'package.json')), /must contain 320 files/],
-  ['extra file', path => writeFileSync(join(path, 'unexpected'), 'extra'), /must contain 320 files/],
+  ['missing file', path => rmSync(join(path, 'package.json')), /must contain 342 files/],
+  ['extra file', path => writeFileSync(join(path, 'unexpected'), 'extra'), /must contain 342 files/],
   ['same-count substitution', path => { rmSync(join(path, 'package.json')); writeFileSync(join(path, 'unexpected'), 'extra'); }, /absent from exact server tree/],
   ['symlink', path => { rmSync(join(path, 'package.json')); symlinkSync('/candidate/package.json', join(path, 'package.json')); }, /unexpected symlink/],
 ];

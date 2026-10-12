@@ -1,0 +1,47 @@
+#894 / original PR795: current-main alignment and one real registration gate
+OBSERVED_AT=2026-10-12 13:14+08
+SOURCE PREPARATION ONLY; no new native acceptance or public release.
+
+Normal merge, no rewritten history:
+- Original branch86acbd183fbadd94189049310fec756b8402e4a2 plus exact current
+  main56a8f5f541510a1013135dd1a6947dc3f2f9500a. Ten conflicts reconciled.
+- Keep current-main installer170/136, hash-pinned GitHub download fallback,
+  stop-before-upgrade order, configured child PATH, Hub127 lock/integrity, current
+  Provider creation/control UI and all newer version/release files unchanged.
+- Reapply only the V1 headless labels/note and retain the Node confirmation
+  contrast difference. No lost Provider/secret/clone/relogin feature.
+- Old162/128 policy module retained for historical test-only compilation, not
+  consumed by the current production installer or represented as current policy.
+
+Current inputs:
+- Formal public CLI170/runtime136: source main
+ f86012a30c75f59abeeed3221647f5d2847bd969, archive SHA256 pins in manifest/Dockerfile.
+- Formal Hub127: source main31b0dbdae3192f471c8812574c118795658120f0.
+  Full anonymous archive ef9ed47cff0a1d6b65ef100dbf684f4e2c430e802ee75809bdb4db3c62fc6e54;
+  full frozen source archive dc84654c67487474f630dbb867cfee46f1d35ddb350a7fa6a3dd82394afd71cd.
+  Updated contract/source comparison pins to342 regular package files, not320.
+  Existing precise corruption/substitution/symlink controls preserved.
+  Downloads/hash reads are diagnostics; no local package execution/testing.
+
+Only manual current-v1-registration Actions slice:
+- Source-bound TEST-ONLY desktop build/package inspect -> native startup/auth
+  -> hash-verified public pair/version/help -> real native Daemon install/create
+  -> actual Hub request/profile/token/roster and live headless worker checks.
+- The public pair is reused unchanged in a disposable private prefix. No source
+  candidate overlay, no false npm170 registry-readability or fresh-install claim.
+- Existing V1 TLS/auth/session prerequisite runs; model requests, V2 lifecycle,
+  historical migrations/faults and full model/cancellation matrix are not run.
+- Full historical assertions remain available for explicit full/ready PRs. Large
+  automatic native matrix is skipped on Draft integration, NOT counted as PASS.
+  Wiring contract retains its8 precise negative controls and checks new manual
+  source separation/sandbox/cleanup. No branch protection/release guard changed.
+- All execution in Actions Docker. Always preserve redacted evidence and remove
+  only owned containers; artifacts TEST-ONLY. No local Docker/tests/global npm or
+  production accounts/config/identity/process/DB changes.
+
+Remaining: actual current-pair native result, screenshot review, original broad
+full-suite reconciliation and review. Draft cannot be claimed ready to merge or
+published merely because these inputs are aligned. Old native/diagnostic failures
+remain historical exact-source results, not reclassified or inherited.
+13:15 is source/CI-start checkpoint. Earliest native result13:35–14:00 if runner,
+source build and prerequisites work; final publication has no reliable ETA yet.

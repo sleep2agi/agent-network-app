@@ -1,0 +1,68 @@
+Client 0.2.242 publication evidence (incremental, platform-scoped)
+OBSERVED_AT=2026-10-11T15:24:46Z
+Exact APK and desktop source main=83b02824241880f460d2a4ae9197b6adcc594c10.
+Source ancestry rechecked against current origin/main before publication.
+
+Android build 38149392917 SUCCESS. Independent mirror publish 38150171966,
+job114501802098 SUCCESS. Dispatch workflow head91431e0 is not the APK source:
+the workflow verified source-run main83b, checked out83b, checked APK version
+0.2.242/code2242, and compared anonymous uploaded bytes and metadata.
+
+Independent Docker anonymous-read verification, --rm --init, no host/global
+npm or credential writes. Reused test1020 core Docker environment image
+sha256:3f880e03f85f8dd15f65ace8e0e62c6950b6099bc35937378f8f46868b712b97.
+Candidate source mounted /src:ro; release workflow notes file byte-identical
+to exact source83b (git diff empty for that file).
+PASS android/latest/VERSION=0.2.242.
+PASS SHA256 metadata exact expected line.
+PASS public notes equal androidReleaseNotes(exact-source workflow,0.2.242).
+PASS full anonymous APK 83768749 bytes, SHA256
+9e9f852c3ab2a6fbd7652b1a512c655d304a6ddd3d7dfb820bba5c6aebff3740.
+Public APK:
+https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/agent-network-0.2.242.apk
+Docker verification exit0; container removed, no new running fixture.
+
+Desktop run38149391163: macOS and Windows legs SUCCESS, verify-draft QUEUED
+at this observation. Release409741390 remains draft; no desktop publication
+claimed. Ten selected-platform assets exist, latest.json contains only
+macOS/Windows entries with actual matching asset IDs and signatures.
+
+This version contains pre-login update checks and real Hub vault management
+entry points. Saved-key Provider reference UI PR864/main91431e0 merged after
+the exact83b cut: NOT included in0.2.242. Reference formal release also needs
+published Hub125 and exact bundled local-Hub125 pin; not yet delivered here.
+
+Incremental public desktop observation: 2026-10-11T15:32:20Z.
+Formal desktop run38149391163 completed SUCCESS: macOS, Windows and
+verify-draft all SUCCESS. Release409741390 is public, published_at
+2026-10-11T15:30:17Z; tag desktop-v0.2.242 resolves to exact source83b above.
+Pre-publication read already found draft=false; no local publication PATCH
+was issued. Existing release-event mirror run38151544389 reused, not
+redispatched; still QUEUED at 2026-10-11T15:35:08Z.
+
+Independent Docker anonymous verification (same core image, --rm --init,
+no credentials passed): public GitHub release source/tag and platform scope
+PASS; www.anet.sh/desktop/update/latest.json HTTP200, JSON, no-store, version
+0.2.242 PASS. Entire updater manifest matches the canonical manifest after
+unique GitHub asset-ID to public download URL mapping; notes, signatures and
+pub_date retained. Full anonymous download verification:
+PASS macOS DMG 38945100 bytes, SHA256
+73b3b72cf0007fe76eefd36707475398f41334e46846489034fb3d741bb2e72d.
+PASS Windows NSIS 37127583 bytes, SHA256
+98524dfd63673e59967e15d088e675486fe1216eb7f18287ca947519d269fc64.
+Docker exit0, container removed, no new running fixture. MSI/signatures were
+checked by formal CI and manifest mapping, not independently fully fetched
+in this local probe. Domestic desktop mirror remains a separate pending
+observation; primary public downloads and updater are verified.
+Original Hub #1018 completed with all three checklist items; issue858 was
+already CLOSED on fresh read. This does not deliver the later saved-key
+reference UI or claim Hub125 installed.
+
+Incremental 2026-10-11T15:45:53Z: desktop ModelScope mirror38151544389,
+job114505864532 completed SUCCESS. Independent Docker anonymous mirror
+VERSION242, entire updater manifest equal exact canonical URL rewrite and
+all10 GitHub asset SHA256SUMS entries PASS. Full domestic stable-alias macOS
+DMG38945100B SHA73b3b72cf0007fe76eefd36707475398f41334e46846489034fb3d741bb2e72d
+and Windows NSIS37127583B SHA98524dfd63673e59967e15d088e675486fe1216eb7f18287ca947519d269fc64
+PASS. --rm container exit0, no credentials, install or inference. Domestic
+desktop pending observation above is resolved; all selected242 channels live.

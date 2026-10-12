@@ -1,6 +1,7 @@
-import { applyTagOp, applyTagOpToCatalog, canManageTags, catalogFromHub, localTagCounts, tagName, tagOpErrorKey, tagSuggestions, type TagCatalog } from './task-tag-catalog';
+import { applyTagOp, applyTagOpToCatalog, canManageTags, catalogFromHub, localTagCounts, sidebarTagNames, tagName, tagOpErrorKey, tagSuggestions, type TagCatalog } from './task-tag-catalog';
 import { createInput, emptyDraft } from './task-board-model';
 import { createRequirementBody } from './requirements-hub';
+import { readFileSync } from 'node:fs';
 let p = 0, total = 0;
 function ck(name: string, ok: boolean) { total++; if (ok) p++; else console.error(`FAIL ${name}`); }
 const eq = (a: unknown, b: unknown) => JSON.stringify(a) === JSON.stringify(b);
@@ -58,6 +59,21 @@ ck('400 codes', tagOpErrorKey(400, 'invalid_tag') === 'tags.invalidName' && tagO
 // ── 本地用量 ──
 const local = localTagCounts([{ tags: ['a', 'b'] }, { tags: ['a'] }, {}]);
 ck('local counts', local.get('a') === 2 && local.get('b') === 1 && local.size === 2);
+
+// 侧栏排序与右侧数字使用同一份计数,不改写 Hub 标签或卡片顺序。
+const sidebarCounts = new Map([['权限', 59], ['桌面端', 13], ['ANet', 353], ['组织架构权限', 36]]);
+ck('sidebar: numeric descending (screenshot regression)', eq(sidebarTagNames(sidebarCounts), ['ANet', '权限', '组织架构权限', '桌面端']));
+ck('sidebar: equal counts retain alphabetical order', eq(sidebarTagNames(new Map([['z', 2], ['a', 2], ['b', 10]])), ['b', 'a', 'z']));
+ck('sidebar: equal counts stable across response order', eq(sidebarTagNames(new Map([['a', 2], ['z', 2], ['b', 10]])), ['b', 'a', 'z']));
+ck('sidebar: missing selected tag stays last at zero', eq(sidebarTagNames(local, 'missing'), ['a', 'b', 'missing']));
+ck('sidebar: selected existing tag not duplicated or promoted', eq(sidebarTagNames(local, 'b'), ['a', 'b']));
+ck('sidebar: empty list has no synthetic tag', eq(sidebarTagNames(new Map()), []));
+ck('sidebar: empty list keeps selected tag', eq(sidebarTagNames(new Map(), 'selected'), ['selected']));
+ck('sidebar: input map not mutated', eq([...sidebarCounts.keys()], ['权限', '桌面端', 'ANet', '组织架构权限']));
+ck('sidebar: refreshed counts reorder automatically', eq(sidebarTagNames(localTagCounts([{ tags: ['b'] }, { tags: ['a', 'b'] }])), ['b', 'a']));
+const sidebarSource = readFileSync(new URL('./TaskFilterSidebar.tsx', import.meta.url), 'utf8');
+ck('sidebar wiring: sort and badges share counts', sidebarSource.includes('const tagNames = sidebarTagNames(tagCounts, filter.tag);') && sidebarSource.includes('tagNames.map(tag => tagRow(tag, tag, tagDot(tag), tagCounts.get(tag) ?? 0))'));
+ck('sidebar wiring: all-tags row remains before sorted tags', sidebarSource.indexOf("{tagRow('', tr('tags.all')") >= 0 && sidebarSource.indexOf("{tagRow('', tr('tags.all')") < sidebarSource.indexOf('{tagNames.map('));
 
 // ── 新建带标签:有就发,没有就不带字段(旧 Hub 请求形状不变) ──
 const cfg = { serverUrl: 'http://h', token: 't', networkId: 'n' } as never;

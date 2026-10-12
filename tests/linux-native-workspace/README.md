@@ -39,6 +39,11 @@ Docker error is not a passing negative. This prevents automatic startup from
 being mistaken for successful interaction. Layout changes require screenshot
 review and intentional target updates, never skipping assertions.
 
+The login-before-update layout places the local-workspace button at `(600,422)`
+in the pinned1200x800 window. CI run38156879755's before/after screenshots
+show the old `(600,470)` hitting remote login instead. Keep the negative target
+on background `(30,30)` and retain profile/API/native-credential assertions.
+
 ## Recovery and scope
 
 - Startup authority: this Dockerfile, atomic.sh, ui.sh, and the repository's

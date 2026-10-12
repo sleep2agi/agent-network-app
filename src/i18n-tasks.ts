@@ -486,7 +486,7 @@ registerTranslations({
   'taskSearch.clearFilters': ['清除筛选', 'Clear filters'],
   'taskSearch.loadMore': ['加载更多', 'Load more'],
   'taskSearch.loadingMore': ['正在搜索更早的任务…', 'Searching older tasks…'],
-  'taskSearch.partial': ['只搜了最近的 500 个任务(这个 Hub 版本不支持在服务器上搜更早的)', 'Only the latest 500 tasks were searched (this Hub cannot search older ones)'],
+  'taskSearch.partial': ['只搜了最近的 500 个任务(这个 Hub 版本不支持在 Hub 上搜更早的)', 'Only the latest 500 tasks were searched (this Hub cannot search older ones)'],
 });
 
 // 仪表盘视图(TaskDashboard.tsx / task-dashboard-model.ts / task-share-card.ts)。

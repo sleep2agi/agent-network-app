@@ -1,0 +1,93 @@
+#906 / #907 Client241 exact Hub124 pairing (TEST ONLY candidate)
+OBSERVED_AT=2026-10-11T13:39Z
+
+Inputs
+- App candidate PR857, based on main 8cfdd62272ca4ae7aa9efd43395a79a749d8491d.
+- Published Hub .124 from backend main ad381202cbba00c80efc30522801dedd810fbbea,
+  formal run38142238557, actual anonymous tarball1228117B, SHA256
+  e4391276facfcd5908c9e773ee6e0898ce14402247458ca068e8ce4e6b1d9748.
+- local-hub-sidecar exact package/lock/SRI .124, Rust expected version and
+  desktop minimum Hub version .124; prior .123 is not accepted as the new floor.
+
+Focused Docker evidence (no unchanged broad suite rerun)
+- Existing core image sha256:5c7f73156bb2e4ff499b529387631696493a0112f868dbe53bf274320fdf5e4d.
+- Candidate source/metadata mounted read-only; --rm containers.
+- --network none original sidecar contract14, runtime-status27 and
+  upgrade-button10 checks PASS, all exits zero.
+- Separate clean sidecar install/build inside disposable container (network only
+  for exact locked npm downloads): npm ci --ignore-scripts --no-audit --no-fund
+  installed99 packages; original build-local-hub-sidecar.mjs completed exit0.
+- Actual TEST ONLY x86_64-unknown-linux-gnu compiled sidecar manifest:
+  commhubVersion0.9.0-preview.124,
+  sourceIntegrity sha512-HGfaAk1PDWW7ColScS6kGSyOLOvtRHj6v9WHTI4WnOuxkInxQ2m4tcns6zeACRcW+HqjH08LpApJh0pElg/vZQ==,
+  preBundleSha2567631ae7fd4f38c02b4d7c933728a673e269d987f10d340878030d6a8304d7cd7,
+  preBundleSize96323712.
+- No host npm package installation, persistent test process or production action.
+
+Boundaries
+- Linux compilation is a test-only check, not a public Linux release or native
+  Mac/Windows GUI verification. Public Linux remains deferred by user scope.
+- CLI166 actual bytes/SHA are the remaining installer input; do not insert an
+  invented checksum or count registry metadata as bytes.
+- Candidate241 must merge to main and rebuild via formal source-bound workflows
+  for Mac/Windows/Android; no candidate build is used as a public installer.
+
+Incremental runtime132 pairing (2026-10-11T13:52Z)
+- Published runtime132, formal run38143282653, exact backend main
+  ad381202cbba00c80efc30522801dedd810fbbea; anonymous canonical tgz bytes
+  589697, SHA256 f3445ad33bcabacf4e7ede286168bc5fcac5ff895d8be845b492348cc77ec77f,
+  SRI sha512-57MwdxXhWzek7+ElmhH0XmFvu0wM1mEUr3M6V/CQY1l05G04wDsdI7kKUT6IpIDSYpZt6D328ASggRqGONcMTQ==.
+- Private installer runtime pin .131 -> .132; existing compatibility test now
+  explicitly rejects .131 and accepts .132, without changing stable semantics.
+- Same cached core image, --rm --network none, candidate source mounted read-only:
+  original bun src/local-daemon.test.ts: 34 checks PASS, exit0.
+- This is the source/static contract probe, not a native installation, account
+  entitlement test or public client release. No running business node changed.
+
+Formal CLI166 rebuild input, not yet installer-ready (2026-10-11T14:02Z)
+- Minimal document-claim fix PR2605 merged to main
+  b7cf295ebe12188d0129e73d4a10dc66781c56eb at13:52:40Z;
+  ten required checks and separate Docker E2E succeeded.
+- New formal release run38144933862 build job114486199263 succeeded;
+  checkout log and source-binding step independently identify that full main SHA.
+- Artifact11704322065 zip2123955B/digest
+  ff96e659122c99808a35508675c29e9d0fd0c1ee1492870086f1a036c01718ec.
+- Actual inner CLI166 tgz2123553B/SHA256
+  bce57f5f8abfd2a5b97ac8148045df0f93483fb2ca97ef8aa5bd03d414ad9993,
+  SRI sha512-mgjXebz6IdCMRJQPHSDUL+IEDbSi78ILJkgMIWDS/wCAh+FhgGe0n8UiI9jL0TwYAWnrPPNoo01OtLYn/k5k5Q==.
+- All four formal gates are still queued at this observation; no public
+  CLI166 claim, GitHub asset upload or native installer hash insertion yet.
+- This new source includes previously merged standalone PR2597 (original
+  173SUCCESS/1SKIPPED), not just documentation changes. Keep Hub124/runtime132
+  existing immutable main ad381202 provenance separate; do not call all package
+  sources or the old failed CLI artifact identical.
+
+Formal CLI166 public download and final pin (2026-10-11T14:08Z)
+- Same run38144933862: build, four gates and aggregate SUCCESS; npm publish
+  accepted at14:05:36Z, registry propagation still independently running.
+- Official release cli-v2.3.0-preview.166 explicitly targets full main b7cf295e...
+  above. Remote tag independently resolved to that exact full build SHA.
+- Anonymous GitHub archive downloaded with curl (no credentials), byte-for-byte
+  identical via cmp to the formal archive above; SHA256 bce57f5f... above.
+- Native installer now pins CLI166/public fallback/exact SHA/temp filename,
+  runtime132 and Hub124. No credential or business-node state changes.
+- Final CLI-pin-only delta: same cached Docker image, --rm --network none,
+  candidate mounted read-only, original bun src/local-daemon.test.ts 34 checks
+  PASS/exit0. Existing unchanged UI/sidecar checks were not rerun.
+
+Core actual installer delta (2026-10-11T14:13Z)
+- Updated original local-daemon-init positive Hub fixture .123 -> .124 and
+  exact package/path expectations CLI165/runtime131 -> CLI166/runtime132.
+  Old .66 incompatibility, installed-version readback, stop-before-init and
+  wrong-hash assertions remain unchanged; no assertion removed or weakened.
+- Original independent tests/local-daemon-init/Dockerfile, pinned Rust1.90
+  base digest3914072ca0c3b8aad871db9169a651ccfce30cf58303e5d6f2db16d1d8a7e58f;
+  image config SHA5f2fbd9931b934cb859d93f0bff2b3f15efa12f45a0efd0b60e451a361c2dcf3.
+- docker run --rm --init anet-app:test241-daemon-pair:20 passed/0 failed,
+  exit0,22.43 seconds. The production Rust installer was compiled directly.
+- Real anonymous public CLI166 archive HTTPS download/hash -> fixture npm
+  archive install -> paired runtime -> init/start succeeded. Stop and lying
+  stop preserve config; wrong archive digest never reaches npm/init/start.
+- Hub and npm execution are disposable fixture adapters, not a signed native
+  app install or real vendor account/model entitlement validation. --rm reaped
+  fixture children; no new persistent containers or host services remained.

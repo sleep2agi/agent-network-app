@@ -14,7 +14,17 @@ check('opencode-cli no longer offers the withdrawn mimo-v2.5-free (HTTP 500 on O
 for (const id of ['claude-code-cli', 'codex-app-server', 'grok-build-cli']) {
   check(`${id} still follows the host login (empty models)`, entry(id).includes('models: []'));
 }
-check('summary falls back to the first model of the runtime', src.includes("v={model || runtime.models[0] || '跟随宿主登录'}"));
+// Evaluate the actual summary expression, not an obsolete exact JSX string.
+// Managed profiles precede the legacy selection; all legacy fallbacks remain required.
+const summaryExpression = src.match(/<SummaryRow k="模型" v=\{([^}]+)\}/)?.[1];
+check('model summary expression is present', !!summaryExpression);
+if (summaryExpression) {
+  const summary = new Function('managedSelection', 'model', 'runtime', `return (${summaryExpression});`);
+  check('summary uses the managed profile model before legacy selection', summary({ model: 'managed-model' }, 'legacy-model', { models: ['first-model'] }) === 'managed-model');
+  check('summary keeps the explicit legacy model', summary(null, 'legacy-model', { models: ['first-model'] }) === 'legacy-model');
+  check('summary falls back to the first model of the runtime', summary(null, '', { models: ['first-model'] }) === 'first-model');
+  check('summary follows host login when no model is available', summary(null, '', { models: [] }) === '跟随宿主登录');
+}
 // owner 2026-09-25:Grok 默认 = ACP;共存(grok-build-cli)降为实验性,收进 Grok 行的「高级」折叠。
 // (原先这里钉的是 09-23 方案 A 的「预览」标签和「指向 build-acp」的 note —— 方向相同,措辞升级。)
 check('Grok shows as ONE plain choice that creates ACP (label "Grok", id grok-build-acp, not advanced)',

@@ -88,7 +88,7 @@ reportReadSuccess(T1);
 reportReadFailure(T2); reportReadFailure(T2 + FAILURE_ROUND_MS); reportReadFailure(T2 + 2 * FAILURE_ROUND_MS);
 ck('3 轮但只持续了 6s(< 10s):还不是 offline,是「连接较慢 · 正在重试」', S().failureRounds === 3 && !S().offline && text() === '连接较慢 · 正在重试');
 reportReadFailure(T2 + OFFLINE_AFTER_MS);
-ck('失败持续到 10s:offline', S().offline === true && text().startsWith('无法连接服务器'));
+ck('失败持续到 10s:offline', S().offline === true && text().startsWith('无法连接 Hub'));
 
 R();
 reportReadSuccess(T1);

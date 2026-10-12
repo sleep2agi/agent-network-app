@@ -23,7 +23,7 @@ import -window root /evidence/before.png
 if [ "${TEST_UI_MISS_CLICK:-0}" = 1 ]; then
   xdotool mousemove --window "$window" 30 30 click 1
 else
-  xdotool mousemove --window "$window" 600 470 click 1
+  xdotool mousemove --window "$window" 600 422 click 1
 fi
 for attempt in $(seq 1 100); do
   kill -0 "$app_pid" || { echo 'FAIL: desktop exited after click'; exit 1; }

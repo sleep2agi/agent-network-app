@@ -20,7 +20,7 @@ import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT
 import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
 import { commitSideRename, renameKey } from './task-side-menu';
 import TaskSideItemMenu from './TaskSideItemMenu';
-import { canManageTags, localTagCounts } from './task-tag-catalog';
+import { canManageTags, localTagCounts, sidebarTagNames } from './task-tag-catalog';
 import { readTagsCollapsed, writeTagsCollapsed } from './task-sidebar-prefs';
 import { CONTROL_H, a11yState } from './TaskBoardParts';
 
@@ -129,7 +129,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
   // 标签:数字按当前列表算(同项目);筛着的标签即使这页没有卡也留在列表里(好取消)。
   const tagCounts = localTagCounts(items);
-  const tagNames = [...new Set([...tagCounts.keys(), ...(filter.tag ? [filter.tag] : [])])].sort((a, b) => a.localeCompare(b));
+  const tagNames = sidebarTagNames(tagCounts, filter.tag);
   const tagDot = (tag: string) => {
     const c = tagCatalog?.colors[tag];
     return <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c ?? 'transparent', borderWidth: c ? 0 : 1.5, borderColor: colors.textMuted }} />;

@@ -1,0 +1,94 @@
+#906 — successful Provider application refreshes client inventory
+Observed: 2026-10-12 04:39 +08. TEST-ONLY candidate, not a published installer.
+Base main: 532fa0eea3c7f23af963e78a5834e774491d1d0f
+Branch: fix/906-provider-readback-refresh. Original requirement #906/#905;
+no additional implementation ticket or production login.
+
+Cause and narrow change
+- DaemonProviderSelection received an exact applied receipt but only updated
+  its own terminal status. Both parent panels kept their previous scan/config
+  revision until the user manually refreshed. A second selection was blocked
+  by the previous result and lacked a renewed node revision.
+- Only an accepted applied receipt calls onApplied. NodeDaemonProviderSection
+  and DaemonProvidersPane reuse their existing refresh/read path. The new scope
+  clears the old selection and fetches configuration plus the current CAS token.
+- Unknown/incorrect application receipts do not refresh or retry a mutation.
+  Target binding, explicit confirmation and existing receipt checks stay intact.
+- No backend/schema/configuration/credential or runtime changes.
+
+Reproduction commands (all tests run through sg docker)
+docker build --target core -f tests/node-provider-switch/Dockerfile \
+  -t anet-app:provider906-refresh-core .
+docker run --rm --network none anet-app:provider906-refresh-core
+docker run --rm --network none --entrypoint bun \
+  anet-app:provider906-refresh-core src/daemon-provider-management.test.ts
+docker build --target browser -f tests/node-provider-switch/Dockerfile \
+  -t anet-app:provider906-refresh-browser .
+docker run --rm --network none anet-app:provider906-refresh-browser
+docker run --rm --network none -e CORE_NODE_SWITCH=0 -e CORE_APPLY_REFRESH=1 \
+  anet-app:provider906-refresh-browser
+
+Environment -> contracts/typecheck -> exported UI
+- Locked npm ci and pinned Bun/Node/Playwright inputs: PASS. Real Expo web export
+  compiled 1246 modules. No host HOME, credentials or Docker socket mounted.
+- Core: node target tests 2 PASS (9 checks); model checks39/39; reasoning8/8;
+  candidate TypeScript typecheck PASS. Provider contract checks27/27 PASS.
+- Actual exported React nodeInfo UI / Docker Chromium: 10/10 PASS.
+  Two separately confirmed writes, latest displayed config after each read,
+  second write uses refreshed node_revision c*64 rather than a*64. Wrong-model
+  receipt remains unconfirmed; scan count unchanged; no implicit resubmission.
+  Unbound node still has no apply control; no browser page errors.
+- Actual exported Daemon Provider page / Docker Chromium: 8/8 PASS. Two
+  confirmed writes, latest scanned model and renewed revision, no page errors.
+- Synthetic Hub responses and model names only. No vendor API, real OAuth,
+  entitlement, production runtime, native installer or paid inference proof.
+  The Provider/current-configuration section is checked; unrelated fixture
+  node-header/model metadata is not an application receipt.
+
+Screenshot review (temporary output, personally inspected; not runtime data)
+node-provider-refreshed.png SHA256
+a3331cc5407936d7e4ec419496e3212b8f0c1cd66483b8b8048d2fc24788c641
+daemon-provider-refreshed.png SHA256
+a9f297859d8f137f4dd41e031b202355a33aa761568f79fe8c224fd4bce367e8
+
+Image identities (local test images, rebuild from the Dockerfile)
+core: sha256:c938512f8c60398998dc9f73e7e181cebe16d6e45b905d3990c5118092507f28
+browser: sha256:b3c29ef25d8eb87f86363e87662c392d72b3a9db6ceae30545534185158029ef
+An initial core run was requested before the build had registered its image:
+exit125 / pull access denied, tests did not start. After build completion the
+same local command passed. This was orchestration/setup, not a product failure.
+
+Cleanup/recovery/release boundary
+All test containers used --rm and finished. Only task-specific temporary images,
+worktree and screenshot output remain. Production nodes/services untouched.
+No port/proxy/startup/env/key-source/data-backup changes. Existing release SOP
+and main-pinned client workflows remain authoritative; installation rollback
+uses the previous published client. This patch cannot reconstruct production
+accounts or database data and does not change their backup requirements.
+Formal client artifacts require merge and a fresh exact-main release build;
+these local browser/build outputs must not enter Release or updater channels.
+
+CI synchronization correction, 04:44 +08
+PR872 head4ed8206d03435c8910862b9f712d4c2e44ed5d2c:
+node UI job114569837313/run38173150927 failed at drive line114 (1 !== 2).
+The second wait searched the entire node panel, so the previous runtime provider
+and the newly selected dropdown model could satisfy it before the async second
+POST. This is not proof that the application completed. Add an explicit current-
+configuration testID and wait on that line only. Preserve exactly-one-write,
+refreshed-CAS and wrong-receipt assertions. No product callback behavior changed.
+Do not call the old head's CI green or count its first local pass as new evidence.
+
+Corrected candidate verification, 04:48 +08
+- Corrected browser image:
+  sha256:431c9ed932d49c7a2c32e9599d78a6e526a005c3865c87ffc5050a53d70b4a0f
+- Rebuilt the actual Expo export (1246 modules); current-configuration-only
+  waits: node UI10/10 PASS; daemon UI8/8 PASS. Each run completed with --rm.
+- Typecheck PASS in the existing locked core image, with only the changed
+  NodeDaemonProviderSection.tsx mounted read-only. Other TypeScript inputs
+  remain identical to the original core run; unchanged suites not rerun.
+- Reviewed both new screenshots. Node screenshot SHA remains
+  a3331cc5407936d7e4ec419496e3212b8f0c1cd66483b8b8048d2fc24788c641;
+  daemon screenshot SHA is now
+  895a8e306fad56a6d941cf2b8978021868ad8447c1672c6c8cf75be068c583f6.
+- This corrected local evidence does not make the superseded CI head green,
+  prove native installation/inference, or constitute a public release.

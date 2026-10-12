@@ -132,17 +132,32 @@ try {
     await page.getByText(/不会自动改为 V1/).first().waitFor();
     assert.equal(await page.evaluate(() => window.__createCalls.length), 1);
     console.log(`PASS ${tag}: old Hub rejection displayed, no automatic downgrade/retry`);
-    await open(page); await next(page); await next(page);
-    await page.getByText('V1（兼容默认 · headless）', { exact: true }).waitFor();
-    assert.equal(await page.getByText('OpenCode（TUI 共存）', { exact: true }).count(), 0);
-    await page.screenshot({ path: `${process.env.OUT}/${tag}-v1-mode-confirm.png` });
-    const v1 = await submit(page);
+    await open(page); await next(page); await next(page); const v1 = await submit(page);
     assert.equal(v1.flags?.opencodeGeneration, undefined); assert.equal(v1.flags?.opencodeUnsafeTools, undefined);
     await page.getByText('✓ v2-fixture 已上线', { exact: true }).waitFor({ timeout: 7000 });
     await open(page); await chooseV2(page);
     await page.getByTestId('runtime-row-codex-app-server').click(); await next(page);
-    const codex = await submit(page); assert.deepEqual(codex.flags, { copresence: true });
-    console.log(`PASS ${tag}: V1 headless labels and completion, Codex payload unchanged; consent does not leak`);
+    const codex = await submit(page);
+    assert.deepEqual(codex.flags, {
+      copresence: true,
+      approvalPolicy: 'never',
+      sandboxMode: 'danger-full-access',
+      skipGitRepoCheck: true,
+      copresenceFullAccess: true,
+    });
+    console.log(`PASS ${tag}: V1 completion; OpenCode consent does not leak; Codex carries copresence + yolo defaults`);
+    if (tag === 'desktop-light') {
+      await open(page);
+      await page.getByTestId('runtime-row-codex-app-server').click();
+      const consent = page.getByTestId('codex-auto-execute-consent');
+      await consent.waitFor();
+      if (await consent.getAttribute('aria-checked') === 'true') await consent.click();
+      assert.equal(await consent.getAttribute('aria-checked'), 'false');
+      await next(page);
+      const codexNoYolo = await submit(page);
+      assert.deepEqual(codexNoYolo.flags, { copresence: true });
+      console.log(`PASS ${tag}: Codex with auto-exec off sends only copresence`);
+    }
     assert.deepEqual(errors, []); await ctx.close();
   }
   console.log('PASS rendered V2 creation UI; fixture Hub only, no native app or production acceptance');

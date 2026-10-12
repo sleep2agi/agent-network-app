@@ -27,6 +27,14 @@ on:
     branches: ['**']
 
 jobs:
+  tag-count-order:
+    name: task tag count order (Docker)
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+      - run: docker build -f tests/tag-count-order/Dockerfile -t tag-count-order .
+      - run: docker run --rm --network none tag-count-order
   user-avatar:
     name: user avatar editor (Docker)
     runs-on: ubuntu-latest

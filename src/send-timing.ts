@@ -107,7 +107,7 @@ export function sendTimingRow(t: SendTiming | undefined): { label: string; value
   if (!t) return null;
   const s = (ms: number | null | undefined) => (ms === null || ms === undefined ? '—' : ms >= 1000 ? `${(ms / 1000).toFixed(1)} s` : `${Math.round(ms)} ms`);
   const head = t.outcome === 'ok' ? `成功 HTTP ${t.status ?? '?'}` : t.outcome === 'timeout' ? '超时' : `失败${t.status ? ` HTTP ${t.status}` : ''}`;
-  const skew = t.clockOffsetMs !== null && Math.abs(t.clockOffsetMs) >= 2000 ? ` · ⚠ 本机时钟与服务器差 ${s(Math.abs(t.clockOffsetMs))}` : '';
+  const skew = t.clockOffsetMs !== null && Math.abs(t.clockOffsetMs) >= 2000 ? ` · ⚠ 本机时钟与 Hub 差 ${s(Math.abs(t.clockOffsetMs))}` : '';
   const bubble = t.bubble ? ` · 气泡${t.bubble.state === 'sent' ? '已送达' : '未送达'}于 ${s(t.bubble.sinceDreqMs)}` : '';
   const load = t.inflightAtSend === undefined ? '' : ` · 当时在途请求 ${t.inflightAtSend} 个 / 近 1 分钟 ${t.requestsLastMinute ?? '?'} 个`;
   const value = `${head} · 点发送→开始发 ${s(t.sinceDreqMs)} · 身份(${t.identity}) ${s(t.identityMs)} · 响应头 ${s(t.headersMs)} · 响应体 ${s(t.bodyMs)} · 合计 ${s(t.totalMs)}${bubble}${load}${skew}`;

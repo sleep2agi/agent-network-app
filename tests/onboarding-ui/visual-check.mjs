@@ -30,12 +30,12 @@ const primaryBox = await compactPrimary.boundingBox();
 if (!primaryBox || primaryBox.y < 0 || primaryBox.y + primaryBox.height > 520) {
   throw new Error('compact primary action cannot be scrolled fully into view');
 }
-await compact.getByText('使用已有服务器登录').scrollIntoViewIfNeeded();
+await compact.getByText('使用已有 Hub 登录').scrollIntoViewIfNeeded();
 await compact.screenshot({ path: `${outputDir}/first-run-compact-scrolled.png`, fullPage: false });
 await compact.close();
 
 const login = await open('login-dark', 'screen=login&theme=dark', { width: 1280, height: 800 });
-await login.getByLabel('服务器地址').fill('not a valid url');
+await login.getByLabel('Hub 地址').fill('not a valid url');
 await login.getByLabel('用户名').fill('vincent');
 const passwordField = login.getByRole('textbox', { name: '密码', exact: true });
 await passwordField.fill('redacted-password');

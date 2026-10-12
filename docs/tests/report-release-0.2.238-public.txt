@@ -1,0 +1,64 @@
+Hub #906 core slice / #963 settings colors — formal release receipt
+OBSERVED_AT=2026-10-11T09:02:35Z (17:02:35 Asia/Shanghai)
+
+Exact source: 9a4f41c6397d3e89fafdfa02b43c485a4e4b4d4d, merged main.
+Fresh fetch verified this SHA remains an ancestor of origin/main.
+Public tag desktop-v0.2.238 points directly to this SHA. No tag moved.
+Release 409551432 published at 2026-10-11T08:59:54Z, draft=false.
+https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.238
+
+Formal desktop run38125439509: macOS build-release, Windows build-release
+and verify-draft all SUCCESS. Signing, packaged startup, credential-store,
+profile/no-secrets, platform-specific reinstall retention and size gates passed.
+No Linux build was selected, and no Linux assets or update entries are present.
+Formal Android run38125441358 SUCCESS; versionName0.2.238/versionCode2238.
+This Android compatibility certificate is not claimed as a production store key.
+Formal Android publisher38126587150 SUCCESS, one commit and anonymous full
+APK/notes/version verification. Mirror38126779037 and reconciliation38126789265
+SUCCESS. Explicit desktop manifest drift verifier38126894630 SUCCESS.
+
+Independent anonymous downloads (no authorization header), SHA256:
+ANet_0.2.238_aarch64.dmg
+b24f3382b7ac49e272f9c6f94bf8f563b2dc7b5e8a7a6b66373698b6e4ba8c11
+ANet_0.2.238_x64-setup.exe
+ba733e56b2b5b293cd78f67912068b4b1f156b72943e032e44881b557dec41cc
+android/agent-network-0.2.238.apk
+60c962a189aeb9458ada0e118a1297eca1ce905e0ded3debf13f41c6c4fdf940
+Each matches its formal release asset digest. APK also matches the downloaded
+formal build artifact, not a PR/test artifact. Android extra assets attached
+to the desktop release contain the same APK; nothing was overwritten.
+
+Anonymous desktop/latest/VERSION and android/latest/VERSION return0.2.238.
+https://www.anet.sh/desktop/update/latest.json returns0.2.238 and exactly
+darwin-aarch64, darwin-aarch64-app, windows-x86_64, windows-x86_64-nsis,
+windows-x86_64-msi. Android notes contain What's new in0.2.238 and core items.
+Updater URL normalization is checked by the drift workflow, not byte equality.
+
+Delivered slice: Daemon managed ChatGPT account login/list, explicit account
+and model choice, API-key Provider separation, selected Codex node application;
+precise upgrade targets Hub122/CLI164/runtime130; themed settings avatar colors;
+clone-node entry. Official login still requires the account holder's interaction.
+No real OAuth, model entitlement or paid inference is claimed by these gates.
+
+CLI164 formal run38124619816: build and four publication gates passed;
+npm publish returned success but registry visibility verification timed out
+after900s. It is unverified, not a rejected publish and not republished.
+Formal GitHub tarball is public with pinned SHA256
+2c0d292b095005f35e28d1bde77ac23ee502c4d80a299729ab9e8e075a570453.
+The client uses that verified same-version fallback when npm is unavailable.
+Runtime130 npm and GitHub publication are verified independently.
+Selected Daemons daemon-vdev and daemon-dev use the private164/130 pair;
+their identities/configs and other business processes were preserved.
+See agent-network deploy/daemon/provider906-164-130/ and its recovery report.
+
+Remaining original #906 gap: scanner currently covers Hub-bound nodes only.
+On daemon-dev the five bound targets return unavailable; existing nodes parent
+is mode0775 and the resolver rejects it before reading target configs.
+Unbound manual Codex discovery and real login/model use remain unaccepted.
+No production permissions, credentials, bindings or business nodes were changed
+to make a scan appear successful. Whole #906 remains doing; #963 is completed.
+
+Cleanup: downloads streamed only for anonymous hash readback; prior downloaded
+formal APK/draft manifest remain in temporary evidence directories. No new
+runtime, Docker workload, authentication material or production inference was
+created by release readback. No broad regression suite was rerun.

@@ -34,10 +34,27 @@ async function imageValue(page,id) {
  return value;
 }
 try {
- for(const width of [390,1280]) {
+ for(const [width,theme] of [[390,'light'],[1280,'dark']]) {
   mode='ok';saved={a:null,b:null};writes=0;
   const page=await browser.newPage({viewport:{width,height:1000}});
-  await page.goto(`http://127.0.0.1:${server.address().port}`);
+  await page.goto(`http://127.0.0.1:${server.address().port}?theme=${theme}`);
+  await page.getByTestId('user-avatar-pick-3').waitFor();
+  check(`${theme}: theme colors and neutral secondary actions`, await page.evaluate(() => {
+   const style = id => getComputedStyle(document.querySelector(`[data-testid="${id}"]`));
+   const rgb = hex => `rgb(${hex.slice(1).match(/../g).map(v=>parseInt(v,16)).join(', ')})`;
+   const c = window.avatarTheme;
+   return style('user-avatar-hint').color === rgb(c.textSecondary)
+    && style('user-avatar-url').backgroundColor === rgb(c.inputBg)
+    && style('user-avatar-url').borderTopColor === rgb(c.border)
+    && style('user-avatar-reset').backgroundColor === rgb(c.groupedRow)
+    && style('user-avatar-save').backgroundColor === rgb(c.groupedRow);
+  }));
+  await page.getByTestId('user-avatar-url').fill('https://example.test/avatar.png');
+  check(`${theme}: only available save uses primary color`, await page.getByTestId('user-avatar-save').evaluate(e => {
+   const c = window.avatarTheme.accent;
+   return getComputedStyle(e).backgroundColor === `rgb(${c.slice(1).match(/../g).map(v=>parseInt(v,16)).join(', ')})`;
+  }));
+  await page.getByTestId('user-avatar-url').fill('');
   await page.getByTestId('user-avatar-pick-3').click();
   await page.getByTestId('user-avatar-message').filter({hasText:'已保存到 Hub'}).waitFor();
   check(`${width}: pool persisted`,saved.a==='/avatars/avatar-03.webp');

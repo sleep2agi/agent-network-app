@@ -132,7 +132,7 @@ registerTranslations({
   'login.noAccount': ['没有账号？注册', 'No account? Register'],
   'login.haveAccount': ['已有账号？登录', 'Have an account? Sign in'],
   'login.registerTitle': ['注册新账号', 'Create an account'],
-  'login.registerCopy': ['在这个服务器上注册。新账号默认看不到任何 Agent，需要管理员分配。', 'Register on this server. New accounts see no agents until an admin assigns them.'],
+  'login.registerCopy': ['在这个 Hub 上注册。新账号默认看不到任何 Agent，需要管理员分配。', 'Register on this Hub. New accounts see no agents until an admin assigns them.'],
   'login.registerSubmit': ['注册并登录', 'Register and sign in'],
   'login.displayName': ['显示名称（可选）', 'Display name (optional)'],
   'login.registerFailed': ['注册失败', 'Registration failed'],

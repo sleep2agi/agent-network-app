@@ -1,0 +1,71 @@
+#1042 / app#878 — client 0.2.248 formal release receipt
+OBSERVED_AT=2026-10-12 07:31+08
+
+Exact source and narrow scope
+- PR879 normally merged to main f4697d7b71a86be3bf4ee7e3aca8ae086194746c.
+- Formal builds checkout that full40 source and require main ancestry. This
+  receipt is not a new product/release source and does not replace artifacts.
+- PR879 source CI eventually concluded33SUCCESS/1SKIPPED, all terminal;
+  at merge some unrelated builds were still running, not falsely all green.
+- Phone Hub actions now precede machine/connection sections in one-column
+  layout. Existing Provider route, data, permissions and explicit confirmation
+  are unchanged. Desktop two-column ordering is unchanged.
+- Historical core Docker report: report-test1042-mobile-provider-entry.txt.
+  Actual exported React phone light/dark fixture16/16; version14/14,
+  changelog7/7 and full TypeScript check passed in Docker. No repeated broad
+  suite or local/global npm mutation. Web fixture is not on-device installation.
+
+Android — PUBLIC
+- Formal build38183301054 SUCCESS; publisher38184092247 SUCCESS.
+- APK com.anonymous.agentnetworkapp, versionName0.2.248/versionCode2248,
+  83786081 bytes, SHA256
+  143e7e0924cd562ec2dce039f8155af3d01b1fb40d494d2df635e812226bd45a.
+- Publisher committed APK, SHA sidecar, notes and latest/VERSION atomically;
+  at07:24:20+08 anonymous full APK download matched SHA. Small files were
+  independently byte-compared and dataset listing digests matched all4 paths.
+- Operator anonymous readback at07:24:36+08: android/latest/VERSION0.2.248,
+  SHA sidecar matches; notes explicitly describe the mobile entry fix.
+- URL https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/agent-network-0.2.248.apk
+- Users may check updates in Settings. No uninstall/data removal required.
+
+Desktop — PUBLIC, China mirror verified
+- Desktop formal run38183302699 SUCCESS: macOS job114600250556, Windows
+  job114600250394 and verify-draft all SUCCESS; include_linux=false.
+- Audit found exactly8 primary assets: Mac app.tar.gz38288459B, signature400B,
+  dmg38946041B; Windows setup.exe37351427B/signature416B,
+  en-US.msi51163136B/signature416B; latest.json89736B.
+- Manifest0.2.248 has5 Mac/Windows entries only, pointing to actual asset IDs;
+  all3 updater signature file bytes exactly match manifest strings.
+- Normally published desktop-v0.2.248 at07:29:06+08. Immutable tag is a commit
+  object equal to f4697d7b71a86be3bf4ee7e3aca8ae086194746c, not a branch tag.
+- Anonymous dynamic updater HTTP200/application-json/no-store at07:29:14+08,
+  version0.2.248, all5 entries normalized to public GitHub browser URLs.
+  Windows setup anonymous range reachability HTTP206/1B; not full-byte rehash.
+- Drift verifier38184450274 SUCCESS. Explicit China mirror38184448451 SUCCESS;
+  completed anonymous checks at07:30:36+08. Binary ranged GET plus listing
+  digests matched; small signatures/manifests/SHA256SUMS/VERSION full-byte
+  downloads matched. Not an anonymous full-byte binary rehash.
+  This release's duplicate auto-event mirror38184447966 was cancelled before
+  upload to avoid its legacy30-minute APK wait blocking the manual mirror;
+  Android uses its independently verified channel, not desktop attachment.
+- URL https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.248
+- Operator anonymous desktop/latest/VERSION and latest.json readback0.2.248,
+  exactly5 Mac/Windows platform entries. China mirror and Android channel both
+  now advertise248; no docs-site fallback pointer edited.
+
+iOS boundary
+- iOS was not dispatched; no TestFlight upload/processing/on-device claim.
+- Linux deferred per user. No old Linux artifact reused for this source.
+
+Recovery / cleanup boundary
+- Authority: docs/desktop-release-sop.md, docs/ios-release-runbook.md and
+  committed main-only formal workflows. No new startup/ports/proxy/secret
+  source or backup process. Git reproduces software, not production accounts,
+  databases, conversations or native secure-storage contents.
+- Preserve existing profiles and immutable versioned assets/tags; shipped
+  regression uses a higher repair version, not silent replacement or erase.
+- No production Hub/Daemon/node/account/session writes or inference probes.
+  Owned exited test container removed; evidence screenshots/images retained.
+- #1042 closes the Android-first entry slice only. Parent#907 remains doing;
+  other runtime/long-term binding/OAuth/real-vendor rights are not completed
+  by this UI/public APK receipt.

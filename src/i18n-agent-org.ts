@@ -1,0 +1,35 @@
+import { registerTranslations } from './i18n';
+
+export const agentOrgTranslations = {
+  'agentOrg.loading': ['正在读取组织架构…', 'Loading organization…'],
+  'agentOrg.loadFailed': ['组织架构没有读到，请重试', 'Organization could not be loaded. Please retry.'],
+  'agentOrg.retry': ['重试', 'Retry'],
+  'agentOrg.noNetwork': ['还没有选中的网络', 'No network is selected'],
+  'agentOrg.oldHub': ['这个 Hub 还没有部门树，也没有人员通讯录', 'This Hub has neither a department tree nor a people directory'],
+  'agentOrg.directoryMissing': ['人员通讯录还没有，暂时列不出 Agent 和负责人', 'The people directory is not available, so agents and owners are not listed'],
+  'agentOrg.noTree': ['部门树还没有，这些部门来自通讯录，只有一层。', 'There is no department tree. These departments come from the directory as a flat list.'],
+  'agentOrg.empty': ['还没有部门', 'No departments yet'],
+  'agentOrg.unowned': ['未归属', 'Unassigned'],
+  'agentOrg.agentsCount': ['{count} 个 Agent', '{count} agents'],
+  'agentOrg.owner': ['负责人 {name}', 'Owner {name}'],
+  'agentOrg.noAgents': ['这个部门下面没有 Agent', 'No agents in this department'],
+  'agentOrg.noOwner': ['没有负责人', 'No owner'],
+  'agentOrg.back': ['全部部门', 'All departments'],
+  'agentOrg.readOnly': ['部门树和 Agent 的负责人来自 Hub，这里只读。', 'The department tree and each agent\'s owner come from Hub and are read-only here.'],
+  'agentOrg.demoBanner': ['演示数据 · 后端开发中，敬请期待', 'Demo data — backend in development, coming soon'],
+  'agentOrg.demoHint': ['这些调整只在这台设备上模拟，不会向 Hub 发请求，也不会写入配置。', 'These adjustments are simulated on this device. They do not send a Hub request and do not write configuration.'],
+  'agentOrg.demoTitle': ['调整结构（演示）', 'Adjust structure (demo)'],
+  'agentOrg.demoPickAgent': ['选择 Agent', 'Choose an agent'],
+  'agentOrg.demoPickDept': ['移到部门', 'Move to department'],
+  'agentOrg.demoApply': ['模拟调整', 'Simulate move'],
+  'agentOrg.demoReset': ['清除演示调整', 'Clear demo moves'],
+  'agentOrg.demoResult': ['这次没有向 Hub 发请求，也没有写入任何配置。', 'No Hub request was sent, and nothing was written.'],
+  'agentOrg.demoBadge': ['演示', 'Demo'],
+  'agentOrg.demoKeptOwner': ['仍由 {name} 负责，没有保存', 'Still owned by {name}, not saved'],
+  'agentOrg.demoKeptUnowned': ['仍然没有负责人，没有保存', 'Still has no owner, not saved'],
+  'agentOrg.demoNoAgents': ['通讯录里还没有可调整的 Agent', 'The directory has no agents to move'],
+  'agentOrg.demoNeedPick': ['先选一个 Agent 和目标部门', 'Choose an agent and a target department first'],
+  'agentOrg.demoFailed': ['这次模拟没有完成', 'This simulation did not complete'],
+} as const;
+
+registerTranslations(agentOrgTranslations);

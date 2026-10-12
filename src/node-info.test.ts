@@ -1,7 +1,8 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { nodeStatusPath } from './api';
-import { nodeInfoFacts, safeServerLabel, safeServerUrl } from './node-info';
+import { nodeInfoFacts, resumeSessionId, safeServerLabel, safeServerUrl } from './node-info';
+import { factText, headerChips } from './node-page-model';
 
 let passed = 0;
 const check = (name: string, ok: boolean) => {
@@ -24,6 +25,20 @@ check('project path is displayed independently', value(facts, '工作路径') ==
 check('server/hostname/IP are all retained', value(facts, '服务器') === 'edge-a' && value(facts, 'Hostname') === 'host-a' && value(facts, 'IP') === '10.0.0.8');
 check('runtime/agent/node type remain distinct', value(facts, 'Runtime') === 'codex' && value(facts, 'Agent') === 'codex-sdk' && value(facts, '节点类型') === 'worker');
 check('model/version/status are visible', value(facts, '模型') === 'gpt-5' && value(facts, '版本') === '2.5.0' && value(facts, '状态') === 'working');
+const labels = facts.map(f => f.label);
+check('session-id is the cell after 版本', labels[labels.indexOf('版本') + 1] === 'session-id');
+check('missing session_id still occupies the row (empty, not omitted)', facts.some(f => f.label === 'session-id') && value(facts, 'session-id') === undefined);
+check('empty session-id displays an em dash, same as other absent facts', factText(value(facts, 'session-id')) === '—' && factText(undefined) === '—');
+
+const withSession = nodeInfoFacts({
+  alias: 'agent-a', status: 'working', agent: 'codex-sdk', version: '2.5.0-preview.126',
+  session_id: '  sess_01HRESUME  ',
+}, { node_id: 'node-a', alias: 'agent-a' }, 'https://hub.example');
+const sessionFact = withSession.find(f => f.label === 'session-id');
+check('session-id shows the trimmed status session_id', sessionFact?.value === 'sess_01HRESUME' && sessionFact.wrap === true && sessionFact.testID === 'node-runtime-session-id');
+check('header chips stay runtime/model/version and do not swallow the session id', !headerChips(withSession).some(chip => chip.includes('sess_01HRESUME')));
+check('blank session_id is an empty fact', value(nodeInfoFacts({ alias: 'b', status: 'idle', session_id: '   ' }, null, 'https://hub.example'), 'session-id') === undefined);
+check('non-string session_id does not throw and stays empty', value(nodeInfoFacts({ alias: 'n', status: 'idle', session_id: 12345 } as any, null, 'https://hub.example'), 'session-id') === undefined && resumeSessionId(null) === undefined && resumeSessionId({}) === undefined);
 
 const legacy = nodeInfoFacts({
   alias: 'legacy', status: 'offline', project_dir: '/home/should-not-be-a-user/secret',
@@ -61,14 +76,16 @@ const root = process.cwd();
 const app = fs.readFileSync(path.join(root, 'App.tsx'), 'utf8');
 const chat = fs.readFileSync(path.join(root, 'src/ChatScreen.tsx'), 'utf8');
 const detail = fs.readFileSync(path.join(root, 'src/NodeDetailScreen.tsx'), 'utf8');
-check('mobile chat opens exact-alias nodeInfo', app.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: screen.alias })}"));
-check('detached chat opens exact-alias nodeInfo', app.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias })}"));
-check('nodeInfo Back restores the same chat', app.includes("onBack={() => setScreen({ name: 'chat', alias: screen.alias })} readOnly"));
-check('Android hardware Back restores the same chat', app.includes("if (screen.name === 'nodeInfo')") && app.includes("setScreen({ name: 'chat', alias: screen.alias })"));
+check('mobile chat opens exact-alias nodeInfo', app.includes('onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}'));
+check('detached chat opens exact-alias nodeInfo', app.includes("onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias, daemonMgmt: screen.daemonMgmt })}"));
+check('nodeInfo Back restores the same chat', app.includes('onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly'));
+check('Android hardware Back restores the same chat', app.includes("if (screen.name === 'nodeInfo')") && app.includes('setScreen(chatBackFromNodeInfo(screen))'));
 // Since 聊天信息 the header's 「设置」 is gone: node settings are the panel's avatar row + section rows.
 check('聊天信息 rows open node settings (with the section they name)', chat.includes('canOpenNode: !!onOpenNodeSettings') && /requestNodeSection\(nodeInfoSectionKey\(cfg\.profileId \?\? cfg\.serverUrl, alias\), row\.section\);\s*onOpenNodeSettings\?\.\(\);/.test(chat));
 check('node info page honours the requested section (read-only page only)', detail.includes('const requested = readOnly ? takeNodeSectionRequest(sectionHandoffKey) : undefined;'));
 check('read-only details hide mutation surfaces except overview restart/stop (board #694)', detail.includes('!readOnly ? <AvatarEditSection') && detail.includes('visible={!!pendingAction && (!readOnly || OVERVIEW_ACTIONS.includes(pendingAction))}') && detail.includes("{readOnly ? '节点信息' : '节点详情'}"));
 check('details use network-scoped full status rather than the list projection', detail.includes('fetchNodeStatus(cfg, alias)'));
+check('model & runtime summary reads modelSectionFacts (session-id beside 版本)', detail.includes('const runtimeFacts = modelSectionFacts(facts);') && detail.includes('runtimeFacts.map(fact => <FactCell'));
+check('fact values stay selectable; a wrapped session-id is not ellipsized', detail.includes('selectable') && detail.includes('...(fact.wrap ? {} : { numberOfLines: 2 })') && detail.includes("overflowWrap: 'anywhere'"));
 
 console.log(`node info: ${passed}/${passed} checks passed`);

@@ -1,0 +1,55 @@
+#906 node detail Provider/model switch core — TEST ONLY
+Observed: 2026-10-11T10:19Z / 18:19 Asia/Shanghai
+Base main: 43995b64f3d8f377860da262f2b22f9f0fd05b22
+Branch: feat/906-node-provider-switch
+
+Docker only, no host npm or production state mounted.
+Pinned Bun1.3.14 and Node22.22.2 images; npm ci uses repository lockfile.
+Core tests: 2 PASS / 0 FAIL / 9 expectations. Candidate typecheck PASS.
+Candidate real Expo export: PASS, 1231 modules.
+Exported React UI in Docker Chromium: 5 PASS / 0 FAIL.
+The first browser run reused the task-owned client239 Chromium harness image
+25539b2767140862c600b55fbc5f60683b34613cdf676d6432409ccf902449f7;
+candidate browser image 6ab093757022269da121b47de53f48beacbb6b68e6157c3bd494f70cd07b6e37.
+The suite Dockerfile now rebuilds the harness from a pinned public Playwright
+image. Its rebuild is independent of the first completed UI run.
+
+Core checks:
+- Actual chat node-info page shows Provider/model controls despite the old
+  launcher config_update_capable control being unavailable.
+- Target node id is fixed; no target-node picker on the detail page.
+- Select Provider/authentication profile/model; no write before confirmation.
+- Actual exported UI sends the chosen node/provider/model through existing
+  MCP apply and displays the matching application receipt.
+- Remove the Hub binding, reopen the actual page: binding guidance replaces
+  the apply control. Same hostname/pending adoption do not imply ownership.
+- Browser page errors: zero.
+
+HTTP responses and runtime-confirmed receipt are synthetic fixtures. No real
+Hub/Daemon/OAuth/model inference/native macOS/Windows installation is tested
+by this suite. Existing backend apply is reused, not newly proven by a mock.
+Source collection, new-node creation with a managed Provider and official
+account authorization remain separate unfinished pieces of original #906.
+Not included in client239; this branch has not been merged or released.
+
+Cleanup: all tests use --rm; browser test uses --network none. No production
+restart, credentials copied, published artifacts or local global npm changes.
+
+18:26+08 CI differential: the repository runs each test as `bun file.ts`, so
+the new bun:test-only file failed before assertions. Converted to the existing
+script/assert style, retaining all9 assertions. The old source-wiring check
+expected every known node to mount the legacy model section; updated that
+same check to require both the Codex daemon control and other-runtime legacy
+control branches. Docker reran only these differences: target2/2 groups with
+9 assertions and model-change39/39 PASS; candidate typecheck follows. Original
+UI5/5 evidence is unchanged, not counted as a new native application test.
+
+18:31+08 exact5efe12a CI differential: Ubuntu and Windows each finished
+399/400 test files. The only failure was node-codex-reasoning's old literal
+`{node ? <NodeModelSection` source check. Updated the same assertion to
+require BOTH legacy-model and daemon-Provider mounting, and prohibit readOnly
+gating for either. All8 reasoning assertions remain; no product change or
+permission relaxation. The dedicated core Dockerfile now includes this
+reasoning suite. Docker narrow rerun completed18:32+08: target2/2 groups
+(9 assertions), model-change39/39, reasoning8/8 and candidate typecheck PASS.
+UI product code is unchanged from the earlier5/5 Chromium run.

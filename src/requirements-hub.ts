@@ -113,7 +113,7 @@ function checklistFromHub(rows: unknown[]): ChecklistItem[] {
 /** 需求池每个请求(含响应体)的硬上限。原来没有任何超时:手机链路上一个卡住的连接会让任务页
  *  首次加载永远停在转圈(2026-09-29 Vincent 折叠屏截图),而 refresh 只在 ready 时才跑,没有东西能把它救回来。 */
 export const REQUIREMENTS_DEADLINE_MS = 20_000;
-export const REQUIREMENTS_TIMEOUT_TEXT = `服务器 ${REQUIREMENTS_DEADLINE_MS / 1000} 秒内没有响应`;
+export const REQUIREMENTS_TIMEOUT_TEXT = `Hub ${REQUIREMENTS_DEADLINE_MS / 1000} 秒内没有响应`;
 let deadlineMs = REQUIREMENTS_DEADLINE_MS;
 /** Test-only: shorten the deadline so a hanging-request test doesn't wait 20 s. */
 export function __setRequirementsDeadlineForTest(ms: number = REQUIREMENTS_DEADLINE_MS): void { deadlineMs = ms; }
@@ -195,6 +195,17 @@ export function listTruncated(data: { has_more?: unknown }, rowCount: number): b
 }
 
 /**
+ * 列表 / 增量响应里的 capabilities。
+ * 字段在(哪怕是空数组)= known,调用方用这一份覆盖上次的 —— Hub 降级后不再带 column_abandoned,
+ * 空列表必须写回去,否则界面还拿「废弃」去 PATCH,旧 Hub 回 400 invalid_column。
+ * 字段不在 = known false,增量读不要拿空数组把上次的能力清掉。
+ */
+export function capabilitiesFromPayload(data: { capabilities?: unknown }): { capabilities: string[]; known: boolean } {
+  if (!Array.isArray(data.capabilities)) return { capabilities: [], known: false };
+  return { capabilities: data.capabilities.filter((c): c is string => typeof c === 'string'), known: true };
+}
+
+/**
  * 连同 Hub 的 capabilities(#2076 起:agent_owner / description / checklist / projects / due_datetime;旧 Hub = [])。
  * summary = 读精简列表(capability list_summary):每行不带描述正文和子任务条目,打开卡时再按 id 读全文。
  * 只在上一次读到的 capabilities 里有 list_summary 时才传 —— 旧 Hub 不认识 view,会照旧回完整列表,也不会错。
@@ -202,7 +213,8 @@ export function listTruncated(data: { has_more?: unknown }, rowCount: number): b
 export async function listRequirementsFull(cfg: HubConfig, opts: { summary?: boolean } = {}): Promise<{ rows: Requirement[]; capabilities: string[]; truncated: boolean }> {
   const data = await call(cfg, scoped(cfg, opts.summary ? '/api/requirements?view=summary' : '/api/requirements')) as { requirements?: unknown; capabilities?: unknown; has_more?: unknown };
   const rows = Array.isArray(data.requirements) ? data.requirements : [];
-  const capabilities = Array.isArray(data.capabilities) ? data.capabilities.filter((c): c is string => typeof c === 'string') : [];
+  // 整表读:没带 capabilities 字段的旧 Hub 当成空(没有 column_abandoned)。
+  const capabilities = capabilitiesFromPayload(data).capabilities;
   return { rows: rows.map(requirementFromHub).filter((row): row is Requirement => !!row), capabilities, truncated: listTruncated(data, rows.length) };
 }
 
@@ -210,7 +222,7 @@ export async function listRequirementsFull(cfg: HubConfig, opts: { summary?: boo
  * 增量读(Hub capability changes):since 之后改过的卡(含归档的,行上 archived: true)+ 删掉的卡的 id + 下次用的 server_time。
  * 精简行(view=summary)。has_more = 这段时间改动太多一页装不下 —— 调用方改为整读一次。
  */
-export async function listRequirementChanges(cfg: HubConfig, since: string): Promise<{ rows: Requirement[]; deleted: string[]; serverTime: string | null; hasMore: boolean; capabilities: string[] }> {
+export async function listRequirementChanges(cfg: HubConfig, since: string): Promise<{ rows: Requirement[]; deleted: string[]; serverTime: string | null; hasMore: boolean; capabilities: string[]; capabilitiesKnown: boolean }> {
   const data = await call(cfg, scoped(cfg, `/api/requirements?changes=1&view=summary&limit=${HUB_LIST_CAP}&updated_since=${encodeURIComponent(since)}`)) as {
     requirements?: unknown; deleted?: unknown; server_time?: unknown; has_more?: unknown; capabilities?: unknown;
   };
@@ -219,12 +231,14 @@ export async function listRequirementChanges(cfg: HubConfig, since: string): Pro
     const r = requirementFromHub(row);
     return r && (row as { archived?: unknown }).archived === true ? { ...r, archived: true } : r;
   }).filter((row): row is Requirement => !!row);
+  const caps = capabilitiesFromPayload(data);
   return {
     rows,
     deleted: Array.isArray(data.deleted) ? data.deleted.filter((id): id is string => typeof id === 'string') : [],
     serverTime: typeof data.server_time === 'string' && data.server_time ? data.server_time : null,
     hasMore: data.has_more === true,
-    capabilities: Array.isArray(data.capabilities) ? data.capabilities.filter((c): c is string => typeof c === 'string') : [],
+    capabilities: caps.capabilities,
+    capabilitiesKnown: caps.known,
   };
 }
 

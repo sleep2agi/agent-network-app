@@ -16,7 +16,7 @@
 // 1200×800 桌面(非安卓 UA):点「设置」要开出设置窗口(960×720),逐个分类截图,供与改动前的导出逐像素比对(DESKTOP_BASELINE=<旧截图目录>)。
 // 任何一页没打开 = FAIL(不是 skip)。
 import { mkdirSync, readFileSync, existsSync } from 'node:fs';
-import { serveExport, initScript, findChromium, ANDROID_UA, paintedText, openStubWindow } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, ANDROID_UA, paintedText, openStubWindow, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -121,7 +121,7 @@ const web = await serveExport(WEB);
 const browser = await chromium.launch({ executablePath: findChromium() });
 
 if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
-  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: ANDROID_UA, colorScheme: theme, deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: ANDROID_UA, colorScheme: theme, deviceScaleFactor: 1, locale: TEST_LOCALE });
   const page = await ctx.newPage();
   const errors = [];
   page.on('pageerror', e => errors.push(String(e).split('\n')[0]));
@@ -153,8 +153,8 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
       await run(key, async () => {
         await page.locator('[data-testid="settings-row-server"]').click();
         await page.locator('[data-testid="server-header"]').waitFor({ timeout: 8000 });
-        const title = await paintedText(page, '[data-testid="server-header"] *', '服务器');
-        ck(`${theme} server: 打开 服务器 页`, !!title?.painted && title.w >= 8, fmtPaint(title));
+        const title = await paintedText(page, '[data-testid="server-header"] *', 'Hub');
+        ck(`${theme} server: 打开 Hub 页`, !!title?.painted && title.w >= 8, fmtPaint(title));
         await page.locator('[data-testid="server-header"] [aria-label="返回设置"]').click();
         await page.locator('[data-testid="settings-phone-list"]').waitFor({ timeout: 5000 });
         ck(`${theme} server: ‹ 回到设置`, true);
@@ -205,7 +205,7 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
   await ctx.close();
 
   // 安卓专属的通知行(后台保持连接 / 勿扰 / 小米指引 / 测试通知):web 里只能经通知设置夹具按安卓渲染。
-  const fctx = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: ANDROID_UA, colorScheme: theme, deviceScaleFactor: 1 });
+  const fctx = await browser.newContext({ viewport: { width: 390, height: 844 }, userAgent: ANDROID_UA, colorScheme: theme, deviceScaleFactor: 1, locale: TEST_LOCALE });
   const fp = await fctx.newPage();
   await fp.goto(`${web.url}?fixture=notify-settings&platform=android&theme=${theme}`);
   try {
@@ -218,7 +218,7 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
 
 // ── 桌面 1200×800:只截图(与改动前逐像素比对)──────────────────────────────────────────────────
 {
-  const ctx = await browser.newContext({ viewport: { width: 1200, height: 800 }, colorScheme: 'light', deviceScaleFactor: 1 });
+  const ctx = await browser.newContext({ viewport: { width: 1200, height: 800 }, colorScheme: 'light', deviceScaleFactor: 1, locale: TEST_LOCALE });
   const page = await ctx.newPage();
   await page.addInitScript(initScript, { theme: 'light' });
   await page.addInitScript(extraStub);

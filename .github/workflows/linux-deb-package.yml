@@ -1,6 +1,7 @@
 name: Linux deb package (TEST ONLY)
 on:
   pull_request:
+    types: [opened, synchronize, reopened, ready_for_review]
     paths:
       - 'src-tauri/**'
       - 'src/NodeDetailScreen.tsx'
@@ -23,6 +24,7 @@ on:
       - 'tests/linux-native-v1-candidate-runtime/**'
       - 'tests/linux-native-v1-lifecycle/**'
       - 'tests/linux-native-v1-ci/**'
+      - 'tests/linux-native-current-v1/**'
       - 'tests/local-daemon-packages/**'
       - 'scripts/seed-previous-local-hub.mjs'
       - 'scripts/with-linux-test-keyring.sh'
@@ -34,7 +36,7 @@ on:
       focus:
         description: 'Full historical suite or only the original V1 registration refusal'
         type: choice
-        options: [full, v1-registration]
+        options: [full, v1-registration, current-v1-registration]
         default: full
 permissions:
   contents: read
@@ -49,6 +51,9 @@ jobs:
       - run: docker build -t anet-v1-ci-contract:test -f tests/linux-native-v1-ci/Dockerfile .
       - run: docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-v1-ci-contract:test
   linux-deb:
+    # Draft integration is exercised explicitly by the bounded current-pair job.
+    # Keep full historical gates on ready PRs/manual full; skipped is not PASS.
+    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && (github.event_name != 'workflow_dispatch' || inputs.focus != 'current-v1-registration')
     needs: v1-ci-contract
     env:
       V1_REGISTRATION_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'v1-registration' }}
@@ -416,6 +421,74 @@ jobs:
         if: always()
         with:
           name: TEST-ONLY-linux-deb-${{ github.sha }}
+          path: out/
+          retention-days: 7
+          if-no-files-found: error
+  current-v1-registration:
+    if: github.event_name == 'workflow_dispatch' && inputs.focus == 'current-v1-registration'
+    needs: v1-ci-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - name: Build bound TEST ONLY desktop and validate package
+        run: |
+          source_sha=$(git rev-parse HEAD)
+          docker build --build-arg SOURCE_COMMIT="$source_sha" -t anet-current-deb:test -f tests/linux-deb-package/Dockerfile .
+          docker run --rm --network none anet-current-deb:test
+          docker create --name current-deb-artifacts anet-current-deb:test
+          mkdir -p out
+          docker cp current-deb-artifacts:/app/src-tauri/target/release/bundle/deb/. out/
+          docker rm current-deb-artifacts
+          sha256sum out/*.deb >out/SHA256SUMS
+          printf 'TEST ONLY. Not a release or updater.\nApp source: %s\n' "$source_sha" >out/TEST-ONLY.txt
+      - name: Native startup and credential authentication prerequisite
+        run: |
+          source_sha=$(git rev-parse HEAD)
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg DEB_IMAGE=anet-current-deb:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-install:test -f tests/linux-deb-install/Dockerfile .
+          docker run --rm --network none anet-current-install:test
+          docker build --build-arg INSTALL_IMAGE=anet-current-install:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-workspace:test -f tests/linux-native-workspace/Dockerfile .
+          docker run --rm --network none anet-current-workspace:test
+      - name: Verified public CLI170 runtime136 prerequisite
+        run: |
+          docker build --target current-prefix -t anet-current-prefix:test -f tests/local-daemon-packages/Dockerfile .
+          docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-current-prefix:test
+      - name: Build current published-pair registration fixture without source overlay
+        run: |
+          source_sha=$(git rev-parse HEAD)
+          deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
+          docker build --build-arg NATIVE_IMAGE=anet-current-workspace:test --build-arg PAIR_IMAGE=anet-current-prefix:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-daemon:test -f tests/linux-native-daemon/Dockerfile .
+          docker build --build-arg NATIVE_IMAGE=anet-current-daemon:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-daemon-ui:test -f tests/linux-native-daemon-ui/Dockerfile .
+          docker build --build-arg V1_IMAGE=anet-current-prefix:test --build-arg NATIVE_IMAGE=anet-current-daemon-ui:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-v1-base:test -f tests/linux-native-opencode-v1/Dockerfile .
+          docker build --network none --build-arg V1_NATIVE_IMAGE=anet-current-v1-base:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-v1-registration:test -f tests/linux-native-v1-registration/Dockerfile .
+          docker build --build-arg V1_NATIVE_IMAGE=anet-current-v1-registration:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-v1-model:test -f tests/linux-native-v1-model/Dockerfile .
+          docker build --network none --build-arg V1_MODEL_IMAGE=anet-current-v1-model:test -t anet-current-v1:test -f tests/linux-native-current-v1/Dockerfile .
+      - name: V1 environment authentication session prerequisite
+        run: docker run --name current-v1-atomic --network none --cap-drop ALL --security-opt no-new-privileges anet-current-v1:test python3 /fixture/v1-atomic.py
+      - name: Real native creation binds actual Hub request profile identity and worker
+        run: docker run --name current-v1-registration --network none --cap-drop ALL --security-opt no-new-privileges --shm-size 256m -e TEST_V1_REGISTRATION_ONLY=1 anet-current-v1:test
+      - name: Evidence and owned-container cleanup even after failure
+        if: always()
+        run: |
+          cleanup_failed=0
+          for name in current-deb-artifacts current-v1-atomic current-v1-registration; do
+            if docker container inspect "$name" >/dev/null 2>&1; then
+              mkdir -p "out/$name"
+              docker inspect --format '{{.State.Status}} exit={{.State.ExitCode}} image={{.Image}}' "$name" >"out/$name/container-state.txt" || cleanup_failed=1
+              if [ "$name" != current-deb-artifacts ]; then
+                docker cp "$name:/evidence/." "out/$name/" || cleanup_failed=1
+              fi
+              docker rm -f "$name" || cleanup_failed=1
+            fi
+          done
+          test "$cleanup_failed" -eq 0
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: TEST-ONLY-current-v1-registration-${{ github.sha }}
           path: out/
           retention-days: 7
           if-no-files-found: error
