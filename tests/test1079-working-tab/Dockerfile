@@ -6,7 +6,7 @@ WORKDIR /app
 COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts --no-audit --no-fund
 COPY . .
-CMD ["sh", "-c", "bun src/conversation-working-tab.test.ts && bun src/conversation-tab.test.ts && npm run typecheck"]
+CMD ["sh", "-c", "bun src/conversation-working-tab.test.ts && bun src/conversation-tab.test.ts && bun src/drive-registry.test.ts && npm run typecheck"]
 FROM core AS web
 ENV CI=1 EXPO_NO_TELEMETRY=1
 RUN npx --no-install expo export -p web --output-dir /web

@@ -14,4 +14,17 @@ Validation plan: GitHub Actions agent-working-tab.yml, staged Docker core then
 desktop 1440x900 / phone 390x844 real web export with synthetic Hub/native IPC.
 Core filter/old unread regression/typecheck precede UI. Screenshots TEST ONLY.
 Local product tests: NOT RUN. Real native installation/model calls: NOT RUN.
-CI result: PENDING. No feature release claimed; 0.2.251 does not include #1079.
+First exact head: 7c94e54af1fddcb0773be3216be6ed612259845c.
+Actions core-and-ui run38233844431/job114759551824: SUCCESS.
+12 core assertions, 34/34 existing unread assertions, app typecheck PASS.
+Actual exported UI: desktop and phone active-only rows, live working->idle,
+empty state and Show all PASS at 10:05:08Z and 10:05:19Z respectively.
+TEST-ONLY artifact11740445576 (47088 bytes), tested merge
+3e8ccf717f549008dfbce8816c4c9ee648bc2683. Synthetic Hub/native IPC, not
+native macOS/Windows/Android installation or production account/model proof.
+Other first-head CI: drive-registry rejects missing new drive registration
+in avatar, people-loading and Ubuntu/Windows units. Product assertion failure
+not observed in those logs. Added dedicated-workflow registration (like the
+existing prelogin entry), plus registry assertion to this core gate; no guard
+or assertion relaxed. Follow-up exact-head CI remains PENDING.
+No feature release claimed; 0.2.251 does not include #1079.
