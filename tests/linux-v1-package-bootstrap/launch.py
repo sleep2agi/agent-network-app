@@ -73,6 +73,20 @@ try:
             os.killpg(child.pid, signal.SIGKILL)
             output, _ = child.communicate(timeout=3)
     text = output[:1024 * 1024].decode('utf-8', errors='replace')
+    # All input/credentials are synthetic and execution has no external network.
+    # Keep only bounded error lines, never a full startup log or environment.
+    error_lines = []
+    for line in text.splitlines():
+        if not re.search(r'FATAL|Error:|Refusing|not executable|not compatible', line):
+            continue
+        if re.search(r'token|password|secret|authorization|api.?key', line, re.I):
+            error_lines.append('[credential-related diagnostic omitted]')
+            continue
+        for value, label in [(str(node_dir), '$NODE_DIR'), (str(prefix), '$PRIVATE_PREFIX'),
+                             (str(Path.home()), '$TEST_HOME')]:
+            line = line.replace(value, label)
+        error_lines.append(line[:240])
+    Path('/evidence/cli-bootstrap-errors.txt').write_text('\n'.join(error_lines[:12]) + '\n')
     known = {
         'package_entrypoint_not_executable': 'resolved agent-node package entrypoint is not executable',
         'package_path_refused': 'resolved agent-node package has unsafe ownership or mode',

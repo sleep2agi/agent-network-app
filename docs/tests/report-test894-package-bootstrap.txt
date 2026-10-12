@@ -37,5 +37,7 @@ Actual result — 2026-10-12 12:44+08
   using source-candidate128 and the original safe/default created profile fields.
   Its rejecting HTTP fixture is NOT a real Hub: only startup-to-request is observed,
   no identity registration/SSE/model assertion. Output is constant reason enums,
-  process-lifetime and request counters, never raw diagnostic text/credentials.
+  process-lifetime and request counters plus at most12 error lines (240chars each)
+  with private fixture paths replaced and credential-related lines omitted.
+  No full startup log, config, environment, arbitrary argv or credentials export.
   This does not recompile desktop, change product or lower the native gate.
