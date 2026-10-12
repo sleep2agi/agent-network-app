@@ -217,3 +217,21 @@ Keep this FAIL separate from the earlier checkbox failure and product launch.
 Fix these two positions only in explicit current-V2 mode; historical coordinates
 and exact creation/model/config/process assertions remain unchanged. Next run
 will reuse the same tested app/deb/public pair; no extra suite or local tests.
+
+2026-10-12 14:50+08 actual V2 admission refusal, not UI coordinate failure
+-----------------------------------------------------------------------
+Run38213926492@f8fdb07ea029c639b3ac3e0cf3c56c3a6870b2d5 failed14:46:58.
+Reviewed confirmation screenshot: exactV2/consent/stub-model/workdir submitted;
+actual daemon rejection opencode_v2_configured_model_missing. Native auth,
+public pair, real V2 atomic model transport remain SUCCESS; cleanup/upload
+SUCCESS. Artifact11730682423 archive51,329,867B/digest
+5587af1d5259a256ccaa0f34064de3dcb4671bac344175a4768d9638f6cd5783.
+The frozen public sourcef860 create-node-daemon.ts1183 reads existing project's
+OpenCode config; opencode-v2-configured-model.ts global/direct/.opencode order
+does not discover the old fixture's child-private .config seed. This is missing
+test machine configuration, not authority to remove alignment/no-fallback.
+Current-only fixture now writes a synthetic0600 target-project opencode.json
+before UI creation; public software will align the private child itself.
+Historical child-only preparation stays unchanged. No identity/token/profile
+is seeded. Original exact config/model/process/task assertions unchanged.
+Next Actions pending; no currentV2 creation/model response acceptance yet.
