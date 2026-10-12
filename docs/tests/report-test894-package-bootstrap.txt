@@ -57,3 +57,11 @@ Second atomic run — 2026-10-12 12:49+08
 - Always cleanup/upload succeeded; TEST-ONLY artifact11727042664,1825B,
   archive digest3009bde2ebf7b3e5bcecaffb5113e33ee9718d8c1be610e2d688eb8c33ccf086.
   Retain this failed attempt; no product/production/release change.
+
+Third setup correction — 2026-10-12 12:51+08
+- run38205323134@5d3318e0665eee5519626532b6cc10f1120ba1fc failed before
+  CLI launch: real profile writer already made the empty auth directory, and
+  the fixture's mkdir lacked exist_ok. Allow that existing directory but still
+  refuse any existing auth.json before writing a synthetic key. No product change.
+- Same-head Ubuntu unit/typecheck succeeded; other jobs were not yet terminal
+  at the observation. Do not count this setup failure as a product assertion.

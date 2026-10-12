@@ -18,9 +18,10 @@ assert created['runtime'] == 'opencode-cli' and created['opencodeGeneration'] ==
 assert created['model'] == 'opencode/mimo-v2.6-flash-free'
 assert config.stat().st_mode & 0o777 == 0o600
 auth_dir = node_dir / '.local/share/opencode'
-auth_dir.mkdir(parents=True, mode=0o700)
+auth_dir.mkdir(parents=True, mode=0o700, exist_ok=True)
 for parent in [node_dir, node_dir / '.local', node_dir / '.local/share', auth_dir]:
     parent.chmod(0o700)
+assert not (auth_dir / 'auth.json').exists(), 'never replace an existing fixture credential'
 (auth_dir / 'auth.json').write_text(json.dumps({'openai': {'type': 'api', 'key': 'test-only-v1-acp'}}))
 (auth_dir / 'auth.json').chmod(0o600)
 requests = []
