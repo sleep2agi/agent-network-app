@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Pressable, View, useWindowDimensions } from 'react-native';
 import { Text } from './ui-text';
 import { SelectField, type SelectOption } from './TaskSelectMenu';
@@ -9,11 +9,13 @@ import { useTranslation } from './i18n-react';
 import './i18n-provider-management';
 import type { HubConfig } from './api';
 import type { ProviderRead } from './daemon-provider-management';
-import { readManagedProviders } from './daemon-provider-management-api';
-import { changeCreateProviderSelection, createProviderOptions, EMPTY_CREATE_PROVIDER, managedCreateReference,
+import { readManagedProviders, providerWriteTransportAllowed } from './daemon-provider-management-api';
+import DaemonProviderCollection from './DaemonProviderCollection';
+import type { ProviderCollectionWrite } from './daemon-provider-collection';
+import { changeCreateProviderSelection, collectedCreateSelection, createProviderOptions, EMPTY_CREATE_PROVIDER, managedCreateReference,
   type CreateProviderReference, type CreateProviderSelection } from './daemon-provider-create';
 
-/** Read-only choices. Actual configuration is initialized by the Daemon on create. */
+/** Selection is read-only; collection requires confirmation, creation remains separate. */
 export default function DaemonCreateProvider({ cfg, daemonId, identity, enabled, onMode, onSelection }: {
   cfg: HubConfig; daemonId: string; identity: string; enabled: boolean;
   onMode: (enabled: boolean) => void; onSelection: (reference: CreateProviderReference | null) => void;
@@ -22,7 +24,12 @@ export default function DaemonCreateProvider({ cfg, daemonId, identity, enabled,
   const [refresh, setRefresh] = useState(0);
   const [read, setRead] = useState<{ scope: string; value: ProviderRead } | null>(null);
   const [state, setState] = useState<{ scope: string; selection: CreateProviderSelection } | null>(null);
+  const [collectionState, setCollectionState] = useState<'saving' | 'saved' | 'unconfirmed' | null>(null);
+  const collectionController = useRef<AbortController | null>(null);
   const readScope = JSON.stringify([identity, refresh]);
+  useEffect(() => () => {
+    collectionController.current?.abort(); collectionController.current = null;
+  }, [readScope, enabled]);
   useEffect(() => {
     if (!enabled) return;
     const controller = new AbortController();
@@ -36,8 +43,26 @@ export default function DaemonCreateProvider({ cfg, daemonId, identity, enabled,
   const choiceScope = JSON.stringify([readScope, snapshot?.revision, result?.kind === 'ready' ? result.observedAt : null]);
   const selection = state?.scope === choiceScope ? state.selection : EMPTY_CREATE_PROVIDER;
   const options = snapshot ? createProviderOptions(snapshot, selection) : { providers: [], auth: [], models: [] };
+  const collecting = collectionState === 'saving' || collectionState === 'unconfirmed';
+  const collect = async (write: ProviderCollectionWrite) => {
+    if (!enabled || !snapshot || collecting || collectionController.current
+      || !providerWriteTransportAllowed(cfg.serverUrl)) return;
+    const ctrl = new AbortController(); collectionController.current = ctrl;
+    setCollectionState('saving'); onSelection(null); setState(null);
+    const saved = await readManagedProviders(cfg, daemonId, ctrl.signal, write);
+    if (ctrl.signal.aborted) return;
+    const next = saved.kind === 'ready' ? collectedCreateSelection(snapshot, write, saved.snapshot) : null;
+    if (saved.kind === 'ready' && next) {
+      setRead({ scope: readScope, value: saved });
+      setState({ scope: JSON.stringify([readScope, saved.snapshot.revision, saved.observedAt]), selection: next });
+      onSelection(managedCreateReference(saved.snapshot, 'codex-app-server', next));
+      setCollectionState('saved');
+    } else setCollectionState('unconfirmed');
+    collectionController.current = null; ctrl.abort();
+  };
   const pick = (field: keyof CreateProviderSelection, value: string) => {
     const next = changeCreateProviderSelection(selection, field, value);
+    setCollectionState(null);
     setState({ scope: choiceScope, selection: next });
     onSelection(snapshot ? managedCreateReference(snapshot, 'codex-app-server', next) : null);
   };
@@ -45,14 +70,14 @@ export default function DaemonCreateProvider({ cfg, daemonId, identity, enabled,
     <Text style={{ color: colors.textSecondary }}>{t(`providerManagement.select.${name}`)}</Text>
     <SelectField value={selection[name] || null} options={entries} noneLabel={t('providerManagement.select.clear')}
       placeholder={t('providerManagement.select.choose')} title={t(`providerManagement.select.${name}`)}
-      touch={width < 600} searchable disabled={!entries.length} testID={`create-daemon-provider-${name}`}
+      touch={width < 600} searchable disabled={collecting || !entries.length} testID={`create-daemon-provider-${name}`}
       onPick={value => pick(name, value ?? '')} />
   </View>;
   return <PendingPanelCard testID="create-daemon-provider">
     <PendingCardTitle title={t('providerManagement.create.title')} />
     {([false, true] as const).map(mode => <Pressable key={String(mode)} testID={`create-daemon-provider-mode-${mode}`}
       accessibilityRole="radio" accessibilityState={{ checked: enabled === mode }} aria-checked={enabled === mode}
-      onPress={() => { onSelection(null); setState(null); setRead(null); setRefresh(v => v + 1); onMode(mode); }} style={buttonStyle('secondary')}>
+      onPress={() => { onSelection(null); setState(null); setRead(null); setCollectionState(null); setRefresh(v => v + 1); onMode(mode); }} style={buttonStyle('secondary')}>
       <Text style={buttonTextStyle('secondary')}>{t(mode ? 'providerManagement.create.managed' : 'providerManagement.create.existing')}</Text>
     </Pressable>)}
     {enabled ? <>
@@ -60,11 +85,17 @@ export default function DaemonCreateProvider({ cfg, daemonId, identity, enabled,
       {!result ? <Text testID="create-daemon-provider-loading" style={{ color: colors.textSecondary }}>{t('providerManagement.loading')}</Text> : null}
       {result && result.kind !== 'ready' ? <Text style={{ color: colors.textSecondary }}>{t(`providerManagement.${result.kind}`)}</Text> : null}
       {snapshot && !options.providers.length ? <Text style={{ color: colors.textSecondary }}>{t('providerManagement.create.empty')}</Text> : null}
+      {snapshot ? <DaemonProviderCollection snapshot={snapshot} identity={identity} context="create"
+        secure={providerWriteTransportAllowed(cfg.serverUrl)} busy={collecting} collect={collect} /> : null}
+      {collectionState ? <Text testID="create-daemon-provider-collection-status" style={{ color: colors.textSecondary }}>
+        {t(`providerManagement.create.collection.${collectionState}`)}
+      </Text> : null}
       {field('providerId', options.providers.map(p => ({ id: p.id, label: p.label, sub: p.id })))}
       {field('authId', options.auth.map(a => ({ id: a.id, label: a.id, sub: 'API Key' })))}
       {field('model', options.models.map(model => ({ id: model, label: model })))}
       <Pressable testID="create-daemon-provider-refresh" accessibilityRole="button" onPress={() => {
-        onSelection(null); setState(null); setRefresh(v => v + 1);
+        collectionController.current?.abort(); collectionController.current = null;
+        onSelection(null); setState(null); setCollectionState(null); setRefresh(v => v + 1);
       }} style={buttonStyle('secondary')}><Text style={buttonTextStyle('secondary')}>{t('providerManagement.refresh')}</Text></Pressable>
     </> : null}
   </PendingPanelCard>;

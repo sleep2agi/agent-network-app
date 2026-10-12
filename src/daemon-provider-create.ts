@@ -1,4 +1,5 @@
 import type { ProviderSnapshot } from './daemon-provider-management';
+import { providerCollectionConfirmed, type ProviderCollectionWrite } from './daemon-provider-collection';
 export type CreateProviderSelection = { providerId: string; authId: string; model: string };
 export type CreateProviderReference = { revision: number; provider_id: string; auth_id: string; model: string };
 export const EMPTY_CREATE_PROVIDER: CreateProviderSelection = { providerId: '', authId: '', model: '' };
@@ -20,6 +21,14 @@ export function managedCreateReference(snapshot: ProviderSnapshot, runtimeId: st
   const options = createProviderOptions(snapshot, selection);
   if (runtimeId !== 'codex-app-server' || !options.models.includes(selection.model)) return null;
   return { revision: snapshot.revision, provider_id: selection.providerId, auth_id: selection.authId, model: selection.model };
+}
+/** A confirmed local collection can populate the form, but never creates a node. */
+export function collectedCreateSelection(before: ProviderSnapshot, write: ProviderCollectionWrite, after: ProviderSnapshot): CreateProviderSelection | null {
+  if (!providerCollectionConfirmed(before, write, after)) return null;
+  const auth = after.providers.find(p => p.id === write.provider.provider_id)?.runtimes
+    .find(r => r.runtime === 'codex-tui')?.auth.find(a => a.id === write.provider.auth_id);
+  const selection = { providerId: write.provider.provider_id, authId: write.provider.auth_id, model: auth?.models[0] ?? '' };
+  return managedCreateReference(after, 'codex-app-server', selection) ? selection : null;
 }
 export function validCreateProviderReference(value: CreateProviderReference): boolean {
   const id = (s: string) => /^[A-Za-z0-9][A-Za-z0-9_-]{0,63}$/.test(s);

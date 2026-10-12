@@ -3,6 +3,8 @@ on:
   pull_request:
     paths:
       - 'src/DaemonProviderCollection.tsx'
+      - 'src/DaemonCreateProvider.tsx'
+      - 'src/daemon-provider-create*'
       - 'src/daemon-provider-collection.ts'
       - 'src/DaemonProvidersPane.tsx'
       - 'src/daemon-provider-management-api.ts'
@@ -26,3 +28,6 @@ jobs:
         run: |
           sg docker -c 'docker build --target browser -f tests/provider-collection/Dockerfile -t anet-app:provider-collection-browser .'
           sg docker -c 'docker run --rm --network none anet-app:provider-collection-browser'
+      - name: Creation reuses an explicitly collected profile (same Docker export)
+        run: |
+          sg docker -c 'docker run --rm --network none -e CORE_CREATE_COLLECTION=1 anet-app:provider-collection-browser'

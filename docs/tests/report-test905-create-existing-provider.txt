@@ -1,0 +1,73 @@
+#905 creation-time reuse of existing API-key Provider — TEST ONLY
+OBSERVED_AT=2026-10-12 08:16+08
+
+Source and cause
+- Original #905/#906, new user feedback
+  admin idem_4394bc4c793da8b06b5200c3d3a82d8b6e290745; Issue884.
+- Screenshot248 shows a zero managed Provider catalog alongside scanned Codex
+  configurations. Scanned inventory is not the saved catalog read by creation.
+- Clean owned branch fix/create-existing-daemon-provider from main
+  d3705a8ca7f8d738cf399e1666ae574b38b176ae.
+- Candidate tree before this report:8d29e18df5d24e114716630a0717faedc81b2063.
+- Reuse the existing identifier-only collect command in the actual create
+  wizard. Explicit review/confirmation saves on the selected Daemon; exact
+  collection receipt fills Provider/auth/model and the new catalog revision.
+  Only a subsequent create submission sends the normal creation request.
+- No source-node modification/restart, key input/upload, ChatGPT auth clone,
+  new backend protocol, silent default model or automatic create/retry.
+- Wrong model/scope/revision or disabled profile cannot become a creation
+  selection. Refresh/scope exit stops observation without claiming remote undo.
+
+Core Docker evidence
+- Candidate src and App.tsx read-only in the existing locked-dependency source
+  image anet-app:mobile-provider-entry-core, network none.
+- Creation core5/5 groups PASS, including10 new collection/selection/assertions.
+  Existing management27/27 groups PASS; full typecheck exit0. The final source
+  typecheck completed08:15+08 after all product edits.
+- Actual Expo export1246 modules from tracked Dockerfile
+  tests/daemon-provider-management/Dockerfile, web-export target.
+- Export manifest-list sha256:
+  38fb98f8b7d1f519d23514161f656cbec7142be7a881aab09a22e19d69ee8960.
+- Browser via Dockerfile.ui, export-only named context. Final image manifest:
+  eede96bd0d1d7f0ef3b6012954fde60bdc2f67b691e342cbb0392d80df98e79e.
+- CORE_CREATE_COLLECTION=1, network none, actual exported wizard with synthetic
+  HTTP/native transport; desktop1200x850:11/11 checks PASS, zero page errors.
+  Select/cancel produce0 collect and0 create; confirmation produces1 exact
+  collect intent. Exact saved profile/model is automatically selected while
+  create remains0. Final create sends1 request, correct daemon/model/revision4,
+  identifier-only reference, no endpoint/key;0 apply operations.
+- Screenshot reviewed: selected Provider/auth/model and explicit not-created
+  status visible. Browser success proves client UI/request wiring only, NOT
+  real daemon key access, native child registration, OAuth or vendor model access.
+- Existing default collection drive remains unchanged; the dedicated
+  provider-collection workflow adds this mode using the same built export,
+  after core checks. No additional full native/model suite.
+
+Fixture setup corrections
+- An early browser invocation ran before its image existed: pull access error
+  before tests, not a product failure. It was not retried against the registry.
+- Interim browser context mistakenly selected the entire web build image
+  instead of web-export. That image was never counted as acceptance. Correct
+  export-only context reused the cached1246-module build; no assertion weakened.
+
+Rebuild the bounded path
+sg docker -c 'docker build --target core -f tests/provider-collection/Dockerfile -t anet-app:provider-collection-core .'
+sg docker -c 'docker run --rm --network none anet-app:provider-collection-core'
+sg docker -c 'docker build --target browser -f tests/provider-collection/Dockerfile -t anet-app:provider-collection-browser .'
+sg docker -c 'docker run --rm --network none -e CORE_CREATE_COLLECTION=1 anet-app:provider-collection-browser'
+
+Delivery and recovery
+- Client248 does not include this shortcut; PR/main/formal release are separate.
+  Public builds must use a full40 main ancestor, not this branch artifact.
+- HTTP user deployments also need the #1045 matching backend software; current
+  metadata PR2636 remains unmerged with a separate real-client stop-session
+  check failure. This client pass does not solve or bypass that release gate.
+- Startup/ports/proxy/secret sources/schema unchanged. Authority remains
+  docs/daemon-provider-create-client.md, docs/desktop-release-sop.md and backend
+  docs/daemon-provider-creation.md / docs-site/docs/deploy/daemon.md.
+- Retain prior client/software/config for rollback. A confirmed collection
+  persists in the selected Daemon's private state; rollback does not delete it
+  or revoke a key. Restore private data from identity-matched protected backups.
+  Git recreates software, not user credentials/accounts/conversations.
+- No production Provider write, account login, node restart or global install.
+  Test containers --rm removed; only own worktree/images/screenshot retained.

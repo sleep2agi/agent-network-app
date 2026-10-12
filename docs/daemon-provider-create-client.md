@@ -16,6 +16,31 @@ the companion merged and released, then compatible Hub/CLI/runtime software.
 Saved ChatGPT accounts are not copied into fresh nodes by this API-key flow.
 Existing accounts remain managed through the existing explicit login paths.
 
+## Reuse a scanned API-key source during creation (#905 continuation)
+
+Choose the managed-profile mode, then explicitly select a Codex API-key source
+already bound to this Daemon. Review and confirm collection: the existing
+`daemon_provider_snapshot` collect contract reads the key only on that machine
+and saves a private profile. A matching source/model/revision receipt fills the
+Provider, key-profile and model selections without asking for the key again.
+This is not node creation. Review the form and submit the normal creation step,
+which still sends only identifiers and the freshly saved catalog revision.
+
+Selection or cancellation performs no collection or node write. A failed or
+unknown receipt leaves the creation profile unset; refresh to inspect, without
+automatic retries or a silent default model. Source nodes and sessions are
+unchanged. ChatGPT node credentials and unbound local discoveries are not
+collection sources; use the existing explicit managed-login paths instead.
+Configured models are not a claim of verified vendor access.
+
+The client248 screenshot reported by the user predates this creation shortcut.
+This source slice is not a published installer or a production Provider change.
+Core creation coverage is included in the existing provider-collection Docker
+workflow using `CORE_CREATE_COLLECTION=1`; default collection assertions stay.
+No new service, port, secret source or schema is added. Collected private
+profiles persist on the selected Daemon and use its identity-matched protected
+backup; downgrading a client does not remove a confirmed collection.
+
 Deployment/recovery: this adds no service, listener or secret store. Rebuild
 the normal client from exact merged main SHA using its formal release workflow;
 retain the previous installer for rollback. Hub URL and user credentials use
