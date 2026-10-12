@@ -15,7 +15,7 @@ RUN node /candidate/manifest.mjs && \
       @sleep2agi/agent-network@2.3.0-preview.162 @sleep2agi/agent-node@2.5.0-preview.128 && \
     npm install -g --no-audit --no-fund opencode-ai@1.18.34 && test "$(opencode --version)" = 1.18.34
 COPY tests/linux-native-v1-candidate-runtime/prepare.py /fixture/prepare.py
-COPY tests/linux-v1-package-bootstrap/probe.ts /fixture/probe.ts
+COPY tests/linux-v1-package-bootstrap/probe.mjs /fixture/probe.mjs
 COPY tests/linux-v1-package-bootstrap/launch.py /fixture/launch.py
 RUN cp -a /candidate /fixture/runtime-candidate && \
     useradd --uid 10001 --create-home smoke && mkdir /evidence && \
@@ -24,4 +24,4 @@ ENV ANET_PACKAGED_SMOKE_ROOT=/home/smoke/app
 ARG APP_SOURCE_COMMIT
 ENV APP_SOURCE_COMMIT=${APP_SOURCE_COMMIT}
 USER smoke
-CMD ["bun", "/fixture/probe.ts"]
+CMD ["bun", "/fixture/probe.mjs"]

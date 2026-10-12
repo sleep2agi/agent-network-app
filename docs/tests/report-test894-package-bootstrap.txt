@@ -41,3 +41,19 @@ Actual result — 2026-10-12 12:44+08
   with private fixture paths replaced and credential-related lines omitted.
   No full startup log, config, environment, arbitrary argv or credentials export.
   This does not recompile desktop, change product or lower the native gate.
+
+Second atomic run — 2026-10-12 12:49+08
+- run38205115983/job114666773229 locked89b330494c5a56089c6d30ed9b538f57e3bfb59a
+  FAILURE. Package resolver passed; CLI refused the diagnostic's hand-written
+  profile because its runtime binding was missing (zero HTTP requests). This is
+  a fixture preparation error, NOT proof of the original native failure's cause:
+  the real daemon uses writeCreatedOpencodeProfile, which creates that binding.
+- Corrected fixture calls that exact source production creator, not a handmade
+  binding or an admission bypass. Original native refusal remains separate.
+- Same-head unit run38205110590 failed typecheck in Ubuntu/Windows and two Docker
+  UI jobs because the Docker-only .ts probe imported /source. Changed it to .mjs
+  executed by Bun, preserving the actual source imports and App typecheck scope.
+  This is not an environmental failure or a relaxed App assertion.
+- Always cleanup/upload succeeded; TEST-ONLY artifact11727042664,1825B,
+  archive digest3009bde2ebf7b3e5bcecaffb5113e33ee9718d8c1be610e2d688eb8c33ccf086.
+  Retain this failed attempt; no product/production/release change.

@@ -12,22 +12,17 @@ assert os.getuid() == 10001
 assert re.fullmatch('[a-f0-9]{40}', os.environ['APP_SOURCE_COMMIT'])
 node_home = Path.home() / 'v1-native'
 node_dir = node_home / '.anet/nodes/v1-native'
-node_dir.mkdir(parents=True, mode=0o700)
+config = node_dir / 'config.json'
+created = json.loads(config.read_text())
+assert created['runtime'] == 'opencode-cli' and created['opencodeGeneration'] == 'v1'
+assert created['model'] == 'opencode/mimo-v2.6-flash-free'
+assert config.stat().st_mode & 0o777 == 0o600
 auth_dir = node_dir / '.local/share/opencode'
 auth_dir.mkdir(parents=True, mode=0o700)
 for parent in [node_dir, node_dir / '.local', node_dir / '.local/share', auth_dir]:
     parent.chmod(0o700)
 (auth_dir / 'auth.json').write_text(json.dumps({'openai': {'type': 'api', 'key': 'test-only-v1-acp'}}))
 (auth_dir / 'auth.json').chmod(0o600)
-config = node_dir / 'config.json'
-config.write_text(json.dumps({
-    'node_id': 'node_test894_bootstrap', 'node_name': 'v1-native', 'alias': 'v1-native',
-    'runtime': 'opencode-cli', 'model': 'opencode/mimo-v2.6-flash-free',
-    'hub': 'http://127.0.0.1:18883', 'token': 'ntok_test_only_bootstrap',
-    'opencodeGeneration': 'v1', 'opencodeMode': 'headless',
-    'flags': {'opencodeUnsafeTools': False},
-}))
-config.chmod(0o600)
 requests = []
 
 
