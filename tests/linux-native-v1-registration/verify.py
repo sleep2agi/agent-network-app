@@ -5,6 +5,8 @@ import re
 from pathlib import Path
 import runpy
 import sqlite3
+import signal
+import subprocess
 import sys
 import time
 import urllib.parse
@@ -47,6 +49,82 @@ def preserve_refusal(row):
     print(f"V1 registration refusal: status={row['status']} error_code={code}", flush=True)
 
 
+def diagnose_failed_start():
+    # One failure-only replay of the SAME public CLI/profile in this isolated
+    # fixture, after Hub revoked the child token. NOT a registration retry/pass.
+    if not config_path.exists():
+        return
+    cfg = json.loads(config_path.read_text())
+    if cfg.get('runtime') != 'opencode-cli' or cfg.get('opencodeGeneration', 'v1') != 'v1':
+        return
+    original = rows()[0]
+    token = db.execute('SELECT t.revoked_at FROM node_create_requests r JOIN api_tokens t ON t.token_id=r.child_token_id WHERE r.request_id=?', (original['request_id'],)).fetchone()
+    if token is None or token['revoked_at'] is None:
+        return  # Never diagnose with a still-active identity after rejection.
+    daemon_cfg = session['root'] / 'local-daemon/.anet/nodes/local-daemon/config.json'
+    daemon = json.loads(daemon_cfg.read_text())
+    matches = []
+    for proc in Path('/proc').iterdir():
+        if not proc.name.isdigit():
+            continue
+        try:
+            args = (proc / 'cmdline').read_bytes().split(b'\0')
+            if b'--config' in args and args[args.index(b'--config') + 1] == str(daemon_cfg).encode():
+                env = dict(e.split(b'=', 1) for e in (proc / 'environ').read_bytes().split(b'\0') if b'=' in e)
+                matches.append((proc, {k.decode(): v.decode() for k, v in env.items()}))
+        except (FileNotFoundError, ProcessLookupError, PermissionError):
+            continue
+    if len(matches) != 1:
+        return
+    proc, parent = matches[0]
+    node_bin = str((proc / 'exe').resolve())
+    # Same POSIX minimalEnv inherited keys/fixed PATH from published f860 source.
+    inherited = ['USER', 'LOGNAME', 'HTTPS_PROXY', 'https_proxy', 'HTTP_PROXY',
+                 'http_proxy', 'ALL_PROXY', 'all_proxy', 'NO_PROXY', 'no_proxy']
+    env = {k: parent[k] for k in inherited if parent.get(k)}
+    paths = ['/usr/local/sbin', '/usr/local/bin', '/usr/sbin', '/usr/bin', '/sbin', '/bin']
+    if str(Path(node_bin).parent) not in paths:
+        paths.insert(0, str(Path(node_bin).parent))
+    paths.extend(daemon.get('daemonExtraPath', []))
+    env.update(HOME=parent['HOME'], LANG=parent.get('LANG', 'C.UTF-8'), PATH=':'.join(paths))
+    cli = session['root'] / 'local-daemon/anet/lib/node_modules/@sleep2agi/agent-network/dist/bin/anet.cjs'
+    child = subprocess.Popen([node_bin, str(cli), 'node', 'start', 'v1-native'],
+        cwd=str(node_dir.parent.parent.parent), env=env, stdin=subprocess.DEVNULL,
+        stdout=subprocess.PIPE, stderr=subprocess.STDOUT, start_new_session=True)
+    timed_out = False
+    try:
+        output, _ = child.communicate(timeout=12)
+    except subprocess.TimeoutExpired:
+        timed_out = True
+        try:
+            os.killpg(child.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        try:
+            output, _ = child.communicate(timeout=3)
+        except subprocess.TimeoutExpired:
+            try:
+                os.killpg(child.pid, signal.SIGKILL)
+            except ProcessLookupError:
+                pass
+            output, _ = child.communicate()
+    text = output.decode(errors='replace')[-16384:]
+    secrets = [cfg.get('token'), session['secret'], *cfg.get('env', {}).values()]
+    for secret in secrets:
+        if isinstance(secret, str) and secret:
+            text = text.replace(secret, 'REDACTED')
+    text = re.sub(r'(?:ntok|atok|utok)_[\w.-]+', 'TOKEN_REDACTED', text)
+    Path('/evidence/v1-startup-diagnostic.json').write_text(json.dumps({
+        'failure_only_replay': True, 'registration_proof': False,
+        'original_request_still_failed': rows()[0]['status'] == original['status'],
+        'diagnostic_token_already_revoked': True, 'exit_code': child.returncode,
+        'timed_out': timed_out, 'sanitized_output': text,
+        'source': os.environ['TEST_DEB_SOURCE_COMMIT'],
+        'deb_sha256': os.environ['TEST_DEB_SHA256'],
+    }, indent=2))
+    print('Failure-only public CLI diagnostic saved; NOT original startup/registration acceptance', flush=True)
+
+
 def workers():
     found = []
     for directory in Path('/proc').iterdir():
@@ -78,6 +156,7 @@ while time.monotonic() < deadline:
         row = dict(requests[0])
         if row['status'] in ['failed', 'rejected', 'runtime_capability_check_failed']:
             preserve_refusal(row)
+            diagnose_failed_start()
             raise AssertionError('V1 registration rejected')
         if row['status'] == 'succeeded' and config_path.exists():
             roster = api('/api/status', light='0').get('sessions', [])

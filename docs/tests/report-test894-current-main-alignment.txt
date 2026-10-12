@@ -95,3 +95,27 @@ Incremental native UI receipt, OBSERVED_AT=2026-10-12T05:44:53Z (13:44+08):
 - Next result requires the corrected driver's own Actions execution. Original
   full-suite reconciliation, screenshot review of created node, review/main and
   formal release are not completed by automatic34SUCCESS/4SKIPPED PR checks.
+
+Current-public-pair UI receipt, OBSERVED_AT=2026-10-12T05:52:23Z (13:52+08):
+- Fixture84e5bf2b4f3a8a88c96e7bba43e02cb3a9eb51af, actual app945 and exact
+  deb5e4e15b3... retained. run38209503570 used opt-in artifact replay:
+  binding/native auth/public pair/fixture/atomic prerequisites succeeded;
+  full compile SKIPPED, not PASS. Actual local-workspace click now succeeded.
+- Actual native scan/install registered the private public170/136 daemon and
+  confirmed child PATH/readiness. Native submit then reached the real Hub but
+  failed runtime_capability_check_failed/unclassified13:51:51. This is no
+  longer the welcome-click/setup failure, and remains NOT accepted.
+- Artifact11728821551 downloaded and v1-final.png reviewed: actual UI shows
+  pending create; preserved refusal JSON has one original request and null
+  child_node_id. Model/lifecycle/TUI not tested. Owned containers exited and
+  cleanup/upload succeeded. No local execution or production modification.
+- Published f860 create-node-daemon source attributes the V1 capability refusal
+  to a child dying within5000ms after spawn; its stderr is intentionally ignored
+  there. Existing evidence therefore does not establish the early-exit cause.
+- Add one bounded failure-only diagnostic in the original Actions fixture: only
+  after the original rejected child's token is confirmed revoked, invoke the
+  same public CLI against that same V1 private profile with the daemon's POSIX
+  minimal environment, capture redacted startup output, and reap only its owned
+  process group after12s. No new identity/task/profile or package/source overlay.
+  This diagnostic is a replay with a revoked token, NOT the original startup,
+  registration acceptance or a fix; original rejection still fails the suite.
