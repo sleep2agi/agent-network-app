@@ -1,4 +1,13 @@
 Task #899: task list hover performance, first bounded slice
+2026-10-13 restack checkpoint (Actions pending, not a new PASS):
+Original PR797/source727482282102ea74f852277c9ea1a8e3ff6d2867 had23SUCCESS/1SKIPPED.
+Restacked onto main289eda8aa32900fe5a37cd7ea355b40fe46ac2d1 after0.2.255 pagination;
+kept tag-count Docker job and body scroll reset, moved page/query hover reset to
+the row-local component using pageKey, and added retained-row reset coverage.
+Below historical tests/negative control belong to the old exact source, not this
+restack. New core and exported pagination Actions must verify this head before
+merge. No local product tests, production mutations, npm or public build started.
+
 Observed: 2026-10-10 08:16 Asia/Shanghai
 Baseline: a48e697c92bf8a647a62f48890f2b59da7da9590
 
