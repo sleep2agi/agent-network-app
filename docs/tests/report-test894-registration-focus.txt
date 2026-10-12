@@ -26,3 +26,17 @@ SOURCE PREPARATION; no new test execution or publication claimed.
 - No package version/binary/updater/release or production setting changed.
   Test artifacts remain TEST-ONLY; new audit result must be read before fixing
   a product difference or claiming registered/model/lifecycle acceptance.
+
+CI increment — 2026-10-12 12:16+08
+- Dispatched only existing linux-deb-package.yml, focus=v1-registration,
+  run38202449262, exact code head0f6ee8b663457473db174bf7ea4e9bf5611c7728.
+- v1-ci-contract job114658575916 SUCCESS04:07:01Z:1 wiring contract and
+  original8 exact mutation controls passed, including manual-only selection,
+  source binding, prerequisite failure, negative exit and unconditional cleanup.
+- linux-deb job114658659903 still full source-bound Ubuntu build at12:15.
+  Authentication/native registration has NOT started; no error code or model/
+  lifecycle result yet. This is not a new bundle or source-integration PASS.
+- The later receipt-only commit does not change this run's source or tests.
+  Default full guards remain;33 unrelated cases are conditional on the explicit
+  manual focus, not counted as succeeded. No local execution or production work
+  belongs to this test line. ETA12:20–12:35 assumes normal runner/build progress.
