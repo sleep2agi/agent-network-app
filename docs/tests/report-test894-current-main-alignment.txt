@@ -169,3 +169,18 @@ Accepted CURRENT public-pair core, OBSERVED_AT=2026-10-12T06:13:24Z (14:13+08):
   formal main merge/rebuilt publication or production activation. Original broad
   checklist remains1/3 until those actual requested gates/review are reconciled.
   Do not repeat this passing core merely to fill the next inspection window.
+2026-10-12 14:27+08 bounded current V2 follow-up (not execution acceptance)
+-----------------------------------------------------------------------
+Original PR795 only: add manual current-v2-create focus to the current public
+pair job, excluding the historical matrix and all V1 execution steps. Reuse
+the exact945 app/deb is opt-in and guarded by unchanged product/build inputs.
+V2 fixture uses real integrity-locked OpenCode2.0.22 with unchanged public
+CLI170/runtime136 and bundled Hub127. The native authentication/private pair
+prerequisites remain; then only real V2 auth/model transport and native UI
+explicit-consent creation plus one REST-observed model reply are run.
+The existing creation observer/assertions are unchanged. No lifecycle or new
+negative matrix is added. A Docker-only symlink selects the locked V2 binary
+instead of the inherited V1 executable. No public package/product changes.
+Source/fixture/deb identities stay separate, evidence/owned cleanup always run.
+At authoring: execution NOT STARTED, no new PASS or publication claim. Tests
+will run in Actions Docker only, not on the local machine or production.

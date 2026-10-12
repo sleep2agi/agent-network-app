@@ -23,7 +23,7 @@ RUN bash -n /fixture/opencode-lifecycle-ui.sh && \
     python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("/fixture/opencode-verify-lifecycle.py").read_text())'
 RUN bash -n /fixture/opencode-create-ui.sh && \
     python3 -c 'import ast,pathlib; ast.parse(pathlib.Path("/fixture/opencode-verify-create.py").read_text())'
-RUN ln -s /opt/opencode-fixture/node_modules/.bin/opencode /usr/local/bin/opencode && \
+RUN ln -sfn /opt/opencode-fixture/node_modules/.bin/opencode /usr/local/bin/opencode && \
     mkdir -p /run/user/10001 && chown 10001:10001 /run/user/10001 && chmod 700 /run/user/10001
 USER smoke
 CMD ["python3", "/fixture/opencode-atomic.py"]

@@ -9,7 +9,7 @@ workflow = yaml.load(Path('/fixture/workflow.yml').read_text(), Loader=yaml.Base
 source = 'ded59ce7417ed8b0d22290d9c6fcb6e5c3fb324a'
 suite_dirs = ['linux-native-opencode-v1', 'linux-native-v1-registration',
               'linux-native-v1-model', 'linux-native-v1-candidate-runtime',
-              'linux-native-v1-lifecycle', 'linux-native-v1-ci', 'linux-native-current-v1']
+              'linux-native-v1-lifecycle', 'linux-native-v1-ci', 'linux-native-current-v1', 'linux-native-current-v2']
 ordered = [
     'Checkout exact V1 backend candidate (TEST ONLY)',
     'Build source-bound V1 model and lifecycle fixtures (not registry acceptance)',
@@ -38,7 +38,7 @@ negatives = {
 def check(doc):
     assert doc['permissions'] == {'contents': 'read'}, 'read-only permissions'
     focus = doc['on']['workflow_dispatch']['inputs']['focus']
-    assert focus['default'] == 'full' and focus['options'] == ['full', 'v1-registration', 'current-v1-registration'], 'full default and bounded manual focus'
+    assert focus['default'] == 'full' and focus['options'] == ['full', 'v1-registration', 'current-v1-registration', 'current-v2-create'], 'full default and bounded manual focus'
     for directory in suite_dirs:
         assert 'tests/' + directory + '/**' in doc['on']['pull_request']['paths'], 'suite path trigger'
     job = doc['jobs']['linux-deb']
@@ -99,7 +99,7 @@ def check(doc):
         if 'run' in step:
             subprocess.run(['bash', '-n'], input=step['run'], text=True, check=True)
     current = doc['jobs']['current-v1-registration']
-    assert current['if'] == "github.event_name == 'workflow_dispatch' && inputs.focus == 'current-v1-registration'", 'current pair manual only'
+    assert current['if'] == "github.event_name == 'workflow_dispatch' && (inputs.focus == 'current-v1-registration' || inputs.focus == 'current-v2-create')", 'current pair manual only'
     assert current['needs'] == 'v1-ci-contract', 'current pair contract prerequisite'
     assert current['permissions'] == {'contents': 'read', 'actions': 'read'}, 'artifact read only'
     assert doc['on']['workflow_dispatch']['inputs']['reuse_current_deb']['default'] == 'false', 'reuse is opt-in'
@@ -116,9 +116,15 @@ def check(doc):
     assert '5e4e15b31aac772cc295132da4c5384982fe815e0a0532e02862a9c1c57f8256' in reused and 'sha256sum -c -' in reused, 'exact reused deb bytes'
     for command in [named['V1 environment authentication session prerequisite']['run'], named['Real native creation binds actual Hub request profile identity and worker']['run']]:
         assert '--network none --cap-drop ALL --security-opt no-new-privileges' in command
+    for name in ['Build V1 registration fixture only for explicit V1 focus', 'V1 environment authentication session prerequisite', 'Real native creation binds actual Hub request profile identity and worker']:
+        assert named[name]['if'] == "inputs.focus == 'current-v1-registration'", 'V1 not repeated by V2 focus'
+    v2_names = ['Build current public-pair V2 core without source overlay', 'V2 environment authentication and exact model transport prerequisite', 'Real native V2 creation and one actual model reply']
+    assert [current_steps.index(named[name]) for name in v2_names] == sorted(current_steps.index(named[name]) for name in v2_names), 'V2 prerequisite before creation'
+    for name in v2_names:
+        assert named[name]['if'] == "inputs.focus == 'current-v2-create'", 'explicit bounded V2 focus'
     cleanup = current_steps[-2]
     assert cleanup['if'] == 'always()' and 'docker rm -f "$name" || cleanup_failed=1' in cleanup['run']
-    assert all(name in cleanup['run'] for name in ['current-deb-artifacts', 'current-v1-atomic', 'current-v1-registration'])
+    assert all(name in cleanup['run'] for name in ['current-deb-artifacts', 'current-v1-atomic', 'current-v1-registration', 'current-v2-atomic', 'current-v2-create'])
     assert current_steps[-1]['if'] == 'always()' and current_steps[-1]['with']['name'].startswith('TEST-ONLY-')
     for command in runs:
         subprocess.run(['bash', '-n'], input=command, text=True, check=True)
