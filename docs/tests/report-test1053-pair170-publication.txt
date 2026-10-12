@@ -10,6 +10,11 @@ CLIENT249 NOT PUBLISHED; this checkpoint is not deployment acceptance.
   zero failures,27s, recorded02:41:22Z. Source is original db9727bf; previous
   failed744 viewport attempt remains independent. At merge32SUCCESS/
   1SKIPPED/2IN_PROGRESS (Linux TEST ONLY and unrelated stub1), no FAILURE.
+- Head above identifies the PR, not the checkout commit: actual Mac regression
+  and shard2 checkout logs both pin tested merge
+  f63fa1644f489028755d3e74d02e0f7685bd3fd3. Its tree and merged main128e743c
+  tree both equal8481935dfb9b888eaeab1f606898057dd71049a2. Later fresh PR889
+  rollup is fully terminal34SUCCESS/1SKIPPED, no failure or pending job.
 - Formal exact-main desktop38197215075 created02:48:04Z, include_linux=false;
   Android38197217064 created02:48:06Z. Existing macos-signing environment was
   approved for this run under prior release authorization using an account
