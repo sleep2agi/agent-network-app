@@ -1,0 +1,85 @@
+#1053/#1045/#905/#998 exact pair publication and client core evidence
+OBSERVED_AT=2026-10-12 10:45+08
+CLIENT249 NOT PUBLISHED; this checkpoint is not deployment acceptance.
+
+2026-10-12 10:50+08 increment (supersedes pending states below)
+- App PR889 normally squash MERGED at02:47:26Z. Full40 main source
+  128e743c6a8141289fc0219d2e1768f2dc169b78 was fetched explicitly and verified
+  as current main; package version249 and native170/136/Hub127 pins read back.
+- Affected stub shard2 job114639948657 SUCCESS: actual changelog drive PASS,
+  zero failures,27s, recorded02:41:22Z. Source is original db9727bf; previous
+  failed744 viewport attempt remains independent. At merge32SUCCESS/
+  1SKIPPED/2IN_PROGRESS (Linux TEST ONLY and unrelated stub1), no FAILURE.
+- Formal exact-main desktop38197215075 created02:48:04Z, include_linux=false;
+  Android38197217064 created02:48:06Z. Existing macos-signing environment was
+  approved for this run under prior release authorization using an account
+  the API explicitly allowed to approve. No protection setting changed.
+  Both are builds, not yet public client249 installers or an updater rollout.
+- CLI170 npm release38195512383 ended FAILURE at02:49:36Z only because its
+ 900-second anonymous visibility check timed out after accepted npm publish.
+  Four gates remain SUCCESS. Expected tarball SHA1
+  90b51d72f9fd0223003ea2ade520d1c34536fcba. Do not retry publishing immutable170
+  or claim this run succeeded. Separate official GitHub download is SUCCESS
+  and its public bytes already verified; native fallback works without npm170.
+- This node's configured Hub anonymous /health read200/ok=true/version126.
+  Therefore remote secret functionality and daemon activation still require
+  production Hub127. TMHR notified to verify its own target Hub and hold
+  activation below127; this worktree has not upgraded production Hub.
+- Client publication and runtime deployment remain separate open stages.
+
+Backend source
+- PR2640 normally merged to full40 main
+  f86012a30c75f59abeeed3221647f5d2847bd969.
+- CLI170 release38195512383: original main build + four gates + aggregate
+  SUCCESS; npm publish job still IN_PROGRESS. Anonymous npm metadata still
+  returned404 at10:41; no second publish or immutable version overwrite.
+- Runtime136 release38195510631 completed SUCCESS. Public package downloaded
+  anonymously in full and compared byte-for-byte with original main artifact.
+- Official CLI gated download38196254002 completed SUCCESS; non-draft
+  prerelease cli-v2.3.0-preview.170 published2026-10-12T02:35:15Z.
+  GitHub tag object and target_commitish both equal the full40 main source.
+
+Exact public bytes (inner tgz, not artifact ZIP)
+- CLI170:2113589B,
+  SHA256 e1cef7f5b295ac27968782f07fda5b0e22b176b9b650d4fe9177b976f1121d60.
+  https://github.com/sleep2agi/agent-network/releases/download/cli-v2.3.0-preview.170/sleep2agi-agent-network-2.3.0-preview.170.tgz
+- Runtime136:591168B,
+  SHA256 038bf75e2ade28d4b79efb5ee4d278862b0b1f2a4d34fd677f4475672aee2524.
+  https://registry.npmjs.org/@sleep2agi/agent-node/-/agent-node-2.5.0-preview.136.tgz
+- Both complete anonymous downloads SHA256 and cmp match original gated
+  main artifacts. Hub127 exact public bytes were verified separately in the
+  preceding preparation report. CLI169 must not be paired with runtime136.
+
+Client core (actual source db9727bf542d59cb36d51b4c77ecdc663da1200c)
+- PR889 now ready for review, not merged or published. Installer URL/hash,
+  regression fixture and249 notes all use CLI170/runtime136.
+- Native installer Actions38196093764 attempt1 Mac19PASS/1FAIL; the public
+  archive fallback case ran before CLI170 release publication. Ubuntu was
+  CANCELLED by fail-fast, not passed. No source changed for the retry.
+- After anonymous complete public byte verification, reran only failed/
+  cancelled jobs. Attempt2 Mac job11464092973920PASS/0FAIL completed02:41:49Z;
+  Ubuntu job11464092989020PASS/0FAIL completed02:41:53Z. Actual public archive
+  download/hash path accepted; npm/Hub adapters in this fixture are synthetic.
+  These are native installation fixture tests, not real Provider inference,
+  production login or installed signed desktop package acceptance.
+- Fresh PR rollup30SUCCESS/1SKIPPED/4IN_PROGRESS, no FAILURE. Pending are
+  linux-deb(TEST ONLY) and stub drives1/2/7; shard2 includes repaired changelog
+  viewport sampling and is the remaining directly affected check.
+- Windows upgrade job114639492382 completed SUCCESS. Do not inherit old
+  head744 results or call this still-running rollup all green.
+
+Operations / recovery
+- TMHR received exact public pair and hashes for the existing software-only
+  daemon-vdev upgrade lane. Actual Hub>=127 and idle/inflight0 are prerequisites.
+  A requested or inactive install is not an activated daemon receipt.
+- Read-only fleet snapshot10:43: daemon-vdev runtime134, daemon-dev133,
+  TMA cloud/TMAI dog129, TMAI owner126, client114. Recent heartbeats are present;
+  no model authentication or production inference was probed.
+- No local tests, global installs, local Docker execution, credential changes,
+  production node restarts or cleanup of user data performed by this worktree.
+  Download/evidence copies retained in private task temp directory.
+- Normal main merge followed by fresh exact-main macOS/Windows/Android builds
+  remains mandatory for client publication. Linux public release is deferred.
+- Existing docs/desktop-release-sop.md and backend docs/scoped-secrets.md remain
+  installation/upgrade/rollback/state authorities. Keep prior private software
+  and protected configuration backups; production data is not supplied by Git.
