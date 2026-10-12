@@ -1,0 +1,28 @@
+#894 / original PR795: bounded registration refusal diagnostic
+OBSERVED_AT=2026-10-12 12:05+08
+SOURCE PREPARATION; no new test execution or publication claimed.
+
+- Previous exact head2a2adc3d23ef3843b0bd85b5f4e3a56c3a9ffeaa:
+ 28SUCCESS/1SKIPPED/1FAILURE, original job114108417992/run38016437613.
+  Actual TEST-ONLY product mergecda41447341b744b88de96709a46fc21391bf4ca,
+  debac982478f374dfa2476e211c9fdb383bc94859fc5bea4f8713deb535fcae6744,
+  backendded59ce7417ed8b0d22290d9c6fcb6e5c3fb324a (candidate runtime128).
+- Existing artifact11657636489 inspected, not executed. Native V1 registration
+  rejected before the model layer. Observer discarded the error field; screenshot
+  remains starting. Root cause UNKNOWN, not a claimed network/model assertion.
+- This change records only opaque lowercase error codes plus request/status and
+  exact input metadata before the unchanged rejection exception. No raw error
+  text, credentials, profiles, process argv or DB export. No local tests run.
+- Existing manual workflow gains focus=v1-registration; default stays full.
+  Rebuild source-bound disposable package and required auth/private-prefix
+  prerequisites, then one actual native registration. Model/lifecycle/V2/
+  migration and historical negative matrices are not executed in this mode.
+  Their full-mode assertions/default gates remain intact. Cleanup runs always.
+- Frozen historical inputs are deliberate for refusal diagnosis, not current
+  249/Hub127/170-136 acceptance. PR795 has substantive conflicts with current
+  main installer/Provider code. Attempted merge was aborted without source
+  changes; do not silently replace current published upgrade semantics with
+  the old branch's strict private-prefix implementation. Integration stays open.
+- No package version/binary/updater/release or production setting changed.
+  Test artifacts remain TEST-ONLY; new audit result must be read before fixing
+  a product difference or claiming registered/model/lifecycle acceptance.

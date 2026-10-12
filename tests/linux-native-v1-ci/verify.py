@@ -37,9 +37,12 @@ negatives = {
 
 def check(doc):
     assert doc['permissions'] == {'contents': 'read'}, 'read-only permissions'
+    focus = doc['on']['workflow_dispatch']['inputs']['focus']
+    assert focus['default'] == 'full' and focus['options'] == ['full', 'v1-registration'], 'full default and bounded manual focus'
     for directory in suite_dirs:
         assert 'tests/' + directory + '/**' in doc['on']['pull_request']['paths'], 'suite path trigger'
     job = doc['jobs']['linux-deb']
+    assert job['env']['V1_REGISTRATION_ONLY'] == "${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'v1-registration' }}", 'focus only on explicit manual dispatch'
     assert job['needs'] == 'v1-ci-contract', 'contract prerequisite'
     steps = job['steps']
     names = [step.get('name', '') for step in steps]
@@ -49,7 +52,8 @@ def check(doc):
     assert names.index('Native V2 model switch and stop/start/restart') < indices[0], 'V2 before V1'
     selected = {name: steps[names.index(name)] for name in ordered}
     for name in ordered[:-1]:
-        assert selected[name].get('if', 'success()') == 'success()', 'fail-closed prerequisite'
+        expected = "success() && env.V1_REGISTRATION_ONLY != 'true'" if name in ordered[3:9] else 'success()'
+        assert selected[name].get('if', 'success()') == expected, 'fail-closed prerequisite'
         assert selected[name].get('continue-on-error', 'false') == 'false', 'no ignored prerequisite'
     checkout = selected[ordered[0]]['with']
     assert checkout['ref'] == source and re.fullmatch('[0-9a-f]{40}', checkout['ref']), 'exact backend SHA'
@@ -75,10 +79,15 @@ def check(doc):
         else:
             assert not re.search(r'\|\||set \+e', run), 'positive must propagate failure'
     assert len(created) == len(set(created)) == 7, 'seven independent containers'
+    registration = next(step for step in steps if step.get('name') == 'Native V1 registration only (manual diagnostic)')
+    assert registration['if'] == "success() && env.V1_REGISTRATION_ONLY == 'true'", 'manual registration only'
+    assert '-e TEST_V1_REGISTRATION_ONLY=1' in registration['run'], 'no model workload in manual registration'
+    assert '--network none --cap-drop ALL --security-opt no-new-privileges' in registration['run'], 'isolated registration'
     cleanup = selected[ordered[-1]]
     assert cleanup['if'] == 'always()', 'unconditional evidence cleanup'
     for container in created:
         assert container in cleanup['run'], 'all owned containers cleaned'
+    assert 'native-v1-registration' in cleanup['run'], 'registration container cleaned'
     assert 'docker cp "$name:/evidence/."' in cleanup['run'], 'redacted evidence only'
     assert 'docker rm -f "$name" || cleanup_failed=1' in cleanup['run'], 'cleanup on evidence failure'
     assert '{{.State.ExitCode}}' in cleanup['run'] and '{{.Image}}' in cleanup['run'], 'terminal identity evidence'

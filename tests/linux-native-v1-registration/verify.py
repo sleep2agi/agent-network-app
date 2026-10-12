@@ -1,6 +1,7 @@
 """Read-only registration gate. NOT a model, ACP, TUI or V2 launch-proof gate."""
 import json
 import os
+import re
 from pathlib import Path
 import runpy
 import sqlite3
@@ -31,7 +32,19 @@ def api(path, **query):
 
 
 def rows():
-    return db.execute('SELECT request_id,status,child_node_id,network_id FROM node_create_requests').fetchall()
+    return db.execute('SELECT request_id,status,child_node_id,network_id,error FROM node_create_requests').fetchall()
+
+
+def preserve_refusal(row):
+    # Preserve only an opaque reason code, never diagnostic text/paths/keys.
+    prefix = str(row.get('error') or '').split(':', 1)[0]
+    code = prefix if re.fullmatch(r'[a-z][a-z0-9_]{0,95}', prefix) else 'unclassified'
+    proof = {key: row[key] for key in ['request_id', 'status', 'child_node_id', 'network_id']}
+    proof.update(error_code=code, observer_read_only=True, model_reply_tested=False,
+                 source=os.environ['TEST_DEB_SOURCE_COMMIT'],
+                 deb_sha256=os.environ['TEST_DEB_SHA256'])
+    Path('/evidence/v1-registration-refusal.json').write_text(json.dumps(proof, indent=2))
+    print(f"V1 registration refusal: status={row['status']} error_code={code}", flush=True)
 
 
 def workers():
@@ -63,7 +76,9 @@ while time.monotonic() < deadline:
     assert len(requests) <= 1, 'duplicate V1 create requests'
     if requests:
         row = dict(requests[0])
-        assert row['status'] not in ['failed', 'rejected', 'runtime_capability_check_failed'], 'V1 registration rejected'
+        if row['status'] in ['failed', 'rejected', 'runtime_capability_check_failed']:
+            preserve_refusal(row)
+            raise AssertionError('V1 registration rejected')
         if row['status'] == 'succeeded' and config_path.exists():
             roster = api('/api/status', light='0').get('sessions', [])
             exact = [r for r in roster if r.get('node_id') == row['child_node_id'] and r.get('network_id') == network]

@@ -5,6 +5,10 @@ python3 /fixture/v1-model-prepare.py
 export SSL_CERT_FILE=/tmp/v1-native-model/fixture.crt
 export NODE_EXTRA_CA_CERTS=$SSL_CERT_FILE
 source /fixture/v1-create-ui.sh
+if [ "${TEST_V1_REGISTRATION_ONLY:-0}" = 1 ]; then
+  echo 'PASS: native V1 registration only; model/lifecycle not executed'
+  exit 0
+fi
 click() { xdotool mousemove --window "$window" "$1" "$2" click 1; }
 click 1060 293
 sleep 3
