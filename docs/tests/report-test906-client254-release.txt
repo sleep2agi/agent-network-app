@@ -1,0 +1,11 @@
+OBSERVED_AT=2026-10-12T15:20:10Z (23:20:10 Asia/Shanghai).
+State: MAIN SOURCE MERGED / CORE DOCKER PASS / FORMAL BUILDS RUNNING / NOT PUBLIC.
+Client0.2.254 source9ccacc5a2ade09364bbf47b1039cd79c7109bdd5, tree4b08c07cdd8d26df5e153a219f72066077b7dcd8.
+Scope: known-old independent-node runtime preflight plus earlier SSE refusal parsing fix (App PR905). No node/Daemon deployment, credential/account/model change, migration or restart.
+Before dispatch: exact full40 source fetched and proved ancestor of origin/main; tag/draft desktop-v0.2.254 absent. Source PR907 Docker21/21+typecheck and exported UI17/17, metadata and both-platform units passed; no branch artifact reused for formal delivery.
+Desktop run38268947807: normal macos-signing approval after reading run path/event/full source and pending environment. Windows job114878118709 running web export; macOS job114878119161 running Tauri icon generation. Existing signing/bundle/packaged checks unchanged, Linux explicitly false. No failure observed; not completed.
+Android run38268952126/job114878143478: building release APK via established debug-signed channel, not store signing. Full40 same source.
+No public254 release, asset hashes, verified updater channel or publication receipt yet. Expected conditional window23:25-23:50+08; next evidence checkpoint23:30. Not a release promise or proof.
+Current public253 remains source9986a21fe897fe8bf52ae7d89f5da7c5fbb4a269, immutable 9 assets and both mirror channels at253; no asset replaced/tag moved.
+Cleanup: no local product process or test container started. Isolated worktrees retain source/report history; no credential copied or real key read. No business-node upgrade performed.
+Recovery: unchanged repository release workflows/SOP own signing and distribution; rollback requires newer client or separate documented channel action, not replacing published signed bytes. Runtime credentials/private secret data remain outside Git and need their protected backup; no recovery drill added or claimed.
