@@ -67,3 +67,31 @@ Incremental CI receipt, OBSERVED_AT=2026-10-12T05:28:28Z (13:28+08):
   is NOT the deb SHA. This node has not downloaded or reviewed its screenshots.
 - Previous13:35–14:00 result window is conditional and now depends on this
   fixture correction and a new bound run; no merge/publication claim.
+
+Incremental native UI receipt, OBSERVED_AT=2026-10-12T05:44:53Z (13:44+08):
+- Exact app/fixture source945cecf3722b9daadeb8e32bd7a0bd7b9f1e7aae;
+  run38208152886/job114676278739 reached native UI and ended FAILURE.
+- Desktop build SUCCESS13:39:58; native startup/auth SUCCESS13:41:03;
+  public CLI170/runtime136 SUCCESS13:41:38; registration fixture and V1 atomic
+  auth/session prerequisite also succeeded. Archive EACCES correction verified.
+- Native UI failed at verify-session.py: profiles/index.json absent. No node
+  submit, create request/worker or model/lifecycle acceptance was reached.
+- Downloaded exact artifact11728676878, inspected welcome.png and final.png:
+  1200x800 local-workspace button covers404–440; old600,470 click opened the
+  remote-Hub username/password page. Fix only the fixture target to600,422,
+  matching the existing native workspace driver. No API/profile seeding, no
+  product login mutation or assertion relaxation. Updater's TEST-ONLY endpoint
+  warning in the screenshot is not this registration failure.
+- Full downloaded deb50,367,088B has SHA256
+  5e4e15b31aac772cc295132da4c5384982fe815e0a0532e02862a9c1c57f8256.
+  SHA is from actual deb bytes, not artifact ZIP digest1283da6c2ee2161a...
+  Cleanup and TEST-ONLY evidence upload succeeded. No local installation/tests.
+- Add explicit opt-in fixture-only replay of those exact existing bytes. Actions
+  binds app source945 separately from the new driver/workflow source, rejects
+  product/build-input changes, verifies inner deb hash and TEST-ONLY marker.
+  Fresh native environment/auth/UI still execute; full desktop compile is
+  SKIPPED on replay, not counted as a new compile PASS. Default rebuild remains.
+  Nothing may publish this branch artifact or use it in an updater/release.
+- Next result requires the corrected driver's own Actions execution. Original
+  full-suite reconciliation, screenshot review of created node, review/main and
+  formal release are not completed by automatic34SUCCESS/4SKIPPED PR checks.

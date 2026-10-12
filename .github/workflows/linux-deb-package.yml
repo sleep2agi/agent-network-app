@@ -38,6 +38,10 @@ on:
         type: choice
         options: [full, v1-registration, current-v1-registration]
         default: full
+      reuse_current_deb:
+        description: 'Core fixture-only replay of the exact945 TEST-ONLY deb; never a release'
+        type: boolean
+        default: false
 permissions:
   contents: read
 jobs:
@@ -427,13 +431,46 @@ jobs:
   current-v1-registration:
     if: github.event_name == 'workflow_dispatch' && inputs.focus == 'current-v1-registration'
     needs: v1-ci-contract
+    permissions:
+      contents: read
+      actions: read
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
         with:
           persist-credentials: false
+          fetch-depth: 0
+      - name: Download exact previous TEST ONLY deb for fixture-only replay
+        if: inputs.reuse_current_deb == true
+        uses: actions/download-artifact@v4
+        with:
+          github-token: ${{ github.token }}
+          run-id: 38208152886
+          name: TEST-ONLY-current-v1-registration-945cecf3722b9daadeb8e32bd7a0bd7b9f1e7aae
+          path: reused-input/
+      - name: Bind reused deb to its actual app source and unchanged product
+        if: inputs.reuse_current_deb == true
+        run: |
+          app_source=945cecf3722b9daadeb8e32bd7a0bd7b9f1e7aae
+          deb_sha=5e4e15b31aac772cc295132da4c5384982fe815e0a0532e02862a9c1c57f8256
+          mkdir -p out
+          cp reused-input/ANet_0.2.249_amd64.deb reused-input/SHA256SUMS reused-input/TEST-ONLY.txt out/
+          git merge-base --is-ancestor "$app_source" HEAD
+          while IFS= read -r changed; do
+            case "$changed" in
+              tests/linux-native-*/*|tests/local-daemon-packages/*|docs/tests/*|.github/workflows/linux-deb-package.yml) ;;
+              *) echo "FAIL: product/build input changed: $changed"; exit 1 ;;
+            esac
+          done < <(git diff --name-only "$app_source" HEAD)
+          grep -Fx 'TEST ONLY. Not a release or updater.' out/TEST-ONLY.txt
+          grep -Fx "App source: $app_source" out/TEST-ONLY.txt
+          printf '%s  out/ANet_0.2.249_amd64.deb\n' "$deb_sha" | sha256sum -c -
+          docker build --network none --build-arg SOURCE_COMMIT="$app_source" --build-arg DEB_SHA256="$deb_sha" -t anet-current-deb:test -f tests/linux-native-current-v1/Dockerfile.deb out/
+          printf 'TEST_APP_SOURCE_COMMIT=%s\n' "$app_source" >> "$GITHUB_ENV"
+          printf 'TEST ONLY reused package. App source: %s\nFixture source: %s\n' "$app_source" "$(git rev-parse HEAD)" >out/FIXTURE-REPLAY.txt
       - name: Build bound TEST ONLY desktop and validate package
+        if: inputs.reuse_current_deb != true
         run: |
           source_sha=$(git rev-parse HEAD)
           docker build --build-arg SOURCE_COMMIT="$source_sha" -t anet-current-deb:test -f tests/linux-deb-package/Dockerfile .
@@ -446,7 +483,7 @@ jobs:
           printf 'TEST ONLY. Not a release or updater.\nApp source: %s\n' "$source_sha" >out/TEST-ONLY.txt
       - name: Native startup and credential authentication prerequisite
         run: |
-          source_sha=$(git rev-parse HEAD)
+          source_sha=${TEST_APP_SOURCE_COMMIT:-$(git rev-parse HEAD)}
           deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
           docker build --build-arg DEB_IMAGE=anet-current-deb:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-install:test -f tests/linux-deb-install/Dockerfile .
           docker run --rm --network none anet-current-install:test
@@ -458,7 +495,7 @@ jobs:
           docker run --rm --network none --cap-drop ALL --security-opt no-new-privileges anet-current-prefix:test
       - name: Build current published-pair registration fixture without source overlay
         run: |
-          source_sha=$(git rev-parse HEAD)
+          source_sha=${TEST_APP_SOURCE_COMMIT:-$(git rev-parse HEAD)}
           deb_sha=$(sha256sum out/*.deb | awk '{print $1}')
           docker build --build-arg NATIVE_IMAGE=anet-current-workspace:test --build-arg PAIR_IMAGE=anet-current-prefix:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-daemon:test -f tests/linux-native-daemon/Dockerfile .
           docker build --build-arg NATIVE_IMAGE=anet-current-daemon:test --build-arg SOURCE_COMMIT="$source_sha" --build-arg DEB_SHA256="$deb_sha" -t anet-current-daemon-ui:test -f tests/linux-native-daemon-ui/Dockerfile .

@@ -101,14 +101,20 @@ def check(doc):
     current = doc['jobs']['current-v1-registration']
     assert current['if'] == "github.event_name == 'workflow_dispatch' && inputs.focus == 'current-v1-registration'", 'current pair manual only'
     assert current['needs'] == 'v1-ci-contract', 'current pair contract prerequisite'
+    assert current['permissions'] == {'contents': 'read', 'actions': 'read'}, 'artifact read only'
+    assert doc['on']['workflow_dispatch']['inputs']['reuse_current_deb']['default'] == 'false', 'reuse is opt-in'
     current_steps = current['steps']
     assert current_steps[0]['with']['persist-credentials'] == 'false'
     assert all(s.get('continue-on-error', 'false') == 'false' for s in current_steps)
     runs = [s['run'] for s in current_steps if 'run' in s]
-    assert '--target current-prefix' in runs[2], 'current public pair, not historical prefix'
+    named = {s.get('name'): s for s in current_steps if s.get('name')}
+    assert '--target current-prefix' in named['Verified public CLI170 runtime136 prerequisite']['run'], 'current public pair, not historical prefix'
     assert 'linux-native-v1-candidate-runtime/Dockerfile' not in ''.join(runs), 'no source-candidate overlay'
-    assert '-e TEST_V1_REGISTRATION_ONLY=1' in runs[5], 'registration before any model/lifecycle'
-    for command in runs[4:6]:
+    assert '-e TEST_V1_REGISTRATION_ONLY=1' in named['Real native creation binds actual Hub request profile identity and worker']['run'], 'registration before any model/lifecycle'
+    reused = named['Bind reused deb to its actual app source and unchanged product']['run']
+    assert 'git merge-base --is-ancestor "$app_source" HEAD' in reused and 'git diff --name-only "$app_source" HEAD' in reused, 'reused product source binding'
+    assert '5e4e15b31aac772cc295132da4c5384982fe815e0a0532e02862a9c1c57f8256' in reused and 'sha256sum -c -' in reused, 'exact reused deb bytes'
+    for command in [named['V1 environment authentication session prerequisite']['run'], named['Real native creation binds actual Hub request profile identity and worker']['run']]:
         assert '--network none --cap-drop ALL --security-opt no-new-privileges' in command
     cleanup = current_steps[-2]
     assert cleanup['if'] == 'always()' and 'docker rm -f "$name" || cleanup_failed=1' in cleanup['run']

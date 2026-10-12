@@ -18,7 +18,8 @@ xdotool getwindowgeometry "$window" >/evidence/geometry.txt
 grep -F 'Geometry: 1200x800' /evidence/geometry.txt
 sleep 5
 import -window "$window" /evidence/welcome.png
-xdotool mousemove --window "$window" 600 470 click 1
+# Reviewed945 native welcome.png: local workspace is at422;470 opens remote login.
+xdotool mousemove --window "$window" 600 422 click 1
 for attempt in $(seq 1 100); do
   kill -0 "$app_pid"
   test ! -s "$ANET_PACKAGED_SMOKE_ROOT/profiles/index.json" || break
