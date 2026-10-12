@@ -88,3 +88,26 @@ Fifth atomic / exact reason — 2026-10-12 12:57+08
 - TEST-ONLY artifact11727206971,1936B, archive digest
  4ebeb620a1ea922c1dd4d8c204326f4ec8fae0803943f2de842a941d239ee20d.
   Cleanup/upload passed. Actual native request registration remains unverified.
+
+Final bounded result — 2026-10-12 13:00+08
+- run38205883371/job114669156918, actual tested full head
+ 74c181926b4978c5c19723111ea3f88c4f55d13d, SUCCESS04:59:10Z (12:59:10+08).
+  Actual CLI162/source-candidate128 passed production package admission and the
+  real profile writer, emitted the runtime launch marker, survived eight seconds
+  and made6 requests to the rejecting HTTP fixture. It then exited0 on the
+  observer's SIGTERM; this is controlled cleanup, not natural completion.
+- Fixture Hub rejects ALL requests. Therefore this is pre-Hub startup only:
+  no actual identity registration, SSE acceptance, model response, native UI or
+  release proof. It does not resolve or reclassify native run38202449262's failure.
+  Missing binding/auth-directory/runtime-base errors belonged to this diagnostic
+  fixture and are corrected; no product guard or admission policy was changed.
+- Cleanup/upload SUCCESS; TEST-ONLY artifact11727134023,2247B, archive digest
+ c9ecb47d9d09adee19a9883b4ba623155ece80e90e0b0b3190c054fc54788451.
+  No branch product published. No local tests/Docker or production mutations.
+- App same-head unit run38205858033 was4SUCCESS/1 WindowsIN_PROGRESS at12:59;
+  preceding e27 unit38205679364 all5SUCCESS. Separate heads/results; not all green
+  on74 until Windows actually completes. Original PR remains Draft/conflicting.
+- Stop expanding this standalone probe or repeating its successful build.
+  Next original-card slice: reconcile current-main inputs and inspect the actual
+  created request/profile/launch boundary with controlled real Hub evidence.
+  Do not revive the stale162/128 fixture as current170/136 installation acceptance.
