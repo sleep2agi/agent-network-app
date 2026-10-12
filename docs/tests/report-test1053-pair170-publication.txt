@@ -1,6 +1,51 @@
 #1053/#1045/#905/#998 exact pair publication and client core evidence
 OBSERVED_AT=2026-10-12 10:45+08
-CLIENT249 NOT PUBLISHED; this checkpoint is not deployment acceptance.
+Historical checkpoint: CLIENT249 was NOT PUBLISHED at10:45+08.
+
+2026-10-12 11:35+08 publication increment (supersedes pending states below)
+- Selected platforms all publicly delivered from exact main
+  128e743c6a8141289fc0219d2e1768f2dc169b78. PR889 fully terminal
+  34SUCCESS/1SKIPPED; tested merge f63fa1644f489028755d3e74d02e0f7685bd3fd3
+  and main128 have identical tree8481935dfb9b888eaeab1f606898057dd71049a2.
+- Android source-pinned build38197217064 and publish38197939578 SUCCESS.
+  Anonymous full APK/hash/VERSION/notes verified03:00:18Z (11:00:18+08).
+  com.anonymous.agentnetworkapp, versionName0.2.249/versionCode2249,
+  83813965B, SHA256962078b8ee77e1e91e2221a249be77d495ad790df61b5afdc36c8249a3a67ff1.
+  https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/agent-network-0.2.249.apk
+- Signed desktop formal38197215075: Mac114642451487/Windows114642451604
+  and verify-draft SUCCESS. Release410100023/desktop-v0.2.249 public
+ 03:17:28Z (11:17:28+08); tag object and target_commitish equal fullmain128.
+  https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.249
+  Eight assets: MacDMG/app.tar.gz/signature, WinEXE/MSI/two signatures,manifest.
+  https://www.anet.sh/desktop/update/latest.json anonymously returns249.
+- All five expected generic/installer-specific updater aliases map to those
+  assets with byte-identical serialized .sig values. Inspector initially
+  expected exactly two aliases and failed; corrected inspection only, no
+  artifact/manifest mutation. Byte matching is not cryptographic validation.
+  MacDMG38950243B/SHA2569194f04f6fb9c235ae3448a2166feb972a02682245365baafb5e603943988db5;
+  WinEXE37347383B/SHA256670174458d9cfe75f3e3e8b8773819e09593fb9ab774c897e621c74f7c822648;
+  WinMSI51171328B/SHA256637fe6f96f8e381bcd1bfea08fc5a65a4d35613d90e9568b8a0676a34ddb0ee3.
+  Linux public/iOS deferred; no old asset relabeled249.
+- Desktop mirror's automatic38199170886 was cancelled before upload: it was
+  waiting for an unneeded GitHub APK while independent Android was public.
+  Replacement38199804435/job114651644333 SUCCESS03:34:21Z. Workflowmain
+  77ad5f6ba3dd3305909d0f943fd368c379213e50 (PR893) verifies release source128,
+  immutable tag and main ancestry before copying. Source remains128, not77ad.
+  Anonymous desktop/latest/VERSION now249. Mirror verifies large files by
+  remote SHA256 listing plus ranged reachability; NOT full anonymous installer
+  download proof. Small metadata/signatures are full-byte matched.
+- ProductionHub narrow activation11:19:35.611+08:127/Bun3775153, original
+  PM2/port330sessions/config/key source retained; private consistent backups
+  and old126 kept. Backend deploy authority main3f956831eb949636b97ef964d5c4bd3ce9d97426;
+  software source31b0dbdae3192f471c8812574c118795658120f0. Full operational
+  observations/rollback/data boundaries in backend report-test1053-hub127-profile.txt.
+- Daemon-vdev fresh11:32 heartbeat136/originalnodeid/idle0; TMHR task1110d499
+  ended failed without complete CLI/PID/SSE/Provider/config/rollback receipt.
+  Keep that acceptance pending and original1053/1045 delivery items unclosed.
+- No local tests/Docker/global npm/production credentials changed. This
+  worktree only built/released through Actions and read anonymous metadata;
+  backend narrowHub activation is separate. Retained package/evidence copies,
+  private previous installation/config/data backups remain recoverable.
 
 2026-10-12 10:50+08 increment (supersedes pending states below)
 - App PR889 normally squash MERGED at02:47:26Z. Full40 main source
