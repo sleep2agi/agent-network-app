@@ -202,3 +202,18 @@ remains runtime selection, not a spinning launch. No create-proof/bridge file.
 Fix only current-V2 fixture consent coordinate; keep historical default and
 original acceptance assertions. Capture accepted-consent/model screens before
 later input for exact current layout evidence. New run pending; not accepted.
+
+2026-10-12 14:43+08 current V2 second result
+-----------------------------------------
+Run38213305715@a4f67fa347d243cf501ed29f32616a0cffbaed49 failed native creation
+at14:41:09; prerequisites including real V2 exact model remain SUCCESS,
+cleanup/upload SUCCESS. Artifact11730567408 archive51,367,157B/digest
+6f449599aff08e7fa767753af50cb19556b2711a9e5727e2e36afa591feb1854.
+Personally reviewed accepted-consent/model/confirm/final screenshots: consent
+now checked and next opens the model page. Current input is497 and next590;
+old416/510 clicks did not enter the fixture model or advance. Final screenshot
+remains model selection, not submitted creation. No create-proof/bridge file.
+Keep this FAIL separate from the earlier checkbox failure and product launch.
+Fix these two positions only in explicit current-V2 mode; historical coordinates
+and exact creation/model/config/process assertions remain unchanged. Next run
+will reuse the same tested app/deb/public pair; no extra suite or local tests.

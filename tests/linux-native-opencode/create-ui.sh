@@ -46,10 +46,17 @@ import -window "$window" /evidence/create-consent-accepted.png
 xdotool mousemove --window "$window" 1059 741 click 1
 sleep 1
 import -window "$window" /evidence/create-model.png
-xdotool mousemove --window "$window" 700 416 click 1 key ctrl+a
+model_y=416
+model_next_y=510
+if [ "${TEST_CURRENT_V2_UI:-0}" = 1 ]; then
+  # Exact945 create-model.png: Provider note adds height before the text input.
+  model_y=497
+  model_next_y=590
+fi
+xdotool mousemove --window "$window" 700 "$model_y" click 1 key ctrl+a
 xdotool type --clearmodifiers --delay 80 'stub/stub-model'
 sleep 1
-xdotool mousemove --window "$window" 1060 510 click 1
+xdotool mousemove --window "$window" 1060 "$model_next_y" click 1
 sleep 1
 import -window "$window" /evidence/create-confirm.png
 if [ "${TEST_CREATE_MISS_CLICK:-0}" = 1 ]; then
