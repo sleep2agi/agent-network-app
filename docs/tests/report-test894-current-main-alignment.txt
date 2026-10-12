@@ -119,3 +119,19 @@ Current-public-pair UI receipt, OBSERVED_AT=2026-10-12T05:52:23Z (13:52+08):
   process group after12s. No new identity/task/profile or package/source overlay.
   This diagnostic is a replay with a revoked token, NOT the original startup,
   registration acceptance or a fix; original rejection still fails the suite.
+
+Failure-only diagnostic receipt, OBSERVED_AT=2026-10-12T06:06:00Z (14:06+08):
+- Fixture850906b905c6ecb706d4f3c77a3b5a029e181016/run38210469208 remained
+  FAILURE after the real native refusal. Cleanup/upload SUCCESS14:04:31.
+  Artifact11728598213 downloaded; v1-startup-diagnostic.json confirms revoked
+  token, original request still failed, diagnostic exit1 without timeout.
+- Same-public-CLI replay refused BEFORE registration with the concrete reason:
+  OpenCode safe runtime base /run/user/10001 missing; expected0700 or trusted
+  host-level ANET_OPENCODE_SAFE_BASE. The test image only useradd'ed smoke and
+  did not supply a login-manager runtime directory. Published f860 minimalEnv
+  does not forward an ambient safe-base override into daemon children.
+- Supply only that ordinary private OS directory in the current Docker fixture,
+  owned by smoke/mode0700. No env override, no product/package mutation, no
+  reduced private-root or registration assertion, no new identity/model task.
+  Diagnostic explains a reproducible pre-Hub refusal; it is not the original
+  successful creation. Corrected real UI registration still must run in Actions.
