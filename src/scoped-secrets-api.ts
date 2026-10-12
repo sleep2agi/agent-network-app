@@ -19,6 +19,10 @@ export function scopedSecrets(cfg: HubConfig, scope: SecretScope, signal: AbortS
     if(parsed.kind==='unsupported')return {ok:false,error:'unsupported'};
     try {
       const envelope=JSON.parse(text.startsWith('data:')?text.split(/\r?\n/).filter(l=>l.startsWith('data:')).at(-1)!.slice(5):text);
+      // Older Hubs know the management tool but not the secret_* actions.
+      // Valid locally constructed protocol arguments failing MCP validation are
+      // a compatibility failure, not an endlessly pending save.
+      if(envelope.error?.code===-32602)return {ok:false,error:'unsupported'};
       const value=JSON.parse(envelope.result.content[0].text);
       if(['secret_admin_required','user_token_required','scoped_secrets_upgrade_required','invalid_secret_input'].includes(value.error))return {ok:false,error:value.error};
     } catch {}
