@@ -20,4 +20,6 @@ jobs:
       - name: Build actual installer fixture
         run: sg docker -c 'docker build -t anet-client-daemon-core:test -f tests/local-daemon-init/Dockerfile .'
       - name: Init, stop-before-replace, exact archive fallback and cleanup
-        run: sg docker -c 'docker run --rm --cap-drop ALL --security-opt no-new-privileges anet-client-daemon-core:test'
+        # Detached fixture daemons need a PID1 reaper, just like a real host init.
+        # Keep the installer's old-process-exited check; do not treat zombies as PASS.
+        run: sg docker -c 'docker run --rm --init --cap-drop ALL --security-opt no-new-privileges anet-client-daemon-core:test'
