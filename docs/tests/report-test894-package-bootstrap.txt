@@ -1,0 +1,26 @@
+#894 / original PR795: package-boundary atomic diagnosis
+OBSERVED_AT=2026-10-12 12:46+08
+PREPARATION ONLY; no new test pass or product fix claimed.
+
+Original native run38202449262 failed at startup capability; child output was
+discarded. Do not repeat the same desktop build without new diagnostic evidence.
+
+Source review found a concrete hypothesis: the source-candidate preparer applies
+npm tar member modes to an already installed package. The production resolver
+rejects a non-executable dist/cli.js even when invoked via Node. npm installation
+and npm tar extraction may have different bin modes. This is NOT yet a proven
+cause of the previous native failure; actual archive/prepared modes were absent.
+
+Added one manual v1-package-bootstrap slice to the existing bundled-Hub contract
+workflow. Default contract/PR gates remain. Docker builds the frozen backend
+ded59ce7417ed8b0d22290d9c6fcb6e5c3fb324a (archive SHA256 checked), then uses the
+actual npm pack, original prepare.py and source production package resolver.
+Installed/archive/prepared modes, payload hash and one constant refusal code
+are exported. No arbitrary stderr, profile, credential or process argv exported.
+Only a synthetic empty-profile sentinel is created in the disposable container.
+
+It does NOT build Rust/deb or launch a Daemon/Hub/OpenCode/model. A resolver pass
+cannot clear the native registration failure. A refusal gives only a narrower
+package-boundary cause to fix and verify before the original native gate.
+Run is Docker in Actions, non-root UID10001, network none/cap-drop ALL at execution,
+always cleanup and TEST-ONLY artifact. No local test or production change.
