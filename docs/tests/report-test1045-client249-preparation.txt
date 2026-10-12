@@ -1,6 +1,21 @@
 #998/#1045 client249 preparation checkpoint — NOT PUBLISHED
 OBSERVED_AT=2026-10-12 08:04+08
 
+2026-10-12 10:08+08 cloud fixture alignment — NOT a passed replay
+- App889@e63278062f4b9c6635a5bf5d1f8e695a4ba9fdd4 cloud Mac regression
+  run38193978755/job114632526787:15native unit cases PASS/5regression FAIL.
+- All five regression fixtures still advertise Hub124, below new actual
+  installer minimum127, so install rejects at health check before their
+  intended npm/stop/hash/initialization stages. This is stale fixture wiring,
+  not an environment failure or a completed installer validation.
+- Align only healthy fixture version127 and exact expected CLI169/runtime136
+  pair/archive name. Keep incompatible Hub66 case, stop-order/pid identity,
+  original-config preservation, bad-hash rejection and compatible reuse
+  assertions unchanged. No production minimum or test assertion weakened.
+- Existing Actions regression reruns on this narrow file change; no local
+  tests. CLI169 official download and runtime136 publication still required
+  before client merge/publication. Not all client CI is terminal or green.
+
 2026-10-12 10:00+08 pin preparation — still NOT PUBLISHED
 - Formal main source31b0dbdae3192f471c8812574c118795658120f0 Hub127
   release38193173842 all gates/publication SUCCESS. Anonymous npm tarball
