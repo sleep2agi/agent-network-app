@@ -37,7 +37,7 @@ Actual result — 2026-10-12 12:44+08
   using source-candidate128 and the original safe/default created profile fields.
   Its rejecting HTTP fixture is NOT a real Hub: only startup-to-request is observed,
   no identity registration/SSE/model assertion. Output is constant reason enums,
-  process-lifetime and request counters plus at most12 error lines (240chars each)
+  process-lifetime and request counters plus at most20 startup tail lines (240chars each)
   with private fixture paths replaced and credential-related lines omitted.
   No full startup log, config, environment, arbitrary argv or credentials export.
   This does not recompile desktop, change product or lower the native gate.
@@ -65,3 +65,15 @@ Third setup correction — 2026-10-12 12:51+08
   refuse any existing auth.json before writing a synthetic key. No product change.
 - Same-head Ubuntu unit/typecheck succeeded; other jobs were not yet terminal
   at the observation. Do not count this setup failure as a product assertion.
+
+Fourth atomic — 2026-10-12 12:54+08
+- run38205477062@ab51c20b3e5f01d957a59eb3bdcbd39198121139 built and prepared the
+  exact candidate/profile successfully. Actual CLI exited1 before any HTTP request.
+  No runtime launch marker; error-keyword filtering retained no diagnostic line.
+  Thus a real pre-Hub refusal exists in this standalone pair, but its cause is
+  still UNKNOWN and is not yet matched to the original native rejection.
+- Keep at most20 fixture-only startup tail lines,240chars each, replacing fixture
+  paths and omitting credential-related lines. Translated/icon admission errors
+  must not be silently discarded. No product guard change or full native rerun.
+  Cleanup/upload successful; TEST-ONLY artifact11727465974,1689B, archive digest
+ 0ad333b46137856e2af11fe4aaca3af557ba2eedb5d1c660ab9416bea16185cc.

@@ -70,11 +70,10 @@ try:
             output, _ = child.communicate(timeout=3)
     text = output[:1024 * 1024].decode('utf-8', errors='replace')
     # All input/credentials are synthetic and execution has no external network.
-    # Keep only bounded error lines, never a full startup log or environment.
+    # Keep the bounded tail, not only English error keywords: admission messages
+    # can use translated text or an icon. Never export a full log/environment.
     error_lines = []
-    for line in text.splitlines():
-        if not re.search(r'FATAL|Error:|Refusing|not executable|not compatible', line):
-            continue
+    for line in text.splitlines()[-20:]:
         if re.search(r'token|password|secret|authorization|api.?key', line, re.I):
             error_lines.append('[credential-related diagnostic omitted]')
             continue
@@ -82,7 +81,7 @@ try:
                              (str(Path.home()), '$TEST_HOME')]:
             line = line.replace(value, label)
         error_lines.append(line[:240])
-    Path('/evidence/cli-bootstrap-errors.txt').write_text('\n'.join(error_lines[:12]) + '\n')
+    Path('/evidence/cli-bootstrap-errors.txt').write_text('\n'.join(error_lines) + '\n')
     known = {
         'package_entrypoint_not_executable': 'resolved agent-node package entrypoint is not executable',
         'package_path_refused': 'resolved agent-node package has unsafe ownership or mode',
