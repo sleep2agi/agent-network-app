@@ -77,3 +77,14 @@ Fourth atomic — 2026-10-12 12:54+08
   must not be silently discarded. No product guard change or full native rerun.
   Cleanup/upload successful; TEST-ONLY artifact11727465974,1689B, archive digest
  0ad333b46137856e2af11fe4aaca3af557ba2eedb5d1c660ab9416bea16185cc.
+
+Fifth atomic / exact reason — 2026-10-12 12:57+08
+- run38205684361@e27ba7dbaf3c4c092ab08b613781395c7702d178 ended FAILURE12:55:49.
+  Retained tail now identifies missing /run/user in this small Docker fixture;
+  CLI's safe runtime-base guard refused before any Hub request. This is NOT the
+  original native root cause: the existing native/runtime images create the
+  UID-specific runtime directory. Add the same root-created0755 parent and
+  smoke-owned0700 /run/user/10001; do not override/relax the product base guard.
+- TEST-ONLY artifact11727206971,1936B, archive digest
+ 4ebeb620a1ea922c1dd4d8c204326f4ec8fae0803943f2de842a941d239ee20d.
+  Cleanup/upload passed. Actual native request registration remains unverified.

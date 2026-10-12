@@ -19,6 +19,7 @@ COPY tests/linux-v1-package-bootstrap/probe.mjs /fixture/probe.mjs
 COPY tests/linux-v1-package-bootstrap/launch.py /fixture/launch.py
 RUN cp -a /candidate /fixture/runtime-candidate && \
     useradd --uid 10001 --create-home smoke && mkdir /evidence && \
+    install -d -m 0755 /run/user && install -d -m 0700 -o smoke -g smoke /run/user/10001 && \
     chown -R smoke:smoke /fixture/exact-prefix /evidence && chmod 0700 /fixture/exact-prefix /evidence
 ENV ANET_PACKAGED_SMOKE_ROOT=/home/smoke/app
 ARG APP_SOURCE_COMMIT

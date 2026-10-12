@@ -89,6 +89,7 @@ try:
         'missing_dependency': 'Cannot find module',
         'missing_cli': 'not found on PATH',
         'unsupported_version': 'not compatible',
+        'safe_runtime_base_missing': 'safe runtime base /run/user is missing',
         'profile_refused': 'Refusing to start node',
         'unsafe_mcp_config': 'ensureMcpJson',
         'permission_denied': 'EACCES',
