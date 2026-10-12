@@ -773,7 +773,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     const ids = new Set(pageRows.map(row => row.id));
     return columns.map(col => ({ ...col, matchedCount: col.items.length, items: col.items.filter(item => ids.has(item.id)) })).filter(col => col.items.length);
   }, [columns, pageRows]);
-  useEffect(() => { listScrollRef.current?.scrollTo({ y: 0, animated: false }); }, [listQueryKey, listWindow.page]);
+  useEffect(() => {
+    setListPaging(current => current.key !== listQueryKey || current.page !== listWindow.page ? { key: listQueryKey, page: listWindow.page } : current);
+    listScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [listQueryKey, listWindow.page]);
   // Shift 单击连选按「当前显示的顺序」:列表按排序后的行,看板按 需求池 → 进行中 → 完成 各列从上到下。
   const order = useMemo(() => (section === 'list' ? pageRows.map(r => r.id) : columns.flatMap(c => c.items.map(i => i.id))), [section, pageRows, columns]);
   useEffect(() => { setSel(cur => pruneSelection(cur, items.map(i => i.id))); }, [items]);

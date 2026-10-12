@@ -52,6 +52,8 @@ try{
         await page.waitForFunction(()=>document.querySelectorAll('[data-testid^="req-row-r"]').length===1);
         assert((await page.getByTestId('task-page-range').innerText()).includes('1–1'));passed++;
         assert.equal(await page.getByTestId('req-row-r0495').count(),1);passed++;
+        await page.getByTestId('task-search-input').fill('');
+        await page.waitForFunction(()=>document.querySelectorAll('[data-testid^="req-row-r"]').length===50 && document.querySelector('[data-testid="task-page-range"]')?.textContent.includes('1–50'));passed++;
       }
       const id=await page.locator('[data-testid^="req-row-r"]').first().getAttribute('data-testid');
       const row=page.getByTestId(id),name=await row.getAttribute('aria-label');
