@@ -58,7 +58,7 @@ ck('打开精简行才需要补读全文', needsFullText(parsed) && !needsFullTe
 
 // ── Poll identity and changes independent of updatedAt ──
 {
-  const rows = Array.from({ length: 500 }, (_, i) => card(`p${i}`, { tags: ['ANet'], owner: { kind: 'user', id: 'u1' }, participants: [], children: { total: 0, done: 0 } }));
+  const rows = Array.from({ length: 500 }, (_, i) => card(`p${i}`, { createdAt: iso(T0 - i * 1000), tags: ['ANet'], owner: { kind: 'user', id: 'u1' }, participants: [], children: { total: 0, done: 0 } }));
   const wire = JSON.parse(JSON.stringify(rows));
   ck('500-row unchanged full read keeps the same list and all row identities', mergeListRows(rows, wire) === rows);
   ck('empty delta keeps list identity', applyChanges(rows, [], []) === rows);
