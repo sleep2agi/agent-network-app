@@ -62,6 +62,8 @@ ck('打开精简行才需要补读全文', needsFullText(parsed) && !needsFullTe
   const wire = JSON.parse(JSON.stringify(rows));
   ck('500-row unchanged full read keeps the same list and all row identities', mergeListRows(rows, wire) === rows);
   ck('empty delta keeps list identity', applyChanges(rows, [], []) === rows);
+  const optimistic = [card('child', { parentId: 'parent', column: 'done', createdAt: iso(T0 + 1) }), card('parent', { children: { total: 1, done: 0 } })];
+  ck('empty delta still reconciles child counts after a local optimistic status change', applyChanges(optimistic, [], []).find(row => row.id === 'parent')!.children!.done === 1);
   const one = rows[0];
   const changes: Partial<Requirement>[] = [
     { readOnly: true, editFields: ['column'] }, { children: { total: 3, done: 2 } },

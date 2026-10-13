@@ -115,7 +115,6 @@ export function recountChildren(items: readonly Requirement[]): Requirement[] {
 
 /** 一次增量并进来。changed 里 archived 的卡 = 移出看板(平常的列表不含归档的卡)。 */
 export function applyChanges(prev: Requirement[], changed: readonly Requirement[], deleted: readonly string[]): Requirement[] {
-  if (!changed.length && !deleted.length) return prev;
   const gone = new Set(deleted);
   const byId = new Map(prev.map(item => [item.id, item]));
   for (const next of changed) {
