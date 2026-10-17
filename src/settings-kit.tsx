@@ -190,7 +190,7 @@ export function SettingsAccountRow({ name, subtitle, warning, current, badge, la
   return (
     <RowShell onPress={onPress} testID={id} accessibilityLabel={accessibilityLabel ?? name}>
       <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}><AliasAvatar alias={name} size={large ? 48 : 36} /></View>
-      <View style={styles.accountCopy}>
+      <View style={[styles.accountCopy, large && styles.accountCopyLarge]}>
         <View style={styles.accountNameLine}>
           <Text style={[styles.label, { color: colors.text }, large && styles.accountNameLarge]} numberOfLines={1} testID={`${id}-label`}>{name}</Text>
           {current ? <Text style={[styles.pill, styles.pillCurrent]} testID={`${id}-current`}>{current}</Text> : null}
@@ -380,10 +380,12 @@ export function SettingsTextField({ label, testID, ...input }: TextInputProps & 
 }
 
 /** 整宽按钮:primary = 主色实心(保存);destructive = 卡片底红字(清除 / 删除);plain = 卡片底正文色。 */
-export function SettingsButton({ label, onPress, variant = 'primary', disabled, busy, testID, accessibilityLabel }: {
+export function SettingsButton({ label, onPress, variant = 'primary', disabled, busy, testID, accessibilityLabel, inline }: {
   label: string;
   onPress: () => void;
   variant?: 'primary' | 'destructive' | 'plain';
+  /** 卡片内部的按钮:不带页面级外边距,高 40、字 14。省略 = 原来的整宽页面按钮。 */
+  inline?: boolean;
   disabled?: boolean;
   busy?: boolean;
   testID?: string;
@@ -402,14 +404,14 @@ export function SettingsButton({ label, onPress, variant = 'primary', disabled, 
       onPress={onPress}
       style={({ pressed }) => [
         styles.button,
-        { minHeight: settingsRowMinHeight() },
+        inline ? styles.buttonInline : { minHeight: settingsRowMinHeight() },
         primary ? styles.buttonPrimary : styles.buttonCard,
         off && styles.disabled,
         pressed && (primary ? { opacity: 0.8 } : styles.rowPressed),
       ]}
     >
       {busy ? <ActivityIndicator size="small" color={textColor} /> : null}
-      <Text style={[styles.buttonText, { color: textColor }]}>{label}</Text>
+      <Text style={[styles.buttonText, inline && styles.buttonTextInline, { color: textColor }]}>{label}</Text>
     </Pressable>
   );
 }
@@ -427,12 +429,15 @@ const makeStyles = () => StyleSheet.create({
     ...elevated('raised'),
   },
   caption: { color: colors.textMuted, paddingTop: 0, paddingBottom: spacing.xs + 2 },
-  cardHighlight: { borderWidth: 1, borderColor: colors.accent },
+  // 当前账号卡:不用主色描边(和选中态、焦点线抢),用导航选中同一档的浅主色细边。
+  cardHighlight: { borderWidth: 1, borderColor: colors.railActiveBg },
   lead: { width: SETTINGS_LEAD, alignItems: 'flex-start', justifyContent: 'center', flexShrink: 0 },
   iconTile: { width: 30, height: 30, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   accountCopy: { flex: 1, minWidth: 0, gap: 2 },
   accountNameLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
-  accountNameLarge: { fontSize: 17, fontWeight: '600' },
+  // 当前账号(large):头像 48(行首格子宽度不变,文字左缘仍对齐)、名字 18/600,上下各留 md,做成页首的「身份卡」而不是又一行列表。
+  accountCopyLarge: { paddingVertical: spacing.md, gap: 4 },
+  accountNameLarge: { fontSize: 18, fontWeight: '600' },
   pill: { fontSize: 11, fontWeight: '600', paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, overflow: 'hidden', flexShrink: 0 },
   pillCurrent: { color: colors.accent, backgroundColor: colors.railActiveBg },
   pillMuted: { color: colors.textSecondary, backgroundColor: colors.subtleFill },
@@ -462,6 +467,8 @@ const makeStyles = () => StyleSheet.create({
   buttonPrimary: { backgroundColor: colors.accent },
   buttonCard: { backgroundColor: colors.groupedRow, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
   buttonText: { fontSize: 16, fontWeight: '600' },
+  buttonInline: { marginHorizontal: 0, marginTop: 0, minHeight: 40, paddingHorizontal: spacing.md },
+  buttonTextInline: { fontSize: 14 },
   disabled: { opacity: 0.45 },
 });
 
