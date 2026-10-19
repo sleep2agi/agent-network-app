@@ -10,6 +10,7 @@ import { useTranslation } from './i18n-react';
 import { useCallback, useMemo, useRef, useState, type ReactNode } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text } from './ui-text';
+import MarkdownMessage from './MarkdownMessage';
 import { timeTextFloor } from './chat-time-layout';
 import { uiScale } from './ui-scale';
 import { Ionicons } from './icons';
@@ -24,6 +25,7 @@ import type { RequirementPerson, RequirementPersonRef } from './requirement-peop
 import { fetchRequirementEvents } from './requirements-hub';
 import { usePoll } from './usePoll';
 import { taskText } from './i18n-tasks';
+import { commentPreview } from './task-activity-model';
 import { personDisplay } from './task-board-model';
 import { PRIORITY_CODE } from './task-priority';
 import { PriorityBadge, STATUS_TONE, Segmented, a11yState, type TaskStyles } from './TaskBoardParts';
@@ -211,7 +213,7 @@ function PartView({ part, v }: { part: Part; v: ViewCtx }) {
     case 'check': return <Ionicons name={part.done ? 'checkbox' : 'square-outline'} size={16} color={part.done ? colors.accent : colors.textMuted} />;
     case 'arrow': return <Text style={c.arrow}>→</Text>;
     // 评论整段换行显示(最多 8 行),不是一个小引号块:Agent 的进展说明往往有好几行。
-    case 'comment': return <Text style={[c.text, c.comment]} numberOfLines={8} selectable testID="activity-comment">{part.v}</Text>;
+    case 'comment': return <View testID="activity-comment"><MarkdownMessage>{commentPreview(part.v).text}</MarkdownMessage></View>;
   }
 }
 

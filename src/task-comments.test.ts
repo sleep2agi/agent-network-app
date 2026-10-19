@@ -42,7 +42,11 @@ const i18n = readFileSync(join(import.meta.dir, 'i18n-tasks.ts'), 'utf8');
 ck('i18n: zh + en for the new strings', ['act.commented', 'act.t.comment', 'comments.title', 'comments.earlier'].every(k => new RegExp(`'${k.replace('.', '\\.')}': \\['[^']+', '[^']+'\\]`).test(i18n)));
 
 const src = (f: string) => readFileSync(join(import.meta.dir, f), 'utf8');
-ck('动态 renders a comment part as a multi-line block', /case 'comment': return <Text style=\{\[c\.text, c\.comment\]\} numberOfLines=\{8\}/.test(src('TaskActivity.tsx')));
+ck('动态 renders a comment part through the markdown renderer', src('TaskActivity.tsx').includes("case 'comment': return <View testID=\"activity-comment\"><MarkdownMessage>{commentPreview(part.v).text}</MarkdownMessage></View>"));
+ck('动态 keeps the 8-line collapse in the source, not numberOfLines', src('TaskActivity.tsx').includes('commentPreview(part.v).text') && src('task-activity-model.ts').includes('export function commentPreview(text: string, maxLines = 8)'));
+ck('评论 body renders markdown, not raw text', src('TaskComments.tsx').includes('<MarkdownMessage>{c.text}</MarkdownMessage>') && !src('TaskComments.tsx').includes("selectable testID={`req-comment-text-"));
+ck('评论 keeps a copy action (markdown source, both platforms)', src('TaskComments.tsx').includes('Clipboard.setStringAsync(text)') && src('TaskComments.tsx').includes("testID={`req-comment-copy-"));
+ck('i18n: copy strings exist in zh + en', ['comments.copy', 'comments.copied'].every(k => new RegExp(`'${k.replace('.', '\\.')}': \\['[^']+', '[^']+'\\]`).test(src('i18n-tasks.ts'))));
 const detail = src('TaskDetailPanel.tsx');
 ck('task detail shows the comments section', detail.includes("<TaskComments key={`comments:${item.id}`} cfg={cfg} requirementId={item.id}"));
 const comp = src('TaskComments.tsx');

@@ -4,7 +4,9 @@
 // 旧 Hub 没有评论(或没有动态接口):读不到 / 没有评论就什么都不画,详情和以前一样。
 import { useCallback, useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
+import * as Clipboard from 'expo-clipboard';
 import { Text } from './ui-text';
+import MarkdownMessage from './MarkdownMessage';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-tasks';
@@ -24,6 +26,7 @@ export default function TaskComments({ cfg, requirementId, people, onLoadPeople 
   useTranslation();
   const [comments, setComments] = useState<CardComment[]>([]);
   const [all, setAll] = useState(false);
+  const [copiedId, setCopiedId] = useState<string | null>(null);
   const load = useCallback(async () => {
     try {
       setComments(cardComments(parseEvents(await fetchRequirementEvents(cfg, { requirementId, limit: 200 })).events));
@@ -38,6 +41,15 @@ export default function TaskComments({ cfg, requirementId, people, onLoadPeople 
     askedPeople.current = true;
     void onLoadPeople();
   }, [missing, onLoadPeople]);
+  const copyComment = async (id: string, text: string) => {
+    try {
+      await Clipboard.setStringAsync(text);
+    } catch {
+      // RN Web / 旧 WebView: fall back to the browser API (same shape as AccountRowActions)
+      try { await (globalThis as any).navigator?.clipboard?.writeText?.(text); } catch { return; }
+    }
+    setCopiedId(id);
+  };
   if (!comments.length) return null;
   const hidden = all ? 0 : Math.max(0, comments.length - COMMENTS_SHOWN);
   return (
@@ -55,7 +67,22 @@ export default function TaskComments({ cfg, requirementId, people, onLoadPeople 
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} numberOfLines={1}>
               {who}{c.actor?.kind === 'node' ? ` · ${tr('act.agent')}` : ''} · {c.at}
             </Text>
-            <Text style={{ color: colors.text, fontSize: typeScale.body, lineHeight: 20 }} selectable testID={`req-comment-text-${c.id}`}>{c.text}</Text>
+            <View style={{ gap: 4 }}>
+              <View testID={`req-comment-text-${c.id}`}>
+                <MarkdownMessage>{c.text}</MarkdownMessage>
+              </View>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={tr('comments.copy')}
+                onPress={() => { void copyComment(c.id, c.text); }}
+                hitSlop={6}
+                testID={`req-comment-copy-${c.id}`}
+              >
+                <Text style={{ color: colors.accent, fontSize: typeScale.small }}>
+                  {copiedId === c.id ? tr('comments.copied') : tr('comments.copy')}
+                </Text>
+              </Pressable>
+            </View>
           </View>
         );
       })}
