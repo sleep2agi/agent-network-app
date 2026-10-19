@@ -43,6 +43,8 @@ export default function CommentBody({ text, clampLines, testID, style }: {
   const [expanded, setExpanded] = useState(false);
   const timer = useRef<ReturnType<typeof setTimeout> | null>(null);
   useEffect(() => () => { if (timer.current) clearTimeout(timer.current); }, []);
+  // 「动态」按 part index 做 key,槽位换文本时会复用同一个组件:换文本就回到折叠态,别停在上一段的展开态。
+  useEffect(() => { setExpanded(false); }, [text]);
 
   const copy = useCallback(async () => {
     if (!(await writeClipboard(text))) return;
