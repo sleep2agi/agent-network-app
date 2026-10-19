@@ -9,16 +9,21 @@ let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 
 const src = readFileSync('src/TaskComments.tsx', 'utf8').replace(/\r\n?/g, '\n');
+const body = readFileSync('src/comment-body.tsx', 'utf8').replace(/\r\n?/g, '\n');
+const activity = readFileSync('src/TaskActivity.tsx', 'utf8').replace(/\r\n?/g, '\n');
 
-ck('评论组件引入 MarkdownMessage', /import MarkdownMessage from '\.\/MarkdownMessage'/.test(src));
-ck('评论正文交给 MarkdownMessage 渲染', /<MarkdownMessage>\{c\.text\}<\/MarkdownMessage>/.test(src));
-ck('不再把评论正文当纯文本 Text 渲染', !/\{c\.text\}<\/Text>/.test(src));
+ck('评论区用共用 CommentBody', /import CommentBody from '\.\/comment-body'/.test(src) && src.includes('<CommentBody text={c.text}'));
+ck('评论正文交给 MarkdownMessage 渲染', /<MarkdownMessage>\{text\}<\/MarkdownMessage>/.test(body));
+ck('不再把评论正文当纯文本 Text 渲染', !/\{c\.text\}<\/Text>/.test(src) && !/case 'comment': return <Text/.test(activity));
+ck('「动态」视图也用同一个 CommentBody', /import CommentBody from '\.\/comment-body'/.test(activity) && activity.includes('<CommentBody text={part.v} clampLines={8}'));
+ck('「动态」保留 8 行折叠语义', body.includes('maxHeight: (clampLines as number) * LINE_HEIGHT'));
+ck('折叠后有展开/收起入口', body.includes("tr('act.expand')") && body.includes("tr('act.collapse')"));
 ck('保留逐条评论的 testID', src.includes('req-comment-text-${c.id}'));
-ck('长按只在触屏设备上绑定', /onLongPress=\{pointer \? undefined : \(\) => \{ void copyComment\(c\.id, c\.text\); \}\}/.test(src));
-ck('桌面有独立复制按钮', src.includes('req-comment-copy-${c.id}'));
-ck('复制写入剪贴板', src.includes('Clipboard.setStringAsync(text)'));
-ck('复制后给「已复制」反馈', src.includes('req-comment-copied-${c.id}'));
-ck('复制失败时有浏览器剪贴板兜底', src.includes('navigator?.clipboard?.writeText'));
+ck('长按只在触屏设备上绑定', /onLongPress=\{pointer \? undefined : \(\) => \{ void copy\(\); \}\}/.test(body));
+ck('鼠标设备有独立复制按钮', body.includes('${testID}-copy'));
+ck('复制写入剪贴板', body.includes('Clipboard.setStringAsync(text)'));
+ck('复制后给「已复制」反馈', body.includes('${testID}-copied'));
+ck('复制失败时有浏览器剪贴板兜底', body.includes('navigator?.clipboard?.writeText'));
 
 const i18n = readFileSync('src/i18n-tasks.ts', 'utf8');
 ck('i18n 有复制提示', i18n.includes("'comments.copyHint'"));
