@@ -220,6 +220,15 @@ const strs = (v: unknown): string[] => (Array.isArray(v) ? v.filter((x): x is st
 const sameRef = (a: RequirementPersonRef, b: RequirementPersonRef) => a.kind === b.kind && a.id === b.id;
 
 /** 评论事件的正文(new.text);形状不对就空串。 */
+/** 「动态」行里的评论只给前 N 行:MarkdownMessage 是 View 组合、不吃 numberOfLines,
+ *  所以折叠改在源文本上做(截断后仍交给 MarkdownMessage 渲染,标题/粗体/行内 code 仍成立)。 */
+export function commentPreview(text: string, maxLines = 8): { text: string; truncated: boolean } {
+  const raw = String(text ?? '');
+  const lines = raw.split('\n');
+  if (lines.length <= maxLines) return { text: raw, truncated: false };
+  return { text: lines.slice(0, maxLines).join('\n') + '…', truncated: true };
+}
+
 export function commentText(e: Pick<ActivityEvent, 'new'>): string {
   const v = (e.new ?? null) as { text?: unknown } | null;
   return v && typeof v.text === 'string' ? v.text : '';

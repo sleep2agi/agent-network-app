@@ -6,6 +6,8 @@ import {
   localDay, mergeEvents, parseEvents, tally, EMPTY_ACTIVITY_FILTER, type ActivityEvent, type Part,
 } from './task-activity-model';
 import type { Requirement } from './requirements-model';
+import { readFileSync } from 'node:fs';
+import { commentPreview } from './task-activity-model';
 
 let p = 0, tt = 0;
 const ck = (n: string, c: boolean, extra = '') => { tt++; if (c) { p++; console.log(`  ✓ ${n}`); } else console.log(`  ✗ ${n}${extra ? ` (${extra})` : ''}`); };
@@ -142,5 +144,18 @@ ck('type: deleted and archived are one type', activityType({ kind: 'deleted', fi
 // ── tally ──
 ck('tally: members vs agents', JSON.stringify(tally([ev({ minAgo: 1 }), ev({ minAgo: 1, actor: { kind: 'node', id: 'n' } }), ev({ minAgo: 1, actor: null })])) === JSON.stringify({ total: 3, members: 1, agents: 1 }));
 
+
+// ── #1831「动态」里的评论也走 Markdown 渲染,折叠在源文本上做 ──
+const activitySrc = readFileSync(new URL('./TaskActivity.tsx', import.meta.url), 'utf8');
+ck('动态 comment part renders through MarkdownMessage', activitySrc.includes('case \'comment\': return <View testID="activity-comment"><MarkdownMessage>{commentPreview(part.v).text}</MarkdownMessage></View>'));
+ck('动态 comment part no longer uses numberOfLines/Text', !/case 'comment': return <Text[^>]*numberOfLines/.test(activitySrc));
+ck('commentPreview keeps 8 lines and marks truncation', (() => {
+  const long = Array.from({ length: 12 }, (_, i) => `line${i}`).join('\n');
+  const r = commentPreview(long, 8);
+  return r.truncated && r.text.split('\n').length === 8 && r.text.endsWith('…');
+})());
+ck('commentPreview leaves short text byte-identical', commentPreview('a\nb').text === 'a\nb');
+
 console.log(`${p}/${tt} passed`);
 process.exit(p === tt ? 0 : 1);
+
