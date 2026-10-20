@@ -1,5 +1,8 @@
 // agent-network #1511 片二 —— 密钥保存后的「重启二选一」。
 // ck 风格自执行脚本(npm test = scripts/run-tests.mjs 逐个 spawn)。
+// Expo 的 tsconfig 不含 node types。其它旧测试已有同样的 TS2591，
+// 这个新文件不能再多一条，否则全仓 tsc 比基线 +1。
+// @ts-expect-error TS2591 node:fs is not in the app tsconfig types list
 import { readFileSync } from 'node:fs';
 import {
   manualRestartCommand, RESTART_COUNTDOWN_SECONDS, restartChoiceAfterAttempt,
