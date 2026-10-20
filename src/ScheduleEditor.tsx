@@ -243,7 +243,11 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
   const submit = async () => {
     setBusy(true); setError(''); setConflict(null);
     try {
-      const input = supportsWatchers && canManageWatchers ? { ...draftInput(), watchers: watcherIds } : draftInput();
+      const input = draftInput();
+      // A new plan omits an empty watcher list. Copying a schedule must keep the
+      // old POST body, and an older Hub must not see a field it does not know.
+      // Editing still sends the list, including [] to clear it.
+      if (supportsWatchers && canManageWatchers && (base || watcherIds.length > 0)) input.watchers = watcherIds;
       if (base) await save(base, input, false);
       else { await createScheduledTask(cfg, input); onSaved(); }
     } catch (e) {
