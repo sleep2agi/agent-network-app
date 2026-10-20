@@ -188,7 +188,7 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
 
   useEffect(() => {
     if (!visible) { setPristine(null); setDiscardThen(null); return; }
-    setError(''); setConflict(null); setWatcherIds((editing?.watchers ?? []).map(w => w.user_id)); setBase(editing); setAdjustedFrom(null); setPristine('pending');
+    setError(''); setConflict(null); setBase(editing); setWatcherIds((editing?.watchers ?? []).map(w => w.user_id)); setAdjustedFrom(null); setPristine('pending');
     if (!editing) {
       setName(''); setTask(''); setTarget(initialTarget ?? ''); setKind('once'); setWhen(''); setEvery('1'); setUnit('hours');
       setClock('09:00'); setWeekdays([1]); setMisfirePolicy('catch_up_once'); setPriority('normal'); setTimezone(detectedTimezone);
