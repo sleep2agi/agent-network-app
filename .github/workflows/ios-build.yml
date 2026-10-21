@@ -41,6 +41,10 @@ permissions:
 
 jobs:
   ios-ipa:
+    # 2026-10-21(发版速度分析):有一例 ios-build 跑了 **61.7 小时**后被 cancelled,
+    # 另一次合法构建用了 193 分钟。所以上限取 4 小时:能容下最慢的那次真构建,
+    # 又不会让一个卡死的构建占着 macOS runner 挂两天半。
+    timeout-minutes: 240
     # Reuse the reviewed signing environment used by desktop notarization.
     # It already owns the App Store Connect API key; keeping one credential
     # namespace avoids stale duplicate ASC_* repository secrets.
