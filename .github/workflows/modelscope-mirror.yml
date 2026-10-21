@@ -173,8 +173,11 @@ jobs:
           # release:published 会触发一次镜像；手动重同步最新 tag 又会触发一次镜像。
           # 两次镜像都成功 ⇒ 两次 ios-build ⇒ 同一个版本传两个 build number、白占一个证书位，
           # 第三次还会撞 POST /certificates 的 409。head_sha 就是这一版的提交。
-          already=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/workflows/ios-build.yml/runs?per_page=100" \
-            --jq "[.workflow_runs[] | select(.event==\"workflow_dispatch\" and .head_sha==\"$sha\")] | length")
+          # 🔴 不用 --paginate：它会把 jq 的结果**每页各输出一行**，多页时
+          #    `already` 就成了多行文本，`[ "$already" -gt 0 ]` 直接报语法错。
+          #    一页 100 条足够覆盖最近 50 多个版本。
+          already=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/ios-build.yml/runs?per_page=100&event=workflow_dispatch" \
+            --jq "[.workflow_runs[] | select(.head_sha==\"$sha\")] | length")
           if [ "${already:-0}" -gt 0 ]; then
             echo "an ios-build for $sha was already dispatched — not dispatching a second one"
             exit 0
