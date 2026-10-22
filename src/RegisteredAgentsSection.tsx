@@ -4,11 +4,15 @@
 // giving these entries a Session.status would paint them online/green
 // (chat-actions.ts:69, agent-row-model.ts default branch). This block never
 // opens a chat and never offers start/stop/restart/adopt.
+import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, radius, spacing } from './theme';
 import type { RegisteredAgentRow } from './registered-agents';
+import {
+  registeredExpanded, registeredHiddenCount, registeredNeedsMore, registeredToggleEnabled, registeredVisibleCount, showAllScopeKey,
+} from './registered-agents-view';
 
 export default function RegisteredAgentsSection(props: {
   rows: RegisteredAgentRow[];
@@ -16,26 +20,38 @@ export default function RegisteredAgentsSection(props: {
   loaded: boolean;
   collapsed: boolean;
   onToggle: () => void;
+  /** The Agents list query. A non-empty query forces the block open so matches are reachable. */
+  query?: string;
   onExplain?: (row: RegisteredAgentRow) => void;
   compact?: boolean;
 }) {
-  const { rows, loaded, collapsed, onToggle, onExplain, compact } = props;
+  const { rows, loaded, collapsed, onToggle, query = '', onExplain, compact } = props;
+  const [showAll, setShowAll] = useState(false);
+  // #2064: "show all" belongs to one query/row set. A new search must not inherit an
+  // expansion that was granted for a different (unfiltered) directory.
+  const scope = showAllScopeKey(query, rows.map(r => r.key));
+  useEffect(() => { setShowAll(false); }, [scope]);
   if (!loaded || rows.length === 0) return null;
-  // 展开时也只铺前 8 条：这一组可能有几十个节点，全铺会把下面的 Agent 列表推走。
-  const VISIBLE = 8;
-  const shown = rows.slice(0, VISIBLE);
-  const hidden = rows.length - shown.length;
+  // #2064: a search that matches a registered node must be visible even when the user
+  // collapsed the block earlier; and rows past the page size always get a way through.
+  const expanded = registeredExpanded(query, collapsed);
+  // While a query forces the block open, the header must not pretend to toggle it.
+  const toggleEnabled = registeredToggleEnabled(query);
+  const shown = rows.slice(0, registeredVisibleCount(rows.length, showAll));
+  const hidden = registeredHiddenCount(rows.length, showAll);
+  const needsMore = registeredNeedsMore(rows.length, showAll);
   return (
     <View testID="registered-agents-section">
       <Pressable
         testID="registered-agents-header"
         accessibilityRole="button"
-        accessibilityLabel={`已登记节点 ${rows.length} 个，${collapsed ? '已折叠' : '已展开'}`}
-        accessibilityState={{ expanded: !collapsed }}
-        onPress={onToggle}
+        accessibilityLabel={`已登记节点 ${rows.length} 个，${expanded ? '已展开' : '已折叠'}`}
+        accessibilityState={{ expanded, disabled: !toggleEnabled }}
+        disabled={!toggleEnabled}
+        onPress={toggleEnabled ? onToggle : undefined}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 34, paddingHorizontal: spacing.md, backgroundColor: compact ? colors.listBg : colors.bg }}
       >
-        <Ionicons name={collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
+        <Ionicons name={expanded ? 'chevron-down' : 'chevron-forward'} size={12} color={colors.textMuted} />
         <Text selectable={false} numberOfLines={1} style={{ flex: 1, color: colors.textMuted, fontSize: 12 }}>
           已登记节点
         </Text>
@@ -43,7 +59,7 @@ export default function RegisteredAgentsSection(props: {
           {rows.length}
         </Text>
       </Pressable>
-      {collapsed ? null : shown.map(row => (
+      {expanded ? shown.map(row => (
         <Pressable
           key={row.key}
           testID={`registered-agent-${row.alias}`}
@@ -64,11 +80,19 @@ export default function RegisteredAgentsSection(props: {
             <Text selectable={false} style={{ color: colors.textMuted, fontSize: 10 }}>只读</Text>
           </View>
         </Pressable>
-      ))}
-      {collapsed || hidden === 0 ? null : (
-        <Text selectable={false} testID="registered-agents-more" style={{ color: colors.textMuted, fontSize: 11, paddingHorizontal: spacing.md, paddingVertical: 6 }}>
-          还有 {hidden} 个已登记节点
-        </Text>
+      )) : null}
+      {!expanded || !needsMore ? null : (
+        <Pressable
+          testID="registered-agents-more"
+          accessibilityRole="button"
+          accessibilityLabel={`显示其余 ${hidden} 个已登记节点`}
+          onPress={() => setShowAll(true)}
+          style={{ paddingHorizontal: spacing.md, paddingVertical: 8 }}
+        >
+          <Text selectable={false} style={{ color: colors.accent, fontSize: 11 }}>
+            还有 {hidden} 个已登记节点 · 显示全部
+          </Text>
+        </Pressable>
       )}
     </View>
   );
