@@ -62,5 +62,11 @@ ck('草稿建好后钉回真实构建提交',
 ck('钉提交只在 macOS（创建者）执行',
   /Pin the draft release to the exact built commit[\s\S]{0,120}?runner\.os == 'macOS'/.test(wf));
 
+
+// 7. 钉目标提交时必须同时写回 tag_name：只 PATCH target_commitish 会把 draft 变成
+// `untagged-<hash>`（0.2.287 run 39843345864 实测），之后按 tag 找草稿就是 0 个。
+ck('钉目标提交时保留 tag_name',
+  /-f tag_name="\$tag" -f target_commitish='\$\{\{ inputs\.commit \}\}'/.test(wf));
+
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
