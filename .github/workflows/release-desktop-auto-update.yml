@@ -27,10 +27,60 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  # 一个 tag 只允许一个 release 对象，决定权只在这个 job：
+  #   published → fail（要重发请 bump 版本号）；0 draft → 创建并输出 release_id；
+  #   1 draft → 复用；>1 draft → fail-closed。
+  # 后面所有 matrix job 只认这个 release_id，禁止再按 tag 各自创建/删除。
+  prepare-release:
+    if: inputs.publish == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      release_id: ${{ steps.prepare.outputs.release_id }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Require exact merged commit
+        shell: bash
+        run: |
+          set -euo pipefail
+          requested='${{ inputs.commit }}'
+          resolved="$(git rev-parse HEAD)"
+          [[ "$requested" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$resolved" == "$requested" ]]
+          git fetch origin main
+          git merge-base --is-ancestor "$resolved" origin/main
+
+      - name: Reuse or create the single draft release for this tag
+        id: prepare
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          export VERSION="$version"
+          export REQUESTED_COMMIT="${{ inputs.commit }}"
+          export INCLUDE_LINUX="${{ inputs.include_linux }}"
+          node scripts/prepare-desktop-release.mjs
+
   build-release:
+    needs: [prepare-release]
+    # publish=false 是「只构建 + smoke，不建 release」的 dry run：prepare-release 会跳过，
+    # 这个 job 必须照常跑，否则 Build signed bundles without uploading a release 那套永远不执行。
+    if: always() && (inputs.publish == false || needs.prepare-release.result == 'success')
     environment: macos-signing
     strategy:
       fail-fast: false
+      # 所有矩阵行现在写同一个 release（同一个 releaseId）：并发跑会让多个 tauri-action
+      # 同时改 latest.json，后写的覆盖先写的。串行化是最小、可解释的修法；
+      # 真正的一次写入者由 normalize-updater-manifest 收口。
+      max-parallel: 1
       matrix:
         # Linux is opt-in, not a skipped matrix job that delays the primary pair.
         # When requested it still uses the production updater/signing/retention gates.
@@ -452,82 +502,8 @@ jobs:
           bash -n "$RUNNER_TEMP/retry-macos-dmg.sh"
           chmod +x "$RUNNER_TEMP/retry-macos-dmg.sh"
 
-      # 一个 tag 只留一个 release 对象。
-      #
-      # 事故(2026-10-21 实测,来自发版速度分析):同一个 tag 上出现了**两个** release
-      # (desktop-v0.2.274:一个 draft、一个 published)—— tauri-action 每次跑都新建,
-      # 重跑就多一个草稿;最近 20 个 release 里 9 个是**从未发布**的草稿,
-      # 用户和更新器看到的是残缺版本,latest.json 也可能指向半个版本。
-      #
-      # 这里在构建之前先清掉同 tag 的**草稿**(已发布的不动:它带着已下载的资产,
-      # 删掉会毁掉用户的更新记录),让重跑变成「更新同一个 release」。
-      - name: Remove stale draft releases for this tag (idempotent release creation)
-        # #2064: 只有 macOS job 拥有「建草稿」的权力。两个矩阵 job 同时在开始时清理、
-        # 结束时各建一个同 tag 草稿，0.2.287 就这样得到了两个 draft
-        # (420936057 只有 darwin 资产 / 420938453 只有 windows 资产)，
-        # verify-draft 取到第一个后报 "draft is missing ANet_0.2.287_x64-setup.exe"。
-        if: inputs.publish == true && runner.os == 'macOS'
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          version=$(node -p 'require("./package.json").version')
-          tag="desktop-v$version"
-          drafts=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
-            --jq ".[] | select(.tag_name == \"$tag\" and .draft == true) | .id")
-          for id in $drafts; do
-            echo "deleting stale draft release $id for $tag"
-            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
-          done
-          echo "idempotent-release: $tag has no stale draft left"
-          # 已经**发布**过的 tag,不许再发一次。
-          # 只删草稿还不够:重发同一个已发布版本时,tauri-action 仍可能再造一个新对象
-          # (desktop-v0.2.274 就是 published 09:33 + draft 09:45 并存)。
-          # 这里直接 fail-fast:要重发就 bump 版本号,别在同一个 tag 上叠第二条。
-          published=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
-            --jq ".[] | select(.tag_name == \"$tag\" and .draft == false) | .id")
-          if [ -n "$published" ]; then
-            echo "::error::$tag 已经发布过了(release id: $published)。重发请先 bump 版本号。"
-            exit 1
-          fi
-
-      # 一个 tag 只能有一个 release 对象。非 macOS 平台不建 release，而是等 macOS job
-      # 把草稿和它的 darwin 资产传上去，然后按 releaseId 追加自己的资产。
-      - name: Wait for the single draft release created by the macOS job
-        if: inputs.publish == true && runner.os != 'macOS'
-        id: draft
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          version=$(node -p 'require("./package.json").version')
-          tag="desktop-v$version"
-          mac_asset="ANet_${version}_aarch64.app.tar.gz"
-          # 只认本次 run 期间新建的草稿。上一单的残留草稿也带着 darwin 资产，
-          # 0.2.287 run 39827091918 就是这样：Windows 在 18:03:12Z 绑到旧的
-          # 420987662，macOS 18:09 清理时把它删了，Windows 上传时报
-          # `Not Found - .../releases/assets`。run_started_at 之前的草稿一律跳过。
-          run_started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
-          for attempt in $(seq 1 120); do
-            id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
-              --jq ".[] | select(.tag_name == \"$tag\" and .draft == true and .created_at > \"$run_started\") | .id" | head -1)
-            if [ -n "$id" ]; then
-              has_mac=$(gh api "repos/$GITHUB_REPOSITORY/releases/$id/assets" \
-                --jq ".[] | select(.name == \"$mac_asset\") | .id" | head -1)
-              if [ -n "$has_mac" ]; then
-                echo "id=$id" >> "$GITHUB_OUTPUT"
-                echo "using the draft release $id created by the macOS job"
-                exit 0
-              fi
-            fi
-            echo "waiting for the macOS draft release with $mac_asset (attempt $attempt/120)"
-            sleep 15
-          done
-          echo "::error::no macOS draft release for $tag after 30 minutes; refusing to create a second release object"
-          exit 1
-
+      # #1035(0.2.287 双草稿事故) 与 #1034 的最终形态：草稿的唯一性由 prepare-release 单点保证；
+      # 这里（每个 matrix job 内）不再按 tag 删除或创建 release，也不再等别的平台先建。
       - uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
         if: inputs.publish == true
         env:
@@ -543,10 +519,9 @@ jobs:
           # Empty on Windows and Linux, so those jobs keep using bun. The path
           # has no spaces: tauri-action splits this input on spaces.
           tauriScript: ${{ runner.os == 'macOS' && format('bash {0}/retry-macos-dmg.sh', runner.temp) || '' }}
-          # Empty on macOS: that job is the only one allowed to create the release.
-          releaseId: ${{ runner.os == 'macOS' && '' || steps.draft.outputs.id }}
           tagName: desktop-v__VERSION__
           releaseName: ANet Desktop v__VERSION__
+          releaseId: ${{ needs.prepare-release.outputs.release_id }}
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
@@ -1799,34 +1774,36 @@ jobs:
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
-      # tauri-action 建草稿时把 target_commitish 设成默认分支 HEAD（0.2.287 实测是
-      # 7551c09f），而这次二进制是从 inputs.commit 构建的 —— verify-draft 因此报
-      # `draft targetCommitish … is not 1f86099f…`。草稿还没打 tag，这里把它钉回
-      # 真实构建提交：发布时 tag 才会落在真正被构建的那次提交上。
-      - name: Pin the draft release to the exact built commit
+      # 草稿由 prepare-release 在构建前建好/复用，id 唯一；这里按这个 id 把它钉到
+      # 本次真实构建提交，并且**同时写回 tag_name**：只 PATCH target_commitish 会把
+      # draft 变成 untagged-…（PR1039 实测），之后任何按 tag 的查找都找不到它。
+      - name: Pin the prepared draft to the exact built commit
         if: inputs.publish == true && runner.os == 'macOS'
         shell: bash
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
           tag="desktop-v$version"
-          run_started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
-          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
-            --jq ".[] | select(.tag_name == \"$tag\" and .draft == true and .created_at > \"$run_started\") | .id" | head -1)
-          if [ -z "$id" ]; then
-            echo "::error::no draft release for $tag created during this run"
-            exit 1
-          fi
-          current=$(gh api "repos/$GITHUB_REPOSITORY/releases/$id" --jq .target_commitish)
-          if [ "$current" = '${{ inputs.commit }}' ]; then
-            echo "draft $id already targets $current"
+          read -r current tag_now <<<"$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            --jq '.target_commitish + " " + (.tag_name // "")')"
+          if [ "$current" = '${{ inputs.commit }}' ] && [ "$tag_now" = "$tag" ]; then
+            echo "draft $RELEASE_ID already targets $current with tag $tag"
             exit 0
           fi
-          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" \
-            -f target_commitish='${{ inputs.commit }}' --jq '{id,target_commitish}' >/dev/null
-          echo "pinned draft $id to ${{ inputs.commit }} (was $current)"
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            -f tag_name="$tag" \
+            -f target_commitish='${{ inputs.commit }}' \
+            --jq '{id,tag_name,target_commitish}' >/dev/null
+          read -r pinned_tag pinned_commit <<<"$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            --jq '.tag_name + " " + .target_commitish')"
+          if [ "$pinned_commit" != '${{ inputs.commit }}' ] || [ "$pinned_tag" != "$tag" ]; then
+            echo "::error::draft $RELEASE_ID still reads tag=$pinned_tag target=$pinned_commit after PATCH"
+            exit 1
+          fi
+          echo "pinned draft $RELEASE_ID to $tag @ ${{ inputs.commit }} (was $current / $tag_now)"
 
       # Same bundles and signing material as the release step. Nothing is uploaded
       # to a GitHub Release. macOS still notarizes when this leg is approved.
@@ -2123,7 +2100,7 @@ jobs:
           if-no-files-found: error
 
   verify-draft:
-    needs: build-release
+    needs: [prepare-release, build-release]
     if: inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 15
@@ -2136,27 +2113,13 @@ jobs:
         with:
           node-version: 20
       # #2064: 两个同 tag 草稿会让这件事看起来像「资产没编出来」。先点清数量。
-      - name: Require exactly one draft release for this tag
-        shell: bash
-        env:
-          GITHUB_TOKEN: ${{ github.token }}
-        run: |
-          set -euo pipefail
-          version=$(node -p 'require("./package.json").version')
-          tag="desktop-v$version"
-          # --paginate 会按页各吐一个数字（0.2.287 实测是 "1\n0\n0"），拿它和 "1"
-          # 直接比较必然失败。这里改成数 id 的行数：跨页也只得到一个整数。
-          count=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
-            --jq ".[] | select(.tag_name == \"$tag\" and .draft == true) | .id" | wc -l | tr -d ' ')
-          echo "draft releases for $tag: $count"
-          if [ "$count" != "1" ]; then
-            echo "::error::expected exactly one draft release for $tag, found $count"
-            exit 1
-          fi
+      # 草稿身份由 prepare-release 的 release_id 唯一确定：不再按 tag 列举/计数
+      # （分页下 "1\n0\n0" 那类误报），身份断言改在 verify-desktop-release-draft.mjs 里做。
 
       - name: Require selected platform draft assets, updater entries, and checksums
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
           INCLUDE_LINUX: ${{ inputs.include_linux }}
         run: node scripts/verify-desktop-release-draft.mjs
@@ -2237,3 +2200,37 @@ jobs:
           cp "$apk" "$tmp/$name"
           gh release upload "desktop-v$version" "$tmp/$name" --clobber --repo "$GITHUB_REPOSITORY"
           echo "attached $name to desktop-v$version"
+
+  # 0.2.286 的真问题:tauri-action 生成的 latest.json 里，五个 platforms.url 是
+  #   https://api.github.com/repos/<repo>/releases/assets/<id>
+  # 而站点校验和普通 updater 认的是
+  #   https://github.com/<repo>/releases/download/<tag>/<file>
+  # 于是「资产都在、manifest 也在」的发布，客户端仍然可能拿不到包。
+  # 这里在 draft 阶段（APK 挂完之后、发布之前）把它映射成本 release 真实资产的
+  # browser_download_url，上传替换后**重新下载**断言五个 URL 都是公共下载链接、
+  # 且能匿名 HEAD 到内容。缺映射/歧义/非公开链接一律 fail-closed，不静默带坏 URL 发布。
+  normalize-updater-manifest:
+    needs: [prepare-release, attach-android-apk]
+    if: inputs.publish == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Normalize latest.json platform URLs to public download links
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          # 与 attach-android-apk 同一个来源：这次发布的版本号就是 package.json 的版本。
+          version=$(node -p 'require("./package.json").version')
+          export RELEASE_TAG="desktop-v$version"
+          echo "normalizing $RELEASE_TAG"
+          # 脚本自己 fresh 回读 release assets、上传替换、再回读断言；任何一步不合预期即非零退出。
+          node scripts/normalize-desktop-update-manifest.mjs
