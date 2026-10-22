@@ -31,6 +31,7 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   if (mode === 'http404') return new Response(null, { status: 404 });
   if (mode === 'denied') return new Response(null, { status: 403 });
   if (mode === 'lost') throw Error('private token/endpoint detail');
+  if (mode === 'binding409') return Response.json({ ok: false, error: 'session_control_changed' }, { status: 409 });
   if (method === 'POST') return Response.json({ ok: true, request_id: id, status: 'pending', expires_at: Date.now() + 15_000 });
   if (mode === 'receipt-gone') return new Response(null, { status: 404 });
   if (mode === 'unknown') return Response.json({ ok: true, request_id: id, status: 'unknown' });
@@ -47,10 +48,10 @@ try {
   ck('204 semantics rendered only as processed', result.ok && result.outcome === 'request_processed');
   ck('one mutation enqueue and receipt GET', calls.filter(c => c.method === 'POST').length === 1 && calls.filter(c => c.method === 'GET').length === 1);
   ck('mutation carries expected binding, no commands', calls[0].body.expected.binding_id === state.binding_id && !('keys' in calls[0].body) && !('command' in calls[0].body));
-  for (const scenario of ['http404', 'denied', 'lost', 'unknown', 'receipt-gone', 'foreign-receipt', 'changed', 'bad-outcome', 'idle']) {
+  for (const scenario of ['http404', 'denied', 'binding409', 'lost', 'unknown', 'receipt-gone', 'foreign-receipt', 'changed', 'bad-outcome', 'idle']) {
     mode = scenario; calls.length = 0;
     result = await runSessionControl(cfg, target, scenario === 'changed' ? undefined : state);
-    const expected = ({ http404: 'unsupported', denied: 'access', lost: 'unknown', unknown: 'unknown', 'receipt-gone': 'unknown', 'foreign-receipt': 'unknown', changed: 'changed', 'bad-outcome': 'unknown' } as Record<string, string>)[scenario];
+    const expected = ({ http404: 'unsupported', denied: 'access', binding409: 'changed', lost: 'unknown', unknown: 'unknown', 'receipt-gone': 'unknown', 'foreign-receipt': 'unknown', changed: 'changed', 'bad-outcome': 'unknown' } as Record<string, string>)[scenario];
     ck(`${scenario} truthful outcome`, scenario === 'idle' ? result.ok && result.outcome === 'already_idle' : !result.ok && result.error === expected);
     ck(`${scenario} never re-enqueues`, calls.filter(c => c.method === 'POST').length === 1);
   }

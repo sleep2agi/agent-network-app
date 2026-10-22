@@ -62,8 +62,9 @@ export async function runSessionControl(cfg: HubConfig, target: SessionControlTa
         });
         if (response.status === 401 || response.status === 403) return { ok: false, error: body === undefined && mutation ? 'unknown' : 'access_denied' };
         if (response.status === 404 || response.status === 405) return { ok: false, error: body === undefined ? (mutation ? 'unknown' : 'unavailable') : 'unsupported' };
-        if (!response.ok) return { ok: false, error: 'unavailable' };
-        return await response.json();
+        const data: unknown = await response.json();
+        if (!response.ok) return { ok: false, error: record(data) && typeof data.error === 'string' ? data.error : 'unavailable' };
+        return data;
       })(), Math.max(1, Math.min(5_000, deadline - Date.now())), () => ({ ok: false, error: mutation ? 'unknown' : 'unavailable' }));
     } finally { clearTimeout(timer); }
   };

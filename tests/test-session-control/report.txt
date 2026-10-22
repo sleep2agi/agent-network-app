@@ -22,15 +22,16 @@ Scope
 Necessary verification
   npm ci --no-audit --no-fund
   bun src/node-session-control.test.ts
-    43/43 PASS (target scope, schema, freshness, actual enqueue/read adapter,
+    45/45 PASS (target scope, schema, freshness, actual enqueue/read adapter,
     one mutation, unknown/missing ACK, old Hub, permission, wrong receipt,
-    expected-session mismatch, bilingual keys and both UI entry points)
+    expected-session mismatch, real Hub HTTP409 binding refusal, bilingual keys
+    and both UI entry points)
   bun src/drive-registry.test.ts
     12/12 PASS; test-session-control/drive.mjs registered as stub in tests/drives.json
   npm run typecheck
     PASS: tsc --noEmit -p tsconfig.build.json (not bare tsc)
   npx expo export --platform web --output-dir /tmp/opencode/2014-ui-web-final
-    PASS
+    PASS (aa7f3f14747620d36172a789c71978fa0947adaf application snapshot)
 
 Browser reproduction (uses existing local Playwright/Chromium, no download):
   WEB_DIR=/tmp/opencode/2014-ui-web-final \
@@ -38,11 +39,15 @@ Browser reproduction (uses existing local Playwright/Chromium, no download):
   CHROMIUM_EXECUTABLE_PATH=<existing-chromium> \
   node tests/test-session-control/drive.mjs
 
-  22/22 PASS, actual exported App, synthetic Tauri/Hub transport, two viewports:
+  22/22 PASS on aa7f3f14747620d36172a789c71978fa0947adaf's application snapshot,
+  actual exported App, synthetic Tauri/Hub transport, two viewports:
   phone390 Chinese/light, desktop1200 English/dark. Chat and node Overview,
   no pre-read control traffic, disabled until positive state, processed wording,
   exact original target, unknown lock after read-only refresh, old-Hub refusal,
   no horizontal overflow and no pageerror. No real Hub, credentials or inference.
+  Subsequent integration correction preserves a typed HTTP409 binding refusal
+  instead of a generic error. Only that adapter path changed; its regression is
+  in the final 45/45 core result and final typecheck, not a repeated browser run.
 
 Boundaries
 - Not native Android/iOS/Tauri binaries or live OpenCode/Bridge acceptance.
