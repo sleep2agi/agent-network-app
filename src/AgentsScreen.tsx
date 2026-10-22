@@ -37,6 +37,7 @@ import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, typ
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import RegisteredAgentsSection from './RegisteredAgentsSection';
+import { searchCountLabel } from './registered-agents-view';
 import { useAgentDirectory } from './agent-directory-hook';
 import { registeredAgentRows, sessionIdentities } from './registered-agents';
 import { colors, onThemeChange, radius, spacing, statusColor, themeMode, type, weight } from './theme';
@@ -907,7 +908,7 @@ export default function AgentsScreen({
         <View testID="agents-list-head" style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
-            {q ? `${shownCount} / ${sessions.length} agents` : `${sessions.length} agents`}
+            {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} agents`}
           </Text>
           <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
             <Ionicons name="add" size={24} color={colors.accent} />
@@ -940,7 +941,7 @@ export default function AgentsScreen({
               <Ionicons name="add" size={24} color={colors.accent} />
             </Pressable>
           </View>
-          {q ? <Text style={[styles.listHeader, rowStyles.searchCount]}>{`${shownCount} / ${sessions.length} agents`}</Text> : null}
+          {q ? <Text style={[styles.listHeader, rowStyles.searchCount]} testID="agents-search-count">{searchCountLabel(q, shownCount, sessions.length, registeredRows.length)}</Text> : null}
         </View>
       )}
       {showTabs ? (
@@ -1077,7 +1078,7 @@ export default function AgentsScreen({
             </Pressable>
           </View>
         )
-      ) :
+      ) : registeredRows.length > 0 ? null :
         // 搜不到时必须说出"为什么空",否则用户分不清「搜挂了」和「真没有」
         // ——空白屏是这两种情况唯一相同的表现。加载中/加载失败在上面的
         // early return 里已经各自有屏,走到这里必然是"数据到了但没有匹配"。

@@ -4,13 +4,15 @@
 // giving these entries a Session.status would paint them online/green
 // (chat-actions.ts:69, agent-row-model.ts default branch). This block never
 // opens a chat and never offers start/stop/restart/adopt.
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, radius, spacing } from './theme';
 import type { RegisteredAgentRow } from './registered-agents';
-import { registeredExpanded, registeredHiddenCount, registeredNeedsMore, registeredVisibleCount } from './registered-agents-view';
+import {
+  registeredExpanded, registeredHiddenCount, registeredNeedsMore, registeredToggleEnabled, registeredVisibleCount, showAllScopeKey,
+} from './registered-agents-view';
 
 export default function RegisteredAgentsSection(props: {
   rows: RegisteredAgentRow[];
@@ -25,10 +27,16 @@ export default function RegisteredAgentsSection(props: {
 }) {
   const { rows, loaded, collapsed, onToggle, query = '', onExplain, compact } = props;
   const [showAll, setShowAll] = useState(false);
+  // #2064: "show all" belongs to one query/row set. A new search must not inherit an
+  // expansion that was granted for a different (unfiltered) directory.
+  const scope = showAllScopeKey(query, rows.map(r => r.key));
+  useEffect(() => { setShowAll(false); }, [scope]);
   if (!loaded || rows.length === 0) return null;
   // #2064: a search that matches a registered node must be visible even when the user
   // collapsed the block earlier; and rows past the page size always get a way through.
   const expanded = registeredExpanded(query, collapsed);
+  // While a query forces the block open, the header must not pretend to toggle it.
+  const toggleEnabled = registeredToggleEnabled(query);
   const shown = rows.slice(0, registeredVisibleCount(rows.length, showAll));
   const hidden = registeredHiddenCount(rows.length, showAll);
   const needsMore = registeredNeedsMore(rows.length, showAll);
@@ -38,8 +46,9 @@ export default function RegisteredAgentsSection(props: {
         testID="registered-agents-header"
         accessibilityRole="button"
         accessibilityLabel={`已登记节点 ${rows.length} 个，${expanded ? '已展开' : '已折叠'}`}
-        accessibilityState={{ expanded }}
-        onPress={onToggle}
+        accessibilityState={{ expanded, disabled: !toggleEnabled }}
+        disabled={!toggleEnabled}
+        onPress={toggleEnabled ? onToggle : undefined}
         style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 34, paddingHorizontal: spacing.md, backgroundColor: compact ? colors.listBg : colors.bg }}
       >
         <Ionicons name={expanded ? 'chevron-down' : 'chevron-forward'} size={12} color={colors.textMuted} />
