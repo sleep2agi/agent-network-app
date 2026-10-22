@@ -218,20 +218,50 @@ ck('include_linux=false 时即使只剩 latest.json 也回收并如实返回 rem
   return deleted.join(',') === '34'
     && JSON.stringify(result.removedAssets) === JSON.stringify([{ id: 34, name: 'latest.json' }]);
 })());
-ck('prior-run partial draft 不允许静默沿用（removedAssets 非空且等于既有资产数）', (() => {
+ck('prior-run partial draft 不允许静默沿用（逐项核对 removedAssets 与实际 delete 调用）', (() => {
   const assets = [
     { id: 51, name: 'ANet_0.2.287_aarch64.app.tar.gz' },
     { id: 52, name: 'ANet_0.2.287_x64-setup.exe' },
     { id: 53, name: 'latest.json' },
   ];
+  const deleted: number[] = [];
   const result = prepareReleaseDraft({
     version: '0.2.287',
     listReleases: () => [{ id: 22, tag_name: tag, draft: true, target_commitish: 'main' }],
     listAssets: () => [assets],
-    deleteAsset: () => ({}),
+    deleteAsset: (id: number) => { deleted.push(id); return null; },
     log: () => {},
   });
-  return result.action === 'reuse' && result.removedAssets.length === assets.length;
+  return result.action === 'reuse'
+    && JSON.stringify(deleted) === '[51,52,53]'
+    && JSON.stringify(result.removedAssets) === JSON.stringify(assets.map((asset) => ({ id: asset.id, name: asset.name })));
+})());
+ck('malformed asset id → prepare 整单失败（不允许 filter 掉后继续 build）', (() => {
+  try {
+    prepareReleaseDraft({
+      version: '0.2.287',
+      listReleases: () => [{ id: 23, tag_name: tag, draft: true, target_commitish: 'main' }],
+      listAssets: () => [[
+        { id: 61, name: 'ANet_0.2.287_aarch64.app.tar.gz' },
+        { id: undefined, name: 'latest.json' },
+      ]],
+      deleteAsset: () => ({}),
+      log: () => {},
+    });
+    return false;
+  } catch (error) { return String(error).includes('without a positive integer id'); }
+})());
+ck('id 非正数同样必须失败', (() => {
+  try {
+    prepareReleaseDraft({
+      version: '0.2.287',
+      listReleases: () => [{ id: 24, tag_name: tag, draft: true, target_commitish: 'main' }],
+      listAssets: () => [[{ id: 0, name: 'latest.json' }]],
+      deleteAsset: () => ({}),
+      log: () => {},
+    });
+    return false;
+  } catch (error) { return String(error).includes('without a positive integer id'); }
 })());
 ck('创建/复用 release 之前先跑 exact-merged-commit 门',
   /prepare-release:[\s\S]{0,900}- name: Require exact merged commit[\s\S]{0,1200}node scripts\/prepare-desktop-release\.mjs/.test(wf));

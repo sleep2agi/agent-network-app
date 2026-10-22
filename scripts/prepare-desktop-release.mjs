@@ -144,9 +144,13 @@ export function prepareReleaseDraft({
     // 上一 run 留下的 mac/windows 分片是「partial draft」：asset 在、内容却是旧构建，
     // 若静默沿用，verify-draft 与用户下载都会指向半成品。这里全删，本次 matrix 用同一
     // releaseId 完整重传，故不存在「沿用旧资产」的路径。
-    const stale = assets
-      .filter((asset) => Number.isInteger(asset?.id))
-      .map((asset) => ({ id: asset.id, name: typeof asset.name === 'string' ? asset.name : '' }));
+    // fail-closed：只要有一个资产没有正整数 id，就整单失败。
+    // 过滤掉 malformed 条目会静默「少删一个资产」，随后 build 继续跑 → 旧资产被沿用（fail-open）。
+    const malformed = assets.filter((asset) => !Number.isInteger(asset?.id) || asset.id <= 0);
+    if (malformed.length > 0) {
+      throw new Error(`${tag}: draft ${plan.releaseId} has ${malformed.length} asset(s) without a positive integer id; refusing to reuse it (${JSON.stringify(malformed.map((asset) => asset?.name ?? null))})`);
+    }
+    const stale = assets.map((asset) => ({ id: asset.id, name: typeof asset.name === 'string' ? asset.name : '' }));
     for (const asset of stale) {
       log(`${tag}: removing prior-run asset ${asset.name} (id ${asset.id}) before this run re-uploads it`);
       deleteAsset(asset.id);
