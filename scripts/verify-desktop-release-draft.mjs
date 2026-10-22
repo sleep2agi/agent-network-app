@@ -186,7 +186,9 @@ function main() {
   console.log(`draft identity ok: release ${identity.id} tag ${identity.tag} commit ${identity.commit}`);
   const release = {
     isDraft: rawRelease.draft,
-    targetCommitish: rawRelease.target_commitish,
+    // 传**解析后的 SHA**：分支名形态（如 main）已经在身份门里被 resolve 过，
+    // 下游资产检查若还比原始字符串，会在完整构建之后才失败（codex 4353226188）。
+    targetCommitish: identity.commit,
     assets: (Array.isArray(rawAssets) ? rawAssets : []).map((asset) => ({
       name: asset.name,
       state: asset.state,

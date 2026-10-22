@@ -324,6 +324,10 @@ ck('target/SHA 不匹配 → fail-closed', (() => {
   try { assertDraftReleaseIdentity({ ...identityArgs, release: { ...identityRelease, target_commitish: 'e'.repeat(40) } }); return false; }
   catch (e) { return String(e).includes('targets'); }
 })());
+ck('下游资产检查拿到的是解析后的 SHA（不是原始分支名）', (() => {
+  const src = readFileSync(new URL('../scripts/verify-desktop-release-draft.mjs', import.meta.url), 'utf8');
+  return /targetCommitish: identity\.commit/.test(src) && !/targetCommitish: rawRelease\.target_commitish/.test(src);
+})());
 ck('分支名 target 需 resolve 后才能比对（resolve 不一致 → 拒绝）', (() => {
   try {
     assertDraftReleaseIdentity({ ...identityArgs, release: { ...identityRelease, target_commitish: 'main' }, resolveRef: () => ({ sha: 'f'.repeat(40) }) });
