@@ -525,6 +525,11 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.288:
+            - 修复：Agent 列表里搜索只命中「已登记节点」时，不再出现「计数非零但看不到行」——查询非空会强制展开该分区，计数也会显示「+ K 已登记」。
+            - 修复：搜索状态下点击「已登记节点」标题不再静默改动你保存的折叠偏好（此时标题不可点）。
+            - 修复：超过 8 个已登记节点时提供「显示全部」入口（手机布局同样可点）；切换或清空搜索会把展开状态重置，不再把整个未过滤目录铺开。
+
             What's new in 0.2.287:
             - 修复：Agent 列表最上面的「已登记节点」默认折叠，展开时也只列前 8 个，不再把在线 Agent 挤出首屏（admin 反馈「这些东西放前面太碍事」）。
 
