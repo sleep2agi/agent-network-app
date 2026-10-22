@@ -49,6 +49,8 @@ import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNo
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import NodeAdoptionControls from './NodeAdoptionControls';
 import NodeControlCard from './NodeControlCard';
+import NodeSessionControl from './NodeSessionControl';
+import { sessionControlTarget } from './node-session-control';
 import { nodeControlView } from './node-control-access';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
@@ -457,6 +459,7 @@ export default function NodeDetailScreen({
   const online = s.status !== 'offline';
   const danger = dangerActions({ lifecycleControllable: node?.lifecycle_controllable, online, configUpdateCapable, lifecycleState: node?.lifecycle_state, alias });
   const control = node ? nodeControlView({ node, danger, online, hostname: node.hostname ?? s.hostname, daemons: hostDaemons, networkId: cfg.networkId }) : null;
+  const backgroundTarget = sessionControlTarget(cfg, s, alias);
   const chipColor = statusColor(s.status, online);
   const team = teamOf(s.alias);
   const executeLifecycle = async () => {
@@ -595,6 +598,7 @@ export default function NodeDetailScreen({
         </View>
         {/* board #694 —— 重启 / 停止放在主人看的地方:概览。置灰也画出来,底下一句原因 + 下一步(收编 / 没有 daemon)。
             只读页(聊天里的「节点信息」)也在:重启 / 停止是主人在这里要的;删除 / 启动仍只在节点详情的「危险操作」里。 */}
+        {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
         {control ? (
           <View>
             <SectionTitle title={t('nodeControl.title')} />
