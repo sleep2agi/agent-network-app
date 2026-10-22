@@ -1824,8 +1824,12 @@ jobs:
             echo "draft $id already targets $current"
             exit 0
           fi
+          # 必须同时带上 tag_name：只 PATCH target_commitish 会让 draft 变成
+          # `untagged-<hash>`（0.2.287 run 39843345864 实测），随后按 tag 找草稿
+          # 就只剩 0 个，verify-draft 报 `found 0`。
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" \
-            -f target_commitish='${{ inputs.commit }}' --jq '{id,target_commitish}' >/dev/null
+            -f tag_name="$tag" -f target_commitish='${{ inputs.commit }}' \
+            --jq '{id,tag_name,target_commitish}' >/dev/null
           echo "pinned draft $id to ${{ inputs.commit }} (was $current)"
 
       # Same bundles and signing material as the release step. Nothing is uploaded
