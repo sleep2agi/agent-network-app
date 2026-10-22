@@ -19,6 +19,7 @@ import {
   prepareReleaseDraft,
   staleAssetsFor,
 } from '../scripts/prepare-desktop-release.mjs';
+import { assertDraftReleaseIdentity } from '../scripts/verify-desktop-release-draft.mjs';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log(`PASS: ${n}`); } else console.log(`FAIL: ${n}`); };
@@ -44,12 +45,18 @@ ck('releaseId 不再按 runner.os 条件分支',
   !/releaseId: \$\{\{ runner\.os == 'macOS'/.test(wf));
 
 // 3. 验证阶段先把「同 tag 草稿数量」点清，避免误报成缺资产（#1035 保留）。
-ck('verify-draft 先断言恰好一个草稿',
-  /- name: Require exactly one draft release for this tag/.test(wf) && /expected exactly one draft release/.test(wf));
-ck('草稿计数按 id 行数统计（跨页只得到一个整数，#1036）',
-  /--jq "\.\[\] \| select\(\.tag_name == \\"\$tag\\" and \.draft == true\) \| \.id" \| wc -l/.test(wf));
-ck('数量断言在资产断言之前',
-  wf.indexOf('Require exactly one draft release for this tag') < wf.indexOf('Require selected platform draft assets, updater entries, and checksums'));
+ck('verify-draft 身份断言改由脚本按 release_id 做（不再按 tag 计数）',
+  !wf.includes('Require exactly one draft release for this tag')
+  && readFileSync(new URL('../scripts/verify-desktop-release-draft.mjs', import.meta.url), 'utf8').includes('assertDraftReleaseIdentity'));
+ck('不再按 tag 跨页计数草稿（改由 release_id 唯一确定）', !wf.includes('draft releases for $tag:'));
+ck('身份断言先于资产断言（脚本内部顺序：identity → assets）',
+  (() => {
+    const src = readFileSync(new URL('../scripts/verify-desktop-release-draft.mjs', import.meta.url), 'utf8');
+    const mainBody = src.slice(src.indexOf('function main()'));
+    const identityAt = mainBody.indexOf('assertDraftReleaseIdentity({');
+    const assetsAt = mainBody.indexOf('assertDesktopReleaseDraft({');
+    return identityAt >= 0 && assetsAt >= 0 && identityAt < assetsAt;
+  })());
 
 // 4. 纯函数判定：0/1/2 drafts 与 published。
 ck('0 个草稿 → 创建', planReleaseDraft([], tag).action === 'create');
@@ -279,6 +286,56 @@ ck('prepare-release 是唯一的创建入口',
 // 10. 删除资产是 204 无正文：空 stdout 不能当 JSON 解析（TMA云欧审计 P1）
 ck('空 stdout（204 No Content）解析为 null 而不是抛错', parseGhOutput('') === null && parseGhOutput('  \n ') === null);
 ck('有正文时照常解析', parseGhOutput('{"id":7}')?.id === 7);
+
+// 11. verify-draft 身份门：只认 prepare-release 的 release_id（不再按 tag 列举计数）
+const identityRelease = {
+  id: 420900001,
+  tag_name: 'desktop-v0.2.287',
+  draft: true,
+  target_commitish: 'd'.repeat(40),
+};
+const identityArgs = {
+  release: identityRelease,
+  releaseId: '420900001',
+  expectedTag: 'desktop-v0.2.287',
+  expectedCommit: 'd'.repeat(40),
+  resolveRef: () => ({ sha: 'd'.repeat(40) }),
+};
+ck('正确 id/tag/draft/target → 通过', (() => {
+  const r = assertDraftReleaseIdentity(identityArgs);
+  return r.id === 420900001 && r.tag === 'desktop-v0.2.287' && r.commit === 'd'.repeat(40);
+})());
+ck('id 不匹配 → fail-closed', (() => {
+  try { assertDraftReleaseIdentity({ ...identityArgs, releaseId: '420900002' }); return false; }
+  catch (e) { return String(e).includes('is not the prepared release'); }
+})());
+ck('已发布（draft=false）→ fail-closed', (() => {
+  try { assertDraftReleaseIdentity({ ...identityArgs, release: { ...identityRelease, draft: false } }); return false; }
+  catch (e) { return String(e).includes('is not a draft'); }
+})());
+ck('tag 不匹配 → fail-closed', (() => {
+  try { assertDraftReleaseIdentity({ ...identityArgs, release: { ...identityRelease, tag_name: 'desktop-v0.2.286' } }); return false; }
+  catch (e) { return String(e).includes('tag_name'); }
+})());
+ck('target/SHA 不匹配 → fail-closed', (() => {
+  try { assertDraftReleaseIdentity({ ...identityArgs, release: { ...identityRelease, target_commitish: 'e'.repeat(40) } }); return false; }
+  catch (e) { return String(e).includes('targets'); }
+})());
+ck('分支名 target 需 resolve 后才能比对（resolve 不一致 → 拒绝）', (() => {
+  try {
+    assertDraftReleaseIdentity({ ...identityArgs, release: { ...identityRelease, target_commitish: 'main' }, resolveRef: () => ({ sha: 'f'.repeat(40) }) });
+    return false;
+  } catch (e) { return String(e).includes('targets'); }
+})());
+ck('resolve 失败 → fail-closed', (() => {
+  try {
+    assertDraftReleaseIdentity({ ...identityArgs, release: { ...identityRelease, target_commitish: 'gone' }, resolveRef: () => { throw new Error('HTTP 404'); } });
+    return false;
+  } catch (e) { return String(e).includes('cannot resolve target'); }
+})());
+ck('verify-draft 不再按 tag 列举/计数草稿', !wf.includes('Require exactly one draft release for this tag') && !wf.includes('draft releases for $tag:'));
+ck('verify-draft 仍然把 release_id 传成 RELEASE_ID',
+  /verify-draft:[\s\S]{0,2500}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(wf));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

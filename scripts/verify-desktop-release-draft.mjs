@@ -15,6 +15,59 @@ import { fileURLToPath } from 'node:url';
 
 export const LINUX_UPDATER_PLATFORMS = ['linux-x86_64', 'linux-x86_64-deb'];
 
+/**
+ * draft 的身份门：只认 prepare-release 传下来的那一个 release id。
+ *
+ * 这里不再「按 tag 全量列举再数数量」——那种检查在分页/多对象时既可能误报
+ * （0.2.287 的 "1\n0\n0"）也可能放过错的草稿。改为：拿到 id 之后，
+ * 断言它就是这次要验的那个对象，且 tag / draft / target 都指向本次发布。
+ *
+ * `resolveRef` 用于把分支名形态的 target_commitish 解析成 SHA（注入以便测试）。
+ */
+export const assertDraftReleaseIdentity = ({
+  release,
+  releaseId,
+  expectedTag,
+  expectedCommit,
+  resolveRef,
+}) => {
+  if (!release || typeof release !== 'object') throw new Error('release is required');
+  if (!/^\d+$/.test(String(releaseId ?? ''))) throw new Error('release id must be numeric');
+  const id = Number(releaseId);
+  if (Number(release.id) !== id) {
+    throw new Error(`release id ${JSON.stringify(release.id)} is not the prepared release ${id}`);
+  }
+  if (!expectedTag) throw new Error('expected tag is required');
+  if (release.tag_name !== expectedTag) {
+    throw new Error(`release ${id} tag_name ${JSON.stringify(release.tag_name)} is not ${expectedTag}`);
+  }
+  if (release.draft !== true) throw new Error(`release ${id} (${expectedTag}) is not a draft`);
+  if (!/^[0-9a-f]{40}$/.test(expectedCommit ?? '')) throw new Error('expected commit must be a 40-character SHA');
+
+  const target = release.target_commitish;
+  if (typeof target !== 'string' || target.length === 0) {
+    throw new Error(`release ${id} has no target_commitish`);
+  }
+  let targetSha = target;
+  if (!/^[0-9a-f]{40}$/.test(targetSha)) {
+    if (typeof resolveRef !== 'function') throw new Error(`release ${id} target ${JSON.stringify(target)} needs resolving`);
+    let resolved;
+    try {
+      resolved = resolveRef(target);
+    } catch (error) {
+      throw new Error(`release ${id} cannot resolve target ${JSON.stringify(target)}: ${error instanceof Error ? error.message : String(error)}`);
+    }
+    targetSha = String(resolved?.sha ?? '');
+  }
+  if (!/^[0-9a-f]{40}$/.test(targetSha)) {
+    throw new Error(`release ${id} target ${JSON.stringify(target)} did not resolve to a commit`);
+  }
+  if (targetSha !== expectedCommit) {
+    throw new Error(`release ${id} targets ${targetSha} (${target}), not ${expectedCommit}`);
+  }
+  return { id, tag: expectedTag, commit: targetSha };
+};
+
 const SHA256_DIGEST = /^sha256:([0-9a-f]{64})$/;
 
 export const releaseAssetNames = (product, version, includeLinux = true) => [
@@ -122,6 +175,15 @@ function main() {
   if (!/^\d+$/.test(releaseId)) throw new Error('RELEASE_ID must be a numeric release id from prepare-release');
   const rawRelease = ghJson(['api', `repos/${repository}/releases/${releaseId}`]);
   const rawAssets = ghJson(['api', `repos/${repository}/releases/${releaseId}/assets?per_page=100`, '--paginate']);
+  // 身份门：id / tag / draft / target 必须都指向本次发布（不再按 tag 列举计数）。
+  const identity = assertDraftReleaseIdentity({
+    release: rawRelease,
+    releaseId,
+    expectedTag: tag,
+    expectedCommit,
+    resolveRef: (ref) => ghJson(['api', `repos/${repository}/commits/${encodeURIComponent(ref)}`]),
+  });
+  console.log(`draft identity ok: release ${identity.id} tag ${identity.tag} commit ${identity.commit}`);
   const release = {
     isDraft: rawRelease.draft,
     targetCommitish: rawRelease.target_commitish,
