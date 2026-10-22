@@ -1,0 +1,57 @@
+Windows installer brand / Hub #1036 / app issue867 — TEST ONLY
+OBSERVED_AT=2026-10-11T16:45:28Z (2026-10-12 00:45:28 Asia/Shanghai)
+Base exact main a90cfd2d978678ddc3bbd3c497540af46fef4288.
+Branch feat/1036-installer-brand; not a public release.
+
+Small implementation: explicit NSIS installerIcon/uninstallerIcon reuse the
+application's generated icons/icon.ico; header/uninstaller-header/sidebar use
+BMPs derived from existing assets/icon.png. No new logo design or font source.
+No vendor-template, upgrade identity, installation path, shortcut identity,
+Provider/runtime, account storage, package version or signing changes.
+
+Docker environment: exact Node22.23.0 Bookworm digest
+e0d149b4727ac0c20d9774e801e423d7a946a0bffced886f42cfe9cd3c67820a;
+repo package-lock npm ci; public pinned Tauri helper commit
+499df79be65ef8c0670abc0207cd9e37b55d8491 and nsis-tauri-utils0.5.3
+plugin checksum retained from the existing installer fixture. Real Debian NSIS
+3.08-3+deb12u1. No production configuration/credentials or account files mounted.
+
+Layer1 core --network none, --rm:
+branding3/3 groups PASS: explicit shared icon/page paths, real branded pixels,
+24-bit uncompressed BMP dimensions, deterministic bytes from current logo.
+Existing template provenance5/5 and install identity15/15 PASS. New template
+logic was not added; old identity-changing mutation remains rejected.
+Core image manifest:
+sha256:6c81f196e20ef8e45a5ded907fb604ef86e90a21696c2439fd64e4adf3bff895.
+
+Layer2 real compilation, only after core PASS:
+The pinned actual Tauri CLI generates ICO from the same logo; the entire locked
+NSIS template is rendered with actual configured icon/BMP paths and compiled by
+makensis. Inert payload; completed PASS,441304-byte TEST-ONLY-branded-installer.exe.
+Compile image manifest:
+sha256:5175cdf748a51252ead17e830bcde94da2944e672c8af9267b2d5106a1d769cb.
+Header BMP SHA256:68c6da4115a13794703fb5baabe8bc4c470babc139c34192a51c6ba983469cae.
+Sidebar BMP SHA256:f8d382e1b7492b9792dd1adcd287134c5beee56bd4e48fa2316aea0dc1fe70f4.
+
+Commands, Docker through sg docker:
+docker build --target core -f tests/windows-installer-brand/Dockerfile -t anet-app:test1036-brand-core .
+docker run --rm --network none anet-app:test1036-brand-core
+docker build --target compile -f tests/windows-installer-brand/Dockerfile -t anet-app:test1036-brand-compile .
+docker run --rm --network none anet-app:test1036-brand-compile
+
+The first run attempt preceded core image export completion and exited125;
+no tests ran, not a product failure or PASS. Accepted executions above completed
+after image export. A first direct BMP preview was unsupported by the viewer;
+lossless PNG decoding in a network-none Docker container allowed inspection of
+both actual artwork files. This is asset inspection, not native installer UI.
+
+Limits: compiler acceptance is not native Windows UI/signed installation,
+real account continuity, runtime login, or publication. No old native upgrade
+samples or unrelated full app suite repeated locally. Existing PR checks still
+required; formal public bytes must rebuild from an exact merged main SHA.
+The new path-filtered CI repeats this same two-layer contract, not production
+installation. Recovery inputs/boundaries in src-tauri/windows/brand/README.md
+and existing docs/desktop-release-sop.md; not an empty-machine data-restore claim.
+Cleanup: all test/preview containers --rm; inert installer removed with container,
+TEST-ONLY images cached. Own isolated worktree and generated tracked assets only;
+no local global packages, Hub restart, daemon/node/account changes or Release.

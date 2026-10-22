@@ -9,7 +9,7 @@ const migrationSeed = fs.readFileSync(new URL('../scripts/seed-previous-local-hu
 
 const checks: Array<[string, boolean]> = [
   ['first run offers recommended local workspace', app.includes('创建本地工作区')],
-  ['first run retains explicit remote-server path', app.includes('使用已有服务器登录')],
+  ['first run retains explicit remote-Hub path', app.includes('使用已有 Hub 登录')],
   ['first run reports preparing, starting and migrating stages', app.includes('正在准备本地工作区') && app.includes('正在启动本地服务') && app.includes('正在备份并迁移') && app.includes('status.requiresMigration')],
   ['saved local profile starts before workspace restore', app.includes("stored?.profileId === LOCAL_HUB_PROFILE_ID") && app.includes('await startLocalHub()')],
   ['local profile follows a fallback loopback port without changing identity', rust.includes('if session.server_url == endpoint') && rust.includes('profile_id: Some(session.profile_id)') && rust.includes('server_url: endpoint.into()')],
@@ -34,7 +34,7 @@ const checks: Array<[string, boolean]> = [
   ['signed packages migrate real previous-version node/task data', appWorkflow.includes('resolve-previous-desktop-hub-version.mjs') && appWorkflow.includes('ANET_SMOKE_PREVIOUS_HUB_VERSION') && !appWorkflow.includes('0.9.0-preview.28') && appWorkflow.includes('--smoke-local-hub-migration') && migrationSeed.includes('ANET_SMOKE_PREVIOUS_HUB_VERSION') && !migrationSeed.includes("0.9.0-preview.28") && rust.includes('ANET_SMOKE_PREVIOUS_HUB_VERSION is required') && rust.includes('previous-version node is missing after migration') && rust.includes('migration backup snapshot is missing') && !rust.includes('0.9.0-preview.28')],
   ['failed packaged migration restores exact previous data and metadata', appWorkflow.includes('--smoke-local-hub-failed-migration') && rust.includes('failed migration did not restore the exact previous database') && rust.includes('failed migration did not restore previous compatibility metadata') && rust.includes('failed migration left a stale supervisor lock')],
   ['packaged supervisor recovers a force-killed Hub', appWorkflow.includes('--smoke-local-hub-crash-recovery') && rust.includes('kill_process_for_smoke') && rust.includes('supervisor did not recover the killed sidecar within 20 seconds') && rust.includes('crash recovery changed profile or native credential')],
-  ['signed release audits macOS and Windows uninstall/reinstall retention', appWorkflow.includes('Audit macOS app removal and reinstall data retention') && appWorkflow.includes('Audit Windows NSIS uninstall and reinstall data retention') && appWorkflow.includes('NSIS uninstall deleted retained app data') && appWorkflow.includes('reinstall lost retained database')],
+  ['signed release audits macOS, Windows, and Linux uninstall/reinstall retention', appWorkflow.includes('Audit macOS app removal and reinstall data retention') && appWorkflow.includes('Audit Windows NSIS uninstall and reinstall data retention') && appWorkflow.includes('Audit Linux deb removal and reinstall data retention') && appWorkflow.includes('NSIS uninstall deleted retained app data') && appWorkflow.includes('reinstall lost retained database')],
   ['signed packages reject corrupt data with rollback and diagnostics', appWorkflow.includes('--smoke-local-hub-corrupt-data') && rust.includes('corrupt-data failure did not restore the exact original bytes') && rust.includes('corrupt data returned a non-actionable diagnostic') && rust.includes('corrupt-data failure left a stale supervisor lock')],
 ];
 

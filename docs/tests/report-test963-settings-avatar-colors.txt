@@ -1,0 +1,23 @@
+Hub #963 / app #838 — settings avatar theme colors
+OBSERVED_AT=2026-10-11T07:00:38Z
+Base main: 8f182ad781a119d51d14956b5696584bbe7dd085
+Scope: UserAvatarEditor colors only; no API/account/auth behavior changes.
+
+Docker build:
+sg docker -c 'docker build -f tests/user-avatar/Dockerfile.colors -t anet-app:settings-avatar-colors .'
+Image config: sha256:e5500f9634fa542a78d3eb1bfd5c1cec0ae94440ccc67df11761e2f34d8d0d7e
+TypeScript typecheck PASS.
+Node build base resolved c3de60bf2f9dd0ac6370e6117950ff62d6e339527e7472301c9c78a017978392;
+Dockerfile now records that same resolved digest for subsequent rebuilds.
+
+Docker run: --rm --network none, temporary /output screenshot bind.
+tests/user-avatar/drive.mjs: 30/30 PASS, exit 0.
+390px light and 1280px dark: rendered theme foreground, input background/border,
+neutral reset/disabled save, enabled primary save; pool save/readback, failure
+preserves preview, invalid URL no write, reset, late response/account isolation,
+no horizontal overflow, unsupported Hub, human/node avatar isolation and fallback.
+Synthetic in-container Hub only; no production writes or external image requests.
+Reviewed avatar-390.png and avatar-1280.png: visible copy, neutral secondary action,
+input separated from card surface. Browser fixture, not a native installer test.
+Container removed automatically. Test image and screenshots retained as evidence.
+Not a published client version. Main-only release remains separate.

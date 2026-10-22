@@ -36,6 +36,10 @@ import MacTitleStrip from './mac-title-strip';
 import WinTitleBar from './win-title-bar';
 import NodePickerSheet, { NodePickerField } from './NodePicker';
 import { pickerChoices } from './node-picker-model';
+import { listRequirementPeople } from './requirement-people-api';
+import type { RequirementPerson } from './requirement-people';
+import RequirementPeoplePicker from './RequirementPeoplePicker';
+import AliasAvatar from './AliasAvatar';
 import { useModalSafePadding } from './safe-area-runtime';
 import { pointerUi } from './pointer-ui';
 import { withBasePadding } from './modal-safe-area';
@@ -45,6 +49,9 @@ import { colors, radius, spacing, type as fontSize, weight } from './theme';
 import { elevated } from './elevation';
 import { scheduledTaskActions } from './scheduled-task-actions';
 import TaskDescriptionEditor from './TaskDescriptionEditor';
+import TaskDuePicker from './TaskDuePicker';
+import { schedulePickerValue } from './schedule-date-time';
+import ScheduleClockPicker from './ScheduleClockPicker';
 import { contentDirty, SCHEDULE_CONTENT_MAX } from './schedule-content-edit';
 import { runDisplay, runDurationText, runFailureText, runIsOpen } from './schedule-run-result';
 import { describeMisfire, describeSchedule, formatAbsolute, scheduleStatusMeta } from './scheduled-view-model';
@@ -75,7 +82,7 @@ const toLocalDateTimeInput = (value: string) => {
   const date = new Date(value);
   if (!Number.isFinite(date.getTime())) return '';
   const pad = (part: number) => String(part).padStart(2, '0');
-  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}`;
+  return `${date.getFullYear()}-${pad(date.getMonth() + 1)}-${pad(date.getDate())}T${pad(date.getHours())}:${pad(date.getMinutes())}:${pad(date.getSeconds())}`;
 };
 
 const intervalFormValue = (seconds: number): { every: string; unit: IntervalUnit } => {
@@ -127,6 +134,9 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
 }) {
   const styles = useMemo(makeStyles, [visible]);
   const [name, setName] = useState(''); const [task, setTask] = useState('');
+  const [watcherIds, setWatcherIds] = useState<string[]>([]);
+  const [people, setPeople] = useState<RequirementPerson[]>([]);
+  const [watchersOpen, setWatchersOpen] = useState(false);
   const [target, setTarget] = useState(''); const [kind, setKind] = useState<HubScheduleSpec['type']>('once');
   const [when, setWhen] = useState(''); const [every, setEvery] = useState('1'); const [unit, setUnit] = useState<IntervalUnit>('hours'); const [clock, setClock] = useState('09:00');
   const [weekdays, setWeekdays] = useState([1]); const [busy, setBusy] = useState(false); const [error, setError] = useState('');
@@ -185,7 +195,7 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
 
   useEffect(() => {
     if (!visible) { setPristine(null); setDiscardThen(null); return; }
-    setError(''); setConflict(null); setBase(editing); setAdjustedFrom(null); setPristine('pending');
+    setError(''); setConflict(null); setBase(editing); setWatcherIds((editing?.watchers ?? []).map(w => w.user_id)); setAdjustedFrom(null); setPristine('pending');
     if (!editing) {
       setName(''); setTask(''); setTarget(initialTarget ?? ''); setKind('once'); setWhen(''); setEvery('1'); setUnit('hours');
       setClock('09:00'); setWeekdays([1]); setMisfirePolicy('catch_up_once'); setPriority('normal'); setTimezone(detectedTimezone);
@@ -199,6 +209,16 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [visible, editing, detectedTimezone, initialTarget, copyFrom]);
 
+  useEffect(() => {
+    if (!visible) return;
+    let live = true;
+    void listRequirementPeople(cfg).then(rows => {
+      if (live) setPeople(rows.filter(r => r.kind === 'user' && !r.unavailable));
+    }).catch(() => { if (live) setPeople([]); });
+    return () => { live = false; };
+  }, [visible, cfg.serverUrl, cfg.token, cfg.networkId]);
+  const supportsWatchers = !editing || Array.isArray(editing.watchers);
+  const canManageWatchers = !editing || editing.can_manage_watchers !== false;
   const invalidSchedule = (kind === 'once' && !when) ||
     (kind === 'interval' && (!Number.isInteger(Number(every)) || Number(every) < (unit === 'seconds' ? 60 : 1))) ||
     (kind === 'weekly' && weekdays.length === 0);
@@ -231,6 +251,10 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
     setBusy(true); setError(''); setConflict(null);
     try {
       const input = draftInput();
+      // A new plan omits an empty watcher list. Copying a schedule must keep the
+      // old POST body, and an older Hub must not see a field it does not know.
+      // Editing still sends the list, including [] to clear it.
+      if (supportsWatchers && canManageWatchers && (base || watcherIds.length > 0)) input.watchers = watcherIds;
       if (base) await save(base, input, false);
       else { await createScheduledTask(cfg, input); onSaved(); }
     } catch (e) {
@@ -303,7 +327,7 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
     } finally { setActing(false); }
   };
   const actions = current ? scheduledTaskActions(current.status) : [];
-  const canEdit = !editing || actions.includes('edit');
+  const canEdit = (!editing || actions.includes('edit')) && editing?.can_edit !== false;
 
   const whenMs = kind === 'once' && when ? new Date(when).getTime() : NaN;
   const timeHint = kind !== 'once' ? null
@@ -324,7 +348,7 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
               {actions.includes('run') && <Pressable testID="schedule-editor-run" disabled={acting || busy} style={[styles.primarySmall, (acting || busy) && styles.actionDisabled]} onPress={() => void act('run')}><Text style={styles.primaryText}>立即执行</Text></Pressable>}
               {actions.includes('toggle') && <Pressable testID="schedule-editor-toggle" disabled={acting || busy} style={[styles.action, (acting || busy) && styles.actionDisabled]} onPress={() => void act('toggle')}><Text style={styles.actionText}>{current.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
               {actions.includes('copy') && <Pressable testID="schedule-editor-copy" disabled={acting || busy} style={[styles.action, (acting || busy) && styles.actionDisabled]} onPress={() => guarded(() => manage!.onCopy(current))}><Text style={styles.actionText}>{t('schedules.copy.action')}</Text></Pressable>}
-              {actions.includes('cancel') && <Pressable testID="schedule-editor-cancel-plan" disabled={acting || busy} style={[styles.action, styles.danger, (acting || busy) && styles.actionDisabled]} onPress={() => setCancelAsk(true)}><Text style={styles.dangerText}>取消计划</Text></Pressable>}
+              {actions.includes('cancel') && current.can_manage_watchers !== false && <Pressable testID="schedule-editor-cancel-plan" disabled={acting || busy} style={[styles.action, styles.danger, (acting || busy) && styles.actionDisabled]} onPress={() => setCancelAsk(true)}><Text style={styles.dangerText}>取消计划</Text></Pressable>}
             </View>
             {!canEdit ? <Text style={styles.meta}>这条计划已结束，不能再改；可以复制后新建。</Text> : null}
           </View>
@@ -351,6 +375,44 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
         })() : null}
         <View pointerEvents={canEdit ? 'auto' : 'none'} style={!canEdit && styles.formLocked}>
         <Label text="名称"><TextInput style={styles.input} value={name} onChangeText={setName} placeholder="每日巡检" placeholderTextColor={colors.textMuted} /></Label>
+        {supportsWatchers ? (
+          <View testID="schedule-watchers" style={styles.field}>
+            <Text style={styles.label}>关注人</Text>
+            <Text style={styles.meta}>{canManageWatchers ? '能看也能改这条计划，不能取消，也不能改关注人。' : '你是关注人，可以编辑这条计划。'}</Text>
+            <View style={styles.watcherField}>
+              {watcherIds.length === 0 ? (
+                <Pressable testID="schedule-watchers-field" accessibilityRole="button" accessibilityLabel="添加关注人" disabled={!canManageWatchers} onPress={() => setWatchersOpen(true)} style={styles.watcherOpen}>
+                  <Text style={styles.watcherPlaceholder}>{canManageWatchers ? '添加关注人' : '还没有关注人'}</Text>
+                </Pressable>
+              ) : (
+                <View style={styles.watcherChips}>
+                  {watcherIds.map(id => {
+                    const person = people.find(p => p.id === id);
+                    const saved = (editing?.watchers ?? []).find(w => w.user_id === id);
+                    const label = person?.displayName || person?.name || saved?.display_name || saved?.username || id;
+                    return (
+                      <View key={id} testID={`schedule-watcher-${id}`} style={styles.watcherChip}>
+                        <AliasAvatar alias={label} size={22} />
+                        <Text style={styles.watcherChipText} numberOfLines={1}>{label}</Text>
+                        {canManageWatchers ? (
+                          <Pressable testID={`schedule-watcher-remove-${id}`} accessibilityLabel={`移除 ${label}`} hitSlop={8} onPress={() => setWatcherIds(ids => ids.filter(x => x !== id))}>
+                            <Ionicons name="close" size={14} color={colors.textMuted} />
+                          </Pressable>
+                        ) : null}
+                      </View>
+                    );
+                  })}
+                </View>
+              )}
+              {canManageWatchers ? (
+                <Pressable testID="schedule-watchers-manage" accessibilityRole="button" accessibilityLabel="管理关注人" hitSlop={8} onPress={() => setWatchersOpen(true)}>
+                  <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+                </Pressable>
+              ) : null}
+            </View>
+            {canManageWatchers && people.length === 0 ? <Text style={styles.meta}>没有可选的人类账户</Text> : null}
+          </View>
+        ) : null}
         <Label text="执行节点"><NodePickerField node={chosen} fallbackAlias={fallbackAlias} onPress={() => setPickerOpen(true)} /></Label>
         {/* 任务内容:⤢ 全屏 + 🎤,和任务描述同一个编辑器(TaskDescriptionEditor);节点收到的是原文,不放图片、不走富文本。
             表单一打开就是编辑框(原来就是输入框),桌面全屏从「左右」起。 */}
@@ -376,10 +438,25 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
         <Label text="优先级"><View style={styles.segment}>{(['high','normal','low'] as const).map((value) => <Pressable key={value} onPress={() => setPriority(value)} style={[styles.segmentItem, priority === value && styles.segmentActive]}><Text style={priority === value ? styles.segmentTextActive : styles.segmentText}>{value === 'high' ? '高' : value === 'low' ? '低' : '普通'}</Text></Pressable>)}</View></Label>
         <Label text="类型"><View style={styles.segment}>{(['once','interval','daily','weekly'] as const).map((x, i) => <Pressable key={x} onPress={() => setKind(x)} style={[styles.segmentItem, kind === x && styles.segmentActive]}><Text style={kind === x ? styles.segmentTextActive : styles.segmentText}>{['单次','间隔','每天','每周'][i]}</Text></Pressable>)}</View></Label>
         <Label text="错过执行"><View style={styles.segment}>{(['catch_up_once','skip'] as const).map((policy) => <Pressable key={policy} onPress={() => setMisfirePolicy(policy)} style={[styles.segmentItem, misfirePolicy === policy && styles.segmentActive]}><Text style={misfirePolicy === policy ? styles.segmentTextActive : styles.segmentText}>{policy === 'catch_up_once' ? '补跑一次' : '跳过本次'}</Text></Pressable>)}</View><Text style={styles.meta}>{misfirePolicy === 'catch_up_once' ? '适合新闻抓取；恢复后最多补跑一次' : '错过后等待下一周期'}</Text></Label>
-        {kind === 'once' && <Label text="执行时间（ISO 或 YYYY-MM-DDTHH:mm）"><TextInput style={styles.input} autoCapitalize="none" value={when} onChangeText={v => { setWhen(v); setAdjustedFrom(null); }} placeholder="2026-08-10T09:00" placeholderTextColor={colors.textMuted} />{timeHint ? <Text testID="schedule-form-time-hint" style={styles.timeHint}>{timeHint}</Text> : null}</Label>}
+        {kind === 'once' && <Label text="执行时间（本地时间）">
+          <TaskDuePicker
+            value={schedulePickerValue(when)}
+            onChange={v => { setWhen(v); setAdjustedFrom(null); }}
+            allowTime
+            requireTime
+            pointer={pointerUi()}
+            sheet={!pointerUi()}
+            idBase="schedule-form-run-at"
+            fieldLabel="执行时间"
+            placeholder="选择日期和时间"
+          />
+          {timeHint ? <Text testID="schedule-form-time-hint" style={styles.timeHint}>{timeHint}</Text> : null}
+        </Label>}
         <Label text="时区（IANA）"><TextInput style={styles.input} autoCapitalize="none" value={timezone} onChangeText={setTimezone} placeholder="Asia/Shanghai" placeholderTextColor={colors.textMuted} /></Label>
         {kind === 'interval' && <Label text="固定间隔"><TextInput style={styles.input} keyboardType="number-pad" value={every} onChangeText={setEvery} /><View style={[styles.segment, { marginTop: spacing.sm }]}>{(['seconds','minutes','hours','days'] as const).map((value, index) => <Pressable key={value} onPress={() => setUnit(value)} style={[styles.segmentItem, unit === value && styles.segmentActive]}><Text style={unit === value ? styles.segmentTextActive : styles.segmentText}>{['秒','分钟','小时','天'][index]}</Text></Pressable>)}</View></Label>}
-        {(kind === 'daily' || kind === 'weekly') && <Label text="时间"><TextInput style={styles.input} value={clock} onChangeText={setClock} placeholder="09:00" placeholderTextColor={colors.textMuted} /></Label>}
+        {/* #1962（admin 2026-10-21:「就别让手输入」）—— 每天/每周的时间也换成选择器。
+            单次那一处是 #990（TaskDuePicker）；这里只要时分，接口的 clock 仍是 "HH:mm"。 */}
+        {(kind === 'daily' || kind === 'weekly') && <Label text="时间"><ScheduleClockPicker value={clock} onChange={setClock} idBase="schedule-form-clock" sheet={!pointerUi()} /></Label>}
         {kind === 'weekly' && <View style={styles.weekdays}>{DAYS.map((d, i) => <Pressable key={d} onPress={() => setWeekdays(v => v.includes(i) ? v.filter(x => x !== i) : [...v, i].sort())} style={[styles.day, weekdays.includes(i) && styles.dayActive]}><Text style={weekdays.includes(i) ? styles.dayTextActive : styles.segmentText}>{d}</Text></Pressable>)}</View>}
         </View>
         {managing ? (
@@ -406,6 +483,19 @@ export default function ScheduleEditor({ cfg, nodes: nodesProp, visible, editing
           </View>
         ) : null}
       </ScrollView>
+      {visible && watchersOpen && canManageWatchers && cfg.networkId ? (
+        <RequirementPeoplePicker
+          networkId={cfg.networkId}
+          mode="participants"
+          kinds={['user']}
+          title="选择关注人"
+          hint={n => n ? `已选 ${n} 人` : '能看也能改，不能取消或改关注人'}
+          people={people}
+          selected={watcherIds.map(id => ({ kind: 'user' as const, id }))}
+          onClose={() => setWatchersOpen(false)}
+          onConfirm={rows => { setWatcherIds(rows.filter(r => r.kind === 'user').map(r => r.id)); setWatchersOpen(false); }}
+        />
+      ) : null}
       <NodePickerSheet
         visible={visible && pickerOpen}
         nodes={choices.nodes}
@@ -574,6 +664,12 @@ export function scheduleStyleDefs() { return {
   conflictSide: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
   conflictValue: { color: colors.text, fontSize: 13 }, muted: { color: colors.textMuted, fontSize: 13 },
   modalRoot: { flex: 1, backgroundColor: colors.bg }, modalHeader: { minHeight: 58, paddingHorizontal: spacing.lg, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderBottomWidth: 1, borderBottomColor: colors.border }, modalTitle: { flex: 1, textAlign: 'center', color: colors.text, fontWeight: '600', fontSize: 16 }, link: { color: colors.accent, fontSize: 15 }, headerSide: { minWidth: 56, minHeight: 44, justifyContent: 'center' }, headerSideEnd: { alignItems: 'flex-end' }, form: { padding: spacing.lg, paddingBottom: 60 }, field: { marginBottom: spacing.lg }, label: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm }, input: { color: colors.text, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 11 }, textarea: { minHeight: 100, textAlignVertical: 'top' },
+  watcherField: { minHeight: 48, marginTop: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 10, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, backgroundColor: colors.card, borderColor: colors.border, borderWidth: 1, borderRadius: radius.control },
+  watcherOpen: { flex: 1 },
+  watcherPlaceholder: { color: colors.textMuted, fontSize: fontSize.body },
+  watcherChips: { flex: 1, flexDirection: 'row', flexWrap: 'wrap', gap: 6 },
+  watcherChip: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: '100%', height: 28, paddingLeft: 3, paddingRight: 8, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+  watcherChipText: { color: colors.text, fontSize: 13, flexShrink: 1 },
   segment: { flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, overflow: 'hidden' }, segmentItem: { flex: 1, alignItems: 'center', paddingVertical: 10, backgroundColor: colors.card }, segmentActive: { backgroundColor: colors.accent }, segmentText: { color: colors.textMuted, fontSize: 12 }, segmentTextActive: { color: colors.onAccent, fontSize: 12, fontWeight: '600' }, weekdays: { flexDirection: 'row', justifyContent: 'space-between' }, day: { width: 38, height: 38, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, dayActive: { backgroundColor: colors.accent, borderColor: colors.accent }, dayTextActive: { color: colors.onAccent, fontWeight: '600' },
   linkDisabled: { opacity: 0.4 },
   actionDisabled: { opacity: 0.4 },

@@ -1,0 +1,32 @@
+Observed 2026-10-11 12:48 UTC+08
+Candidate: desktop 0.2.236, narrow installer download-source fix for #906.
+
+Public artifact operation (not a test against production services):
+CLI .163 GitHub release published 12:45:23, exact main source
+b4413131b73c52c286beec46509773716698d89f, tag resolves to same SHA.
+Original main release run38106199041 gated artifact11689412711; no rebuild.
+Anonymous full HTTPS download SHA256:
+15f498ac22663bb948743fefbc93906751e4aaf493990a484e799a38a5837c58
+
+Docker image anet-app:daemon-cli-fallback, existing local-daemon-init Dockerfile,
+Rust1.90, compiled production local_daemon.rs, no host credentials/state mounted.
+Core added positive PASS: npm ETARGET -> real public tarball download/hash ->
+private archive install -> exact paired runtime -> init/start/readback.
+CLI/npm and loopback Hub are fixture adapters; archive bytes are the public package.
+Core added negative PASS: wrong hash never reaches npm archive install/init/start.
+
+Initial 20-case run: 19 PASS/1 FAIL. Invocation accidentally omitted documented
+--init; repeated repair saw unreaped detached fixture PID104 as alive. No product
+assertion weakened. Reran only that failed case in identical image WITH --init:
+1 PASS/0 FAIL/19 filtered, 4.78s. Both stop-before-init and repeat repair passed.
+All containers used --rm and exited; no production node touched by these tests.
+
+Separate offline Docker checks against candidate worktree:
+version consistency: 14 PASS (0.2.236, Android code2236, lockfiles/display match).
+bundled changelog: 7/7 PASS.
+local-daemon frontend contract: 34 checks PASS.
+git diff --check PASS.
+
+Not claimed: signed desktop .236 publication, macOS native installer success,
+ChatGPT login/account switching, or actual provider inference. Formal main-SHA
+desktop publication remains required after this change is merged.

@@ -14,7 +14,7 @@
 //   desktop/latest/latest.json           Tauri updater manifest whose platform URLs point at
 //                                        desktop/<ver>/ on ModelScope (signatures unchanged)
 //   desktop/latest/VERSION               "<ver>\n"
-//   desktop/latest/Agent.Network_<suffix>  version-less copies of the four installers, so a
+//   desktop/latest/Agent.Network_<suffix>  version-less copies of LATEST_ALIAS_SUFFIXES, so a
 //                                        download page can link a URL that never changes
 //   desktop/latest/SHA256SUMS            over the files in desktop/latest/
 //
@@ -41,7 +41,7 @@ export const mirrorBaseUrl = (mirrorRepo = DEFAULT_MIRROR_REPO) =>
 
 // Installers that get a version-less alias under desktop/latest/. Updater bundles
 // (.app.tar.gz, .sig) are reached through latest.json and keep versioned paths only.
-export const LATEST_ALIAS_SUFFIXES = ['aarch64.dmg', 'x64-setup.exe', 'x64_en-US.msi', 'android-universal.apk'];
+export const LATEST_ALIAS_SUFFIXES = ['aarch64.dmg', 'x64-setup.exe', 'x64_en-US.msi', 'android-universal.apk', 'amd64.deb'];
 export const APK_SUFFIX = 'android-universal.apk';
 
 const TAG_RE = /^desktop-v(\d+)\.(\d+)\.(\d+)(?:-([0-9A-Za-z.-]+))?$/;

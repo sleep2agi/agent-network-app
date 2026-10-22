@@ -10,7 +10,7 @@
 // clicked (navigates or toggles), Esc / outside click (drawer), history back / ‹ (page), Ctrl+F.
 // Exit 1 when any check fails.
 import { mkdirSync, writeFileSync } from 'node:fs';
-import { serveExport, initScript, findChromium, paintedText } from '../test-layout-sweep/harness.mjs';
+import { serveExport, initScript, findChromium, paintedText, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR, OUT = process.env.OUT;
@@ -110,7 +110,7 @@ const tables = { header: [], rows: [] };
 for (const L of LAYOUTS) {
   for (const scheme of ['light', 'dark']) {
     const tag = `${L.name}-${L.w}x${L.h}-${scheme}`;
-    const ctx = await browser.newContext({ viewport: { width: L.w, height: L.h }, userAgent: L.ua, colorScheme: scheme, deviceScaleFactor: 1 });
+    const ctx = await browser.newContext({ viewport: { width: L.w, height: L.h }, userAgent: L.ua, colorScheme: scheme, deviceScaleFactor: 1, locale: TEST_LOCALE });
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message.split('\n')[0]));
@@ -159,7 +159,7 @@ for (const L of LAYOUTS) {
     }
     const ids = pm.rows.map(r => r.id);
     const expected = ['chat-info-row-node', 'chat-info-row-search', 'chat-info-row-pin', 'chat-info-row-mute', ...(L.name === 'desktop' ? ['chat-info-row-windowPin'] : []),
-      'chat-info-row-section-model', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks', 'chat-info-row-section-schedules',
+      'chat-info-row-section-model', 'chat-info-row-section-secrets', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks', 'chat-info-row-section-schedules',
       'chat-info-row-section-logs'];  // 运行日志 (#493)
     check(tag, 'rows in order', JSON.stringify(ids) === JSON.stringify(expected), ids.join(','));
     const heights = pm.rows.map(r => r.box.h);
@@ -232,7 +232,7 @@ for (const L of LAYOUTS) {
     await page.waitForTimeout(300);
 
     // 6. node rows → node info page on the matching section, ‹ back to the chat
-    const sectionLabel = { node: '概览', 'section-model': '模型与运行时', 'section-rules': '规则文件', 'section-skills': '技能', 'section-files': '项目文件夹', 'section-tasks': '任务', 'section-schedules': '定时任务' };
+    const sectionLabel = { node: '概览', 'section-model': '模型与运行时', 'section-secrets': '密钥', 'section-rules': '规则文件', 'section-skills': '技能', 'section-files': '项目文件夹', 'section-tasks': '任务', 'section-schedules': '定时任务' };
     for (const [key, label] of Object.entries(sectionLabel)) {
       await openPanel();
       await page.locator(tid(`chat-info-row-${key}`)).click();

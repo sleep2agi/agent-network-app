@@ -24,6 +24,28 @@ Tokens and the generated bootstrap password are not written to these files.
 They remain in macOS Keychain or Windows Credential Manager. Logs rotate at
 2 MiB and retain one previous file.
 
+## Local daemon initialization
+
+The local daemon installer scans Node.js/npm and the desktop's private CLI/runtime
+under `~/.anet/app/local-daemon/anet`. It requires Node.js >= 22.13 and a compatible
+version set: CLI `2.3.0-preview.162`, agent-node `2.5.0-preview.128`, and the bundled
+Hub `0.9.0-preview.120`. Newer compatible packages may be reused. npm's `latest`
+tag is not used, and an existing package with an older or unknown version is
+upgraded. Global npm packages and other applications' daemons are unaffected.
+
+Repair first stops the existing local daemon and confirms its PID has exited.
+Only then does it replace packages and force initialization (which preserves
+the daemon's node ID but issues a new token). A failed stop retains the existing
+configuration and aborts. Concurrent repairs are rejected. Startup uses the
+private agent-node entry point and records the login shell's tool directories
+for child processes.
+
+Success requires this exact daemon to have a live local process and an online
+Hub record with `can_create_nodes: true`. Merely having a configuration file or
+an offline Hub record is insufficient. Claude/Codex availability and credentials
+are still assessed by the runtime; installing the daemon does not install or
+authenticate those tools.
+
 ## Shutdown and recovery
 
 The local Hub belongs to the desktop process. Closing the app stops it; an
@@ -38,6 +60,44 @@ changing its identity or credential.
 Before a bundled Hub version changes, the stopped data directory is copied to
 `~/.anet/app/backups/`. Failed health checks or bootstrap restore the previous
 data and configuration.
+
+## Private local daemon child executables
+
+On macOS/Linux, the local-workspace install action uses the exact package pair
+defined in `src-tauri/src/local_daemon_packages.rs`, under
+`~/.anet/app/local-daemon/anet/`. The authoritative installer/launcher is
+`src-tauri/src/local_daemon.rs`; it initializes the daemon profile, writes the
+private `anet/bin` absolute path into that profile's `daemonExtraPath`, then
+stops the old daemon and starts the validated pair. Child PATH intentionally
+does **not** inherit the user's or installer's ambient PATH. Do not bypass this
+with an unpinned global package or automatic `npx` fallback.
+
+The daemon profile is `local-daemon/.anet/nodes/local-daemon/config.json`
+relative to the app namespace above. Existing extra paths and unrelated profile
+fields are preserved; malformed configuration or an unexpected node identity
+blocks start. This setting adds no listener, tunnel, or reverse proxy and does
+not change the loopback Hub port selection. The installer derives Hub/network
+credentials from the active native local session and writes its private daemon
+configuration with owner-only permissions; never copy those secrets into Git
+or a test report. Other runtimes still require their own explicit executable
+installation and authentication.
+
+After installing a new **main-SHA-built release**, verify the exact CLI/node
+versions, the private path in the daemon profile, Hub supervisor online state,
+and an actual child creation. Online supervisor status alone is insufficient.
+The PR test gate `tests/linux-native-daemon-ui/verify.py` checks profile/path and
+Hub identity; `tests/linux-native-opencode/` separately checks real V2 runtime
+authentication/model transport, not complete native lifecycle acceptance.
+
+Before rollback retain an encrypted backup of the app namespace and native
+credential-store recovery material. Stop the daemon with the installed private
+`anet node stop local-daemon` from `~/.anet/app/local-daemon`, restore a previously
+validated release and compatible profile/data backup, then verify child creation
+again. Reverting only the binary does not repair the known old installer PATH
+omission. Git recreates the installer and pinned software inputs, **not** Hub
+database contents, local task history, runtime sessions or credentials. Those
+need protected backups or re-registration. No full empty-machine recovery or
+post-fix packaged V2 lifecycle success is implied by these instructions.
 
 ## Lost native credentials
 

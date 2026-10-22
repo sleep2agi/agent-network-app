@@ -1,0 +1,46 @@
+TEST ONLY — #906 old-component creation rejection copy, 2026-10-11 20:51+08.
+Candidate parent6ea9df4d5a3d1c52e6c1958532933b8c637f7fa6 on app main8cfdd622.
+Changed source: provider-create-options.ts, daemon-provider-create.test.ts,
+tests/provider-create/drive.mjs. No credentials, production calls or native pins changed.
+
+Before: Docker ran the new regression against the original production mapper.
+The existing three Provider creation groups passed; the new assertion failed:
+old Hub must name the upgrade needed for the managed Provider flag (null).
+Docker exit1. This is an actual missing error mapping, not a model-call failure.
+
+After: exact unknown flag daemonProvider now returns Hub124 / CLI166 / runtime132
+upgrade order through both the initial rejection and existing async verdict path.
+Other unknown flags, permission denial and Provider revision conflicts keep their
+original error handling. No fallback/default Provider or automatic retry is added.
+
+Independent suite: tests/provider-create/Dockerfile (existing pinned inputs).
+Core image config5c7f73156bb2e4ff499b529387631696493a0112f868dbe53bf274320fdf5e4d.
+Command through sg docker, network none, candidate src mounted read-only:
+  docker run --rm --network none -v CANDIDATE/src:/app/src:ro \
+    anet-app:provider-create-core sh -c \
+    'bun src/daemon-provider-create.test.ts && bun src/provider-create-options.test.ts && bun src/create-request-status.test.ts && npm run typecheck'
+PASS4/4 creation core groups,43/43 Provider options,51/51 request-status checks;
+source typecheck exit0 in the cached core environment. Its package metadata is
+240, so this is not a new 241 dependency-install or native-build acceptance.
+
+Actual UI export used that environment with current candidate src, App.tsx,
+app.json and package.json mounted read-only. Expo export1239 modules succeeded,
+output /export/web. Initial export into the mount root hit EBUSY while clearing
+it; switching to the mount's web subdirectory fixed this test-output path only.
+No product code was changed for that environment error.
+Browser config5e066f68e0485ee6e633a0760ec0c2da08f1f65756f7c86f694127d5af311f5b.
+Command through sg docker, network none, fresh export and current driver RO:
+  docker run --rm --network none -v GENERATED/web:/web:ro \
+    -v CANDIDATE/tests/provider-create/drive.mjs:/app/tests/provider-create/drive.mjs:ro \
+    anet-app:provider-create-browser
+PASS20/20 actual wizard checks: configured Provider/auth/model and name edit are
+retained, exact identifiers submitted, pending not claimed running, old Daemon
+rejection shows all three upgrade versions, only one create call, no page error.
+Desktop1200x900/light and phone390x844/dark preference; no palette assertion.
+Synthetic Hub only; no real node launch, OAuth, model entitlement or native install.
+All --rm containers removed; cached images and generated TEST ONLY web export
+retained. No host/global package installs or account/session changes.
+
+Public241 remains unshipped. Formal backend packages166/132/124 and their actual
+downloadable digests must exist before updating native package/sidecar pins.
+Only a verified full40 main SHA may build or publish the eventual native release.

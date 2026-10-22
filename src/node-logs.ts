@@ -47,7 +47,7 @@ export const LOG_LEVEL_CHIPS: readonly { key: LogLevelFilter; label: string }[] 
 ];
 
 export const LOGS_OLD_NODE_MESSAGE = '节点版本过旧，升级后可查看日志';
-export const LOGS_OLD_HUB_MESSAGE = '服务器版本过旧，升级后可查看日志';
+export const LOGS_OLD_HUB_MESSAGE = 'Hub 版本过旧，升级后可查看日志';
 
 /**
  * 能不能答 —— 只认 logs_capable(节点上报的粘性能力位),没有就不发请求、当场说为什么。
@@ -163,7 +163,7 @@ export function logsStatusMessage(status: string, error: string | null | undefin
   if (status === 'failed') return unknownOpMessage(error, session) ?? `节点读取日志失败：${error || '未知原因'}`;
   if (status === 'timeout') return '节点没有响应（可能离线）';
   if (status === 'pending' || status === 'in_progress') return '正在等节点回传日志…';
-  return `服务器返回了认不出的状态「${status}」`;
+  return `Hub 返回了认不出的状态「${status}」`;
 }
 
 /** hub 在发请求这一步就拒绝时的错误码 → 人话。 */
@@ -173,7 +173,7 @@ export function logsEnqueueError(error: string | null | undefined): string {
     case 'node_token_cannot_read_logs': return '请用用户账号登录后查看运行日志';
     case 'logs_target_not_found': return LOGS_OLD_NODE_MESSAGE;
     case 'cross_network_node': return '这个节点不属于当前网络';
-    case 'node_not_found': return '服务器上找不到这个节点';
+    case 'node_not_found': return 'Hub 上找不到这个节点';
     default: return error || '请求失败';
   }
 }

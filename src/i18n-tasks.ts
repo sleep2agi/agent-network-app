@@ -486,7 +486,7 @@ registerTranslations({
   'taskSearch.clearFilters': ['清除筛选', 'Clear filters'],
   'taskSearch.loadMore': ['加载更多', 'Load more'],
   'taskSearch.loadingMore': ['正在搜索更早的任务…', 'Searching older tasks…'],
-  'taskSearch.partial': ['只搜了最近的 500 个任务(这个 Hub 版本不支持在服务器上搜更早的)', 'Only the latest 500 tasks were searched (this Hub cannot search older ones)'],
+  'taskSearch.partial': ['只搜了最近的 500 个任务(这个 Hub 版本不支持在 Hub 上搜更早的)', 'Only the latest 500 tasks were searched (this Hub cannot search older ones)'],
 });
 
 // 仪表盘视图(TaskDashboard.tsx / task-dashboard-model.ts / task-share-card.ts)。
@@ -648,6 +648,9 @@ registerTranslations({
   'act.commented': ['评论:', 'commented:'],
   'comments.title': ['评论', 'Comments'],
   'comments.earlier': ['还有 {n} 条更早的评论', '{n} earlier comments'],
+  'comments.copyHint': ['可复制 Markdown 原文', 'Copy the Markdown source'],
+  'comments.copy': ['复制', 'Copy'],
+  'comments.copied': ['已复制', 'Copied'],
   'act.deleted': ['删除了任务', 'deleted the task'],
   'act.done': ['完成了任务', 'completed the task'],
   'act.reopened': ['重新打开了任务', 'reopened the task as'],
@@ -733,4 +736,25 @@ registerTranslations({
   'abandoned.collapse': ['收起「废弃」', 'Collapse “Abandoned”'],
   'abandoned.expandA11y': ['展开「废弃」，{n} 个任务', 'Expand “Abandoned”, {n} tasks'],
   'act.abandoned': ['废弃了任务', 'abandoned the task'],
+});
+
+
+registerTranslations({
+  'execution.title': ['执行状态', 'Execution status'],
+  'execution.lifecycleStarted': ['Hub 标记开始', 'Hub start marker'],
+  'execution.finished': ['已结束', 'Finished'],
+  'execution.failed': ['任务失败或已超时', 'Task failed or timed out'],
+  'execution.ended': ['任务已取消', 'Task cancelled'],
+  'execution.consumed': ['运行时已开始 · 等待回复', 'Runtime started · awaiting reply'],
+  'execution.submitted': ['已提交运行时 · 开始状态未确认', 'Submitted to runtime · start unconfirmed'],
+  'execution.received': ['Hub 已收到 · 开始状态未确认', 'Received by Hub · start unconfirmed'],
+  'execution.unconfirmed': ['执行状态未确认', 'Execution unconfirmed'],
+  'execution.missing': ['Hub 未找到目标节点登记', 'Hub could not find the target registration'],
+  'execution.offline': ['Hub 记录目标节点离线', 'Hub reports the target offline'],
+  'execution.disconnected': ['Hub 未检测到目标接收连接', 'Hub sees no target receiving connection'],
+  'execution.evidenceAbsent': ['目标尚未上报运行时证据', 'Target has not reported runtime evidence'],
+  'execution.waitHint': ['可能仍在等待节点空闲；已送达不代表模型已经开始，当前没有精确排队名次。', 'It may be waiting for the node. Delivery does not confirm a model start; an exact queue position is unavailable.'],
+  'execution.evidenceHint': ['当前无法判断是否已开始；请由节点维护者检查运行时证据上报。', 'Start cannot be confirmed. Ask the node maintainer to check runtime evidence reporting.'],
+  'execution.connectionHint': ['请由节点维护者检查登记或接收连接。', 'Ask the node maintainer to check registration or the receiving connection.'],
+  'execution.stale': ['状态读取失败；下面显示上次结果。', 'Status refresh failed; showing the previous result.'],
 });

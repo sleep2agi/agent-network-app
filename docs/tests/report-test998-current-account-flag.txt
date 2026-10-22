@@ -1,0 +1,58 @@
+TEST ONLY — #998 continuation: current-account stale reauth warning
+OBSERVED_AT=2026-10-12 07:54 Asia/Shanghai
+Base main5ea332d09803b7140396efd3a74a408350ff27e1 (includes HTTP source slice).
+Original report-test998-reauth-race.txt remains historical accepted evidence.
+
+User attachment001f216d95114d7281cfab197c9d4805 inspected: desktop Settings
+shows a re-login warning on the current account. Do not infer installed version
+or the real user's token validity from that screenshot.
+
+Different remaining cause from the original late-old-token race:
+- Settings copied persisted requiresReauth into its account row. Its successful
+  auth/me read updated identity but never reconciled the saved warning.
+- auth/me normally shares/caches a successful answer for60 seconds. That warm
+  answer alone must not be used as evidence a currently marked token is valid.
+- Old exported product reproduced a valid synthetic current account retaining
+  the flag: expected clear timed out after5 seconds. Baseline browser image
+  manifest927c19910edceb91cceffe14325dc75e860fb7c9f4ea0bdfcd8de48294a0c1af.
+  Initial fixture omitted safeAreaSim, so its missing debug navigation hook was
+  SETUP ERROR, not product evidence; corrected before the above reproduction.
+
+Narrow fix
+- Only a marked current profile gets a fresh auth/me request, bypassing this
+  account's warm cache. Matching username/credential and no newer401 allow a
+  persisted false mark and fresh account-list readback. Other profiles untouched.
+- Storage checks the persisted token for clearing too, not only marking true;
+  the serialized write and auth revision prevent an older positive proof from
+  superseding a newer401. Credential/profile changes cancel UI observation.
+- Failures and invalid identity proof do not clear the flag. Actual current401,
+  password rotation and late-old-token suppression retain their existing behavior.
+
+Focused Docker evidence (no production test)
+- Final source mounted read-only into existing core image
+  0e6c903d8c4b41dc91e5f34fcb62a12606e2fbeffc7a0f5ad3a1ae3bc548c66e:
+  new proof/real session-store13 assertions, original reauth race10/10 and shared
+  auth cache13/13 PASS. Original cache/in-flight/per-token sharing retained.
+- Initial narrow source typecheck exit0; final combined-main full TypeScript
+  check also completed exit0 at07:54+08, before commit/merge.
+- Rebuilt with tests/test998-reauth/Dockerfile pinned Bun/Node/Playwright inputs,
+  actual Expo export1246 modules. Earlier interim export0e9a0171 was not run or
+  counted after the final auth-revision check changed; final source rebuilt.
+- Final browser manifest-list
+  372eecb2686f4683b8a1a94ce1d2925af178e6e7430718a325ee527a1e35ce31.
+- STALE_BADGE_ONLY=1, --rm --init --network none:6/6 PASS. Actual Settings row,
+  synthetic native profile storage/HTTP: fresh request despite warm cache,
+  exactly one current-profile clear, visible warning gone, other profile warning
+  intact, no login navigation and no page errors. Not native OS/real credentials.
+- No repeated password/account/OAuth/model or full installer suite.
+
+Recovery / cleanup / release boundary
+- No password/token replacement, new service/port/proxy/env/secret source,
+  schema or production update. Existing native profile storage API is reused.
+- Main-only desktop/Android workflows and docs/desktop-release-sop.md remain
+  authority for installation/upgrade/rollback. Retain user profiles and encrypted
+  backups; Git reconstructs software, not credentials/session/database contents.
+- Public0.2.248 does not contain this continuation. This source and image are
+  TEST ONLY; normal main merge/exact-SHA rebuild still required for delivery.
+- Containers removed by --rm. Test images and isolated worktree retained;
+  no host/global npm modification or broad cleanup.

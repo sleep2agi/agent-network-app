@@ -22,6 +22,21 @@ on:
         required: false
         type: boolean
         default: false
+      include_app_store_versions:
+        description: Read App Store version/review states and linked build numbers; never submits or changes a version
+        required: false
+        type: boolean
+        default: false
+      attach_app_store_version:
+        description: "Re-point this App Store version (version string, e.g. 1.0) at the inspected build. It does NOT submit for review, and it refuses a build that is not VALID / not expired / not APP_STORE_ELIGIBLE."
+        required: false
+        type: string
+        default: ""
+      cancel_superseded_beta_reviews:
+        description: "Withdraw the pending Beta App Review submissions of every build OLDER than this build number, so Apple's submission limit frees a slot for the current one. Refuses a build number this app does not have."
+        required: false
+        type: string
+        default: ""
       distribute_to_groups:
         description: Comma-separated beta group names (or all-internal) to attach this build to once it is VALID. Empty = no change.
         required: false
@@ -36,6 +51,14 @@ jobs:
     runs-on: ubuntu-latest
     environment: macos-signing
     steps:
+      - name: Checkout internal distribution automation
+        if: ${{ inputs.distribute_to_groups == 'all-internal' }}
+        uses: actions/checkout@v4
+        with:
+          ref: ${{ github.sha }}
+          path: ios-distribution-tools
+          sparse-checkout: scripts/ios-distribute-internal.mjs
+          sparse-checkout-cone-mode: false
       - name: Query App Store Connect without exposing credentials
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -45,6 +68,9 @@ jobs:
           ENABLE_PUBLIC_TESTING: ${{ inputs.enable_public_testing }}
           SET_EXPORT_COMPLIANCE_ONLY: ${{ inputs.set_export_compliance_only }}
           LIST_BETA_GROUPS: ${{ inputs.list_beta_groups }}
+          INCLUDE_APP_STORE_VERSIONS: ${{ inputs.include_app_store_versions }}
+          ATTACH_APP_STORE_VERSION: ${{ inputs.attach_app_store_version }}
+          CANCEL_SUPERSEDED_BETA_REVIEWS: ${{ inputs.cancel_superseded_beta_reviews }}
           DISTRIBUTE_TO_GROUPS: ${{ inputs.distribute_to_groups }}
           BUNDLE_ID: top.vansin.agentnetwork
           PUBLIC_LINK_ID: ZvqYnCA9
@@ -134,6 +160,98 @@ jobs:
             exit 1
           fi
 
+          # ── withdraw the superseded builds from the beta groups ──────────────
+          # 🔴 为什么需要：同一天发了好几版，每一版都提交了一次 Beta App Review，
+          #    Apple 的提交上限（422 ENTITY_UNPROCESSABLE.SUBMISSION_LIMIT_REACHED）
+          #    就把最新那一版挡在外面了 —— 那一版在公开组里，externalBuildState
+          #    停在 READY_FOR_BETA_SUBMISSION，外部测试者拿不到，而所有检查都是绿的。
+          #
+          # 🔴 2026-10-21 实测：**betaAppReviewSubmissions 不允许 DELETE**
+          #    （Apple: "Allowed operations are: CREATE, GET_COLLECTION, GET_INSTANCE"），
+          #    所以「直接撤销提交」这条路走不通。能做的只有把 build 从 beta 组里移除 ——
+          #    提交挂在组里的 build 上，移除之后应当随之失效。
+          #    但这一步**不假设**它一定生效：移除之后重新查一遍提交和组成员，
+          #    把实际结果打印出来（撤掉了 / 没撤掉 / 不在公开组）。
+          #
+          # 护栏：给出的 build 号必须真的存在；只动**更旧**的 build；只动还在审的
+          #       提交；只从**公开**组里移除（内部组留着，测试者还要用）；每一次都打印。
+          if [ -n "$CANCEL_SUPERSEDED_BETA_REVIEWS" ]; then
+            keep="$CANCEL_SUPERSEDED_BETA_REVIEWS"
+            echo "Withdraw superseded builds (older than $keep) from the public beta group"
+            all_builds="$RUNNER_TEMP/app-builds.json"
+            asc_get builds --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$all_builds"
+            keep_exists=$(jq --arg v "$keep" '[.data[]|select((.attributes.version // "") == $v)]|length' "$all_builds")
+            if [ "$keep_exists" = 0 ]; then
+              echo "::error::build $keep does not exist for $BUNDLE_ID — refusing to withdraw anything"
+              exit 1
+            fi
+            groups_for_withdraw="$RUNNER_TEMP/groups-withdraw.json"
+            asc_get betaGroups --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$groups_for_withdraw"
+            public_group_id=$(jq -r '.data[]|select(.attributes.publicLinkId != null and .attributes.publicLinkId != "")|.id' "$groups_for_withdraw" | head -1)
+            if [ -z "$public_group_id" ]; then
+              echo "::error::no public beta group found for $BUNDLE_ID — refusing to withdraw anything"
+              exit 1
+            fi
+            withdrawn=0
+            while IFS= read -r row; do
+              [ -n "$row" ] || continue
+              bnum=$(jq -r '.attributes.version' <<<"$row")
+              bid=$(jq -r '.id' <<<"$row")
+              if [ "$((10#$bnum))" -ge "$((10#$keep))" ]; then continue; fi
+              subs="$RUNNER_TEMP/subs-$bid.json"
+              asc_get betaAppReviewSubmissions --data-urlencode "filter[build]=$bid" --data-urlencode 'limit=10' > "$subs"
+              while IFS= read -r sub; do
+                [ -n "$sub" ] || continue
+                sid=$(jq -r '.id' <<<"$sub")
+                state=$(jq -r '.attributes.betaReviewState // "UNKNOWN"' <<<"$sub")
+                case "$state" in
+                  IN_REVIEW|WAITING_FOR_REVIEW|PENDING)
+                    echo "  build $bnum has a pending beta review ($state) — removing it from the public group"
+                    group_link=$(jq -cn --arg bid "$bid" '{data:[{type:"builds",id:$bid}]}')
+                    asc_write DELETE "betaGroups/$public_group_id/relationships/builds" "$group_link" > /dev/null
+                    withdrawn=$((withdrawn + 1))
+                    # 复查：提交是否真的随之没了 —— 不假设，量。
+                    asc_get betaAppReviewSubmissions --data-urlencode "filter[build]=$bid" --data-urlencode 'limit=10' > "$subs"
+                    left=$(jq -r '.data|length' "$subs")
+                    if [ "$left" = 0 ]; then
+                      echo "  withdrawn: build $bnum submission $sid is gone"
+                    else
+                      echo "  build $bnum submission $sid is STILL there ($left) — removing the build from the group did not withdraw it"
+                    fi ;;
+                  *)
+                    echo "  leaving build $bnum submission $sid alone (state=$state)" ;;
+                esac
+              done < <(jq -c '.data[]?' "$subs")
+            done < <(jq -c '.data[]?' "$all_builds")
+            echo "removed $withdrawn superseded build(s) from the public beta group"
+          fi
+
+          if [ "$INCLUDE_APP_STORE_VERSIONS" = 'true' ]; then
+            versions_json="$RUNNER_TEMP/app-store-versions.json"
+            asc_get "apps/$app_id/appStoreVersions" \
+              --data-urlencode 'filter[platform]=IOS' \
+              --data-urlencode 'include=build' \
+              --data-urlencode 'limit=200' > "$versions_json"
+            echo 'App Store versions (read-only; TestFlight Beta Review is separate):'
+            jq --arg appId "$app_id" '{
+              appId: $appId,
+              complete: (.links.next == null),
+              versions: [.data[] | {
+                id, version: .attributes.versionString,
+                state: .attributes.appStoreState,
+                appVersionState: .attributes.appVersionState,
+                downloadable: .attributes.downloadable,
+                createdDate: .attributes.createdDate,
+                buildId: (.relationships.build.data.id // null)
+              }],
+              builds: [.included[]? | select(.type == "builds") | {
+                id, version: .attributes.version,
+                processingState: .attributes.processingState,
+                expired: .attributes.expired
+              }]
+            }' "$versions_json"
+          fi
+
           builds_json="$RUNNER_TEMP/builds.json"
           asc_get builds \
             --data-urlencode "filter[app]=$app_id" \
@@ -147,6 +265,59 @@ jobs:
 
           details_json="$RUNNER_TEMP/build-details.json"
           asc_get buildBetaDetails --data-urlencode "filter[build]=$build_id" --data-urlencode 'limit=2' > "$details_json"
+
+          # ── re-point an App Store version at this build ─────────────────────
+          # 🔴 为什么需要这一步：版本 1.0 绑的是 **build 3，而那个 build 的二进制已过期**。
+          #    绑着过期 build 的版本过不了审核 —— 就算别的问题都修好了也一样。所以
+          #    「把版本指向一个有效 build」是任何一次重提审的前置条件。
+          # 🔴 这一步**不提交审核**（appStoreVersionSubmissions 一概不碰），也不改版本号、
+          #    描述、截图、隐私问卷 —— 那些都要按 Apple 的拒审原信来改，不能猜。
+          #    护栏：build 必须 VALID、未过期、且是 APP_STORE_ELIGIBLE；版本不能正在审核中。
+          if [ -n "$ATTACH_APP_STORE_VERSION" ]; then
+            echo "Attach build $BUILD_NUMBER to App Store version $ATTACH_APP_STORE_VERSION"
+            vjson="$RUNNER_TEMP/attach-version.json"
+            asc_get "apps/$app_id/appStoreVersions" \
+              --data-urlencode 'filter[platform]=IOS' \
+              --data-urlencode "filter[versionString]=$ATTACH_APP_STORE_VERSION" \
+              --data-urlencode 'include=build' \
+              --data-urlencode 'limit=10' > "$vjson"
+            vid=$(jq -r '.data[0].id // empty' "$vjson")
+            if [ -z "$vid" ]; then
+              echo "::error::no App Store version $ATTACH_APP_STORE_VERSION for $BUNDLE_ID"
+              exit 1
+            fi
+            vstate=$(jq -r '.data[0].attributes.appStoreState // "UNKNOWN"' "$vjson")
+            vbuild=$(jq -r '.data[0].relationships.build.data.id // "none"' "$vjson")
+            echo "  version $vid state=$vstate currently bound to ${vbuild:-none}"
+            case "$vstate" in
+              WAITING_FOR_REVIEW|IN_REVIEW|WAITING_FOR_RELEASE)
+                echo "::error::version $vid is in state $vstate — refusing to change its build while review is pending"
+                exit 1 ;;
+            esac
+            bstate=$(jq -r '.data[0].attributes.processingState // "UNKNOWN"' "$builds_json")
+            # 🔴 jq 的 `//` 对 **false 也成立**（它是「取替代值」不是「取默认值」）：
+            #    `false // "UNKNOWN"` 会得到 "UNKNOWN"。build 151 的 expired 正是 false,
+            #    照直写会把唯一可用的 build 判成「过期」而拒掉。所以显式分支。
+            bexpired=$(jq -r 'if (.data[0].attributes.expired == null) then "UNKNOWN" else (.data[0].attributes.expired | tostring) end' "$builds_json")
+            bkind=$(jq -r '.data[0].attributes.buildAudienceType // "UNKNOWN"' "$builds_json")
+            echo "  build $build_id state=$bstate expired=$bexpired audience=$bkind"
+            if [ "$bstate" != 'VALID' ] || [ "$bexpired" != 'false' ] || [ "$bkind" != 'APP_STORE_ELIGIBLE' ]; then
+              echo "::error::build $BUILD_NUMBER is not a reviewable App Store build (state=$bstate expired=$bexpired audience=$bkind) — refusing to attach it"
+              exit 1
+            fi
+            if [ "$vbuild" = "$build_id" ]; then
+              echo "  already bound to this build — nothing to change"
+            else
+              vpatch=$(jq -cn --arg vid "$vid" --arg bid "$build_id" '{data:{type:"appStoreVersions",id:$vid,relationships:{build:{data:{type:"builds",id:$bid}}}}}')
+              asc_write PATCH "appStoreVersions/$vid" "$vpatch" > /dev/null
+              echo "  patched: version $vid now points at build $build_id"
+            fi
+            asc_get "appStoreVersions/$vid" --data-urlencode 'include=build' > "$vjson"
+            # 🔴 带 include 的单资源 GET 回的是 JSON:API **document**（`{data:{…}}`），
+            #    而不带 include 时回的是裸资源。两种形状都见过，所以这里两种都认 ——
+            #    只认一种的话，回读会打出一片 null，看起来像「改了但没生效」。
+            jq '(.data // .) | {id, version: .attributes.versionString, state: .attributes.appStoreState, buildId: (.relationships.build.data.id // null)}' "$vjson"
+          fi
 
           groups_json="$RUNNER_TEMP/groups.json"
           asc_get betaGroups --data-urlencode "filter[app]=$app_id" --data-urlencode 'limit=200' > "$groups_json"
@@ -250,6 +421,12 @@ jobs:
           # Groups with hasAccessToAllBuilds already receive every build and
           # Apple rejects a manual attach there, so they are only reported.
           # An external group still needs Beta App Review before testers see it.
+          if [ "$DISTRIBUTE_TO_GROUPS" = 'all-internal' ]; then
+            ASC_KEY_ID="$APPLE_API_KEY" ASC_ISSUER_ID="$APPLE_API_ISSUER" \
+              ASC_KEY_BASE64="$APPLE_API_KEY_BASE64" \
+              node ios-distribution-tools/scripts/ios-distribute-internal.mjs "$BUILD_NUMBER"
+            DISTRIBUTE_TO_GROUPS=""
+          fi
           if [ -n "$DISTRIBUTE_TO_GROUPS" ]; then
             processing=$(jq -r '.data[0].attributes.processingState // "UNKNOWN"' "$builds_json")
             if [ "$processing" != 'VALID' ]; then

@@ -1,6 +1,6 @@
 import { t as tr } from './i18n';
 import { useTaskBoard } from './task-board-store';
-import { statusChoices, supportsAbandoned } from './requirement-columns';
+import { statusChoices, statusCapsuleText, supportsAbandoned } from './requirement-columns';
 import { validationText } from './i18n-task-presentation';
 import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
@@ -512,7 +512,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       <Ionicons name={icon as any} size={17} color={color} />
     </Pressable>
   );
-  const pill = (testID: string, dot: ReactNode, label: string, a11y: string, open: boolean, disabled: boolean, onPress: () => void) => (
+  const pill = (testID: string, dot: ReactNode, label: string, a11y: string, open: boolean, disabled: boolean, onPress: () => void, capsuleColumn?: string) => (
     <Pressable
       accessibilityRole="button"
       accessibilityLabel={a11y}
@@ -523,7 +523,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       testID={testID}
     >
       {dot}
-      <Text style={{ color: open ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: weight.medium }} numberOfLines={1}>{label}</Text>
+      <Text style={[{ fontSize: typeScale.small, fontWeight: weight.medium }, statusCapsuleText(capsuleColumn, capsuleColumn === 'abandoned' ? colors.textMuted : (open ? colors.accent : colors.text))]} numberOfLines={1}>{label}</Text>
       {disabled ? null : <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={12} color={colors.textMuted} />}
     </Pressable>
   );
@@ -569,7 +569,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
       {error?.field === 'name' ? <Text style={s.err} accessibilityRole="alert">{error.message}</Text> : null}
       <View style={styles.pillRow}>
         <View pointerEvents={canColumn ? 'auto' : 'none'}>
-          {pill('req-status-pill', <View style={[s.prioDot, { backgroundColor: STATUS_TONE[item.column]() }]} />, statusLabel, tr('taskDrawer.status', { v0: statusLabel }), menu === 'status', !canColumn || moving, () => setMenu(m => (m === 'status' ? null : 'status')))}
+          {pill('req-status-pill', <View style={[s.prioDot, { backgroundColor: STATUS_TONE[item.column]() }]} />, statusLabel, tr('taskDrawer.status', { v0: statusLabel }), menu === 'status', !canColumn || moving, () => setMenu(m => (m === 'status' ? null : 'status')), item.column)}
         </View>
         <View pointerEvents={readOnly ? 'none' : 'auto'}>
           {pill('req-priority-pill', <PriorityDot p={draft.priority} s={s} />, priorityLabel(draft.priority), tr('taskDrawer.priority', { v0: priorityLabel(draft.priority) }), menu === 'priority', readOnly, () => setMenu(m => (m === 'priority' ? null : 'priority')))}
@@ -592,7 +592,7 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
                 testID={`req-move-${col}`}
               >
                 <View style={[s.prioDot, { backgroundColor: STATUS_TONE[col]() }]} />
-                <Text style={[s.segmentText, on && s.segmentTextOn]}>{taskText(REQ_COLUMN_LABEL[col])}</Text>
+                <Text style={[s.segmentText, on && s.segmentTextOn, statusCapsuleText(col, col === 'abandoned' ? colors.textMuted : (on ? colors.text : colors.textSecondary))]}>{taskText(REQ_COLUMN_LABEL[col])}</Text>
               </Pressable>
             );
           })}

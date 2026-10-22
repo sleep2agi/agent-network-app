@@ -1,0 +1,37 @@
+#906 client 0.2.246 — release preparation, not a published installer
+Observed: 2026-10-12 04:50 +08.
+Initial main base: 532fa0eea3c7f23af963e78a5834e774491d1d0f
+The Provider refresh feature is App PR872. This version-only preparation must
+be rebased on the main commit containing that feature before merge/release.
+
+Scope
+- Eight authoritative version inputs agree on 0.2.246; Android versionCode2246.
+- Cargo.lock changes only agent-network-desktop's root version.
+- User-facing notes cover successful application refresh and explicit second
+  confirmation. The bundled history is generated from those same notes.
+- No backend/runtime/npm version bump, credential or production change.
+
+Docker-only metadata verification
+Use sg docker -c for each command. Existing locked core image:
+anet-app:provider906-refresh-core
+sha256:c938512f8c60398998dc9f73e7e181cebe16d6e45b905d3990c5118092507f28
+Run with --rm --network none, this worktree mounted read-only at /work,
+-w /work --entrypoint bun and one of:
+  src/version-consistency.test.ts: PASS14/14
+  src/changelog-bundled.test.ts: PASS7/7
+  src/release-notes-hygiene.test.ts: PASS9/9
+The existing generator scripts/changelog-bundle.mjs --no-dates ran in Docker
+with the own worktree writable; it retained the existing218 known ISO dates.
+No host dependency installation, credential or Docker socket mount.
+git diff --check: PASS. Containers removed via --rm; test image retained.
+
+Release/recovery boundaries
+Metadata tests do not prove native packages or public availability. Follow
+docs/desktop-release-sop.md: current Ubuntu and Windows units must be green;
+merge normally, then build official macOS/Windows and Android from one exact
+40-character main ancestor SHA. Linux remains excluded for this increment.
+Do not upload branch builds to Release/npm/updater. Native signing, packaged
+checks and public-channel readback are separate gates, not completed here.
+No service/startup/port/proxy/env/key-source or database change. Existing
+installers and previous published client provide software rollback; account
+and database recovery still require their documented backup sources.

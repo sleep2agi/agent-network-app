@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from 'react';
-import { isClosedColumn } from './requirement-columns';
+import { isClosedColumn, statusCapsuleText } from './requirement-columns';
 import { TaskTagChips } from './TaskTags';
+import TaskListRowHover from './TaskListRowHover';
 import { Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -32,8 +33,9 @@ const HANDLE = 8, KEY_STEP = 16;
 type PointerLike = { nativeEvent: { clientX: number; pointerId: number }; currentTarget: unknown };
 type CellEditorState = { pos: CellPos; anchor: SelectAnchor | null };
 const TOAST_MS = 5000;
-export default function TaskListTable({ rows, terms, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu, items, selection, onProject, seqCapable = false, edit }: {
+export default function TaskListTable({ rows, pageKey, terms, people, projects, sort, setSort, s, today, selectedId, onOpen, filtered, needsUpdateUpgrade, touch, onMenu, items, selection, onProject, seqCapable = false, edit }: {
   rows: Requirement[]; people: RequirementPerson[];
+  pageKey?: string;
   /** 搜索词(task-search.ts searchTerms):标题里命中的字高亮。 */
   terms?: readonly string[]; projects: RequirementProject[] | null;
   sort: SortSpec; setSort: (next: SortSpec) => void; s: TaskStyles; today: string;
@@ -62,15 +64,8 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
   const titleDone = useRef(false);
   const [toast, setToast] = useState<{ text: string; anchor: SelectAnchor | null } | null>(null);
   const cellRefs = useRef(new Map<string, any>());
-  // 悬停的行:格子是 Pressable 以后,行自己的 hovered 在鼠标进到格子里时变 false(RN-web 的嵌套 Pressable),
-  // 「展开」按钮和行底色改按 DOM 的 pointerenter / pointerleave(进出子元素不触发)。
-  const [hoverRow, setHoverRow] = useState<string | null>(null);
-  const rowHoverRef = (id: string) => (el: any) => {
-    if (!el?.addEventListener || el.__listHover === id) return;
-    el.__listHover = id;
-    el.addEventListener('pointerenter', () => setHoverRow(id));
-    el.addEventListener('pointerleave', () => setHoverRow(h => (h === id ? null : h)));
-  };
+  const bodyScroll = useRef<ScrollView>(null);
+  useEffect(() => { bodyScroll.current?.scrollTo({ y: 0, animated: false }); }, [pageKey]);
   const posKey = (p: CellPos) => `${p.row}|${p.field}`;
   const at = (p: CellPos | null, id: string, field: FieldId) => !!p && p.row === id && p.field === field;
   useEffect(() => { if (!toast) return; const timer = setTimeout(() => setToast(null), TOAST_MS); return () => clearTimeout(timer); }, [toast]);
@@ -218,7 +213,7 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
       case 'issues': return issueCount(item) ? <TaskIssueCount item={item} /> : <Text style={s.metaMuted}>—</Text>;
       case 'tags': return item.tags?.length ? <TaskTagChips tags={item.tags} /> : <Text style={s.metaMuted}>—</Text>;
       case 'seq': return <Text testID={`task-seq-${item.id}`} style={[s.metaMuted, { fontVariant: ['tabular-nums'] }]} numberOfLines={1}>{shortIdLabel(item) ?? '—'}</Text>;
-      case 'status': return <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]}><View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} /><Text style={[s.statusPillText, { color: STATUS_TONE[item.column]() }]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text></View>;
+      case 'status': return <View style={[s.statusPill, { backgroundColor: STATUS_TONE[item.column]() + '1f' }]} testID={`task-status-${item.id}`}><View style={[s.prioDot, { width: 6, height: 6, backgroundColor: STATUS_TONE[item.column]() }]} /><Text style={[s.statusPillText, statusCapsuleText(item.column, STATUS_TONE[item.column]())]}>{taskText(REQ_COLUMN_LABEL[item.column])}</Text></View>;
     }
   };
   return <View style={{ flex: 1 }}>
@@ -239,12 +234,11 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
               </View>;
             })}
           </View>
-          <ScrollView style={{ flex: 1 }}>
+          <ScrollView ref={bodyScroll} style={{ flex: 1 }}>
             {!rows.length ? <View style={[s.center, { paddingVertical: spacing.xl * 2 }]}><Text style={s.muted}>{t(filtered ? 'tasks.copy.46' : 'tasks.copy.55')}</Text></View> : null}
             {rows.map(item => {
               const picked = !!selection?.ids.includes(item.id);
-              const rowHovered = live && hoverRow === item.id;
-              return <Pressable key={item.id} ref={live ? rowHoverRef(item.id) as never : undefined} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} {...a11yState({ selected: picked })} onPress={e => (selection ? selection.onPress(item.id, e) : onOpen(item.id))} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || rowHovered || state.pressed || item.id === selectedId) && s.trHover, picked && { backgroundColor: colors.accent + '14' }]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
+              return <TaskListRowHover key={item.id} enabled={live} resetKey={pageKey}>{(rowHovered, rowHoverRef) => <Pressable ref={rowHoverRef as never} testID={`req-row-${item.id}`} accessibilityRole="button" accessibilityLabel={item.name} {...a11yState({ selected: picked })} onPress={e => (selection ? selection.onPress(item.id, e) : onOpen(item.id))} onLongPress={touch ? e => onMenu(item, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined} style={state => [s.tr, ((state as { hovered?: boolean }).hovered || rowHovered || state.pressed || item.id === selectedId) && s.trHover, picked && { backgroundColor: colors.accent + '14' }]} {...({ dataSet: { taskCard: item.id, taskFrom: item.column } } as object)}>
                 {(state: any) => <>
                   {selection ? (
                     // 行首勾选框:悬停 / 已选 / 正在多选时出现;一直留出这一格宽,标题不跳。
@@ -271,7 +265,7 @@ export default function TaskListTable({ rows, terms, people, projects, sort, set
                     </Pressable>;
                   })}
                 </>}
-              </Pressable>;
+              </Pressable>}</TaskListRowHover>;
             })}
           </ScrollView>
         </View>

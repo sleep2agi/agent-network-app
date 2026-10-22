@@ -1,0 +1,40 @@
+2026-10-11 11:47 CST — release 0.2.235 changelog drive correction
+
+Scope: test-only follow-up to #906 / app PR832. No product, version, dependency,
+signing, installation, or publication changes.
+Base main: 1fd1c9c042a038e0f0a48774a7f029dc42af9beb.
+
+Observed failure:
+  CI run38107759066/job114378408099, shard2: 12/13 drives passed.
+  Only test-changelog/drive.mjs failed. Its PREV=patch-1 calculation expected
+  a 0.2.234 card, then locator.boundingBox timed out waiting for that card.
+  The actual notes and UI contain 0.2.235, 0.2.233, 0.2.232 (191 versions).
+  0.2.234 was a failed unpublished draft; inventing its release notes is wrong.
+  Evidence: artifact11691152340, test-changelog__drive/log.txt.
+  This is a deterministic test-fixture assumption, not an npm/network failure.
+
+Change:
+  Select previous versions from the supplied release-note headings, sorted
+  numerically. Do not derive expectations from the rendered DOM or production
+  parser. Require the full rendered list to equal the expected list in order,
+  preserving the current-version and >50-versions checks. Keep all geometry,
+  clipboard, sharing, offline, multi-select and kind-format assertions.
+
+Focused Docker verification:
+  Reused unchanged web-export artifact11690665446 from the same CI run.
+  Its source tree is the same as main1fd1c9c0 / tested merge5e12cc902cb1001e89c38faeafe22be9721fdc09.
+  Existing TEST-ONLY image anet-provider-panel:test906-apply-ui supplies pinned
+  Playwright1.58.2/Chromium. Read-only repository and web mounts, --network none,
+  --rm; only the temporary screenshot directory was writable. No authenticated
+  Hub, production service or local npm installation was touched.
+  Ran node /repo/tests/test-changelog/drive.mjs once with the corrected drive.
+  Result: ALL PASS, exit0. Desktop1440x900 and phone390x844 list all191 versions
+  in exact order, including the real .235 -> .233 version gap; all existing
+  copy/share/offline/geometry and feature/speed/fix/mixed format checks passed.
+  No other drive or native package was rerun. git diff --check passed.
+
+Cleanup: --rm container anet-235-changelog-gap-check is absent after completion.
+Downloaded artifacts and screenshots remain in temporary audit directories;
+no background test process, production deployment or public release was made.
+The independent CLI .163 npm-visibility blocker remains; this result does not
+turn the original failed CI run green or claim a published desktop installer.

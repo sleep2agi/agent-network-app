@@ -84,8 +84,10 @@ export type HostLevel = {
   total: number;
   /** 被排除的死节点数。 */
   dead: number;
-  /** 这台机器上全部(非死)节点的别名(点进节点列表时按它筛 —— light 投影的行不带 hostname)。 */
+  /** 这台机器上全部(非死)节点的别名(无 daemon 时点进节点列表时按它筛 —— light 投影的行不带 hostname)。 */
   aliases: string[];
+  /** 同 hostname 上的 host_supervisor daemon 别名(有则 Hub 概览点机器进守护进程管理页)。 */
+  daemonAlias: string | null;
   /** 最新心跳的毫秒时间戳;读不出 = 0。 */
   heartbeatMs: number;
   /** 最新心跳距今多久(ms);读不出 = null。 */
@@ -127,15 +129,27 @@ export function shortHostname(hostname: string): string {
   return CLOUD_HOSTNAME_RE.test(hostname) ? `${hostname.slice(0, CLOUD_HOSTNAME_KEEP)}…` : hostname;
 }
 
+/** 同 hostname 上的 daemon(去空白、不分大小写):在线优先,再按别名排序取第一个。 */
+export function hostDaemonRef(hostname: string, daemons: readonly HostDaemonRef[] = []): HostDaemonRef | null {
+  const key = hostname.trim().toLowerCase();
+  const match = daemons
+    .filter(d => typeof d.alias === 'string' && d.alias.trim() && typeof d.hostname === 'string' && d.hostname.trim().toLowerCase() === key)
+    .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || a.alias.localeCompare(b.alias))[0];
+  return match ?? null;
+}
+
+/** 同 hostname 上的 host_supervisor daemon 别名;没有 = null。 */
+export function hostDaemonAlias(hostname: string, daemons: readonly HostDaemonRef[] = []): string | null {
+  const match = hostDaemonRef(hostname, daemons);
+  return match ? match.alias.trim() : null;
+}
+
 /**
  * 一台机器的显示名:同 hostname(去空白、不分大小写)上有 daemon ⇒ daemon 别名去 `daemon-`;
  * 多个 daemon 时在线的优先,再按别名排序取第一个(结果稳定,不随接口返回顺序跳)。否则 shortHostname。
  */
 export function hostDisplayName(hostname: string, daemons: readonly HostDaemonRef[] = []): string {
-  const key = hostname.trim().toLowerCase();
-  const match = daemons
-    .filter(d => typeof d.alias === 'string' && d.alias.trim() && typeof d.hostname === 'string' && d.hostname.trim().toLowerCase() === key)
-    .sort((a, b) => (b.online ? 1 : 0) - (a.online ? 1 : 0) || a.alias.localeCompare(b.alias))[0];
+  const match = hostDaemonRef(hostname, daemons);
   return match ? daemonDisplayName(match.alias) : shortHostname(hostname);
 }
 
@@ -295,6 +309,7 @@ export function hostLevels(sessions: readonly Session[], now: number, daemons: r
         ? '节点均离线'
         : ageLabel(ageMs);
     const displayName = hostDisplayName(hostname, daemons);
+    const daemonAlias = hostDaemonAlias(hostname, daemons);
     const worst = stale ? 'none' : worstOf(cpu, mem, disk);
     (stale ? offline : active).push({
       hostname,
@@ -305,6 +320,7 @@ export function hostLevels(sessions: readonly Session[], now: number, daemons: r
       total: acc.total,
       dead: acc.dead,
       aliases: acc.aliases,
+      daemonAlias,
       heartbeatMs: acc.newestMs,
       ageMs,
       stale,

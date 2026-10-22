@@ -80,10 +80,10 @@ ck('动作:⌘K=搜索、⌘,=设置、⌘3=定时', M.shortcutAction('nav.searc
 // ── 标签:一律中文,不中英混排(owner 09-27 截图:「切换到 Tasks」「切换到 Messages」)──
 {
   const tabLabels = M.SHORTCUTS.filter(s => s.id.startsWith('nav.tab.')).map(s => s.label);
-  ck('导航 tab 标签 = 切换到 会话 / 任务 / 定时任务 / 消息 / 服务器', JSON.stringify(tabLabels) === JSON.stringify(['切换到 会话', '切换到 任务', '切换到 定时任务', '切换到 消息', '切换到 服务器']), tabLabels.join(','));
+  ck('导航 tab 标签 = 切换到 会话 / 任务 / 定时任务 / 消息 / Hub', JSON.stringify(tabLabels) === JSON.stringify(['切换到 会话', '切换到 任务', '切换到 定时任务', '切换到 消息', '切换到 Hub']), tabLabels.join(','));
   const english = /[A-Za-z]{2,}/;
   const all = [...M.SHORTCUTS.map(s => s.label), ...M.FIXED_SHORTCUTS.map(f => f.label), ...M.SHORTCUT_GROUPS.map(g => g.label)];
-  const bad = all.filter(l => english.test(l));
+  const bad = all.filter(l => english.test(l.replace(/\bHub\b/g, '')));
   ck('快捷键页所有行标签 / 分组名里没有英文单词', bad.length === 0, bad.join(' | '));
   // 页面上写死的文案(发送消息 / 换行 / 随发送键 / 固定 / 页脚)也扫一遍;键帽(Ctrl / Shift / Space / Enter / Esc)是键名,不算。
   const page = read('src/ShortcutsSettings.tsx');

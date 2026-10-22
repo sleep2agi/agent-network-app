@@ -76,7 +76,7 @@ const box = async (page, sel) => { const b = await page.locator(sel).first().bou
 async function login(page, who) {
   const h = HUBS[who];
   await page.locator(tid('login-screen')).waitFor({ timeout: 30000 });
-  await page.getByLabel('服务器地址', { exact: true }).fill(h.hub.url);
+  await page.getByLabel('Hub 地址', { exact: true }).fill(h.hub.url);
   await page.getByLabel('用户名', { exact: true }).fill(h.user);
   await page.getByLabel('密码', { exact: true }).fill(h.pw);
   await page.locator(tid('login-submit')).click();

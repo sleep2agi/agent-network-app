@@ -1,0 +1,33 @@
+Test1036: client 0.2.244 release metadata preflight (TEST ONLY)
+Observed: 2026-10-11T16:55Z / 2026-10-12 00:55 Asia/Shanghai.
+Scope: version metadata, Android versionCode and bundled user release notes.
+Candidate base: App PR868 head07795fc3ca69b8badc0881d492a2de163c6dbe3e.
+This base is not yet merged; no public artifact is built or published here.
+
+Independent Dockerfile: tests/release-metadata/Dockerfile.
+Pinned Bun1.3.14 digest:
+e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4.
+Commands (through sg docker):
+docker build -f tests/release-metadata/Dockerfile -t anet-app:test244-release-metadata .
+docker run --rm --network none --read-only --tmpfs /tmp anet-app:test244-release-metadata
+Image manifest list:
+aea73fb9db4ac5fa7d5f8d442fa1f7f517d549bb6340774b0f00afa574b866d1.
+
+PASS version-consistency: 14/14 assertions, eight version locations0.2.244;
+Android versionCode2244; existing Android package unchanged.
+PASS changelog-bundled: 7/7 assertions, exact releaseBody and offline notes.
+PASS release-notes-hygiene: 9/9 assertions, user-facing notes.
+PASS git diff --check.
+PASS Cargo.lock diff changes only agent-network-desktop root version.
+Earlier read-only run of these same tests in cached Provider core image also
+passed; it is not counted as additional coverage. No Provider/UI/inference
+samples were rerun. Core installer evidence remains the original PR868 report.
+
+No signing, installation, production token, global npm, business-node restart,
+Hub change, or update-channel activation. Test container removed by --rm;
+task-specific test image retained. Source worktree remains isolated.
+Formal delivery pending: merge PR868 and this version-only change normally;
+prove exact40 release SHA remains a main ancestor; dispatch signed primary
+desktop and Android builds from that SHA; audit draft; publish and verify
+anonymous update manifests and mirrored artifact digests. Linux is deferred.
+No claim of native rendered installer appearance or formal release success.

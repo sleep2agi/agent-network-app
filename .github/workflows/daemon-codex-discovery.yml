@@ -1,0 +1,28 @@
+name: Existing Codex discovery core
+on:
+  pull_request:
+    paths:
+      - 'src/**'
+      - 'tests/daemon-provider-management/**'
+      - 'package.json'
+      - 'package-lock.json'
+      - '.github/workflows/daemon-codex-discovery.yml'
+permissions:
+  contents: read
+jobs:
+  discovery:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Readback and selection core (Docker, TEST-ONLY)
+        run: |
+          mkdir -p discovery-evidence
+          sg docker -c 'docker build -f tests/daemon-provider-management/Dockerfile.discovery -t anet-app:test906-discovery .'
+          sg docker -c "docker run --init --rm --network none --mount type=bind,src=$PWD/discovery-evidence,dst=/output anet-app:test906-discovery"
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: TEST-ONLY-existing-codex-discovery
+          path: discovery-evidence
+          retention-days: 7

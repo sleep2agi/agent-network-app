@@ -55,7 +55,7 @@ const browser = await chromium.launch({ headless: true, executablePath: findChro
   await page.addInitScript(() => { try { localStorage.setItem('theme_mode_v1', 'light'); localStorage.setItem('anet.language.v1', 'zh'); } catch {} });
   await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
   await page.locator(tid('login-screen')).waitFor({ timeout: 30000 });
-  await page.getByLabel('服务器地址', { exact: true }).fill(hub.url);
+  await page.getByLabel('Hub 地址', { exact: true }).fill(hub.url);
   await page.getByLabel('用户名', { exact: true }).fill(USER);
   await page.getByLabel('密码', { exact: true }).fill(WEAK_PW);
   await page.locator(tid('login-submit')).click();

@@ -13,7 +13,31 @@ import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdir
 import { checkNodeName, describeNodeNameRejection, folderError, normalizeNodeName, NODE_NAME_HINT } from './node-name';
 import { buttonStyle, buttonTextStyle, elevated } from './elevation';
 import { readinessFor, readinessSelectable } from './runtime-readiness';
-import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
+import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_GENERATION_LABELS, OPENCODE_V1_NOTE, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
+import CodexProviderFields from './CodexProviderFields';
+import { ProviderConfigDemo } from './BackendPendingDemo';
+import DaemonRuntimeProviders from './DaemonRuntimeProviders';
+import DaemonCreateProvider from './DaemonCreateProvider';
+import type { CreateProviderReference } from './daemon-provider-create';
+import OpenCodeProviderNote from './OpenCodeProviderNote';
+import { readListProviders } from './daemon-provider-read';
+import { displayDaemonProviders, type TaggedProvider } from './daemon-runtime-providers';
+import { useTranslation } from './i18n-react';
+import './i18n-provider';
+import {
+  EMPTY_PROVIDER_FORM,
+  codexSubmitGate,
+  describeProviderCreateError,
+  hubTransportAllowsSecrets,
+  presetLabelKey,
+  providerIssueI18nKey,
+  providerLocalIssues,
+  providerSummary,
+  providerSurface,
+  reconcileProviderForm,
+  scrubSecret,
+  type ProviderFormValue,
+} from './provider-create-options';
 
 // #338 RFC-026 §3.1 — mobile create-node wizard rest (Plan B).
 // Up to 5 post-picker steps: ① name ② runtime ③ model ④ flags ⑤ confirm.
@@ -66,7 +90,7 @@ const RUNTIMES: WizardRuntime[] = [
   //  models 留空 ⇒ 提交省略 model ⇒ daemon 起子节点时「OpenCode copresence requires an explicit
   //  provider/model」(2026-09-07 Mac mini 真跑抓到)。这里给 OpenCode 自带的免费模型(不需要任何 key,
   //  DEV 上 opencode-指挥狗 / opencode测试1号 就用它们);要用别的 provider 走 anet opencode auth-login。
-  { id: 'opencode-cli', label: 'OpenCode（TUI 共存）', models: ['opencode/mimo-v2.6-flash-free', 'opencode/north-mini-code-free'] },
+  { id: 'opencode-cli', label: 'OpenCode', models: ['opencode/mimo-v2.6-flash-free', 'opencode/north-mini-code-free'] },
 ];
 const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 
@@ -97,6 +121,7 @@ export interface CreateNodeWizardScreenProps {
 
 export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, desktop = false }: CreateNodeWizardScreenProps) {
   // ── All hooks FIRST (no conditional-hook regressions) ──────────────
+  const { t } = useTranslation();
   const [step, setStep] = useState<WizardStepKey>('name');
   const [name, setName] = useState('');
   // Initial runtime: first supported (and, #623, not reported unusable) by the daemon; else default.
@@ -114,6 +139,16 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [budget, setBudget] = useState('');
   const [opencodeGeneration, setOpenCodeGeneration] = useState<OpenCodeGeneration>('v1');
   const [opencodeUnsafeTools, setOpenCodeUnsafeTools] = useState(false);
+  const [codexAutoExecute, setCodexAutoExecute] = useState(true);
+  const [providerForm, setProviderForm] = useState<ProviderFormValue>(EMPTY_PROVIDER_FORM);
+  const [providerResetHint, setProviderResetHint] = useState('');
+  const [daemonProviderRows, setDaemonProviderRows] = useState<TaggedProvider[]>([]);
+  const [daemonProviderRead, setDaemonProviderRead] = useState<'pending' | 'ok' | 'unsupported' | 'error'>('pending');
+  const managedIdentity = JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, daemon.daemon_node_id, runtimeId]);
+  const [managedModeState, setManagedModeState] = useState('');
+  const [managedSelectionState, setManagedSelectionState] = useState<{ identity: string; value: CreateProviderReference } | null>(null);
+  const managedMode = runtimeId === 'codex-app-server' && managedModeState === managedIdentity;
+  const managedSelection = managedMode && managedSelectionState?.identity === managedIdentity ? managedSelectionState.value : null;
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
@@ -132,6 +167,17 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [requestId, setRequestId] = useState<string | null>(null);
   const submittedSpec = useRef<CreateNodeRequest['node_spec'] | null>(null);
   const pollAlive = useRef(true);
+
+  // #906 —— list_providers 只补 daemon 没带上的、且标了 runtime 的行。响应体不进日志。
+  useEffect(() => {
+    let alive = true;
+    readListProviders({ serverUrl: cfg.serverUrl, token: cfg.token, networkId: cfg.networkId }).then(result => {
+      if (!alive) return;
+      setDaemonProviderRead(result.kind);
+      if (result.kind === 'ok') setDaemonProviderRows(result.rows);
+    });
+    return () => { alive = false; };
+  }, [cfg.serverUrl, cfg.token, cfg.networkId]);
 
   // Stop polling on unmount + on screen exit
   useEffect(() => {
@@ -251,18 +297,27 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const folder = folderEdited ?? workdirSlug(name, workdirFallback);
   const folderErr = workdirRoot && folderEdited !== null ? folderError(folderEdited) : null;
   const openCodeError = opencodeCreateError({ runtimeId, opencodeGeneration, opencodeUnsafeTools, model });
+  const daemonModelChoices = (() => {
+    const shown = displayDaemonProviders({ daemon, rows: daemonProviderRows, read: daemonProviderRead, runtimeId, opencodeGeneration });
+    if (shown.kind === 'opencode') return shown.models;
+    if (shown.kind === 'codex' || shown.kind === 'listed') return shown.providers.flatMap(p => p.models);
+    return [];
+  })();
+  const surface = providerSurface(runtimeId, opencodeGeneration);
+  const transportOk = hubTransportAllowsSecrets(cfg.serverUrl);
+  const providerIssues = providerLocalIssues({ runtimeId, ...providerForm }, transportOk);
   const canNext =
     hasUsableRuntime &&
     (
       (cur === 'name' && nameValid && !folderErr) ||
-      (cur === 'runtime' && isRuntimeAllowed(runtimeId) && (runtimeId !== 'opencode-cli' || opencodeGeneration !== 'v2' || opencodeUnsafeTools)) ||
+      (cur === 'runtime' && isRuntimeAllowed(runtimeId) && (runtimeId !== 'opencode-cli' || opencodeGeneration !== 'v2' || opencodeUnsafeTools) && providerIssues.length === 0 && (!managedMode || !!managedSelection)) ||
       (cur === 'model' && !openCodeError) || cur === 'params'
     );
   const busy = phase === 'creating' || phase === 'awaiting_register';
   // 确认页上显式改过完整路径(workdirEdited)优先;否则 <root>/<文件夹>。
   const workdir = workdirEdited ?? (workdirRoot ? defaultWorkdir(workdirRoot, folder) : '');
   const workdirErr = workdirRoot ? workdirError(workdir, workdirRoot) : null;
-  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId);
+  const canSubmit = !workdirErr && !openCodeError && nameValid && isRuntimeAllowed(runtimeId) && (!managedMode || !!managedSelection);
 
   // ── handlers (no hooks below this line) ────────────────────────────
   // One runtime choice row. `nested` = it lives inside a 「高级」 disclosure:
@@ -286,13 +341,17 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
           disabled={!allowed}
           onPress={() => {
             if (allowed) {
+              const nextForm = reconcileProviderForm(runtimeId, r.id, providerForm);
               setRuntimeId(r.id);
+              setManagedModeState(''); setManagedSelectionState(null);
               setOpenCodeGeneration('v1');
               setOpenCodeUnsafeTools(false);
               // Reset model to the FIRST of the new runtime
               // (never ''). Same reasoning as initial state
               // — hub schema requires non-empty model.
               setModel(r.models[0] || '');
+              setProviderForm(nextForm.form);
+              setProviderResetHint(nextForm.cleared ? t('provider.cleared') : '');
             }
           }}
           style={({ pressed }) => [
@@ -342,6 +401,18 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   };
   const handleSubmit = async () => {
     if (!canSubmit || busy) return;
+    const gate = codexSubmitGate({
+      runtimeId,
+      choice: providerForm.choice,
+      baseUrl: providerForm.baseUrl,
+      model: providerForm.model,
+      apiKey: providerForm.apiKey,
+    }, cfg.serverUrl);
+    if (gate.action === 'block') {
+      setPhase('error');
+      setMsg(scrubSecret(t(providerIssueI18nKey(gate.issue)), providerForm.apiKey));
+      return;
+    }
     setPhase('creating');
     setMsg('');
     // flags.copresence:true 只给「Codex（TUI 共存）」(codex-app-server),见 create-node-request.ts。
@@ -349,6 +420,8 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       name, runtimeId, model, runtimeModels: runtime.models,
       permissionMode, maxTurns, budget,
       opencodeGeneration, opencodeUnsafeTools,
+      codexAutoExecute,
+      ...(managedSelection ? { daemonProvider: managedSelection } : {}),
       workdirField: workdirForRequest(workdirRoot, workdir),
     });
     submittedSpec.current = node_spec;
@@ -363,10 +436,10 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       setMsg('创建请求已下发，正在监测子节点注册…');
     } else if (res.unconfirmed) {
       setPhase('error');
-      setMsg(`服务器未就绪：${res.error}`);
+      setMsg(scrubSecret(`服务器未就绪：${res.error}`, providerForm.apiKey));
     } else {
       setPhase('error');
-      setMsg(`创建失败：${describeOpenCodeCreateError(res) ?? describeNodeNameRejection(res.error, name, 'hub') ?? describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`);
+      setMsg(scrubSecret(`创建失败：${describeProviderCreateError(res) ?? describeOpenCodeCreateError(res) ?? describeNodeNameRejection(res.error, name, 'hub') ?? describeCopresenceError({ error: res.error, field: res.field, runtime: runtimeId }) ?? describeWorkdirError(res.error) ?? res.error}`, providerForm.apiKey));
     }
   };
 
@@ -555,7 +628,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                     aria-checked={opencodeGeneration === g}
                     onPress={() => { setOpenCodeGeneration(g); setOpenCodeUnsafeTools(false); }}
                     style={[styles.choiceRow, opencodeGeneration === g && styles.choiceRowSelected]}>
-                    <Text style={styles.choiceText}>{g === 'v1' ? 'V1（兼容默认）' : 'V2（实验性 TUI 共存）'}</Text>
+                    <Text style={styles.choiceText}>{OPENCODE_GENERATION_LABELS[g]}</Text>
                   </Pressable>
                 ))}
                 {opencodeGeneration === 'v2' ? (
@@ -570,9 +643,52 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                       <Text style={[styles.choiceText, { flex: 1 }]}>我了解风险，仅用于可信任务，允许所有本地工具</Text>
                     </Pressable>
                   </>
-                ) : null}
+                ) : <Text testID="opencode-v1-mode-note" style={styles.hint}>{OPENCODE_V1_NOTE}</Text>}
               </View>
             ) : null}
+            {providerResetHint ? <Text testID="provider-reset-hint" style={styles.hint}>{providerResetHint}</Text> : null}
+            {surface.kind === 'codex' ? (
+              <>
+                <View testID="codex-auto-execute-options" style={styles.section}>
+                  <Pressable
+                    testID="codex-auto-execute-consent"
+                    accessibilityRole="checkbox"
+                    accessibilityState={{ checked: codexAutoExecute }}
+                    aria-checked={codexAutoExecute}
+                    onPress={() => setCodexAutoExecute(v => !v)}
+                    style={styles.choiceRow}
+                  >
+                    <Ionicons name={codexAutoExecute ? 'checkbox' : 'square-outline'} size={20} color={colors.accent} />
+                    <Text style={[styles.choiceText, { flex: 1 }]}>
+                      自动执行（不弹确认）— 与本地 Codex 默认最高权限一致
+                    </Text>
+                  </Pressable>
+                  {!codexAutoExecute ? (
+                    <Text style={styles.hint}>关闭后创建节点不会下发 approvalPolicy / sandboxMode;行为接近 `anet node create --no-yolo`。</Text>
+                  ) : null}
+                </View>
+                {runtimeId === 'codex-app-server' ? <DaemonCreateProvider key={managedIdentity} cfg={cfg}
+                  daemonId={daemon.daemon_node_id} identity={managedIdentity} enabled={managedMode}
+                  onMode={enabled => { setManagedModeState(enabled ? managedIdentity : ''); setManagedSelectionState(null); setProviderForm(EMPTY_PROVIDER_FORM); }}
+                  onSelection={value => setManagedSelectionState(value ? { identity: managedIdentity, value } : null)} /> : null}
+                {!managedMode ? <CodexProviderFields
+                  runtimeId={runtimeId}
+                  value={providerForm}
+                  issues={providerIssues}
+                  transportOk={transportOk}
+                  hubBlocked={providerForm.choice !== 'none' && providerIssues.length === 0}
+                  onChange={next => { setProviderForm(next); setProviderResetHint(''); }}
+                /> : null}
+              </>
+            ) : null}
+            <DaemonRuntimeProviders
+              daemon={daemon}
+              rows={daemonProviderRows}
+              read={daemonProviderRead}
+              runtimeId={runtimeId}
+              opencodeGeneration={opencodeGeneration}
+              onSelectModel={setModel}
+            />
           </View>
         )}
 
@@ -597,13 +713,22 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 </Pressable>
               ))}
             </View>
+            {surface.kind === 'opencode-native' ? <OpenCodeProviderNote /> : null}
             {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
               <View style={styles.section}>
                 <Text style={styles.label}>目标机器已配置的 provider/model</Text>
+                <View testID="opencode-v2-model-choices" style={styles.choiceList}>
+                  {daemonModelChoices.map(m => (
+                    <Pressable key={m} testID={`opencode-v2-model-choice-${m}`} accessibilityRole="button" accessibilityLabel={`选择模型 ${m}`} onPress={() => setModel(m)} style={[styles.choiceRow, model === m && styles.choiceRowSelected]}>
+                      <Text style={[styles.choiceText, model === m && styles.choiceTextSelected]}>{m}</Text>
+                      {model === m ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+                    </Pressable>
+                  ))}
+                </View>
                 <TextInput testID="opencode-v2-model" value={model} onChangeText={setModel}
                   autoCapitalize="none" autoCorrect={false} placeholder="provider/model" style={styles.input} />
                 <Text testID="opencode-v2-model-hint" style={[styles.hint, !!openCodeError && styles.hintErr]}>
-                  {openCodeError ?? '上方是建议值，不保证可用；模型与登录凭据以目标机器配置为准。这里不收集密钥。'}
+                  {openCodeError ?? '点选这台机器已上报的模型。没有列表时再手填 provider/model。这里不收集密钥。'}
                 </Text>
               </View>
             ) : null}
@@ -686,14 +811,35 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             <View style={styles.summaryCard}>
               <SummaryRow k="服务器" v={`${daemon.alias} (${daemon.hostname || '—'})`} />
               <Divider />
-              <SummaryRow k="名字" v={normalizeNodeName(name) || '—'} />
+              <View style={styles.summaryRow}>
+                <Text style={styles.summaryKey}>名字</Text>
+                <View style={styles.summaryValWithAction}>
+                  <Text style={styles.summaryVal} numberOfLines={2} testID="create-name-summary">{normalizeNodeName(name) || '—'}</Text>
+                  <Pressable testID="create-name-edit" accessibilityRole="button" accessibilityLabel="修改节点名字"
+                    hitSlop={8} onPress={() => setStep('name')}
+                    style={({ pressed }) => [styles.summaryEdit, pressed && { opacity: 0.6 }]}>
+                    <Text style={styles.summaryEditText}>修改</Text>
+                  </Pressable>
+                </View>
+              </View>
               <Divider />
               <SummaryRow k="Runtime" v={runtimeDisplayLabel(RUNTIMES, runtime)} />
               {runtimeId === 'opencode-cli' ? (
-                <><Divider /><SummaryRow k="代际" v={opencodeGeneration === 'v2' ? 'V2 · 实验性 TUI 共存' : 'V1 · 兼容默认'} /></>
+                <><Divider /><SummaryRow k="代际 / 模式" v={OPENCODE_GENERATION_LABELS[opencodeGeneration]} /></>
               ) : null}
               <Divider />
-              <SummaryRow k="模型" v={model || runtime.models[0] || '跟随宿主登录'} />
+              <SummaryRow k="模型" v={managedSelection?.model || model || runtime.models[0] || '跟随宿主登录'} />
+              {managedSelection ? <><Divider /><SummaryRow k={t('providerManagement.create.summary')}
+                v={`${managedSelection.provider_id} · ${managedSelection.auth_id} · r${managedSelection.revision}`} /></> : null}
+              {surface.kind === 'codex' && providerForm.choice !== 'none' ? (
+                <>
+                  <Divider />
+                  <SummaryRow
+                    k={t('provider.summaryLabel')}
+                    v={`${t(presetLabelKey(providerSummary(providerForm).preset))} · ${providerSummary(providerForm).model || '—'} · ${t('provider.credential.entered')}`}
+                  />
+                </>
+              ) : null}
               {params.includes('permissionMode') ? (
                 <>
                   <Divider />
@@ -749,6 +895,18 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             </View>
             {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
               <Text testID="opencode-v2-confirm-warning" style={styles.hint}>{OPENCODE_V2_WARNING} 已显式允许所有本地工具。</Text>
+            ) : null}
+            {surface.kind === 'codex' && providerForm.choice !== 'none' && providerIssues.length === 0 ? (
+              <Text testID="codex-provider-confirm-banner" style={styles.hint}>{t('provider.err.hub_not_ready')}</Text>
+            ) : null}
+            {surface.kind === 'codex' && providerForm.choice !== 'none' ? (
+              <ProviderConfigDemo
+                key={providerForm.choice}
+                runtimeId={runtimeId}
+                value={providerForm}
+                transportOk={transportOk}
+                onClearKey={() => setProviderForm(form => ({ ...form, apiKey: '' }))}
+              />
             ) : null}
           </View>
         )}

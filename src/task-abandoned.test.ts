@@ -11,7 +11,8 @@ import {
 import { listRequirementPeople, saveRequirementAssignments } from './requirement-people-api';
 import { fetchTagCatalog } from './task-tag-catalog';
 import { fetchDepartmentRequirements } from './org-api';
-import { ABANDONED_CAPABILITY, ACCEPT_COLUMNS_HEADER, isClosedColumn, statusChoices, supportsAbandoned } from './requirement-columns';
+import { ABANDONED_CAPABILITY, ACCEPT_COLUMNS_HEADER, isClosedColumn, statusCapsuleText, statusChoices, supportsAbandoned } from './requirement-columns';
+import { capabilitiesFromPayload } from './requirements-hub';
 import { abandonedShown, applyFilter, boardColumns, EMPTY_FILTER, hiddenAbandonedCount, HIDE_DONE, matchesFilter, neighbourColumn, projectCounts, subProgress } from './task-board-model';
 import { recountChildren } from './board-sync';
 import { isOverdue } from './due-marker';
@@ -89,6 +90,9 @@ ck('废弃不逾期', !isOverdue({ due: '2020-01-01', column: 'abandoned' }, { t
 {
   const parts = src('./TaskBoardParts.tsx');
   ck('胶囊颜色:废弃 = 灰(textMuted)', /abandoned: \(\) => colors\.textMuted/.test(parts));
+  ck('废弃胶囊文字删除线,完成 / 进行中不划', statusCapsuleText('abandoned', '#888').textDecorationLine === 'line-through' && statusCapsuleText('abandoned', '#888').color === '#888' && statusCapsuleText('done', '#0a0').textDecorationLine === 'none' && statusCapsuleText('doing', '#00f').textDecorationLine === 'none');
+  ck('列表状态胶囊用灰 + 删除线', src('./TaskListTable.tsx').includes('statusCapsuleText(item.column, STATUS_TONE[item.column]())'));
+  ck('详情状态胶囊按列上删除线', src('./TaskDetailPanel.tsx').includes('statusCapsuleText(capsuleColumn, capsuleColumn === \'abandoned\' ? colors.textMuted : (open ? colors.accent : colors.text))'));
   const board = src('./RequirementBoard.tsx');
   ck('卡片 / 行标题:关闭态都划线', (board.match(/isClosedColumn\(item\.column\) && s\.cardDone/g) ?? []).length === 2 && src('./TaskListTable.tsx').includes('isClosedColumn(item.column) && s.cardDone'));
   const pickers = ['./TaskCardMenu.tsx', './TaskListCellEditor.tsx', './TaskDetailPanel.tsx'];
@@ -129,6 +133,20 @@ ck('废弃不逾期', !isOverdue({ due: '2020-01-01', column: 'abandoned' }, { t
   ck('旧 Hub:折叠列 / 胶囊 / 开关都以 abandonedOk 为前提', (board.match(/abandonedOk && /g) ?? []).length >= 3);
   ck('左栏人 / 节点计数跟着废弃的显示状态走', src('./TaskFilterSidebar.tsx').includes('showAbandoned: abandonedShown(filter)'));
   ck('废弃列不给「添加任务」', board.includes("{col.column === 'abandoned' ? null : quick ? ("));
+  ck('收起的废弃栏可以拖进去(和别的列一样换状态)', board.includes("taskColumn: 'abandoned'"));
+  const pagerAt = board.indexOf('testID="req-pager"');
+  const pagerOpen = board.lastIndexOf('<ScrollView', pagerAt);
+  ck('手机分页胶囊是横向滚动,窄屏不把「废弃」挤出屏幕', pagerAt > 0 && pagerOpen > 0 && pagerAt - pagerOpen < 500 && board.slice(pagerOpen, pagerAt).includes('horizontal'));
+  ck('搜索只命中废弃时不拿「没找到」盖住展开入口', board.includes('searchBlockedByAbandoned') && board.includes('!searchBlockedByAbandoned'));
+  ck('搜索条能打开「显示已废弃」', board.includes('onShowAbandoned=') && src('./TaskSearch.tsx').includes('testID="task-search-show-abandoned"'));
+  ck('整表刷新即使 capabilities 为空也写回(Hub 降级)', board.includes('patchTaskBoard(scope, { items: list, capabilities, truncated: cut })') && !/if \(capabilities\.length\) patchTaskBoard/.test(board));
+  ck('增量刷新:响应带了 capabilities(含空数组)才覆盖', board.includes('delta.capabilitiesKnown') && board.includes('capabilities: delta.capabilities'));
+}
+{
+  ck('capabilities 空数组 = 已知且没有能力', capabilitiesFromPayload({ capabilities: [] }).known === true && capabilitiesFromPayload({ capabilities: [] }).capabilities.length === 0);
+  ck('没有 capabilities 字段 = 未知,增量不能拿空数组覆盖', capabilitiesFromPayload({}).known === false && capabilitiesFromPayload({ capabilities: 'abandoned' }).known === false);
+  ck('capabilities 只留字符串', capabilitiesFromPayload({ capabilities: ['column_abandoned', 1, null] }).capabilities.join() === 'column_abandoned');
+  ck('角标轮询也认空的能力列表', src('./task-unread-store.ts').includes('if (delta.capabilitiesKnown) caps = delta.capabilities') && src('./task-unread-store.ts').includes('caps = list.capabilities'));
 }
 
 // ── 4. 中英文 ──

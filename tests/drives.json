@@ -1,6 +1,58 @@
 {
   "//": "Every tests/*/drive.mjs and tests/*/run.mjs, and how CI runs it. stub = needs only the web export + Chromium (run by .github/workflows/drives.yml in shards; secs = measured runtime, used to balance shards); docker = builds its own bundle with its Dockerfile (nightly job); hub / manual = not in CI, with the reason. src/drive-registry.test.ts fails when a drive is missing here.",
   "drives": {
+    "ios-app-store-status/run.mjs": {
+      "kind": "manual",
+      "why": "Runs automatically in the dedicated ios-app-store-status Docker job in unit-tests.yml on push and PR; tests the protected workflow's read-only ASC projection with fixtures, not a browser/export shard."
+    },
+    "test1079-working-tab/drive.mjs": {
+      "kind": "manual",
+      "why": "Dedicated agent-working-tab.yml runs staged Docker core and real exported desktop/phone UI automatically on relevant PRs; excluded from duplicate generic stub shards."
+    },
+    "node-confirm-contrast/drive.mjs": {
+      "kind": "stub",
+      "secs": 35
+    },
+    "scoped-secrets/drive.mjs": {
+      "kind": "manual",
+      "why": "Dedicated scoped-secrets.yml builds the independent Dockerfile, validates core protocol/types first, then node and Daemon exported UI with a synthetic scoped Hub in Docker. Not a live secret, native install or inference test."
+    },
+    "daemon-settings-window/drive.mjs": {
+      "kind": "stub",
+      "secs": 15
+    },
+    "test1020-hub-tokens/drive.mjs": {
+      "kind": "manual",
+      "why": "Dedicated hub-token-management.yml builds the independent Dockerfile, core then actual exported App with synthetic scoped MCP/native HTTP. Not a live Hub or inference test."
+    },
+    "test1018-prelogin-update/drive.mjs": {
+      "kind": "manual",
+      "why": "Dedicated prelogin-update.yml builds the independent Dockerfile, core then actual empty-account exported App. Not a native installation test."
+    },
+    "test998-reauth/drive.mjs": {
+      "kind": "manual",
+      "why": "Focused tests/test998-reauth/Dockerfile core then actual exported mobile login with synthetic HTTP/localStorage; not a native device or live Hub test."
+    },
+    "provider-create/drive.mjs": {
+      "kind": "manual",
+      "why": "Dedicated provider-create.yml builds the actual export and runs this synthetic wizard in Docker after core checks, not shared stub shards."
+    },
+    "hub-provider-management/drive.mjs": {
+      "kind": "manual",
+      "why": "Dedicated hub-provider-core.yml builds tests/hub-provider-management/Dockerfile and runs actual exported React with synthetic Hub/native HTTP in Docker; not the shared stub shards."
+    },
+    "daemon-provider-login/drive.mjs": {
+      "kind": "stub",
+      "secs": 15
+    },
+    "daemon-provider-management/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
+    "daemon-provider-scope/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
     "user-avatar/drive.mjs": {
       "kind": "manual",
       "why": "Self-contained component Docker/Chromium fixture; dedicated user-avatar job in unit-tests.yml runs it on push and PR, not the shared web-export runner."
@@ -12,6 +64,10 @@
     "model-change-deadline/drive.mjs": {
       "kind": "stub",
       "secs": 115
+    },
+    "codex-reasoning-effort/drive.mjs": {
+      "kind": "stub",
+      "secs": 45
     },
     "opencode-v2-create/drive.mjs": {
       "kind": "stub",
@@ -73,8 +129,14 @@
       "kind": "stub",
       "secs": 101
     },
-    "test-chat-older-batches/drive.mjs": { "kind": "stub", "secs": 70 },
-    "test-chat-first-paint/drive.mjs": { "kind": "stub", "secs": 75 },
+    "test-chat-older-batches/drive.mjs": {
+      "kind": "stub",
+      "secs": 70
+    },
+    "test-chat-first-paint/drive.mjs": {
+      "kind": "stub",
+      "secs": 75
+    },
     "test-chat-time-visible/drive.mjs": {
       "kind": "stub",
       "secs": 30
@@ -336,10 +398,6 @@
       "kind": "stub",
       "secs": 32
     },
-    "test-share-card/drive.mjs": {
-      "kind": "stub",
-      "secs": 36
-    },
     "test-shortcuts-settings/drive.mjs": {
       "kind": "stub",
       "secs": 20
@@ -493,6 +551,14 @@
     "test-window-controls/drive.mjs": {
       "kind": "stub",
       "secs": 20
+    },
+    "task-list-pagination/drive.mjs": {
+      "kind": "manual",
+      "why": "Runs automatically in the dedicated task-list-pagination.yml Docker workflow: exact baseline and candidate exports, offline495-row fixture and /output metrics. Not the shared external bundle/shard runner."
+    },
+    "task-tag-status/drive.mjs": {
+      "kind": "stub",
+      "secs": 14
     }
   }
 }

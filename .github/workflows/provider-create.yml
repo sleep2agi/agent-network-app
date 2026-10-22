@@ -1,0 +1,26 @@
+name: Provider creation client core
+on:
+  pull_request:
+    paths:
+      - 'src/CreateNodeWizardScreen.tsx'
+      - 'src/DaemonCreateProvider.tsx'
+      - 'src/daemon-provider-create*'
+      - 'src/create-node-request*'
+      - 'src/i18n-provider-management.ts'
+      - 'tests/provider-create/**'
+      - '.github/workflows/provider-create.yml'
+permissions:
+  contents: read
+jobs:
+  core:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+      - name: Creation references and typecheck (Docker)
+        run: |
+          sg docker -c 'docker build --target core -f tests/provider-create/Dockerfile -t anet-app:provider-create-core .'
+          sg docker -c 'docker run --rm --network none anet-app:provider-create-core'
+      - name: Actual exported wizard (Docker)
+        run: |
+          sg docker -c 'docker build --target browser -f tests/provider-create/Dockerfile -t anet-app:provider-create-browser .'
+          sg docker -c 'docker run --rm --network none anet-app:provider-create-browser'

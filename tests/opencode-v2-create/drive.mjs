@@ -76,8 +76,13 @@ try {
     await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
     await page.waitForFunction(() => !!window.__anetLayoutSweep);
     await open(page);
+    assert.equal((await page.getByTestId('runtime-row-opencode-cli').innerText()).includes('TUI 共存'), false,
+      'shared OpenCode runtime label must not promise TUI copresence for V1');
+    assert.equal(await page.getByTestId('opencode-generation-v1').innerText(), 'V1（兼容默认 · headless）');
+    assert.match(await page.getByTestId('opencode-v1-mode-note').innerText(), /不请求 TUI 共存/);
     assert.equal(await page.getByTestId('opencode-generation-v1').getAttribute('aria-checked'), 'true');
     await chooseV2(page);
+    assert.equal(await page.getByTestId('opencode-v1-mode-note').count(), 0);
     await page.getByTestId('opencode-generation-v1').click(); await chooseV2(page);
     await page.getByTestId('runtime-row-codex-app-server').click();
     await page.getByTestId('runtime-row-opencode-cli').click();
@@ -132,8 +137,27 @@ try {
     await page.getByText('✓ v2-fixture 已上线', { exact: true }).waitFor({ timeout: 7000 });
     await open(page); await chooseV2(page);
     await page.getByTestId('runtime-row-codex-app-server').click(); await next(page);
-    const codex = await submit(page); assert.deepEqual(codex.flags, { copresence: true });
-    console.log(`PASS ${tag}: V1 completion and Codex payload unchanged; consent does not leak`);
+    const codex = await submit(page);
+    assert.deepEqual(codex.flags, {
+      copresence: true,
+      approvalPolicy: 'never',
+      sandboxMode: 'danger-full-access',
+      skipGitRepoCheck: true,
+      copresenceFullAccess: true,
+    });
+    console.log(`PASS ${tag}: V1 completion; OpenCode consent does not leak; Codex carries copresence + yolo defaults`);
+    if (tag === 'desktop-light') {
+      await open(page);
+      await page.getByTestId('runtime-row-codex-app-server').click();
+      const consent = page.getByTestId('codex-auto-execute-consent');
+      await consent.waitFor();
+      if (await consent.getAttribute('aria-checked') === 'true') await consent.click();
+      assert.equal(await consent.getAttribute('aria-checked'), 'false');
+      await next(page);
+      const codexNoYolo = await submit(page);
+      assert.deepEqual(codexNoYolo.flags, { copresence: true });
+      console.log(`PASS ${tag}: Codex with auto-exec off sends only copresence`);
+    }
     assert.deepEqual(errors, []); await ctx.close();
   }
   console.log('PASS rendered V2 creation UI; fixture Hub only, no native app or production acceptance');

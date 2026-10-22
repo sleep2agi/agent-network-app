@@ -158,6 +158,6 @@ export function skillsStatusMessage(status: 'pending' | 'in_progress' | 'done' |
       return unknownOpMessage(error, session) ?? `节点读取技能失败:${error ?? '未说明原因'}`;
     case 'timeout':
       // 技能区只对上报了 skills_capable 的会话显示,所以超时不是版本问题,是连接/节点状态问题。
-      return '节点 60 秒内没有取走这次请求:多半是节点和服务器之间的实时连接断了,或节点卡住了;重启这个节点通常能恢复';
+      return '节点 60 秒内没有取走这次请求:多半是节点和 Hub 之间的实时连接断了,或节点卡住了;重启这个节点通常能恢复';
   }
 }

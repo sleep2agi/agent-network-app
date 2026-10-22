@@ -28,7 +28,9 @@ import {
   fetchScheduledRuns,
   fetchScheduledTasks,
   fetchStatus,
+  fetchScopedStatus,
   fetchTaskDetail,
+  fetchTaskInspection,
   fetchTasks,
   fetchUserMessages,
   fetchUserMessagesWithSystemRows,
@@ -76,6 +78,10 @@ type Scope =
  * table cannot be used to wave an endpoint through on paper.
  */
 const ENDPOINTS: Record<string, { scope: Scope; drive: () => Promise<unknown> }> = {
+  fetchScopedStatus: {
+    scope: { kind: 'network' },
+    drive: () => fetchScopedStatus(cfg),
+  },
   fetchStatus: {
     // Known gap, same shape as the /api/tasks defect this file was added with.
     // Not changed here because scoping it changes which agents the list shows,
@@ -133,6 +139,10 @@ const ENDPOINTS: Record<string, { scope: Scope; drive: () => Promise<unknown> }>
   fetchTaskDetail: {
     scope: { kind: 'network' },
     drive: () => fetchTaskDetail(cfg, 'task_1'),
+  },
+  fetchTaskInspection: {
+    scope: { kind: 'network' },
+    drive: () => fetchTaskInspection(cfg, 'task_1'),
   },
   fetchMessages: {
     // Same known gap as fetchStatus.

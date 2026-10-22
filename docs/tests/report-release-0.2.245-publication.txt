@@ -1,0 +1,75 @@
+Release 0.2.245 publication receipt — Hub #959 / app #837
+OBSERVED_AT: 2026-10-11T20:00:12Z (2026-10-12 04:00:12 +08)
+
+Scope: macOS arm64 and Windows x64 Daemon settings independent window.
+Android keeps its existing in-app navigation. Linux and iOS not selected.
+No new Provider/account/model mutation, live inference, or business restart.
+
+Authoritative release source: main 39a29d78b36772d6a08a445278c208b8e100718f
+Feature PR840; version PR870; both normally merged before formal builds.
+Fresh origin/main ancestor check exited 0 before publishing.
+Formal desktop run: 38168987093
+  macOS job114557411418 SUCCESS
+  Windows job114557411694 SUCCESS
+  verify-draft job114561030640 SUCCESS
+Formal Android build: 38168989297 SUCCESS (same exact main SHA).
+
+GitHub release: desktop-v0.2.245 / release409887016
+  https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.245
+  Published 2026-10-11T19:59:10Z; draft=false; prerelease=false.
+  Published lightweight tag resolves to the exact release source above.
+  Eight primary assets, no Linux assets. GitHub individual asset digests:
+  ANet_0.2.245_aarch64.app.tar.gz 38288321B
+    bc11fa0ab91fc5e112d7e766c89762ac905b2189643e6d236bad15164da3908a
+  ANet_0.2.245_aarch64.app.tar.gz.sig 400B
+    26bec0921a71db500a94c8e35ae7a4c9fb8404e3683c67e462eb9cc9a27fe4e9
+  ANet_0.2.245_aarch64.dmg 38939185B
+    9d11e18fe0fe3a425b73b3685e32f0f3a05bd492c9a071e7a96233f8872aa71a
+  ANet_0.2.245_x64-setup.exe 37351738B
+    2bb89c7623af37b08aa6592631b901bdacf1c29b03aaa476a833d90abe8c3813
+  ANet_0.2.245_x64-setup.exe.sig 416B
+    620d6d501dddebb73b564aca722a01b41ba3ce0957c96bd5750a728c43339905
+  ANet_0.2.245_x64_en-US.msi 51163136B
+    7c9ff45e9abc82e173fd6403696567c15cd2f040befa805be14614565c484986
+  ANet_0.2.245_x64_en-US.msi.sig 416B
+    33bde93d95ad1e765e5fe6169f494c83c80ce52f3e5d508ec6b03a67e5c95bd2
+  latest.json 88863B
+    e99a7d577072af8819a7a144dfdbc7ba419d375561971f63e8c114bf38e981a0
+These are individual release asset digests, not artifact archive digests.
+
+Android channel publish38169948155 / job114560272709 SUCCESS.
+  Package com.anonymous.agentnetworkapp; versionName0.2.245/code2245.
+  Existing debug signing identity retained; not a new production keystore.
+  APK83790625B SHA256
+    deecd52cde9dbaee8b299384032190d1d47109d47cecb129899210db0396632b
+  Existing publish workflow anonymously downloaded full APK and matched hash;
+  notes, checksum and android/latest/VERSION verified byte-for-byte.
+  https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/agent-network-0.2.245.apk
+
+Bounded anonymous updater read in Docker:
+  sg docker; image anet-app:client245-release-metadata
+  --rm --init; no host mounts, credentials, or software installation.
+  https://www.anet.sh/desktop/update/latest.json
+    HTTP200 / version0.2.245 / Cache-Control:no-store,max-age=0
+    Required darwin-aarch64/windows-x86_64 entries have signatures and
+    browser URLs under desktop-v0.2.245; no Linux entries.
+  ModelScope android/latest/VERSION HTTP200 / 0.2.245.
+  Exit0; container removed. No duplicate APK/native app sample executed.
+  Desktop manifest drift run38170294057 SUCCESS.
+
+China desktop mirror final receipt (2026-10-11T20:02:30Z / 04:02:30 +08):
+  Manual run38170292151 / job114561563210 SUCCESS (WAIT_APK0).
+  At20:01:44Z all15 planned paths verified; newest desktop/latest included.
+  Large installers/updater bytes: anonymous ranged GET and exact SHA256 via
+  ModelScope listing. Small signatures/manifests/VERSION: anonymous full
+  download and hash match. Do not call ranged verification a full download.
+  Automatic duplicate38170290588 completed CANCELLED, not SUCCESS.
+  Android is verified in its separate android/ channel, not a desktop release
+  asset; mirror's no-Android-APK warning does not contradict Android receipt.
+
+Boundaries: package build/signing/smoke and browser/IPC window fixtures do not
+prove actual macOS/Windows window-manager interactions, real OAuth, model
+entitlement, or complete Provider acceptance. #959 native checklist remains
+open rather than inheriting those claims from publication.
+Reconstruction/upgrade/rollback procedure remains docs/desktop-release-sop.md;
+no deployment topology, secret source, production state or DB changed here.

@@ -1,0 +1,112 @@
+TEST-ONLY / INCOMPLETE RELEASE CANDIDATE — NOT A PUBLIC PACKAGE
+Observed 2026-10-11 17:52 +08:00.
+
+Initial base main: 7a20a358e6859210e8762c695a7922eeacdf3221
+Rebased preparation onto main 552b950c263b9566355e082145216e97bd2a58dc
+after PR796 normal squash merge (23 SUCCESS / 1 SKIPPED at exact head
+0062f47299b8a2d6034c5bced588b709155bff0c; dedicated Docker scope 233/233).
+Worktree: isolated release/0.2.239-existing-codex (uncommitted preparation).
+Paired backend main: 347a450c6233c940fd8e457aadbeceb68efa18fe
+Intended packages: Hub 0.9.0-preview.123, CLI 2.3.0-preview.165,
+runtime 2.5.0-preview.131, client 0.2.239 / Android versionCode 2239.
+
+Core preparation verification only, all execution in Docker:
+- Image anet-app:provider-hierarchy-web, candidate mounted read-only;
+  candidate source copied into disposable /app, never global host packages.
+- bun --no-install src/local-daemon.test.ts: 34 checks passed.
+- npm run typecheck: exit 0 (tsconfig.build.json).
+- git diff --check: exit 0.
+- Local Hub sidecar static contract: 14 PASS items after real Hub .123 lock
+  alignment; not an installed sidecar or live public URL test.
+- Native installer narrow offline suite: 19/19, 1 explicit filtered test
+  (real CLI download fallback). Fixture Hub returns .123, installed runtime
+  expectation .131. npm and Hub are synthetic in-container adapters.
+  CLI constant/fallback remains .164 until the formal .165 bytes exist, so
+  this is preparation evidence, NOT the final .165/.131 package gate.
+
+Harness correction, retained as a failure rather than a product failure:
+- First attempted the Playwright final UI image with plain Node on an
+  extensionless TypeScript import. ERR_MODULE_NOT_FOUND; tests did not run.
+  Its final stage has no full application build dependencies. Reused the
+  existing build image with the repository's Bun runner instead; no source
+  assertion was weakened and no host test execution occurred.
+- Native Docker login-shell reset PATH: first cargo invocation did not run.
+  Reused the image's declared PATH with a non-login shell instead.
+- First native suite retained old .122 positive Hub fixtures and returned
+  15/20, five failures at the newly stricter Hub precheck. Positive fixtures
+  were aligned with .123 and .131, without changing production guards or
+  negative assertions; the narrow 19/19 result above supersedes this scope,
+  not the still-unexecuted real .165 download fallback.
+
+Unverified release dependencies, do not claim ready:
+- Formal Hub .123 run38128502996 and runtime .131 run38128504297 queued.
+- Both exact-main source build jobs have since succeeded; their four publish
+  gates still queued as of 17:36 +08. CLI .165 run38128894984 dispatched once.
+- Runtime .131 downloaded artifact: 588828 bytes, SHA256
+  53a2518ec0cbdb9f2b0a899a32e4528f62406de514f54bbcea547bc2593a982c.
+- CLI .165 formal artifact and its verified fallback SHA256 not yet available;
+  local_daemon.rs still retains the old .164 URL/hash until formal bytes exist.
+- Hub .123 exact-main build artifact has been downloaded from the above run:
+  1221517 bytes, SHA256 bd58434d88121ee00fd9d1d6477aa3d3dec2a5c979f1bf4b81c9fbff21ec3294.
+  The Hub sidecar lock is aligned with its real SHA512 integrity. Its candidate
+  public URL was not live at the initial 17:36 checkpoint.
+  No local-hub sidecar build or installed-package success is claimed.
+- Full native package and formal macOS/Windows/Android gates not run for this
+  candidate yet. Linux remains deferred.
+
+No production config, credentials, Provider state, session, or process changed.
+Disposable --rm verification containers exited; candidate worktree retained.
+Installation/recovery authority remains docs-site/docs/deploy/daemon.md in
+the backend repository and local-hub-sidecar scripts in this repository.
+
+17:46 update: Hub .123 and runtime .131 formal runs completed SUCCESS,
+including npm publication. Exact versions anonymously visible in registry;
+GitHub tarballs anonymously downloaded completely in Docker and their sizes
+and SHA256 match the above values. Production Hub/Daemon NOT upgraded.
+Original CLI165 run38128894984 passed install/pins/notes, doc gate FAILED
+(.164 preview claims), publication SKIPPED. Fixed bilingual assertions via
+PR2595 main3b5dec670088ef69c6bc2de11058247685e67f44; fresh formal CLI165
+run38129649639 started. Do not reuse the failed-gate artifact as public bytes.
+
+User navigation clarification: Daemon management hides the unrelated Agent/
+people/message sidebar, retaining rail, own navigation and search return.
+Candidate App.tsx and full candidate src copied into disposable Docker:
+daemon-node suite33/33 + typecheck exit0. Initial partial source copy had an
+older fixture missing (CloneNodeFixtureScreen), not a product failure; complete
+candidate source fixed harness input. Real exported UI sidebar assertions are
+being added to the existing discovery drive before final package acceptance.
+These checks are NOT native installation, OAuth or provider reuse verification.
+
+17:54 update: the CLI165 main3b5dec formal run now has all four gates PASS;
+npm publish step succeeded (registry visibility check still pending).
+GitHub formal archive anonymously verified in Docker: 2117329B, SHA256
+027fa43ade83eab14561f5951040b6d988898fbca798be851e4215f7c51906a8.
+This differs from the failed-gate TEST-ONLY artifact; the installer URL and
+digest now pin the fresh formal bytes. Final Rust installer suite20/20 PASS,
+0 filtered, including actual public archive hash/install fallback and paired
+runtime131; npm install/Hub registration are fixture adapters, no production
+identity or model inference. The earlier19/19 filtered scope is superseded
+only for this installer core chain.
+
+Fresh Docker UI image anet-app:test906-client239-ui:
+sha256:25539b2767140862c600b55fbc5f60683b34613cdf676d6432409ccf902449f7.
+Locked inputs build, provider logic26/26, full candidate typecheck, Expo web
+export PASS. Browser run follows separately; no native package claim.
+
+17:54:29+08: fresh exported React + Chromium core drive16/16 PASS, --rm
+--network none. The three added assertions cover Agent sidebar initially
+present, hidden in actual Daemon management, restored after returning to
+Agents. Existing13 discovery assertions retained; no product assertions
+removed. Placeholder API responses only, not production Hub/native runtime.
+Screenshots codex-discovery.png / codex-discovery-selection.png retained as
+local test evidence, not public installable binaries. No browser page errors.
+
+18:00+08 incremental CI correction: exact0fab5951 Ubuntu push unit job
+114442317807 completed398/399 test files; only version-consistency failed
+because its expected constant remained0.2.238 after the product version bump.
+Updated the expected value to0.2.239, retaining all fourteen assertions.
+Disposable Docker anet-app:provider-login-version-web with complete candidate
+version inputs, --network none: version-consistency14/14 PASS. The first
+attempt used the browser-only final image, which has no source tree; cp failed
+before testing. Correct source image run passed; no test failure was hidden.
+Other source-head CI and native formal packages remain independently pending.

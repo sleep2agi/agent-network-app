@@ -1,0 +1,43 @@
+OBSERVED_AT=2026-10-11T19:35:03Z (2026-10-12 03:35:03 Asia/Shanghai)
+Requirement: original Hub #959 / app issue #837; no new product ticket.
+Feature PR840 merged normally into main c8b996ef5235313f67a062a76ccf6a2433d692c7.
+This clean worktree starts at that exact main commit.
+
+Release preparation only
+- Client version 0.2.245 synchronized in all eight authoritative files;
+  Android versionCode 2245. Cargo.lock changes only the root app package.
+- Added the scoped Daemon-window user notes; generated bundled notes and
+  refreshed published dates with the existing generator. No new dependencies.
+- Original feature core Docker report retained independently in
+  docs/tests/report-test959-daemon-settings-window.txt (24/24 IPC fixture).
+  Ubuntu and Windows unit/typecheck on exact PR head 5bf1f262 passed before
+  merge. Other jobs were not all terminal; no blanket CI-green claim.
+- This preparation adds no new runtime/Provider/backend behavior and no SDK
+  upgrade. Android continues the in-app screen. Linux is deferred.
+
+Focused metadata test only, after existing feature core gate
+Dockerfile: tests/release-metadata/Dockerfile
+Pinned Bun 1.3.14 base digest e10577f0db68676a7024391c6e5cb4b879ebd17188ab750cf10024a6d700e5c4
+Image ID: sha256:e56f16ddde27a55c88921259e59465d9d8319e920309f20e76b2ee984380a844
+sg docker build and --rm --network none run: exit 0.
+Version consistency: 14/14 PASS.
+Bundled notes: 7/7 PASS.
+Release notes hygiene: 9/9 PASS.
+No native package acceptance, release or live account/model inference claimed.
+
+Publication boundary / recovery
+- No desktop-v0.2.245 remote tag or matching draft observed at preflight.
+  Recheck immediately before dispatch; never reuse an existing release/tag.
+- This branch is TEST-ONLY, not a release source. Version PR must normally
+  merge; formal workflows must receive its exact merged 40-character main SHA
+  and verify that SHA remains an ancestor of main.
+- Signed Mac/Windows use release-desktop-auto-update.yml, include_linux=false.
+  Android uses android-build.yml then modelscope-android-publish.yml with the
+  same exact main SHA. Do not dispatch iOS ahead of primary platforms.
+- Signing and mirror secrets stay in repository environments; no secret
+  material is copied. Draft/package gates and anonymous channel checks remain.
+- Workflow launch, approval, audit, activation, rollback and data retention:
+  docs/desktop-release-sop.md. Existing installers, identities, configuration,
+  account/session data and product deployment topology are unchanged here.
+- Container removed automatically. Isolated test image and source worktree
+  retained; no host/global package install or production write by this test.

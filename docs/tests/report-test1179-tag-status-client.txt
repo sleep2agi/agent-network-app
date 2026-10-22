@@ -1,0 +1,147 @@
+#1091/#1179 client tag-by-status chart — main source complete
+
+Desktop stacked columns / phone horizontal bars show four current unarchived
+states, Top10 plus expansion, exact counts and a separate no-label bucket.
+Memberships count each distinct tag; summed memberships are not unique tasks.
+Complete Hub tag_status must match current project scope; malformed/old Hub
+data explicitly uses partial loaded cards without assuming a500-row limit is
+full. Request scope keys prevent late project responses from overwriting the
+current selection. Project_id/none is sent to stats; old Hubs ignoring scope
+fall back to project-filtered loaded history. Chart clicks clear unrelated
+search/role filters and select exactly tag/no-label + status + existing project
+in the existing paged list; abandoned is explicit. No chart dependency added.
+
+Validation pending: Docker pure contract/model plus existing dashboard and
+typecheck, then actual Expo web export in Chromium desktop/phone with synthetic
+Hub. Covers whole516 vs loaded35,501 doing beyond client page, duplicate tags,
+old completion, literal/no-label, four states, Top10/expand, project/none, late
+scope response, and actual list drill-down. This is software validation, not
+original native-device/model acceptance. No local application tests run.
+
+Recovery: unchanged desktop/mobile startup, ports, encrypted credential sources
+and locked packages. An exact merged-main client archive reproduces the chart;
+rollback uses the previous signed client. No schema/state migration or private
+data mutation. Git clone does not restore user history/private keys; existing
+backup sources remain necessary and whole private-key recovery NOT_COVERED.
+Hub software contract is already published; this patch does not adopt Hub139
+or alter any original node/daemon/provider/model/thread/login.
+
+Initial metadata CI38473722978 failed because the fixed version assertion still
+expected257 after the258 bump; update that assertion with unchanged checks.
+The first superseded source runs were cancelled to release shared runners;
+final source validation is pending on the current head.
+
+First e529e36a CI38473885707: model18/18, existing dashboard65/65 and
+typecheck PASS; desktop new/old Hub and drill-down PASS. Phone project scope
+passed, but a1/502 fraction was subpixel-wide and its neighbor intercepted
+an ordinary click. Keep exact counts, give nonzero segments a6px visual floor
+and44px count-button targets; retain the unforced actual click test. Initial
+avatar radius and people drive-registry gates also FAIL: use radius.inline and
+register the new drive as a stub in the existing complete registry, preserving
+all gate assertions. Bounded local radius30/30 PASS; final CI pending.
+
+Final chart/runtime inputs at5bf576aacad13eff517edf7852b8615e3aba8875:
+Docker38474479962/job115561679526 SUCCESS22:03:03Z, contract18/18, existing
+dashboard65/65, full typecheck PASS, actual exported Chromium desktop/phone
+full/old Hub52/52 checks PASS. The original ordinary thin-segment click now
+passes on phone;6px geometry verified. Project/none, late old scope, Top10/
+expand, exact/no-label/abandoned actual list drill-down and no page errors all
+passed. Screenshots/result are in TEST-ONLY-task-tag-status-ui artifact.
+Finalebb3039e full Linux/Windows413/413 test files and i18n guard83/83
+PASS38475149339; pagination38475149473 PASS after the network-only failure.
+Before release, source review found the existing browser dashboard contract
+requires recent completions directly below the heroes. Place the tag chart
+after that existing overview on both layouts and run the unchanged existing
+dashboard browser drive in the same staged Docker job. No old layout/share
+assertion is relaxed. Intermediate6aff layout omitted the phone insertion;
+restore it before validation/publication. Final layout validation pending.
+5bf global unit412/413 failed only i18n-copy-guard because its explicit import
+list lacked the new translation module; import it and add the chart to the
+guarded surfaces, leaving every original assertion. Pagination failed before
+functional tests on npm ECONNRESET; retry at the next final candidate without
+changing packages/locks or weakening checks. Metadata already PASS.
+
+Final source PR922 merged22:16:32Z to09652b43285cc11be5839c0e2bfa4978104131a8.
+Candidatef35011d208c186aecaaa826e9343a8a781127944, main and tested runtime
+inputs have identical full tree27dedcacbfc63f8a62304ceb326f3e14973e52b2.
+Final10 relevant source checks SUCCESS: all7 PR unit jobs38475901648
+(Linux/Windows413/413 test files each), metadata38475901669, pagination
+38475901556, staged tag/dashboard38475901609 attempt2. The last stages
+passed contract18/18, original dashboard model65/65, typecheck, exported
+new desktop/phone/full/old Hub52/52 and unchanged original dashboard/share
+30/30 checks. Both overview layouts retain their recent-completion placement.
+Attempt1 of the staged final layout failed at npm ci ECONNRESET/exit152 before
+functional tests; only that failed job was rerun on the same exact source,
+with unchanged packages, lock dependencies and assertions. The first failure
+remains in attempt1; it is not a proved product/native-device failure. Earlier
+version-pin/radius/registry/i18n fixture failures are retained above; no
+assertion or baseline was weakened. Own superseded/duplicate push and broad
+UI runs were cancelled, not PASS; no other owner's work was interrupted.
+
+Formal client258 desktop38476700909 and Android38476703767 were uniquely
+dispatched on main with exact09652b43285cc11be5839c0e2bfa4978104131a8 after
+fresh main-ancestor, full-tree and absence-of-version-tag/draft preflight.
+macOS-signing approved under the user's standing authorization. At this source
+checkpoint formal native builds, draft audit, public promotion and whole-file
+post-verification are pending, not claimed delivered. Linux stays excluded.
+Managed liveHub137 and original nodes/threads/model/login remain unchanged;
+source publication does not prove original-device adoption or full live Hub
+aggregation. Old Hubs explicitly show loaded partial counts; no chart uses
+a500-row page as complete. Drill-down reuses the existing loaded-list paging
+and its partial-data indication; this feature does not replace that cursor
+contract. No install, reset, account/credential/data or production mutation.
+
+Public primary software checkpoint: 2026-10-13T22:34:28Z
+desktop-v0.2.258 tag exactly points at main 09652b43285cc11be5839c0e2bfa4978104131a8.
+Formal38476700909 all3 Mac/Windows/verify-draft jobs SUCCESS. Mac notarized;
+Windows updater signatures, packaged startup/storage/retention gates passed.
+Anonymous complete native files all match authoritative GitHub asset SHA256:
+ANet_0.2.258_aarch64.dmg 38952911B sha256:24f2048018548b44f251bb61cc8be8d8bf2ac49c4b87dd37a635fbd202d305d6
+ANet_0.2.258_aarch64.app.tar.gz 38303114B sha256:e7192688971653b4037fe2a218524184beeb4ea79b56525f258050a8187ea84c
+ANet_0.2.258_x64-setup.exe 37336949B sha256:2b7ef6868fcffb0110478353d63847e86f2b7ea12826293653728bd2543b4a50
+ANet_0.2.258_x64_en-US.msi 51179520B sha256:b9c86e4097ba238c9e4cc638570fa8a8da0f1efb973ecd3fd13e81271a00d6dc
+All5 updater platform entries and3 attached signature files match latest.json.
+Android build38476703767/publisher38477788785 SUCCESS, version0.2.258/code2258; 83847157B sha256:670897835354a4ce6e56fc4c8cf48525b33c0e3892df1aee61e2dd2373f1aabc. Anonymous VERSION/checksum/notes verified 2026-10-13T22:28:18.085060+00:00. Official publisher performs full APK verification; Root did not do a second full mirror APK download.
+Publisher workflow head9c6fe55b is docs-only main after096; the artifact
+source is still096, verified main ancestor. Runtime/locks/workflows unchanged.
+https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.258
+Primary desktop and Android software delivery complete. Domestic mirror
+38478697921 and explicit main mirror38478741759 are in progress/pending at
+this checkpoint, not PASS. iOS is lower priority after both primary channels.
+Original-device adoption and live Hub137 aggregation upgrade remain separate.
+Old Hubs display partial loaded data, not full500-row assumptions.
+
+Deferred distribution checkpoint: 2026-10-13T22:53Z (#1181)
+Explicit main mirror38478741759 SUCCESS22:52:15Z, including exact-main source
+binding, upload and anonymous byte verification. Its workflow head9c6fe55b
+is docs-only main; release/tag/artifact source remains exactly
+09652b43285cc11be5839c0e2bfa4978104131a8. No release assets, tag or version
+were changed and no installer was rebuilt for the mirror.
+The own publication-triggered automatic38478697921 was waiting up to30min
+for a GitHub-attached Android APK under the legacy prepare path. All8 desktop
+assets were uploaded, and Android had already been published independently.
+Before upload began, cancel that own wait to let the existing explicit main
+mirror continue without APK waiting. Automatic run is CANCELLED, not PASS;
+no third dispatch and no other owner's run was interrupted.
+
+Independent anonymous observations22:52:45.936350Z/22:52:47.857300Z:
+desktop/latest/VERSION and mirror latest.json both0.2.258; all5 platform URLs
+point to desktop/0.2.258/ and original signatures match the public manifest.
+SHA256SUMS covers all8 public assets and matches their authoritative public
+digests. Anonymous mirror DMG range request returns206. The official mirror
+job verifies uploaded bytes; Root did not repeat a full anonymous mirror
+installer download/rehash in this checkpoint. Original complete GitHub
+installer downloads and checksums remain recorded above.
+https://www.anet.sh/desktop/update/latest.json exactly matches the public
+manifest normalized to browser download URLs, version0.2.258, sha256
+51e739f26af61728e9df8325802bea5dcbd7739a02f52df14f725f6474d2c055.
+This comparison was direct; no separate scheduled drift run is claimed.
+
+Only after Android2258 was published, desktop258 was published as Latest and
+anonymous domestic VERSION258 was observed, dispatch iOS38480716413 at
+22:53:05Z on main, with exact commit09652b43285cc11be5839c0e2bfa4978104131a8
+and upload_testflight=true. Workflow head30f7c31d is docs-only main; actual
+build source is the release commit input. Fresh ancestor check passed.
+macos-signing approved under the user's standing authorization. Signed IPA,
+TestFlight upload and Apple processing are pending, not claimed complete.
+Linux stays excluded; original devices and live Hub137 are not upgraded.

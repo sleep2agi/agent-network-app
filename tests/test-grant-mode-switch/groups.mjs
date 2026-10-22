@@ -61,7 +61,7 @@ await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
 
 // ── login ──
 await page.locator(tid('login-screen')).waitFor({ timeout: 30000 });
-await page.getByLabel('服务器地址', { exact: true }).fill(seed.hub);
+await page.getByLabel('Hub 地址', { exact: true }).fill(seed.hub);
 await page.getByLabel('用户名', { exact: true }).fill(seed.admin_user);
 await page.getByLabel('密码', { exact: true }).fill(seed.password);
 await page.locator(tid('login-submit')).click();

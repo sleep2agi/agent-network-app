@@ -1,6 +1,6 @@
 # Desktop build, acceptance, signing, and release SOP
 
-This is the release gate for the Tauri desktop app on macOS and Windows.
+This is the release gate for the Tauri desktop app on macOS, Windows, and Ubuntu 24.04 amd64.
 
 **The signed release path is CI, not a laptop.**
 `.github/workflows/release-desktop-auto-update.yml` builds, signs, notarizes,
@@ -15,7 +15,7 @@ Two workflows, two purposes:
 | Workflow | Produces | Use for |
 |---|---|---|
 | `.github/workflows/desktop-tauri.yml` | **unsigned** macOS arm64 + Windows x64 bundles, as Actions artifacts | throwaway test builds |
-| `.github/workflows/release-desktop-auto-update.yml` | **signed + notarized** bundles, updater signatures, `latest.json`, one **draft** Release | every real release |
+| `.github/workflows/release-desktop-auto-update.yml` | signed macOS (notarized) and Windows bundles; opt-in signed Ubuntu 24.04 amd64 `.deb`; updater signatures, `latest.json`, one **draft** Release | every real release |
 
 Unsigned artifacts are for testing only. Label them as such: macOS Gatekeeper
 blocks them and Windows shows SmartScreen.
@@ -118,6 +118,26 @@ gh workflow run release-desktop-auto-update.yml \
   -f commit=<40-character SHA>
 ```
 
+`publish` defaults to true. `include_linux` defaults to false: macOS and Windows
+are the primary desktop release; Android uses its separate workflow below.
+To also release Linux, pass `-F include_linux=true` on the initial dispatch.
+Do not append Linux artifacts to an already published version; use a new version
+and the same main-only release process. Linux selection does not disable any
+signing, updater, packaged smoke or retention check for selected platforms.
+
+A dry run builds, signs, and smoke-tests the selected platforms, then uploads
+Actions artifacts only:
+
+```bash
+gh workflow run release-desktop-auto-update.yml \
+  --repo sleep2agi/agent-network-app \
+  -f commit=<40-character SHA> \
+  -f publish=false
+```
+
+That still waits on `macos-signing` and, on the macOS leg, still notarizes.
+It does not create a GitHub Release, push a tag, or upload to ModelScope.
+
 The workflow's first step, `Require exact merged commit`, refuses anything
 else: the input must match `^[0-9a-f]{40}$`, must equal the checked-out `HEAD`,
 and must be an ancestor of `origin/main`. Short SHAs, tags, and branch names
@@ -171,7 +191,7 @@ main has moved, cancel it **before** approval (no certificate is used).
 
 ## 3. `macos-signing` environment approval
 
-Both matrix jobs run under `environment: macos-signing` and wait for approval.
+All selected matrix jobs run under `environment: macos-signing` and wait for approval.
 Approving authorizes use of the signing material referenced by the workflow:
 the Tauri updater key, the Apple Developer ID certificate, and the App Store
 Connect API key — all read from repository secrets by name. The Developer ID
@@ -183,9 +203,14 @@ release. Approval is what starts consuming signing and notarization quota.
 
 ## 4. What CI enforces (all of it must be green)
 
-Matrix: `macos-14 → --bundles app,dmg` and
-`windows-latest → --bundles nsis,msi`, with `fail-fast: false` so one platform
-failing still reports the other.
+Default matrix: `macos-14 → --bundles app,dmg` and
+`windows-latest → --bundles nsis,msi`. With `include_linux=true`, also build
+`ubuntu-24.04 → --bundles deb`, with `fail-fast: false` so one platform
+failing still reports the others. The Linux leg uses production
+`src-tauri/tauri.conf.json` (real updater endpoints, updater artifacts
+enabled). It does not apply `tests/linux-deb-package/tauri.test.conf.json`
+and it does not pass `--no-sign`. That test overlay remains the CI package
+probe only.
 
 1. `npm ci`, `npm test`, `npm run typecheck`, `npx expo export -p web`.
 2. Pinned local CommHub sidecar build
@@ -201,6 +226,21 @@ failing still reports the other.
 6. `tauri-apps/tauri-action` (pinned by commit SHA, not a floating tag) builds,
    signs, notarizes, and creates the **draft** release
    (`releaseDraft: true`, `prerelease: false`, `updaterJsonPreferNsis: true`).
+   On macOS the action's build command is a wrapper in this workflow file.
+   `bundle_dmg.sh` (`hdiutil` / create-dmg) can exit in a few seconds on
+   `macos-14` after the `.app` is already notarized and stapled, leaving
+   `diskimages-helper` behind. The wrapper runs the build once with
+   `--verbose`, then retries only `bundle_dmg.sh` (10s, then 20s) and
+   codesigns the DMG. It does not notarize again. A re-dispatch still checks
+   out `inputs.commit`, so the wrapper is written from this workflow rather
+   than from that commit. With `publish=false` this step is skipped and the
+   same wrapper (or `tauri build` on Windows and Linux) runs instead;
+   the bundles are Actions artifacts, not a Release. Linux signing is the
+   Tauri updater minisign key over the `.deb` bytes. There is no separate
+   Linux GPG key. The in-app updater installs that `.deb` with `dpkg` and
+   asks for administrator rights (`pkexec`, then a graphical sudo prompt,
+   then `sudo`). The package is built on Ubuntu 24.04 amd64 and is not a
+   build for Ubuntu 22.04 or other architectures.
 7. **Packaged smoke gates**, run against the binary inside the built bundle:
    `--smoke-local-hub`, `--smoke-multihub`,
    `--smoke-local-hub-crash-recovery`, `--smoke-local-hub-migration`,
@@ -216,8 +256,13 @@ failing still reports the other.
    `commhub.db` and `profiles/index.json` survive, reinstall, smoke again.
    Windows: silent NSIS install, smoke, silent uninstall, assert the binary is
    gone *and* the data survives, reinstall, smoke again.
-9. **Size ceiling**: any `.dmg`, `.exe`, or `.msi` over **55 MiB** fails the
-   job. The check is `find -size +55M`, and `find`'s `M` is **MiB**
+   Linux: `apt-get install` the `.deb`, smoke the installed
+   `agent-network-desktop`, `dpkg -r` the package, assert the binary is gone
+   and the smoke data survives, reinstall, smoke again. Credential smoke on
+   the Ubuntu runner uses the isolated test keyring helper; that helper
+   refuses to run unless the step sets its test marker.
+9. **Size ceiling**: any `.dmg`, `.exe`, `.msi`, or `.deb` over **55 MiB**
+   fails the job. The check is `find -size +55M`, and `find`'s `M` is **MiB**
    (1,048,576 bytes), so the limit is 57,671,680 bytes — do not read it as
    55 MB. At v0.2.30 the `.msi` was 48,742,400 bytes = **46.48 MiB**, leaving
    **8,929,280 bytes = 8.52 MiB (8.93 MB)** of headroom; the `.dmg` was
@@ -232,6 +277,18 @@ failing still reports the other.
 
 ## 5. Audit the draft before publishing
 
+For an unpublished draft, a by-tag API 404 does not establish that the draft is
+absent. Enumerate releases or read the known release ID, and check the draft's
+tag name, target commit and uploaded asset IDs. A cancelled build can leave a
+draft behind while a later build replaces its assets.
+
+If correcting this iteration's unpublished draft target after every selected
+main build succeeds, first prove that its assets came from those builds. Send
+`tag_name`, `draft: true` and `target_commitish` together: a target-only update
+can replace the private tag label with an `untagged-*` name. Re-run the existing
+draft verifier with unchanged checks. Keep the original failure records; never
+move an existing public tag or substitute file bytes to repair metadata.
+
 CI stops at a draft. Publishing is a human action, and it is the last point
 with a clean way back.
 
@@ -244,11 +301,27 @@ gh run view <run id> --repo sleep2agi/agent-network-app --json jobs
 Publish only when all of these hold:
 
 - `targetCommitish` equals the 40-character SHA you triggered with;
-- both platform jobs concluded `success`;
-- the eight expected assets are present: macOS `.dmg` and `.app.tar.gz`,
+- macOS, Windows and every selected optional platform concluded `success`,
+  and so did `verify-draft` (which receives the same `include_linux` input);
+- the eight primary assets are present: macOS `.dmg` and `.app.tar.gz`,
   Windows `x64-setup.exe` and `x64_en-US.msi`, the `.sig` for each updater
-  artifact, and `latest.json`;
-- asset sizes match the build log.
+  artifact, and `latest.json`. Linux selection adds `.deb` and `.deb.sig`
+  for ten assets in total;
+- `latest.json` contains `darwin-aarch64` and `windows-x86_64` pointing to the
+  actual assets with signatures. If Linux is selected, also require
+  `linux-x86_64` and `linux-x86_64-deb` pointing at that `.deb` and sharing one
+  signature. Otherwise refuse unexpected Linux assets/entries rather than
+  carrying old binaries forward as if built from this release SHA;
+- asset sizes match the build log. The Linux job summary prints `sha256sum`
+  lines for the `.deb` and `.sig`. GitHub asset digests are the checksums the
+  mirror copies; do not upload a release asset named `SHA256SUMS`.
+- the Android APK, when this commit has a successful `android-build` run, is
+  attached as **`Agent.Network_<version>_android-universal.apk`** by the
+  `attach-android-apk` job (the name the updater computes in
+  `src/android-update-core.ts`). The job verifies `versionName` with `aapt2`
+  before uploading; if it logged `no successful android-build`, publish as
+  usual and attach the APK by hand with that exact name (a wrong name silently
+  breaks the versioned download path).
 
 **Do not look for a tag here.** GitHub creates the tag when the release is
 published, not when the draft is created, so `git/ref/tags/desktop-v<version>`
@@ -278,7 +351,7 @@ Then start the China mirror explicitly (section 10) — do not count on the
 
 ```bash
 gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app \
-  -f tag=desktop-v<version>
+  --ref main -f tag=desktop-v<version> -f commit=<40-character-release-main-SHA>
 ```
 
 `https://www.anet.sh/desktop/update/latest.json` is a dynamic endpoint. It
@@ -407,7 +480,7 @@ Nothing has to be triggered by hand in a normal release.
 | `desktop/<ver>/` | every release asset, byte-identical to GitHub, plus `SHA256SUMS` |
 | `desktop/latest/latest.json` | updater manifest; platform URLs point at `desktop/<ver>/` on ModelScope, signatures unchanged |
 | `desktop/latest/VERSION` | the version `desktop/latest/` currently holds |
-| `desktop/latest/Agent.Network_{aarch64.dmg,x64-setup.exe,x64_en-US.msi,android-universal.apk}` | version-less copies of the installers (stable download-page links) |
+| `desktop/latest/Agent.Network_{aarch64.dmg,x64-setup.exe,x64_en-US.msi,android-universal.apk,amd64.deb}` | version-less copies of the installers (stable download-page links) |
 | `desktop/latest/SHA256SUMS` | over the files in `desktop/latest/` |
 | `android/agent-network-<ver>.apk` | the Android APK, from a successful `android-build` run on main (Android channel, below) |
 | `android/agent-network-<ver>.apk.sha256` | one `sha256sum` line: `<64 hex>  agent-network-<ver>.apk` |
@@ -434,8 +507,10 @@ publish step (section 6) dispatches the mirror by hand; the triggers below are
 the safety net, not the primary path.
 
 **When it runs.** On `release: published` it starts at once and waits up to
-30 minutes for the Android APK, which is attached after publishing (GitHub fires
-no event for an asset upload). A cron run every 30 minutes reconciles the newest
+30 minutes for the Android APK. The release workflow's `attach-android-apk`
+job normally uploads it to the draft before publishing, so this wait is a
+fallback for a hand-attached or missing APK (GitHub fires no event for an
+asset upload). A cron run every 30 minutes reconciles the newest
 published release by sha256 — GitHub asset digests against the ModelScope
 listing — and uploads only what differs, so a late APK, a failed run or a
 ModelScope outage heals itself. In sync, it downloads and commits nothing.
@@ -447,12 +522,19 @@ anet.sh endpoint). Re-syncing an old release never rolls it back.
 **Re-sync a past release** (idempotent; safe to repeat):
 
 ```bash
-gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app -f tag=desktop-v<version>
+gh workflow run modelscope-mirror.yml --repo sleep2agi/agent-network-app \
+  --ref main -f tag=desktop-v<version> -f commit=<40-character-release-main-SHA>
 ```
 
 Dispatch several tags one at a time: the workflow has one concurrency group and
 GitHub keeps only one pending run in it, so a third dispatch replaces the queued
 second one.
+
+The tag selects existing published bytes; it is not a build/source input.
+Manual mirroring requires the full source SHA. The workflow checks release
+metadata against the immutable tag object, checks out that exact SHA and verifies
+it remains an ancestor of main before uploading. Scheduled/release-event runs
+resolve the same full40 binding from the published release, not a floating branch.
 
 **Verify after a release** (no credentials — users have none):
 
@@ -561,15 +643,50 @@ from the environment only and never printed.
 After the mirror run for the new version has finished (`desktop/<ver>/` exists on
 ModelScope), bump `docs-site/docs/index.md` and `docs-site/docs/en/index.md` in
 `sleep2agi/agent-network` by find-and-replace of the previous version. Each page
-has **21** occurrences of the bare version string: the two section eyebrows,
-three platform cards with 5 each (card title `v<ver>`, 线路一 ModelScope
-`desktop/<ver>/Agent.Network_<ver>_…`, 线路二 GitHub
-`desktop-v<ver>/Agent.Network_<ver>_…`), two release-notes links, the product
-card and the final call to action. Update the card sizes from the release
-assets, rebuild `docs-site/docs/public/desktop/update/fallback.json`, and check
-every new link with `curl -sIL` (both routes must answer 200 with the same
-`Content-Length`) before opening the PR. Do not edit the page before the
-mirror has the version: the 线路一 buttons would 404.
+currently has **21** occurrences of the bare version string: the two section
+eyebrows, macOS, Windows, and Android cards (card title `v<ver>`, 线路一
+ModelScope `desktop/<ver>/…_<ver>_…`, 线路二 GitHub
+`desktop-v<ver>/…_<ver>_…`), two release-notes links, the product card and the
+final call to action. Update the card sizes from the release assets, rebuild
+`docs-site/docs/public/desktop/update/fallback.json`, and check every new link
+with `curl -sIL` (both routes must answer 200 with the same `Content-Length`)
+before opening the PR. Do not edit the page before the mirror has the version:
+the 线路一 buttons would 404.
+
+**Linux card, only after that version's `.deb` is on the mirror.**
+When Linux is deferred, the current `/download` catalog reports that this
+release has no Linux package. The previous verified package remains available
+through release history; do not relabel it as the new primary release or invent
+a `.deb` URL. The static-card instructions below apply only to legacy landing
+page sections, not to the current catalog's version or artifact selection.
+Do not overwrite the new update manifest with Linux entries from an older build.
+The dynamic
+updater endpoint already forwards every platform in the release `latest.json`,
+including `linux-x86_64` and `linux-x86_64-deb`, once this workflow has
+published one. The download page is static. Insert a third card in the desktop
+`download-grid` of both `docs-site/docs/index.md` and `docs-site/docs/en/index.md`,
+after the Windows card. The grid is two columns, so the Linux card sits on the
+next row; leave the shared `.download-grid` rule alone so the mobile Android
+and iOS cards stay two-up. Use the asset name from that release
+(`ANet_<ver>_amd64.deb` while `productName` is ANet). Chinese card:
+
+```html
+    <div class="download-card download-card-routes">
+      <span class="download-platform"><strong>Linux</strong> · vVER</span><small>Ubuntu 24.04 amd64 · SIZE</small>
+      <div class="download-routes"><a class="download-route download-route-primary" href="https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/desktop/VER/ANet_VER_amd64.deb">线路一（国内 · ModelScope）<span class="download-route-tag">推荐</span></a><a class="download-route" href="https://github.com/sleep2agi/agent-network-app/releases/download/desktop-vVER/ANet_VER_amd64.deb">线路二（GitHub）</a></div>
+    </div>
+```
+
+English card, same structure and the same two URLs, with the labels already
+used on that page (`Mirror 1 (China · ModelScope)`, tag `Recommended`,
+`Mirror 2 (GitHub)`) and `Ubuntu 24.04 amd64 · SIZE`. Also extend the desktop
+note under each heading so it mentions Ubuntu 24.04 amd64. Each new card adds
+three copies of the bare version string (title plus two URLs).
+`docs-site/scripts/check-desktop-update-route.mjs` must allow a `.deb`
+filename before `fallback.json` is rebuilt from a manifest that contains
+Linux; until that checker accepts `.deb`, copying `latest.json` into the
+fallback fails the docs-site check. Do not point the card at a version that
+has no `.deb`.
 
 ---
 

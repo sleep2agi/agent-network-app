@@ -75,12 +75,14 @@ check('wizard sends workdir through workdirForRequest (omitted for old daemons)'
 const submitExpression = wiz.match(/const canSubmit = ([^;]+);/)?.[1];
 check('submit disabled state is wired to the validation expression', wiz.includes('disabled={!canSubmit}') && !!submitExpression);
 if (submitExpression) {
-  const submitAllowed = new Function('workdirErr', 'openCodeError', 'nameValid', 'isRuntimeAllowed', 'runtimeId', `return (${submitExpression});`);
-  check('valid submission remains enabled', submitAllowed(null, null, true, () => true, 'opencode-cli') === true);
-  check('submit is disabled while the workdir is invalid', submitAllowed('invalid directory', null, true, () => true, 'opencode-cli') === false);
-  check('V2 validation failure also disables submit', submitAllowed(null, 'consent required', true, () => true, 'opencode-cli') === false);
-  check('invalid name disables submit', submitAllowed(null, null, false, () => true, 'opencode-cli') === false);
-  check('unavailable runtime disables submit', submitAllowed(null, null, true, () => false, 'opencode-cli') === false);
+  const submitAllowed = new Function('workdirErr', 'openCodeError', 'nameValid', 'isRuntimeAllowed', 'runtimeId', 'managedMode', 'managedSelection', `return (${submitExpression});`);
+  check('valid submission remains enabled', submitAllowed(null, null, true, () => true, 'opencode-cli', false, null) === true);
+  check('submit is disabled while the workdir is invalid', submitAllowed('invalid directory', null, true, () => true, 'opencode-cli', false, null) === false);
+  check('V2 validation failure also disables submit', submitAllowed(null, 'consent required', true, () => true, 'opencode-cli', false, null) === false);
+  check('invalid name disables submit', submitAllowed(null, null, false, () => true, 'opencode-cli', false, null) === false);
+  check('unavailable runtime disables submit', submitAllowed(null, null, true, () => false, 'opencode-cli', false, null) === false);
+  check('managed Provider without a complete selection disables submit', submitAllowed(null, null, true, () => true, 'codex-app-server', true, null) === false);
+  check('managed Provider with a complete selection allows submit', submitAllowed(null, null, true, () => true, 'codex-app-server', true, { revision: 7, provider_id: 'fixture', auth_id: 'work', model: 'configured-model' }) === true);
 }
 check('unedited workdir follows the name through the ASCII slug (via the step-1 folder, #652)',
   wiz.includes('const folder = folderEdited ?? workdirSlug(name, workdirFallback);')

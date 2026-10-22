@@ -1,0 +1,36 @@
+import { registerTranslations } from './i18n';
+
+export const agentOrgTranslations = {
+  'agentOrg.loading': ['正在读取组织架构…', 'Loading organization…'],
+  'agentOrg.loadFailed': ['组织架构没有读到，请重试', 'Organization could not be loaded. Please retry.'],
+  'agentOrg.retry': ['重试', 'Retry'],
+  'agentOrg.noNetwork': ['还没有选中的网络', 'No network is selected'],
+  'agentOrg.oldHub': ['这个 Hub 还没有部门树，也没有人员通讯录', 'This Hub has neither a department tree nor a people directory'],
+  'agentOrg.directoryMissing': ['人员通讯录还没有，暂时列不出 Agent 和负责人', 'The people directory is not available, so agents and owners are not listed'],
+  'agentOrg.noTree': ['部门树还没有，这些部门来自通讯录，只有一层。', 'There is no department tree. These departments come from the directory as a flat list.'],
+  'agentOrg.empty': ['还没有部门', 'No departments yet'],
+  'agentOrg.unowned': ['未归属', 'Unassigned'],
+  'agentOrg.agentsCount': ['{count} 个 Agent', '{count} agents'],
+  'agentOrg.owner': ['负责人 {name}', 'Owner {name}'],
+  'agentOrg.noAgents': ['这个部门下面没有 Agent', 'No agents in this department'],
+  'agentOrg.noOwner': ['没有负责人', 'No owner'],
+  'agentOrg.back': ['全部部门', 'All departments'],
+  'agentOrg.readOnly': ['部门树和 Agent 的归属来自 Hub；有管理员或部门负责人权限可在这里调整。', 'The department tree and agent placement come from the Hub; admins and department heads can adjust them here.'],
+  'agentOrg.independent': ['Agent 归属与人类部门是两个独立的：只有在这里显式指定才算归属，负责人属于哪个部门不会把 Agent 带过去。', 'Agent placement is independent of the human departments: only an explicit choice here counts; an agent is never carried into a department by its owner.'],
+  'agentOrg.demoTitle': ['调整结构', 'Adjust structure'],
+  'agentOrg.demoHint': ['调整会直接写入 Hub；需要管理员或部门负责人权限。', 'Changes are saved to the Hub. Requires admin or department-head access.'],
+  'agentOrg.demoPickAgent': ['选择 Agent', 'Choose an agent'],
+  'agentOrg.demoPickDept': ['移到部门', 'Move to department'],
+  'agentOrg.demoApply': ['保存到 Hub', 'Save to Hub'],
+  'agentOrg.saving': ['正在保存…', 'Saving…'],
+  'agentOrg.saved': ['已保存到 Hub。', 'Saved to the Hub.'],
+  'agentOrg.saveFailed': ['保存失败，请重试', 'Save failed. Please retry.'],
+  'agentOrg.saveForbidden': ['只有管理员或部门负责人能调整', 'Only an admin or department head can change this'],
+  'agentOrg.saveNoDepartment': ['目标部门不存在或不属于这个网络', 'The target department does not exist in this network'],
+  'agentOrg.saveNoNode': ['这个 Agent 不在当前网络', 'This agent is not in this network'],
+  'agentOrg.saveUnsupported': ['当前 Hub 版本还不支持调整部门，请先升级 Hub', 'This Hub version cannot move agents yet. Upgrade the Hub.'],
+  'agentOrg.demoNoAgents': ['通讯录里还没有可调整的 Agent', 'The directory has no agents to move'],
+  'agentOrg.demoNeedPick': ['先选一个 Agent 和目标部门', 'Choose an agent and a target department first'],
+} as const;
+
+registerTranslations(agentOrgTranslations);

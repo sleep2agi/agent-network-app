@@ -1,10 +1,9 @@
-// 看板 #692 —— 守护节点(role = host_supervisor)不接 AI 对话:它只执行 创建 / 停止 / 重启 / 删除
-// 这类结构化命令,聊天框里打字发过去只会石沉大海。所以:
-//   - 会话页把输入框换成一行说明 + 两个入口(它托管的节点 / 运行日志),历史消息照常显示;
-//   - Agent 列表里它的行不画未读红点。
+// 看板 #692 / #908 —— 守护节点(role = host_supervisor)不接 AI 对话:它只执行 创建 / 停止 /
+// 重启 / 删除这类结构化命令。角色确认之后,会话页整页换成管理页(托管节点 + 已有的 Hub 操作),
+// 运行日志仍从节点页进入。角色还没拉到 = 不知道 = 按普通会话画,不猜。
+// Agent 列表里它的行不画未读红点。
 // 角色从 GET /api/nodes 来(App.tsx 本来就为头像每 30 s 拉一次,同一份结果顺手喂进这里),
 // 读 `role`,没有再看 `config_snapshot.role`(与 local-daemon.ts / node-info.ts 同一口径)。
-// 还没拉到 = 不知道 = 按普通节点画(与升级前逐字相同),不猜。
 // 纯逻辑,不 import react / react-native。
 
 export const HOST_SUPERVISOR_ROLE = 'host_supervisor';
@@ -24,7 +23,7 @@ export const nodeRole = (node: RoleNode | null | undefined): string | null =>
 export const isHostSupervisorNode = (node: RoleNode | null | undefined): boolean =>
   nodeRole(node) === HOST_SUPERVISOR_ROLE;
 
-/** 会话页底部画什么:普通输入框,还是守护节点的说明条。 */
+/** 会话页画什么:普通对话,还是守护节点的管理页。 */
 export type ChatComposerKind = 'chat' | 'daemon';
 export const chatComposerKind = (hostSupervisor: boolean): ChatComposerKind => (hostSupervisor ? 'daemon' : 'chat');
 

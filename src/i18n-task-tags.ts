@@ -44,6 +44,6 @@ registerTranslations({
   'tags.notFound': ['这个标签已经不在了，列表已刷新。', 'This tag no longer exists. The list was refreshed.'],
   'tags.noPermission': ['你没有管理标签的权限。', 'You don\'t have permission to manage tags.'],
   'tags.opFailed': ['没有保存，请重试。', 'Not saved. Please retry.'],
-  'tags.opTimeout': ['服务器没有响应，请重试。', 'The server did not respond. Please retry.'],
+  'tags.opTimeout': ['Hub 没有响应，请重试。', 'The Hub did not respond. Please retry.'],
   'tags.suggest': ['已有标签', 'Existing tags'],
 });

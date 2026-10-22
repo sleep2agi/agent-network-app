@@ -1,0 +1,56 @@
+#906 Provider version guidance — candidate 0.2.237
+Date: 2026-10-11 +08
+Base: main 52ea536413875f70dd5d7c01cc645685bc09a6fc
+Scope: frontend messages and current daemon runtime readback; no daemon/Hub mutation.
+
+User acceptance:
+- Show the selected daemon's heartbeat runtime version (matching node_id), or not reported.
+- Name exact published upgrade targets: Hub 0.9.0-preview.121,
+  daemon CLI 2.3.0-preview.163 + agent-node 2.5.0-preview.129.
+- Targets are a verified deployment pair, NOT a fabricated minimum version.
+  Newer installations should not downgrade. CLI/Hub current versions are not read by this page.
+- Timeout does not prove an outdated version or empty providers.
+  Missing API may be Hub version or routing; offline remains a separate state.
+- API-key application is available; official ChatGPT account switching remains unavailable.
+
+Verified target evidence:
+- CLI public release cli-v2.3.0-preview.163, exact main b4413131b73c52c286beec46509773716698d89f.
+- #906 TMHR receipt and independent Hub heartbeat: daemon-vdev runtime .129,
+  unchanged node identity, idle/in-flight=0; Provider readback revision=0/providers=[].
+  Empty readback is NOT a provider application/account switching acceptance.
+
+Docker-only checks (no host credential or production state mounted):
+1. tests/daemon-provider-management/Dockerfile target test:
+   bun src/daemon-provider-management.test.ts: 24/24 PASS.
+   npm run typecheck: PASS.
+2. Same pinned test image, candidate source mounted read-only:
+   src/version-consistency.test.ts: 14/14 PASS, 0.2.237 / Android code 2237.
+   src/changelog-bundled.test.ts: 7/7 PASS.
+3. Docker Expo web export: PASS. Export made before version-only metadata bump
+   and removal of a legacy vague upgrade sentence in the selection hint;
+   version guidance rendering and Provider behavior match the candidate. Not a native package.
+4. Docker Chromium core UI: 24/24 PASS at 13:42 +08, synthetic Hub,
+   real exported React UI, no native package or real model inference claim.
+   Covered current runtime version, ready state without upgrade warning,
+   explicit component targets on unsupported API, real 20-second pending timeout,
+   timeout guidance without a false old-version diagnosis, and clearing old providers.
+   First run: timeout fixture omitted daemon_node_id in pending read receipts;
+   the existing scope check correctly returned error, so timeout assertion failed.
+   Corrected only the synthetic pending receipt; no product guard was relaxed.
+   Screenshots reviewed: provider-upgrade-targets.png and provider-timeout-not-version.png
+   in the temporary evidence directory (not required to reconstruct the tests).
+   Browser and fixture server closed in finally; test containers removed by --rm.
+
+Reproduce (all Docker commands through sg docker -c):
+  docker build -f tests/daemon-provider-management/Dockerfile --target test -t anet-app:provider-version-hints .
+  docker run --rm --init --network none anet-app:provider-version-hints
+  docker build -f tests/daemon-provider-management/Dockerfile --target web -t anet-app:provider-version-web .
+  Export /web from that image to an empty temporary directory.
+  docker build --build-context web=<export-directory> -f tests/daemon-provider-management/Dockerfile.ui -t anet-app:provider-version-ui .
+  docker run --rm --init --network none anet-app:provider-version-ui
+
+Release/recovery scope:
+No service startup, reverse proxy, port, secret source or database changes.
+Use existing exact-main release workflows, signing sources and rollback paths.
+Branch builds are TEST-ONLY; .237 is not published by these checks.
+Existing public desktop .236 / Android .235 remain unaffected.

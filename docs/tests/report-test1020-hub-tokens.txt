@@ -1,0 +1,37 @@
+Hub #1020 / app#860: real Hub API-key vault management
+OBSERVED_AT: 2026-10-11T14:35Z (22:35 Asia/Shanghai)
+Base: main eb2a7b64d83db3f2f00f3daee599f3f19216ebeb
+Test artifacts only; no public build or production credential probe.
+
+1. Environment/core first
+sg docker -c 'docker build --target core -t anet-app:test1020-tokens-core -f tests/test1020-hub-tokens/Dockerfile .'
+sg docker -c 'docker run --rm --init --network none anet-app:test1020-tokens-core'
+Core 3/3 groups PASS (name/value schema, names-only response, both scoped routes).
+TypeScript tsc --noEmit PASS, exit 0.
+Core image manifest: sha256:0ba35baf164330fb5457219c60c321a75a237c4d65aa9125cbcf50c1d8b1c0c5
+Changed App blob: 43ba689973f8ab15191b0a463585594c2bcc2437
+Screen blob: 926c8921bfddf050e7f02e4618a72b51c3a36181
+API blob: 33431225949555a452253a44c64f53ca63f87400
+Core model blob: 908570f0bf2a9d3f87833c48745dd20897589974
+
+2. Exported UI only after core passed
+sg docker -c 'docker build --target browser -t anet-app:test1020-tokens-ui -f tests/test1020-hub-tokens/Dockerfile .'
+sg docker -c 'docker run --rm --init --network none anet-app:test1020-tokens-ui'
+Actual exported React App, Chromium, synthetic native HTTP/MCP fixture.
+11/11 PASS: actual list, add/readback, field clear, scoped write, confirmed save,
+replace selection, owner denial not success, clear on denied save,
+both live routes, no value in displayed text, no browser page errors.
+Browser image manifest: sha256:8df7d7ee62a5a3fa4348ac69c230fc1ca1d98a23966af59769e73a2f3e89de81
+Driver blob: 66625ad54e7a3daa02e933e8bbd7673202f1951f
+
+Drive registry 12/12 PASS in the core Docker image with current registry mounted
+read-only. Registered the executable new drive and the earlier merged #1018
+drive; kept all existing enumeration assertions. No new api.ts GET reader.
+
+Boundary: synthetic HTTP responses; backend vault API unchanged.
+Not a signed native installation, real owner login, new backend cryptography check,
+Provider secret-name reuse, remote distribution, every-runtime inference or public release.
+No assertions lowered; no repeated unrelated suite. Docker --rm/--init, no persistent
+test containers. Host/global npm unchanged, test-only cached images retained.
+
+Recovery: docs/hub-token-management.md. Client rollback does not undo Hub vault writes.

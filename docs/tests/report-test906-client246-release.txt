@@ -1,0 +1,93 @@
+#906 — client 0.2.246 official release receipt
+Observed: 2026-10-12 05:19 +08. Android and desktop PUBLIC; updater/mirror verified.
+
+Source and scope
+Feature PR872: current head f2e1e92dda3c241920813941c9a759e8f2b1a724,
+merged 04:51:34 +08 as e2e6bdd769e5f82af16411be14d334731300d294.
+Version PR873: head66b8a82a5380bb93d0b53813335acf169409c3b3,
+merged04:58:24 +08 as release main:
+412a7b734bc9e9907ae1b0ba77092ce2426630f0
+Full-SHA ancestry check against freshly fetched origin/main: PASS.
+Preflight: no desktop-v0.2.246 release/draft or remote tag existed.
+No backend/npm/runtime/credential change; Linux excluded.
+Successful application now refreshes node/Daemon inventory and node revision,
+so a second explicitly confirmed selection uses current configuration.
+Configuration receipt is not proof of vendor OAuth, entitlement or inference.
+
+Completed candidate evidence (not native release evidence)
+See report-test906-provider-refresh.txt for old4ed CI synchronization failure,
+corrected current-configuration-only waits and newf2e Docker UI10/10 +8/8.
+Current f2e Node Provider core CI38173695282/job114571472990 SUCCESS;
+both Ubuntu and Windows push/PR unit checks passed before normal merge.
+At feature merge:18SUCCESS/1SKIPPED/8IN_PROGRESS, not all checks terminal.
+See report-test906-client246-preparation.txt for metadata14/14, bundled notes7/7
+and notes hygiene9/9 Docker acceptance. Version PR's four Ubuntu/Windows unit
+checks passed before merge (38173986512/38173972254). At version merge:
+20SUCCESS/1SKIPPED/12IN_PROGRESS; broad optional CI was not called green.
+
+Official exact-main workflows
+- Desktop38174431254, created04:58:34 +08, main/source412a7b7 above,
+  release-desktop-auto-update.yml, include_linux=false. Existing user release
+  authority reused; signing environment approved only after SHA confirmation.
+  macOS job114573666226 started04:59:51; Windows114573666760 at05:00:09.
+- Android38174433144, created04:58:36 +08, same main/source412a7b7,
+  android-build.yml, Android versionCode2246.
+- macOS job114573666226 SUCCESS at05:10:02 +08, including signed/notarized
+  package, packaged local-Hub startup, removal/reinstall retention and cleanup.
+  Windows job114573666760 SUCCESS at05:16:54 +08; packaged startup at05:15:10,
+  NSIS uninstall/reinstall retained data and size ceiling at05:15:29 SUCCESS.
+  Verify-draft114577536054 SUCCESS at05:17:08; official workflow SUCCESS.
+- Signing approval/runner acquisition/build progress are not publication.
+  GitHub release409923308 published05:17:16 +08 after all three jobs passed.
+  Tag desktop-v0.2.246 resolves directly to exact main412a above. No tag moved.
+  Public URL https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.246
+  Manifest version0.2.246 has signed Mac ARM64 and Windows x64 entries pointing
+  to this release's exact asset IDs; no Linux entry. GitHub REST digests:
+  428abfe34313bb95ace1b50f6bc78e62f80a9b7c137e5047a5ccb10d5f1bcbd1  ANet_0.2.246_aarch64.app.tar.gz 38286781B
+  b98602ee23ccf17b5122cdea49cc060c847337491e171207e22f6613aeaa133b  ANet_0.2.246_aarch64.app.tar.gz.sig 400B
+  e4c5818bd97b802e5b23368a7051af801e00832a8cec38e6c67cff854b0a55df  ANet_0.2.246_aarch64.dmg 38944457B
+  a18de6209af765022999692a4d0488b86ae1e4da7e55ecacd032768721947c2b  ANet_0.2.246_x64-setup.exe 37347103B
+  f4c61a538bafbfffbe8e2aa40d6cd67f1ad9011a03ed3e294fa78faccdc409a5  ANet_0.2.246_x64-setup.exe.sig 416B
+  d3f9b93b4e8e8cd4ed03ed27d2e476fdb6f2f180db6afb4429ef6a6cd0fa9196  ANet_0.2.246_x64_en-US.msi 51163136B
+  f86efc8b2bdeece93cde9ba6fe182aeb1b85b85770ed7472548dacc875d4a90f  ANet_0.2.246_x64_en-US.msi.sig 416B
+  7895b3b26416eacc356e2e3fda77f7afe46b2329ad7914e2a7a339225e62744e  latest.json 89162B
+  Drift run38175740178/job114577631917 SUCCESS: deployed updater matches release.
+  Manual exact-tag mirror38175738004/job114577709570 SUCCESS at05:18:54;
+  15 paths uploaded in one commit, anonymous listing SHA all matched at05:18:37,
+  signatures/checksums/manifests/VERSION byte downloads matched, large desktop
+  packages anonymous ranged GET + listing digests matched (not full rehash).
+  desktop/latest VERSION and manifest accepted at05:18:50.
+  Duplicate release-event38175736512
+  cancelled before upload (its legacy 30-minute wait for desktop-attached APK
+  is unnecessary because Android is already independently published).
+  No desktop full-byte anonymous rehash claim. Mirror's no-desktop-APK warning
+  is expected: Android's independent channel was already published and verified.
+
+Android public release (independent of desktop)
+Build38174433144 SUCCESS at05:09:46 +08, exact main412a above.
+Publisher38175249697/job114576173292 SUCCESS at05:11:22 +08.
+Package com.anonymous.agentnetworkapp; versionName0.2.246/versionCode2246.
+APK83791373B, full inner APK SHA256:
+6389c004d1d01245621c58a439db1b992fce2582c721877ee55ecd1a1269c350
+One publication contains APK, SHA256, exact-source notes.md and latest/VERSION.
+Anonymous listing verified all four files at05:11:13 +08; small files verified
+byte-for-byte, and FULL anonymous APK download SHA verified at05:11:20 +08.
+The in-app Android channel now reports0.2.246. Not an artifact ZIP digest.
+Public APK:
+https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/agent-network-0.2.246.apk
+Notes:
+https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/0.2.246/notes.md
+No Android APK asset in the desktop draft; platform receipts are independent.
+
+Recovery and cleanup
+Authoritative build/release/mirror scripts and secret variable names are in
+.github/workflows and scripts; use docs/desktop-release-sop.md from this exact
+main tree. This client-only patch adds no permanent service, launcher, port,
+proxy, environment/secret source or database migration. Existing packaged Hub
+startup/retention/rollback checks remain enabled. Software rollback uses the
+previous published client, not rebuilt branch artifacts. Existing account and
+database data still depend on their documented secure store/backups; this
+receipt does not claim cloning Git recovers user data.
+No production node, Daemon, login/session, credentials or global npm changes.
+Prior local test containers used --rm; temporary worktrees/images are retained
+for the bounded report/release audit, with no shared cache prune.

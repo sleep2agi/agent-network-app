@@ -15,7 +15,7 @@ const posix = (s: string) => s.split(sep).join('/');
 const read = (rel: string) => readFileSync(join(root, ...posix(rel).split('/')), 'utf8').replace(/\r\n?/g, '\n');
 
 // ── model ──
-ck('entry: key server, label 服务器, server icon', PHONE_SETTINGS_SERVER_ENTRY.key === 'server' && PHONE_SETTINGS_SERVER_ENTRY.label === '服务器' && PHONE_SETTINGS_SERVER_ENTRY.icon === 'server-outline');
+ck('entry: key server, label Hub, server icon', PHONE_SETTINGS_SERVER_ENTRY.key === 'server' && PHONE_SETTINGS_SERVER_ENTRY.label === 'Hub' && PHONE_SETTINGS_SERVER_ENTRY.icon === 'server-outline');
 ck('pushed-from-设置 screens = server', JSON.stringify(PHONE_SETTINGS_PUSHED_SCREENS) === JSON.stringify(['server']));
 ck('phone: server back → settings', phoneSettingsBackTarget('phone', 'server') === 'settings');
 ck('two-pane: server back is not redirected (rail destination)', phoneSettingsBackTarget('twoPane', 'server') === null);

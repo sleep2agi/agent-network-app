@@ -17,6 +17,10 @@ ck('source run is verified before checkout', source.includes('if [ "$sha" != "$R
 ck('checkout uses requested SHA and full history', workflow.includes('ref: ${{ inputs.commit }}\n          fetch-depth: 0'));
 const gate = workflow.slice(workflow.indexOf('- name: Require exact merged commit'), workflow.indexOf('- name: Download the APK artifact'));
 ck('gate precedes artifact download and upload', gate.includes('REQUESTED_COMMIT: ${{ inputs.commit }}'));
+ck('short SHA gate is two tests, not the macOS bash 3.2 compound form',
+  gate.includes('[[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]')
+  && gate.includes('[[ "$resolved" == "$REQUESTED_COMMIT" ]]')
+  && !gate.includes('=~ ^[0-9a-f]{40}$ &&'));
 const script = gate.split('run: |\n')[1]?.split('\n').map(line => line.replace(/^          /, '')).join('\n');
 if (!script) throw new Error('missing executable gate');
 // Publication runs on Ubuntu. Windows unit CI checks the workflow contract;

@@ -33,7 +33,9 @@ jobs:
         run: |
           set -euo pipefail
           resolved="$(git rev-parse HEAD)"
-          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ && "$resolved" == "$REQUESTED_COMMIT" ]]
+          # Separate tests. A combined `[[ =~ && == ]]` succeeds on macOS bash 3.2.
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          [[ "$resolved" == "$REQUESTED_COMMIT" ]]
           git fetch origin main
           git merge-base --is-ancestor "$resolved" origin/main
 

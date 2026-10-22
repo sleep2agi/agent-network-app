@@ -1,10 +1,12 @@
 import type { RuntimeReadinessMap } from './runtime-readiness';
+import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
 import { clockOffsetFrom, dreqCreatedAt, recordSendTiming, type SendTiming } from './send-timing';
 import { pollUntilTerminal } from './node-rules';
+import { interpretCloneReply, isCloneToolMissing, type CloneNodeArgs } from './node-clone';
 
 // Thin CommHub API client. The app talks to the same hub the dashboard
 // proxies (status / tasks / messages); auth is the network token sent
@@ -23,7 +25,15 @@ export interface Session {
   hostname?: string | null;
   ip?: string | null;
   project_dir?: string | null;
+  /** Codex 节点上报的 CODEX_HOME。不是工作路径，也不是从 project_dir 推出来的。 */
+  codex_home?: string | null;
   version?: string | null;
+  /**
+   * Resumeable runtime session id on the full `/api/status` row (Claude Code
+   * `--resume`, Codex thread, and the same idea on other runtimes). Older hubs
+   * omit it; the node page still renders the cell and shows 「—」.
+   */
+  session_id?: string | null;
   model?: string | null;
   runtime?: string | null;
   /** Explicit runtime-reported OS identity only. Never infer this from project_dir. */
@@ -41,6 +51,20 @@ export interface Session {
   health_observed_ms_ago?: number | null;
   /** Node skills view — hub `/api/status`: this session answers skills_list /
    *  skill_read on the rules-file doorbell. Absent ⇒ false (no fallback). */
+  /** #1510 — how this node reaches the hub, as the NODE itself reports it:
+   *  `loopback` (nothing leaves the machine), `https`, or `plain` (weakest; also
+   *  what an unparseable hub URL reports). Absent ⇒ older node/hub. */
+  env_transport?: 'loopback' | 'https' | 'plain' | string;
+  /** #1491 — hub ≥ that lane: this node answers the `node_secrets` doorbell and
+   *  can apply env changes to its own secrets.env at the next start. Absent ⇒ an
+   *  older node/hub; the section hides instead of offering a button that expires. */
+  node_secrets_capable?: boolean;
+  /** #1474 — hub ≥ #1474: JSON array of the env key NAMES this node has, from
+   *  its own `secrets.env`. **NAMES ONLY** — the node-side collector parses and
+   *  drops values, and the hub rejects anything that is not a name. Absent ⇒ the
+   *  hub/node predates #1474 (`node-secret-keys.ts` keeps that distinct from an
+   *  empty list). */
+  secret_keys?: string | null;
   skills_capable?: boolean;
   /** Project folder view — hub `/api/status`: this session answers files_list /
    *  file_read. A hub that predates it omits the key entirely (node-files.ts
@@ -124,6 +148,8 @@ import { fetchAuthMe, forgetAuthMeFor } from './user-admin-api';
 import { SendTaskError, isNetworkScopedSendFailure } from './send-failure-reason';
 export { SendTaskError } from './send-failure-reason';
 import { stripHumanDms } from './human-dm';
+import { aliasNetworkFor, networkCandidates, rememberAliasNetworks } from './send-target-network';
+import { aliasNetworkCache, resolveAliasNetwork } from './alias-network-lookup';
 import { splitSystemNotices, stripSystemNotices } from './system-notice';
 import { createReplyInboxReader } from './inbox-cursor';
 import { createUserMessagesWindow } from './user-messages-window';
@@ -142,6 +168,23 @@ export function bodyBytes(res: { headers?: { get?: (k: string) => string | null 
   return Number.isFinite(n) && n >= 0 ? n : undefined;
 }
 
+/** #911 —— Hub 返回非 JSON(HTML/纯文本)时,把底层 JSON Parse error 换成可读提示。 */
+export function parseJsonOrFriendly<T>(text: string, status: number, contentType: string | null): T {
+  try { return JSON.parse(text) as T; } catch { /* fallthrough */ }
+  const ct = (contentType ?? '').toLowerCase();
+  const prefix = text.slice(0, 120).replace(/\s+/g, ' ').trim();
+  let cause: string;
+  if (ct.includes('text/html') || prefix.startsWith('<')) cause = 'HTML';
+  else if (ct.includes('text/plain') || !ct) cause = '纯文本';
+  else cause = ct;
+  // Preserve JSON.parse's error type: legacy Hub route fallbacks identify SyntaxError.
+  throw new SyntaxError(
+    `Hub 返回了非 JSON 响应 / Non-JSON Hub response（HTTP ${status}, Content-Type: ${contentType ?? '无'}）。\n` +
+    `正文前缀 / Response prefix:「${prefix.slice(0, 60)}」（${cause}）。\n` +
+    `请检查 Hub 地址、登录是否过期及 Hub 版本 / Check Hub URL, sign-in expiry and Hub version（commhub-server ≥ 0.9.0-preview.126）。`,
+  );
+}
+
 async function get<T>(cfg: HubConfig, path: string): Promise<T> {
   const started = Date.now();
   const epoch = readEpoch();
@@ -156,14 +199,14 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
         const expired = res.status === 401 && isTokenExpiredBody(await res.json().catch(() => null));
         reportProfileAuthResponse(res.status, authProfileId(cfg), expired ? 'token_expired' : undefined, cfg.token);
         const text = res.ok || res.status === 304 ? await readConditionalText(cfg, path, res) : null;
-        return { res, ok: text !== null, data: text !== null ? (JSON.parse(text) as T) : undefined };
+        return { res, ok: text !== null, data: text !== null ? parseJsonOrFriendly<T>(text, res.status, res.headers?.get?.('content-type') ?? null) : undefined };
       })(),
       readDeadlineMs,
       () => null,
     );
     if (!got) {
       ctrl.abort();
-      throw new Error(`服务器 ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应（${path}）`);
+      throw new Error(`Hub ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应（${path}）`);
     }
     if (!got.ok) {
       if (!readStatusCountsAsFailure(got.res.status)) reported = true;
@@ -185,12 +228,24 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
 // inside the read deadline on flaky cellular. Older hubs ignore the param
 // and return the full payload, so the call is safe regardless of server
 // version.
-export const fetchStatus = (cfg: HubConfig) =>
-  get<{ sessions: Session[] }>(cfg, '/api/status?light=1');
+/**
+ * 列表不带 network_id ⇒ hub 按「我属于哪些网络」返回 ⇒ 列表是**跨网络**的。
+ * 每一行都带 network_id,这里记下来:发送时直接用「这个 alias 住在哪个网络」,
+ * 不用再靠 cfg.networkId 猜(admin 2026-10-21:其他用户发不了消息给 Agent 节点)。
+ */
+export const fetchStatus = async (cfg: HubConfig) => {
+  const data = await get<{ sessions: Session[] }>(cfg, '/api/status?light=1');
+  rememberAliasNetworks(aliasNetworkCache, data?.sessions);
+  return data;
+};
+
+/** Detached daemon management must not inherit the account's default network. */
+export const fetchScopedStatus = (cfg: HubConfig) =>
+  get<{ sessions: Session[] }>(cfg, `/api/status?light=1${cfg.networkId ? `&network_id=${encodeURIComponent(cfg.networkId)}` : ''}`);
 
 /** Full, authenticated status projection for the one-node details screen.
  * List/chat polling stays on `?light=1`; this opt-in read is where legacy
- * Hubs may omit newer nullable facts such as `os_user`.
+ * Hubs may omit newer nullable facts such as `os_user` and `session_id`.
  *
  * `alias` asks the hub for that one agent's rows (`/api/status?alias=`): the
  * full projection of a whole network is ~533 KB (94 KB gzip) on the
@@ -283,6 +338,11 @@ export interface HubScheduledTask {
   next_run_at?: string | null;
   last_run_at?: string | null;
   revision: number;
+  /** Present when the Hub supports schedule watchers. */
+  watchers?: { user_id: string; username: string; display_name: string }[];
+  is_watcher?: boolean;
+  can_edit?: boolean;
+  can_manage_watchers?: boolean;
 }
 
 export interface HubScheduledRun {
@@ -341,6 +401,7 @@ export type ScheduledTaskMutationInput = {
   timezone: string;
   schedule: HubScheduleSpec;
   misfire_policy: HubMisfirePolicy;
+  watchers?: string[];
 };
 
 export const createScheduledTask = (
@@ -618,6 +679,26 @@ export const fetchTaskDetail = async (
   const data = await get<{ tasks: HubTask[] }>(cfg, `/api/tasks?${q}`);
   return data.tasks?.[0] ?? null;
 };
+
+/** Single-task diagnostic reuses the existing authenticated, network-scoped Hub endpoint.
+ * Only legacy unsupported/not-found responses fall back. Auth/connection failures remain errors. */
+export async function fetchTaskInspection(cfg: HubConfig, taskId: string): Promise<{
+  task: HubTask | null; diagnostic: TaskDiagnostic | null;
+}> {
+  const q = new URLSearchParams();
+  if (cfg.networkId) q.set('network_id', cfg.networkId);
+  try {
+    const data = await get<{ task?: HubTask; diagnostic?: unknown }>(cfg,
+      `/api/tasks/${encodeURIComponent(taskId)}${q.size ? `?${q}` : ''}`);
+    if (data.task?.task_id === taskId) {
+      return { task: data.task, diagnostic: readTaskDiagnostic(data.diagnostic) };
+    }
+    // Old Hubs may answer an unknown route with their JSON help response.
+  } catch (e) {
+    if (!(e instanceof SyntaxError) && !(e instanceof Error && /^HTTP (404|501) on /.test(e.message))) throw e;
+  }
+  return { task: await fetchTaskDetail(cfg, taskId), diagnostic: null };
+}
 
 // Task events feed — status transitions logged by the hub.
 //
@@ -933,19 +1014,40 @@ export const sendTask = async (
   priority: TaskPriority = 'normal',
   clientRequestId = createDashboardRequestId(),
 ): Promise<SendTaskResponse> => {
+  // #1968 私信发不出去(admin 2026-10-21 截图:tang → tang02 404 alias_not_found):
+  // 列表是跨网络的(cfg.networkId 落在用户自己的个人网络),发送却钉死这一个网络。
+  // 先用「这个 alias 住在哪个网络」发 —— 它就在用户点的那个 Agent 所在网络里。
+  // 发送前用「这个 alias 住在哪个网络」——**只查已经记住的**(列表读时记下的),不发请求:
+  // 发送路径的请求数是不变量(send-settle / task-priority-send 的断言)。
+  // 没记住(第一次发、还没拉过列表)就走下面的重试那条路:那里才允许多读一次。
+  const targetNetwork = aliasNetworkFor(aliasNetworkCache, to);
   try {
-    return await sendTaskOnce(cfg, to, content, attachments, priority, clientRequestId);
+    return await sendTaskOnce(cfg, to, content, attachments, priority, clientRequestId, targetNetwork);
   } catch (err) {
     if (!isNetworkScopedSendFailure(err)) throw err;
     sendIdentityCache.delete(sendIdentityKey(cfg));
     forgetAuthMeFor(cfg);
     const identity = await fetchAuthIdentity(cfg);
     const fresh = identity.networkId;
-    if (!fresh || fresh === err.networkId) throw err;
+    // 候选顺序:列表里记下的 alias 所属网络 → hub 查到的 → 重算的默认网络。
+    // #552 的老路只有第三个,而且当两个网络对这个人都是 'all' 时它挑回原来那个错网络。
+    const hinted = await resolveAliasNetwork(cfg.serverUrl, cfg.token, to);
+    const candidates = networkCandidates(err.networkId, [hinted, fresh]);
+    if (!candidates.length) throw err;
     rememberSendIdentity(cfg, identity);
-    cfg.networkId = fresh;
-    try { void Promise.resolve(networkIdPersister?.(cfg, fresh)).catch(() => {}); } catch { /* persistence is best-effort */ }
-    return sendTaskOnce(cfg, to, content, attachments, priority, clientRequestId);
+    let lastError: unknown = err;
+    for (const networkId of candidates.slice(0, 2)) {
+      try {
+        const response = await sendTaskOnce(cfg, to, content, attachments, priority, clientRequestId, networkId);
+        cfg.networkId = networkId;
+        try { void Promise.resolve(networkIdPersister?.(cfg, networkId)).catch(() => {}); } catch { /* persistence is best-effort */ }
+        return response;
+      } catch (retryError) {
+        lastError = retryError;
+        if (!isNetworkScopedSendFailure(retryError)) throw retryError;
+      }
+    }
+    throw lastError;
   }
 };
 
@@ -956,12 +1058,14 @@ const sendTaskOnce = async (
   attachments: TaskAttachment[] | undefined,
   priority: TaskPriority,
   clientRequestId: string,
+  /** 这一次发送用的网络(目标 alias 所在网络)。给了就用它,不动 cfg.networkId。 */
+  networkOverride?: string,
 ): Promise<SendTaskResponse> => {
   const started = Date.now();
   const dreqAt = dreqCreatedAt(clientRequestId);
   const load = appFetchLoad(started);
   const cached = sendIdentityCache.get(sendIdentityKey(cfg));
-  let networkId = cfg.networkId ?? cached?.networkId;
+  let networkId = networkOverride ?? cfg.networkId ?? cached?.networkId;
   let username = cfg.username?.trim() || cached?.username;
   let identitySource: SendTiming['identity'] = cfg.networkId && cfg.username?.trim() ? 'cfg' : 'cache';
   // #68 replacement: current hubs (#1156 / preview.38+) attribute omitted `from` from the user token.
@@ -978,7 +1082,8 @@ const sendTaskOnce = async (
     identitySource = 'background';
     void fetchAuthIdentity(cfg).then(identity => rememberSendIdentity(cfg, identity));
   }
-  if (networkId) cfg.networkId = networkId;
+  // 覆盖来的网络只用于这一次发送:cfg.networkId 是「这个账号的网络」,不能被目标 Agent 的网络改写。
+  if (networkId && !networkOverride) cfg.networkId = networkId;
   if (username) cfg.username = username;
   const identityMs = Date.now() - started;
 
@@ -1038,7 +1143,7 @@ const sendTaskOnce = async (
     );
   } catch (e) {
     const aborted = ctrl.signal.aborted;
-    const error = aborted && headersAt === null ? new Error(`服务器 ${Math.round(sendHeaderTimeoutMs / 1000)} 秒内没有响应（/api/task）`) : e;
+    const error = aborted && headersAt === null ? new Error(`Hub ${Math.round(sendHeaderTimeoutMs / 1000)} 秒内没有响应（/api/task）`) : e;
     timing(aborted ? 'timeout' : 'error', error);
     throw error;
   } finally {
@@ -1046,7 +1151,7 @@ const sendTaskOnce = async (
   }
   if (!got) {
     ctrl.abort();
-    const error = new Error(`服务器 ${Math.round(sendDeadlineMs / 1000)} 秒内没有返回完整响应（/api/task）`);
+    const error = new Error(`Hub ${Math.round(sendDeadlineMs / 1000)} 秒内没有返回完整响应（/api/task）`);
     timing('timeout', error);
     throw error;
   }
@@ -1359,7 +1464,7 @@ export const runNodeLifecycleAction = async (
       signal,
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: action, arguments: args } }),
     }));
-    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持节点生命周期操作，请先升级服务器' };
+    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持节点生命周期操作，请先升级 Hub' };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const parsed = parseMcpToolResponse(await res.text());
     if (parsed.kind === 'malformed') return { ok: false, unsupported: true, error: '当前 Hub 未返回兼容的节点生命周期响应' };
@@ -1412,7 +1517,7 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
 export interface UpdateNodeConfigRequest {
   nodeId: string;
   baseRevision: number;
-  patch: { model: string };
+  patch: { model?: string; flags?: Record<string, unknown> };
 }
 
 export type UpdateNodeConfigResult =
@@ -1422,10 +1527,13 @@ export type UpdateNodeConfigResult =
 
 export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequest): Promise<UpdateNodeConfigResult> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const patch: Record<string, unknown> = {};
+  if (typeof req.patch.model === 'string') patch.model = req.patch.model;
+  if (req.patch.flags && typeof req.patch.flags === 'object') patch.flags = req.patch.flags;
   const args = {
     node_id: req.nodeId,
     base_revision: req.baseRevision,
-    patch: { model: req.patch.model },
+    patch,
     ...(networkId ? { network_id: networkId } : {}),
   };
   try {
@@ -1439,7 +1547,7 @@ export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequ
       signal,
       body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'update_node_config', arguments: args } }),
     }));
-    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持远程修改节点配置，请先升级服务器' };
+    if (res.status === 404 || res.status === 501) return { ok: false, unsupported: true, error: '当前 Hub 不支持远程修改节点配置，请先升级 Hub' };
     if (res.status === 409) return { ok: false, conflict: true, error: 'revision conflict' };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const parsed = parseMcpToolResponse(await res.text());
@@ -1519,24 +1627,59 @@ const callHubTool = async (cfg: HubConfig, name: string, args: Record<string, un
       HUB_TOOL_DEADLINE_MS,
       () => null,
     );
-    if (!got) return { kind: 'error', error: `服务器 ${HUB_TOOL_DEADLINE_MS / 1000} 秒内没有返回完整响应`, transient: true };
+    if (!got) return { kind: 'error', error: `Hub ${HUB_TOOL_DEADLINE_MS / 1000} 秒内没有返回完整响应`, transient: true };
     const { res } = got;
-    if (res.status === 404 || res.status === 501) return { kind: 'unsupported', error: '当前 Hub 不支持节点规则文件，请先升级服务器' };
+    if (res.status === 404 || res.status === 501) return { kind: 'unsupported', error: '当前 Hub 不支持节点规则文件，请先升级 Hub' };
     if (!res.ok) return { kind: 'error', error: `HTTP ${res.status}` };
     const parsed = parseMcpToolResponse(got.text);
     if (parsed.kind === 'malformed') return { kind: 'unsupported', error: '当前 Hub 未返回兼容的响应' };
     if (parsed.kind === 'jsonRpcError') {
       // 旧 hub 没有这个工具时 SDK 回 "Tool xxx not found"（-32602）。
-      if (/not found|unknown tool/i.test(parsed.message)) return { kind: 'unsupported', error: '当前 Hub 版本还没有规则文件工具，请先升级服务器（commhub-server 含 app#225）' };
+      if (/not found|unknown tool/i.test(parsed.message)) return { kind: 'unsupported', error: '当前 Hub 版本还没有规则文件工具，请先升级 Hub（commhub-server 含 app#225）' };
       return { kind: 'error', error: parsed.message };
     }
     return { kind: 'payload', payload: parsed.payload };
   } catch (error) {
     const msg = error instanceof Error ? error.message : String(error);
     const aborted = (error instanceof Error && error.name === 'AbortError') || /abort/i.test(msg);
-    return { kind: 'error', error: aborted ? `服务器 ${TIMEOUT_MS / 1000} 秒内没有响应` : msg, transient: true };
+    return { kind: 'error', error: aborted ? `Hub ${TIMEOUT_MS / 1000} 秒内没有响应` : msg, transient: true };
   }
 };
+
+export type OpenCodeCatalogPoll =
+  | { ok: true; status: 'pending'; request_id: string }
+  | { ok: true; status: 'ready'; request_id: string; snapshot: { providers?: Array<{ id: string; activation?: string }>; models?: Array<{ providerId: string; id: string }> } }
+  | { ok: false; error: string; unsupported?: true };
+
+/** Queue a read of the node's OpenCode V2 server catalog. Does not start a server. */
+export async function queueOpenCodeCatalog(cfg: HubConfig, node: { nodeId: string; daemonNodeId: string }): Promise<OpenCodeCatalogPoll> {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const r = await callHubTool(cfg, 'read_opencode_catalog', {
+    daemon_node_id: node.daemonNodeId,
+    node_id: node.nodeId,
+    ...(networkId ? { network_id: networkId } : {}),
+  });
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: '当前 Hub 还不能读取 OpenCode V2 模型列表' };
+  if (r.kind === 'error') return { ok: false, error: r.error };
+  const p = r.payload;
+  if (!p || p.ok !== true || typeof p.request_id !== 'string') return { ok: false, error: String(p?.error ?? 'Hub 返回空响应') };
+  return { ok: true, status: 'pending', request_id: p.request_id };
+}
+
+export async function pollOpenCodeCatalog(cfg: HubConfig, requestId: string): Promise<OpenCodeCatalogPoll> {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const r = await callHubTool(cfg, 'get_opencode_catalog', {
+    request_id: requestId,
+    ...(networkId ? { network_id: networkId } : {}),
+  });
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: '当前 Hub 还不能读取 OpenCode V2 模型列表' };
+  if (r.kind === 'error') return { ok: false, error: r.error };
+  const p = r.payload;
+  if (!p) return { ok: false, error: 'Hub 返回空响应' };
+  if (p.ok === true && p.status === 'pending') return { ok: true, status: 'pending', request_id: requestId };
+  if (p.ok === true && p.status === 'ready' && p.snapshot) return { ok: true, status: 'ready', request_id: requestId, snapshot: p.snapshot };
+  return { ok: false, error: String(p.error ?? 'unavailable') };
+}
 
 const enqueueRulesFile = async (
   cfg: HubConfig,
@@ -1592,13 +1735,168 @@ const enqueueSkills = async (
     ...(tool === 'read_node_skill' ? { name: name ?? '' } : {}),
   };
   const r = await callHubTool(cfg, tool, args);
-  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: '当前 Hub 版本还没有技能查看工具,请先升级服务器' };
-  if (r.kind === 'error') return { ok: false, error: /not found|unknown tool/i.test(r.error) ? '当前 Hub 版本还没有技能查看工具,请先升级服务器' : r.error };
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: '当前 Hub 版本还没有技能查看工具,请先升级 Hub' };
+  if (r.kind === 'error') return { ok: false, error: /not found|unknown tool/i.test(r.error) ? '当前 Hub 版本还没有技能查看工具,请先升级 Hub' : r.error };
   const p = r.payload;
   if (!p || p.ok !== true || typeof p.request_id !== 'string') {
     return { ok: false, error: p?.error === 'request_in_flight' ? '节点还有一个技能请求没做完,请稍后再试' : String(p?.error ?? 'Hub 返回空响应'), ...(p?.existing_request_id ? { existing_request_id: p.existing_request_id } : {}) };
   }
   return { ok: true, request_id: p.request_id, op: 'read' };
+};
+
+/** 读一个 JSON 响应；200 但内容不是 JSON 时不把解析错误抛给用户。
+ *
+ *  背景（真实现场）：老 Hub 没有 /api/skills 时会把**首页 HTML 以 200** 返回
+ *  （0.9.0-preview.137 实测），客户端 `res.json()` 直接抛
+ *  "The string did not match the expected pattern."，用户看到的就是这句。
+ *  这不是「解析失败」，是「这个 Hub 没有这个接口」——两者要修的机器不同。 */
+const readJsonOrNull = async (res: Response): Promise<any | null> => {
+  const text = await res.text().catch(() => "");
+  if (!text) return null;
+  try { return JSON.parse(text); } catch { return null; }
+};
+
+// ── Hub 级技能目录（#1473 / #909）───────────────────────────────────────
+//
+// 服务端 GET /api/skills 与 MCP list_skills 同源，只回元数据、**不回 SKILL.md
+// 正文**；pending 仅 owner/admin 可见（服务端已把关，客户端不再自己判断）。
+// 三态必须分清：不支持(404/501) ≠ 没权限(403) ≠ 真的空目录。
+export type HubSkillRow = {
+  skill_id: string;
+  slug: string;
+  name: string;
+  description: string;
+  version: string;
+  status: 'published' | 'pending' | 'rejected' | string;
+  source_type?: string | null;
+  source_alias?: string | null;
+  created_at?: string | null;
+  updated_at?: string | null;
+  reviewed_at?: string | null;
+  review_note?: string | null;
+};
+export type HubSkillsResult =
+  | { ok: true; reviewer: boolean; skills: HubSkillRow[] }
+  | { ok: false; error: string; unsupported?: boolean; forbidden?: boolean };
+
+// ── 节点密钥的排队/轮询（#1491 E2）──────────────────────────────────────
+//
+// Hub 的节点密钥是一条「排队 + 节点 ack」的 lane：POST 入队，GET 轮询。
+// 值只在 POST 请求体里出现一次；响应里只有 key 名与 revision。
+export type NodeSecretSnapshot = {
+  network_id?: string;
+  node_id?: string;
+  revision: number;
+  activation?: string;
+  keys: Array<{ key: string; source?: string }>;
+};
+export type NodeSecretOpResult =
+  | { ok: true; request_id: string; expires_at?: number }
+  | { ok: false; error: string; message?: string };
+
+export type NodeSecretPollResult =
+  | { ok: true; status: 'pending' | 'succeeded' | 'failed'; snapshot?: NodeSecretSnapshot; error?: string }
+  | { ok: false; error: string };
+
+export const requestNodeSecretOp = async (
+  cfg: HubConfig,
+  nodeId: string,
+  body: { action: 'list' | 'put' | 'delete'; key?: string; value?: string; revision?: number },
+): Promise<NodeSecretOpResult> => {
+  const qs = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/secrets${qs}`, {
+        method: 'POST',
+        headers: { ...headers(cfg), 'Content-Type': 'application/json' },
+        body: JSON.stringify(body),
+        signal,
+      }),
+    );
+    const data = await res.json().catch(() => null) as any;
+    if (res.status === 404 || res.status === 501) {
+      return { ok: false, error: '当前 Hub 版本还没有节点密钥接口，请先升级 Hub' };
+    }
+    if (!res.ok || !data || data.ok !== true) {
+      return { ok: false, error: String(data?.error ?? `HTTP ${res.status}`), message: data?.message };
+    }
+    return { ok: true, request_id: String(data.request_id), expires_at: data.expires_at };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+};
+
+export const pollNodeSecretOp = async (cfg: HubConfig, nodeId: string, requestId: string): Promise<NodeSecretPollResult> => {
+  const qs = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/secrets/${encodeURIComponent(requestId)}${qs}`, {
+        headers: headers(cfg), signal,
+      }),
+    );
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const data = await res.json() as any;
+    if (!data || data.ok !== true) return { ok: false, error: String(data?.error ?? 'Hub 返回空响应') };
+    return { ok: true, status: data.status, snapshot: data.snapshot, error: data.error };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+};
+
+// ── Hub 级环境密钥「名字」（#1479 / #909）──────────────────────────────
+//
+// 服务端 GET /api/secrets 只回 `{key, updated_at}`；ciphertext/iv/tag 三列根本
+// 没有进 SELECT。客户端这边再守一道：只渲染看起来像 key 名的字符串。
+export type HubSecretKey = { key: string; updated_at: number | string | null };
+export type HubSecretsResult =
+  | { ok: true; keys: HubSecretKey[] }
+  | { ok: false; error: string; unsupported?: boolean; forbidden?: boolean };
+
+export const fetchHubSecrets = async (cfg: HubConfig): Promise<HubSecretsResult> => {
+  const qs = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/secrets${qs}`, { headers: headers(cfg), signal }),
+    );
+    if (res.status === 404 || res.status === 501) {
+      return { ok: false, unsupported: true, error: '当前 Hub 版本还没有密钥目录接口，请先升级 Hub' };
+    }
+    if (res.status === 403) return { ok: false, forbidden: true, error: '没有权限查看这个网络的密钥' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const body = await readJsonOrNull(res);
+    if (!body) return { ok: false, unsupported: true, error: '当前 Hub 版本还没有密钥目录接口，请先升级 Hub' };
+    if (body.ok !== true || !Array.isArray(body.keys)) return { ok: false, error: 'Hub 返回空响应' };
+    return { ok: true, keys: body.keys as HubSecretKey[] };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
+};
+
+export const fetchHubSkills = async (
+  cfg: HubConfig,
+  opts?: { includePending?: boolean; limit?: number },
+): Promise<HubSkillsResult> => {
+  const qs = new URLSearchParams();
+  if (cfg.networkId) qs.set('network_id', cfg.networkId);
+  if (opts?.includePending) qs.set('include_pending', '1');
+  if (opts?.limit) qs.set('limit', String(opts.limit));
+  const suffix = qs.toString() ? `?${qs.toString()}` : '';
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/skills${suffix}`, { headers: headers(cfg), signal }),
+    );
+    if (res.status === 404 || res.status === 501) {
+      return { ok: false, unsupported: true, error: '当前 Hub 版本还没有技能目录接口，请先升级 Hub' };
+    }
+    if (res.status === 403) return { ok: false, forbidden: true, error: '没有权限查看这个网络的技能目录' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const body = await readJsonOrNull(res);
+    if (!body) return { ok: false, unsupported: true, error: '当前 Hub 版本还没有技能目录接口，请先升级 Hub' };
+    if (body.ok !== true || !Array.isArray(body.skills)) return { ok: false, error: 'Hub 返回空响应' };
+    return { ok: true, reviewer: body.reviewer === true, skills: body.skills as HubSkillRow[] };
+  } catch (e: any) {
+    return { ok: false, error: String(e?.message ?? e) };
+  }
 };
 
 export const listNodeSkills = (cfg: HubConfig, node: RulesTarget): Promise<RulesFileEnqueueResult> =>
@@ -1611,7 +1909,7 @@ export const readNodeSkill = (cfg: HubConfig, node: RulesTarget, name: string): 
  *  only argument besides the target is a path RELATIVE to the node's work dir;
  *  hub and node both refuse absolute paths and `..`. Results come back through
  *  getRulesFileResult / waitForRulesFileResult like the rules file. */
-const FILES_TOOL_MISSING = '当前 Hub 版本还没有项目文件夹工具,请先升级服务器';
+const FILES_TOOL_MISSING = '当前 Hub 版本还没有项目文件夹工具,请先升级 Hub';
 const enqueueFiles = async (
   cfg: HubConfig,
   tool: 'list_node_files' | 'read_node_file',
@@ -1643,7 +1941,7 @@ export const readNodeFile = (cfg: HubConfig, node: RulesTarget, relPath: string)
 /** Node run-log view — enqueue tail_node_logs (read-only, no path; the node reads
  *  and redacts its own log). The hub hands the result to this login once, then
  *  purges it. Results come back through getRulesFileResult / waitForRulesFileResult. */
-const LOGS_TOOL_MISSING = '服务器版本过旧，升级后可查看日志';
+const LOGS_TOOL_MISSING = 'Hub 版本过旧，升级后可查看日志';
 export const tailNodeLogs = async (
   cfg: HubConfig,
   node: RulesTarget,
@@ -1758,6 +2056,58 @@ export const createNode = async (cfg: HubConfig, req: CreateNodeRequest): Promis
   }
 };
 
+/** Hub MCP `clone_node` (agent-network 5f8961c8). ok:true inserts a pending row; the child is not registered yet. A missing tool is the only demo path. */
+export async function cloneNode(cfg: HubConfig, req: CloneNodeArgs): Promise<ReturnType<typeof interpretCloneReply>> {
+  const preview: CloneNodeArgs = {
+    daemon_node_id: req.daemon_node_id,
+    source_node_id: req.source_node_id,
+    name: req.name,
+    copy_session: req.copy_session,
+    workdir_policy: req.workdir_policy,
+  };
+  try {
+    const networkId = req.network_id ?? cfg.networkId ?? (await fetchNetworkId(cfg));
+    if (networkId) preview.network_id = networkId;
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/mcp`, {
+        method: 'POST',
+        headers: {
+          ...headers(cfg),
+          Accept: 'application/json, text/event-stream',
+          'MCP-Protocol-Version': '2025-03-26',
+        },
+        signal,
+        body: JSON.stringify({
+          jsonrpc: '2.0',
+          id: 1,
+          method: 'tools/call',
+          params: { name: 'clone_node', arguments: preview },
+        }),
+      }),
+    );
+    if (res.status === 404 || res.status === 501) return interpretCloneReply({ kind: 'unsupported' }, preview);
+    const raw = await res.text();
+    if (!res.ok) {
+      try {
+        const j = JSON.parse(raw) as { error?: string | { message?: string } };
+        const err = typeof j?.error === 'string' ? j.error : j?.error?.message;
+        const message = err || `HTTP ${res.status}`;
+        return interpretCloneReply(isCloneToolMissing(message) ? { kind: 'unsupported' } : { kind: 'error', error: message }, preview);
+      } catch {
+        return interpretCloneReply({ kind: 'error', error: `HTTP ${res.status}` }, preview);
+      }
+    }
+    const parsed = parseMcpToolResponse(raw);
+    if (parsed.kind === 'malformed') return interpretCloneReply({ kind: 'error', error: 'clone_node response was not a tool result' }, preview);
+    if (parsed.kind === 'jsonRpcError') {
+      return interpretCloneReply(isCloneToolMissing(parsed.message) ? { kind: 'unsupported' } : { kind: 'error', error: parsed.message }, preview);
+    }
+    return interpretCloneReply({ kind: 'payload', payload: parsed.payload }, preview);
+  } catch (e: unknown) {
+    return interpretCloneReply({ kind: 'error', error: e instanceof Error ? e.message : String(e) }, preview);
+  }
+}
+
 export const fetchServerVersion = async (cfg: HubConfig): Promise<string | undefined> => {
   try {
     const res = await withTimeout(signal =>
@@ -1796,14 +2146,14 @@ export const login = async (
     if (!text.trim()) {
       // review-fix(通信龙 #34):响应形状不对=不是 hub → server-error,与 HTTP 状态码无关
       // (401+空体的常见真身是 basic-auth nginx——判 bad-credentials 会诱导用户反复重打密码)。
-      return { ok: false, kind: 'server-error', error: '服务器无响应内容 — 检查地址和端口（hub 默认 9999）' };
+      return { ok: false, kind: 'server-error', error: 'Hub 无响应内容 — 检查地址和端口（Hub 默认 9999）' };
     }
     let data: any;
     try {
       data = JSON.parse(text);
     } catch {
       // 同上:非 JSON 体(HTML 401 页等)= 不是 hub → server-error(kind 必须与本行文案同向)。
-      return { ok: false, kind: 'server-error', error: `服务器返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 hub` };
+      return { ok: false, kind: 'server-error', error: `Hub 返回了非 JSON 内容（HTTP ${res.status}）— 确认地址指向 Hub` };
     }
     if (!data?.ok) return { ok: false, kind: classifyLoginFailure(false, res.status), error: String(data?.error ?? `HTTP ${res.status}`) };
     const token = data.token ?? data.user_token ?? data.access_token;

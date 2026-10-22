@@ -15,6 +15,7 @@ import { chatWindowLabel, workspaceWindowLabel } from './desktop-chat-menu';
 import { SETTINGS_WINDOW_LABEL } from './desktop-settings-window';
 import { IMAGE_WINDOW_LABEL } from './image-window-model';
 import { taskWindowLabel } from './task-window-model';
+import { daemonSettingsWindowLabel } from './daemon-settings-window';
 
 let p = 0, t = 0;
 const ck = (name: string, cond: boolean, detail = '') => { t++; if (cond) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${detail ? ` — ${detail}` : ''}`); };
@@ -35,6 +36,7 @@ function walk(dir: string, keep: (f: string) => boolean): string[] {
 
 /** file (posix, repo-relative) → the labels its window-creation call sites mint (a sample of each shape). */
 const KNOWN: Record<string, string[]> = {
+  'src/daemon-settings-window.ts': [daemonSettingsWindowLabel({ profileId: 'p1', networkId: 'net1', alias: 'daemon-a' })],
   'src/desktop-chat-menu.ts': [chatWindowLabel('示例-A', 'p-1'), workspaceWindowLabel('p-1')],
   'src/image-window.ts': [IMAGE_WINDOW_LABEL],
   'src/desktop-settings-window.ts': [SETTINGS_WINDOW_LABEL],

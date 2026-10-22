@@ -1,0 +1,41 @@
+#907 — explicit Hub Provider distribution review
+Observed: 2026-10-12 05:27 +08. Candidate only; not published.
+
+Scope
+Base main412a7b734bc9e9907ae1b0ba77092ce2426630f0, client0.2.246.
+Review shows the selected Provider name/id, configuration revision, protocol,
+configured models and exact target Daemon names/ids. Back closes the review.
+Changing target selection clears confirmation. Reuses existing hub_bind,
+Daemon CAS and separate readback receipts; no new backend/API/key storage.
+No automatic node switch, login, credential rotation or model-access claim.
+Read repository AGENTS and exact Expo56 documentation before code edits.
+
+Docker core
+sg docker -c 'docker build --target core -f tests/hub-provider-management/Dockerfile -t anet-app:hub907-review-core .'
+Image config sha256:8131014bbd07d9d4aafb937e55c97f14a874b6d53acab91cebdbd9e90dea7b55
+sg docker -c 'docker run --rm --network none anet-app:hub907-review-core'
+Existing parser/scope/reference tests4/4 PASS; TypeScript build typecheck PASS.
+Only after core passed, build the existing independent Docker browser target.
+sg docker -c 'docker build --target browser -f tests/hub-provider-management/Dockerfile -t anet-app:hub907-review-browser .'
+Image config sha256:9f7d720ebb065f03de9e58e1d687647abf339597b19f5eaa23b498e03aae5e13
+sg docker -c 'docker run --rm --network none anet-app:hub907-review-browser'
+PASS39/39 actual exported React assertions, desktop/light + phone/dark.
+Includes exact Provider id/revision/protocol/models/target review; cancel causes
+zero bind writes; changing targets closes review; explicit confirm and matched
+Daemon readback succeed. Existing wrong-Daemon receipt remains unconfirmed.
+Existing saved-key reference distribution and rendered palette still pass.
+Synthetic HTTP/Hub and Docker Chromium, not native package/live OAuth/inference.
+The source-pinned Dockerfile remains independently rebuildable; no new suite.
+No unchanged installer/account/entitlement suites rerun.
+No production service/account/node changes, no host npm install.
+
+Recovery and cleanup
+This UI-only candidate adds no permanent service, port/proxy/tunnel,
+environment variable, secret source, database migration or persistence.
+Existing deployment authority: .github/workflows, scripts and
+docs/desktop-release-sop.md. Publish only from exact merged main, never this
+branch export. Rollback uses the previous signed client; installed Daemon
+keys/catalogs are not automatically reverted by replacing the client.
+Hub vault/catalog and Daemon state remain dependent on the documented encrypted
+backups; cloning Git does not recreate user credentials or production data.
+Test containers use --rm; audit worktree/images retained, no shared cache prune.

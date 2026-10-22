@@ -59,8 +59,22 @@ const bodyWithKinds = (kinds) => {
   return [...lines.slice(0, at + 1), ...kinds.map(k => `- ${KIND_ITEMS[k].bullet}`), '', ...lines.slice(end)].join('\n');
 };
 const BODY = bodyWithKinds(KIND_CASES.mixed);
-const [maj, min, pat] = APP_VERSION.split('.').map(Number);
-const PREV = `${maj}.${min}.${pat - 1}`, PREV2 = `${maj}.${min}.${pat - 2}`;
+// Release versions can have gaps (for example, an unpublished failed draft).
+// Derive the expected cards from the supplied notes, not patch-number arithmetic
+// or the rendered DOM; still require the complete list in numeric version order.
+const NOTE_VERSIONS = [...BODY.matchAll(/^What's new in (\d+\.\d+\.\d+):$/gm)]
+  .map(match => match[1])
+  .sort((a, b) => {
+    const av = a.split('.').map(Number), bv = b.split('.').map(Number);
+    return bv[0] - av[0] || bv[1] - av[1] || bv[2] - av[2];
+  });
+if (NOTE_VERSIONS.length < 3 || NOTE_VERSIONS[0] !== APP_VERSION) {
+  throw new Error('changelog fixture needs the running version and two older releases');
+}
+const [, PREV, PREV2] = NOTE_VERSIONS;
+// Unpublished drafts sit in the notes without a bundled date. The geometry check
+// below must use cards that actually have one, not the two newest neighbors.
+const KNOWN_DATES = new Set([...bundledSrc.matchAll(/"(\d+\.\d+\.\d+)":\s*"20/g)].map(match => match[1]));
 // What the running version's card must show, read from the same notes (not hard-coded: every release changes them —
 // the drive used to expect 「任务仪表盘」 and exactly 新功能 / 修复, true for one release only). The first bullet's text
 // (minus a 新功能：/修复：/提速： prefix), first 8 characters.
@@ -206,7 +220,7 @@ async function run({ phone }) {
 
   // 2 list
   const versions = await page.locator('[data-testid^="changelog-version-"]').evaluateAll(els => els.map(e => e.textContent));
-  ck(`${vp}: versions newest first, running version on top`, versions[0] === `v${APP_VERSION}` && versions[1] === `v${PREV}` && versions.length > 50, `${versions.slice(0, 3).join(',')} … (${versions.length})`);
+  ck(`${vp}: versions newest first, running version on top`, versions.length > 50 && versions.length === NOTE_VERSIONS.length && versions.every((v, i) => v === `v${NOTE_VERSIONS[i]}`), `${versions.slice(0, 3).join(',')} … (${versions.length})`);
   const v0 = await paintedText(page, tid(`changelog-version-${APP_VERSION}`));
   const d0 = await paintedText(page, tid(`changelog-date-${APP_VERSION}`));
   ck(`${vp}: version + date painted`, painted(v0) && painted(d0) && /^\d{4}-\d{2}-\d{2}$/.test(d0?.text ?? ''), `${pw(v0)} / ${d0?.text} ${pw(d0)}`);
@@ -243,10 +257,26 @@ async function run({ phone }) {
     ck(`${vp}: 复制 touch target ≥ 36 high`, heads.every(h => h.copy.h >= 36), heads.map(h => h.copy.h).join('/'));
   } else {
     ck(`${vp}: check · version · date · 复制 centred on one line`, heads.every(h => [h.check, h.ver, h.date].filter(Boolean).every(b => Math.abs(cy(b) - cy(h.copy)) <= 1)), heads.map(h => [h.check, h.ver, h.date].filter(Boolean).map(b => (cy(b) - cy(h.copy)).toFixed(1)).join(',')).join(' / '));
-    // The running version carries a 当前版本 badge between version and date; compare the other cards with each other.
+    // The running version carries a 当前版本 badge between version and date.
+    // Neighbors may be unpublished and have no date; compare dated cards instead.
     const gap = (h) => h.date.x - h.ver.x - h.ver.w;
-    const dated = heads.slice(1).filter(h => h.date);
-    ck(`${vp}: date right after the version (same gap each dated card)`, dated.length > 0 && dated.every(h => Math.abs(gap(h) - gap(dated[0])) <= 0.5) && gap(dated[0]) > 0 && gap(heads[0]) > gap(dated[0]), heads.filter(h => h.date).map(h => gap(h).toFixed(1)).join('/'));
+    let dated = heads.slice(1).filter(h => h.date);
+    if (dated.length < 2) {
+      for (const v of NOTE_VERSIONS) {
+        if (v === APP_VERSION || !KNOWN_DATES.has(v) || dated.some(h => h.v === v)) continue;
+        // Historical dates can be below the ScrollView's clipped viewport.
+        // Scroll to the real card before requiring its date to be painted;
+        // do not invent publication dates for the two unpublished neighbors.
+        await page.locator(tid(`changelog-date-${v}`)).scrollIntoViewIfNeeded();
+        const ver = await box(page, tid(`changelog-version-${v}`));
+        const dateText = await paintedText(page, tid(`changelog-date-${v}`));
+        const date = painted(dateText) ? await box(page, tid(`changelog-date-${v}`)) : null;
+        if (ver && date) dated.push({ v, ver, date });
+        if (dated.length === 2) break;
+      }
+    }
+    ck(`${vp}: date right after the version (same gap each dated card)`, dated.length >= 2 && dated.every(h => Math.abs(gap(h) - gap(dated[0])) <= 0.5) && gap(dated[0]) > 0 && (!heads[0].date || gap(heads[0]) > gap(dated[0])), [...(heads[0].date ? [`current ${gap(heads[0]).toFixed(1)}`] : []), ...dated.map(h => `${h.v} ${gap(h).toFixed(1)}`)].join('/'));
+    await page.locator(tid(`changelog-card-${APP_VERSION}`)).scrollIntoViewIfNeeded();
   }
 
   // 4 single-version preview in each format

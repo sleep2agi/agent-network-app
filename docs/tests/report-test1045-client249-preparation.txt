@@ -1,0 +1,127 @@
+#998/#1045 client249 preparation checkpoint — NOT PUBLISHED
+OBSERVED_AT=2026-10-12 08:04+08
+
+2026-10-12 10:33+08 main-built exact pair preparation — NOT PUBLISHED
+- Backend PR2640 normally merged to main f86012a30c75f59abeeed3221647f5d2847bd969.
+  Formal release runs38195512383(CLI170)/38195510631(runtime136) built their
+  main tarballs successfully; four release gates are queued, not passed.
+- Downloaded original gated-tarball artifacts (not a host build): CLI170
+  2113589B / SHA256 e1cef7f5b295ac27968782f07fda5b0e22b176b9b650d4fe9177b976f1121d60;
+  runtime136 591168B / SHA256 038bf75e2ade28d4b79efb5ee4d278862b0b1f2a4d34fd677f4475672aee2524.
+  These are inner tgz hashes, not the artifact ZIP digests. Package metadata
+  names/versions match. Native installer, fixture and249 notes now pair170/136.
+  Draft remains HOLD until formal public downloads match these exact bytes.
+- App889@744f4e06: Mac installer20/20 and Windows/Ubuntu unit jobs SUCCESS;
+  linux-deb TEST ONLY SUCCESS. Rollup32SUCCESS/1SKIPPED/1FAILURE/1IN_PROGRESS.
+  Failure is stub shard2 job114635423801, specifically the changelog desktop
+  dated-card geometry assertion. Seven other shards SUCCESS, upgrade pending.
+- Read actual cloud log and paintedText clipping behavior: neighbors248/247
+  are unpublished; known historical244/243 dates are outside the ScrollView
+  viewport. Fixture fallback never scrolls before requiring painted dates.
+  Narrow fixture repair scrolls actual dated cards into view, keeps positive
+  gap/equal spacing/current badge assertions, and requires TWO dated samples
+  instead of one. No fake publication date or product styling change.
+- Push only to existing draft PR; validation by existing GitHub Actions.
+  No local tests, Docker execution, global package install or production change.
+
+2026-10-12 10:08+08 cloud fixture alignment — NOT a passed replay
+- App889@e63278062f4b9c6635a5bf5d1f8e695a4ba9fdd4 cloud Mac regression
+  run38193978755/job114632526787:15native unit cases PASS/5regression FAIL.
+- All five regression fixtures still advertise Hub124, below new actual
+  installer minimum127, so install rejects at health check before their
+  intended npm/stop/hash/initialization stages. This is stale fixture wiring,
+  not an environment failure or a completed installer validation.
+- Align only healthy fixture version127 and exact expected CLI169/runtime136
+  pair/archive name. Keep incompatible Hub66 case, stop-order/pid identity,
+  original-config preservation, bad-hash rejection and compatible reuse
+  assertions unchanged. No production minimum or test assertion weakened.
+- Existing Actions regression reruns on this narrow file change; no local
+  tests. CLI169 official download and runtime136 publication still required
+  before client merge/publication. Not all client CI is terminal or green.
+
+2026-10-12 10:00+08 pin preparation — still NOT PUBLISHED
+- Formal main source31b0dbdae3192f471c8812574c118795658120f0 Hub127
+  release38193173842 all gates/publication SUCCESS. Anonymous npm tarball
+  is byte-identical to gated artifact:1232566B,
+  SHA256 ef9ed47cff0a1d6b65ef100dbf684f4e2c430e802ee75809bdb4db3c62fc6e54.
+- Hub125→127 sidecar package/lock/SRI and native version expectation updated.
+  Exact package dependency fields unchanged; no lock dependency churn.
+  Generated platform binary manifest is rebuilt by the existing Actions
+  sidecar build, not fabricated from the checked-in historical120 manifest.
+- CLI169 main release38193199217 four gates SUCCESS; inner artifact SHA256
+  0665ca5447487874d5ee17604e95e19b2f2449a6e5215e81521ac85dd5e05928,
+  2128700B. Existing main gated download workflow38193906192 pending.
+  Native CLI version/URL/hash and matching fixtures now pin those exact bytes.
+- Runtime135 publication succeeded but later cloud SDK legacy creation fails
+  with an empty source-marker network. Do not install it as fixed. Backend
+  PR2640@fcd7fd9f75a7867c5b162a246bc0e87919c3178e narrowly corrects the
+  marker with the token-bound Hub request network; runtime136 is replacement
+  candidate. Native installer/fixtures and249 notes now require136, not135.
+- No client merge/publication until corrected runtime formal bytes and CLI
+  public download are available. Testing only in GitHub Actions; no local
+  tests, generated binary build, host npm install or production activation.
+
+09:12+08 increment (separate from the older snapshot below)
+- Restacked release/client249-pair on exact app main
+  8616ea5f358cce095e109b93d64da34f2807e28c, containing source merges PR885
+  (creation-time existing Provider) and PR888 (real Daemon/node secrets).
+- Updated249 workflow/bundled notes with those slices and the exact required
+  candidate family Hub127/CLI169/runtime135. Candidate dates not invented.
+- Mechanical checked-in generator --no-dates regenerated bundled notes.
+- Docker anet:test1053-portable, uid/gid1000, network none, candidate read-only:
+  version metadata14 checks, bundled notes7 checks, note hygiene9 checks pass.
+  These scripts assert at import time; Bun's final summary says0 registered
+  tests, not30 Bun test cases. All explicit checks and exit code are successful.
+- Initial browser-image invocation lacked bun; next non-owner uid could not
+  traverse the private candidate directory. Both setup attempts ran no checks;
+  corrected to actual source-capable Bun image and worktree owner uid1000.
+- Native installer remains CLI166/runtime132 and bundled Hub125. No PR,
+  publish or auto-update artifact dispatched from this incomplete candidate.
+  Update exact hashes/sidecar lock only after formal backend bytes are public.
+- No feature/UI suites repeated for notes-only metadata; reuse exact prior
+  feature/core reports. Reported next09:20 backend-gate checkpoint, conditional
+  earliest backend09:35–09:50 / selected client10:00–10:20, not a deadline.
+- All containers --rm; source/generator/report retained; no production writes.
+
+Source/scope
+- Base main d3705a8ca7f8d738cf399e1666ae574b38b176ae includes HTTP PR882 and
+  current-account stale-flag PR883. Candidate branch release/client249-pair.
+- Candidate tree before this report:4b28645f8b029e6fb0aceb3bc84776d6277f2786.
+- Only eight version locations, Android code2249, workflow notes and mechanically
+  generated bundled notes. Cargo.lock changes only the desktop root package.
+- Anonymous tag/draft preflight found no desktop-v0.2.249 on08:04+08.
+- Candidate notes name Hub127/CLI169/runtime135 and clearly state that updating
+  the client does not upgrade a remote server.
+
+Docker metadata checks
+- Existing anet-app:mobile-provider-entry-core source/test image, candidate
+  source/manifests/native/.github/scripts read-only at /app, network none.
+- Version consistency14/14 PASS; actual Android notes generator for249 PASS.
+- Bundled changelog7/7 PASS; release-note hygiene9/9 PASS.
+- First harness used node --import tsx, but the image has Bun rather than tsx:
+  ERR_MODULE_NOT_FOUND setup failure before assertions. Corrected to the image's
+  installed Bun; no new dependency, modified assertion or product workaround.
+- Generator --no-dates preserves actual recorded dates and does not invent a
+  release timestamp for249.
+- Behavioral evidence remains report-test1045-provider-http.txt and
+  report-test998-current-account-flag.txt. No redundant full feature suite,
+  native account, OAuth or model inference performed for this version metadata.
+
+Not ready for formal release
+- Current native installer still references CLI166/runtime132; current bundled
+  Hub is125. These are not HTTP-capable release inputs.
+- Backend metadata PR2636 candidate335fa4d756551fc198fa37c81bdd5f746d7828c8
+  still needs required CI/main merge and formal Hub127/runtime135/CLI169 release.
+- After actual immutable package bytes are readable, update sidecar
+  package/lock/SRI, native Hub expectation and exact native installer
+  URL/SHA256/version fixtures in this candidate. No invented hashes.
+- This checkpoint is not a public package, native installer result or a
+  completed #1045. Build/sign/publication only from an exact full40 main SHA.
+- Primary platforms macOS/Windows/Android. Linux deferred; iOS last.
+
+Cleanup/recovery
+- Test containers --rm; no host/global install, production account, credentials,
+  service activation, schema or data changes. Owned branch/test images retained.
+- Existing docs/desktop-release-sop.md remains release/recovery authority.
+  No new startup/port/proxy/tunnel/secret source; retain old desktop/software and
+  protected profile/database backups. Git does not recreate production data.

@@ -1,0 +1,92 @@
+OBSERVED_AT=2026-10-11T07:28:57Z (15:28:57 Asia/Shanghai)
+Requirement: Hub #959 / sleep2agi/agent-network-app#837
+Product source: affe33d3b0ff79a9a9aeb33d477e15093ba964ff
+Base: ccf611a29ffdd3e0ed2792491af90dca52264cd5
+
+Changes
+- Daemon management header opens a scoped, resizable desktop window.
+- Same profile/network/alias focuses the existing window; different scopes have
+  distinct labels. URL carries routing identifiers only. The window loads the
+  requested saved profile; no fallback to another active account.
+- Reuses Provider, overview, managed nodes, node settings/logs and creation UI.
+- Android/web stay in-app; closing a window does not restart a daemon.
+- Browser core test caught the inherited unscoped status read. Added a light,
+  explicitly network-scoped status reader only for Daemon management.
+
+Docker-only validation
+Dockerfile: tests/daemon-settings-window/Dockerfile (pinned base digests)
+Image: anet-app:daemon-settings-window
+Config SHA256: 0e7c1e94a2aae65fb56c119bae66476039b660c2dea49cb46f8995249e0979da
+- route/create/reuse/error/non-desktop helper checks: PASS
+- window capabilities: 49/49 PASS
+- window chrome: 44/44 PASS
+- native title-bar theme contract: 23/23 PASS
+- TypeScript build typecheck: PASS
+- Expo web export: PASS, 1227 modules
+- Final real React UI + synthetic Tauri/Hub IPC browser drive: 24/24 PASS,
+  exit 0, network disabled, 1120x800, light and dark palettes asserted.
+
+Browser evidence
+Final drive mounted read-only over the image's driver (fixture-only corrections;
+exported product unchanged from affe33d3). Reproduce using the checked-in driver
+with a fresh Docker build, or bind that driver onto the above exact image.
+The first fixture used an invalid request UUID and expected a config fetch that
+only hand-started nodes use; corrected to valid request shape and to assert the
+actual node-details navigation plus alias/network-scoped status read. Palette
+setup now writes the real desktop theme preference and asserts the painted color.
+No product guard or assertion was weakened to accept a wrong network.
+
+Screenshots reviewed (not native window-manager screenshots):
+daemon-settings-light.png SHA256 f09784f476da4fbb4f8a83304f8e21149950ba7ce454d81e08d1ea0c6afd5d2b
+daemon-settings-dark.png SHA256 1c81c3b77dc8d98539e84849448bc881427931ef693631f7344fbb0748ac622f
+Cards separate Provider management, existing Codex inventory and node selection;
+sidebar and header remain visible. No production data or credentials used.
+
+Limits / cleanup
+No signed macOS/Windows package, OS window-manager, real OAuth/model inference,
+production write or Android binary acceptance claimed. Existing pure checks prove
+non-desktop helper returns false; Android still uses the existing in-app screen.
+Docker runs used --rm --init --network none. Browser/server closed in finally.
+Only test image and reviewed screenshots retained. No host/global package change.
+Status: implementation and core Docker verification complete; not released.
+
+2026-10-11T07:35Z incremental reconciliation (not a native package acceptance)
+- Windows CI job114417099428 on d0fcb6cd: 397/399 files passed. Two failures
+  were missing registrations: fetchScopedStatus in the network-scope behavior
+  table and this browser drive in tests/drives.json. Added both, retaining all
+  existing assertions. The drive is a CI stub and honors PLAYWRIGHT_MODULE/OUT.
+- Merged main d9ef6aa685462c90f72f02e0b7bef7b4bceaf036, preserving both the
+  new clone-node controls and the daemon-settings window control/state.
+- Rebuilt the exact merged working sources with the same pinned Dockerfile.
+  api-network-scope, drive-registry, node-clone, window helper/capabilities/chrome,
+  native-title-bar-theme and TypeScript checks PASS. Expo export: 1231 modules.
+  Image config SHA256: 27b456d1e00152a029aa2b844d502f9e8b6f0c5f6eb90634369a8e13da00b349
+- Browser drive against that rebuilt export: 24/24 PASS, exit 0. Docker run
+  --rm --init --network none -e OUT=/tmp/window-evidence; no bind-mounted
+  driver override. Container and temporary screenshots removed by --rm.
+- No production actions; no signed OS package, live OAuth or release claimed.
+
+2026-10-11T19:27Z current-main reconciliation (03:27 Asia/Shanghai)
+- Original PR840, no replacement implementation ticket. Merged current main
+  6763765909d0c7a50dbd9c595e14d294fd0e99b8 (client 0.2.244).
+  The only merge conflict was tests/drives.json; retained both the scoped-window
+  drive and all incoming Provider, token, reauthentication and update drives.
+- Tested staged source tree: 791c53d5c1e1fb18b9fb102cbfbd0c5f3edf5a2a
+  (before this append-only evidence update). No new dependencies or SDK upgrade.
+- Rebuilt with the checked-in pinned Dockerfile. api-network-scope 77,
+  drive-registry 12, node-clone 29, window helper route/create/reuse/error/mobile,
+  capabilities 49, chrome 44 and title-bar theme 23 checks PASS.
+  TypeScript build typecheck PASS. Expo web export PASS (1246 modules).
+- Image ID: sha256:12833766f10f3f743a3455be2e3b326396ec3cca70c6022ea85a27cf284d9ea7
+- Browser drive: 24/24 PASS, exit 0, --rm --init --network none.
+  Real exported React UI, synthetic Tauri/Hub IPC only; no host credentials.
+  Current light/dark screenshots reviewed: Provider/inventory/collection cards,
+  scoped header and navigation remain visible. Synthetic empty inventory is not
+  evidence of a real account, provider, entitlement or live model execution.
+  light SHA256 bb8449dfd9f91516797c68c86ab0969ad98fe18056dd2e958cdcf1cb07f1f4a5
+  dark SHA256 438474b48d3d2edc83f5bf3329eb8a0b6070b861995ad0311cb1b8f8228375f6
+- Cleanup: browser/server closed and container removed. Test image/screenshots
+  retained in isolated temporary storage. No global install or production write.
+- Scope unchanged: native macOS/Windows window-manager and signed package
+  acceptance remain separate; Android keeps its existing in-app screen.
+  This verifies the original PR on current main, not a published client.

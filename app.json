@@ -2,7 +2,7 @@
   "expo": {
     "name": "ANet",
     "slug": "agent-network-app",
-    "version": "0.2.227",
+    "version": "0.2.284",
     "orientation": "default",
     "icon": "./assets/icon.png",
     "userInterfaceStyle": "automatic",
@@ -44,12 +44,12 @@
       [
         "expo-splash-screen",
         {
-          "image": "./assets/android-icon-foreground.png",
+          "image": "./assets/mark-light.png",
           "imageWidth": 200,
           "resizeMode": "contain",
           "backgroundColor": "#f6f7f9",
           "dark": {
-            "image": "./assets/android-icon-foreground.png",
+            "image": "./assets/mark-dark.png",
             "backgroundColor": "#111113"
           }
         }
@@ -74,14 +74,14 @@
     ],
     "android": {
       "adaptiveIcon": {
-        "backgroundColor": "#011133",
+        "backgroundColor": "#236ce1",
         "foregroundImage": "./assets/android-icon-foreground.png",
         "backgroundImage": "./assets/android-icon-background.png",
         "monochromeImage": "./assets/android-icon-monochrome.png"
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.anonymous.agentnetworkapp",
-      "versionCode": 2227,
+      "versionCode": 2284,
       "permissions": [
         "android.permission.REQUEST_INSTALL_PACKAGES",
         "android.permission.POST_NOTIFICATIONS",

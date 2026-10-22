@@ -1,0 +1,96 @@
+#907 client 0.2.247 formal release receipt
+OBSERVED_AT=2026-10-12 06:05+08
+
+Scope
+- Provider distribution review card only: exact Provider id/label, revision,
+  protocol, models and selected Daemon identities shown before explicit bind.
+- Cancel/back/target change sends zero bind writes; existing CAS/receipts reused.
+- No automatic node apply/restart/account switch, key rotation or revocation.
+- macOS Apple Silicon, Windows x64 and Android; Linux deferred.
+- This does NOT close the full Hub Provider lifecycle requirement.
+
+Exact source / merge
+- Feature PR875 normal merged to b77c05c827011b58fc4a087b5599dc7f3931ee50.
+- Version PR876 normal merged at 2026-10-11T21:43:45Z.
+- Formal source main SHA: feba667e94ea3924883f6a6a74a69fe42f5478d9.
+- Fresh public main fetch at 05:59+08 equals that SHA; ancestor check succeeds.
+- PR876 head5e9d1c96035f994dbbaf67cc5e9bbfcf3dc72025 CI32 SUCCESS/1 SKIPPED.
+- Feature/core test and initial failed transient UI fixture evidence are in
+  report-test907-distribution-review.txt and report-test907-client247-preparation.txt.
+- No branch-built artifact is reused as a formal package.
+
+Android: PUBLISHED and verified
+- Build38177581252 / job114583123418 SUCCESS, exact main source above.
+- Publisher38178525197 SUCCESS; version channel verified 21:59:30Z / 05:59:30+08.
+- package=com.anonymous.agentnetworkapp; versionName=0.2.247; versionCode=2247.
+- APK size=83785857 bytes.
+- Inner APK SHA256 (NOT Actions ZIP digest):
+  d2d80f4c40e7fce3a020db2e626d94c0d3ce124732328987e4e973f891befdbb.
+- Publication validates source workflow/main/full SHA, aapt2 identity and notes.
+- Job verifies expected digests for all four public dataset paths; downloads
+  VERSION, notes and checksum byte-for-byte, and FULL APK anonymously by SHA256.
+- Additional fresh anonymous VERSION=0.2.247, checksum and this version's notes
+  read back at 06:00+08. No redundant full APK download on this host.
+- Public APK:
+  https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/agent-network-0.2.247.apk
+- android/latest/VERSION is active; a generated APK alone would not prove this.
+
+Desktop: PUBLISHED, update endpoint and China mirror verified
+- Signed workflow38177579579 exact main source, include_linux=false.
+- macOS job114583118155 SUCCESS (build/sign/notarize, package smoke, retention).
+- Windows job114583117906 SUCCESS; verify-draft SUCCESS; complete workflow SUCCESS.
+- Release409945628 target_commitish equals exact source above.
+- Audited draft has eight selected-platform assets; version0.2.247 manifest has Mac and
+  Windows asset API ids/signatures, no Linux updater entries or deb artifacts.
+- Published as Latest at 2026-10-11T22:02:19Z / 06:02:19+08; non-draft, non-prerelease.
+- Tag desktop-v0.2.247 resolves to exact source main SHA, type commit.
+- Fresh anonymous anet.sh updater manifest version0.2.247; five Mac/Windows
+  primary/alias entries map to the actual browser-download assets with signatures.
+- Original signature asset bytes match manifest signature strings exactly:
+  Mac229a1b8c..., NSIS30771442..., MSIb251b510... (public signatures, not keys).
+- Public release:
+  https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.247
+- Explicit mirror38178806847 SUCCESS at 22:04:18Z / 06:04:18+08; updater drift
+  38178808725 SUCCESS. Fresh anonymous desktop/latest/VERSION=0.2.247;
+  versioned SHA256SUMS matches all eight release asset API digests. Mirror's
+  manifest has five exact selected-platform entries, ModelScope URLs and
+  unchanged signatures; Linux is absent, not relabelled from an older package.
+- GitHub macOS dmg anonymous ranged GET HTTP206, application/octet-stream,
+  Content-Range bytes0-0/38930247. Reachability only, NOT a full local rehash.
+- Auto release-event mirror38178801835 (same tag/source,
+  fresh confirmed still in SDK setup, no upload) reached completed/cancelled to unblock
+  explicit tag sync and avoid its obsolete 30-minute wait for a desktop-attached
+  APK. Android is independently published above. Cancellation is not a PASS.
+
+Skill experience
+- Updated requested local anet-provider-release-cut skill with exact serialized
+  signature-byte comparison. Base64-decoding only one side is not a valid asset
+  comparison; this is distinct from cryptographic installer verification.
+- Official skill-creator quick_validate.py PASS inside disposable Docker
+  node20-alpine plus python3/py3-yaml; mounts read-only, container removed.
+- Two initial attempts used an unsuitable stripped preflight image (missing
+  /runtime/bun entrypoint, then missing python3); validator never started there.
+  These are tooling setup failures, not release gates or product test failures.
+- Local skill is a convenience; this tracked report and release SOP remain the
+  software/recovery authority.
+- Mac dmg631904842 /38930247B /SHA256
+  24b2a6559805eee4037a29577581af7b0e0b03938a717c417afe94aa6afbc000.
+- Mac app.tar.gz631904890 /38288377B /SHA256
+  b97d9f31767d759965a1ab3c72e315c145c87bdd9e585fd2c0184c1f90a28509.
+- Win exe631912914 /37341062B /SHA256
+  adde74d0a989339e570f1d0108983a0c1376218542334e8a37175c576138319f.
+- Win msi631912823 /51163136B /SHA256
+  535d7146d2478f99f4bda1ea2949ede4475a30b8556443af03ed9dd5e4b2c664.
+- These are draft asset API digests, not anonymous full-host rehashes.
+
+Recovery / boundaries
+- Authority: docs/desktop-release-sop.md and the repository workflows/scripts.
+- Build source is the exact main SHA; installer/signing inputs stay CI-bound.
+- Keys come only from named repository secrets in the workflow; no values copied.
+- No service launcher, production Hub/Daemon, port/proxy or state/migration change.
+- Upgrade requires verified public channel/version; published tags/assets are
+  immutable. Rollback/update-channel handling follows the SOP, not tag movement.
+- Git reproduces software/fixtures, not production conversations or credentials;
+  existing data/backup requirements remain independent.
+- Local source worktree is isolated; no global npm change or host tests.
+- No temporary running container or credential material created in this round.
