@@ -289,6 +289,9 @@ const copy = [
   ['Agent 组织架构', 'Agent organization'],
   ['Agent 团队', 'Agent teams'],
   ['我的头像', 'My avatar'],
+  ['技能广场', 'Skill plaza'],
+  ['公开技能目录', 'Public skill catalogue'],
+  ['技能正文', 'Skill content'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

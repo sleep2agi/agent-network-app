@@ -38,6 +38,7 @@ import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runti
 import XiaomiGuideModal from './XiaomiGuideModal';
 import VoiceSettingsSection from './VoiceSettingsSection';
 import UiScaleSettings from './UiScaleSettings';
+import SkillPlazaSection from './SkillPlazaSection';
 import LanguageSettings from './LanguageSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
@@ -640,6 +641,7 @@ export default function SettingsScreen({
     setQuietEnd,
     renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail, setHeader: setHeaderOverride, scrollTop: scrollPaneTop }} />,
     renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />,
+    renderSkillPlaza: bodyOpen => <SkillPlazaSection layout="phone" detailOpen={bodyOpen} navigation={{ openDetail: () => openDetail('skillBody'), closeDetail, setHeader: setHeaderOverride }} />,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
     updateView: isIOS ? IOS_UPDATE_ROW : isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
@@ -1244,6 +1246,12 @@ export default function SettingsScreen({
                   <SettingsSwitchRow label={tr('settings.copy.277')} subtitle={tr('settings.copy.278')} value={pooledHttp} onValueChange={onPooledHttpChange} testID="settings-pooled-http-row" />
                 </SettingsGroup>
               ) : null}
+            </View>
+          ) : null}
+          {sectionsToRender.includes('skillPlaza') ? (
+            <View style={sectionStyle}>
+              {heading('skillPlaza')}
+              <SkillPlazaSection layout="desktop" />
             </View>
           ) : null}
         </ScrollView>

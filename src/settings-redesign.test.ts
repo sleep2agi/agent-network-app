@@ -32,9 +32,12 @@ console.log('# 1 宽屏右栏:每一段都在卡片里');
   marks.forEach((m, i) => {
     const body = settings.slice(m.at, i + 1 < marks.length ? marks[i + 1].at : settings.indexOf('</ScrollView>', m.at));
     // 自己画成设置积木卡片的组件(VoiceSettingsSection / UserManagementPanel)直接放在段里,不再套 WideCard。
-    if (!/<WideCard>|<SettingsGroup|<VoiceSettingsSection |<UserManagementPanel |<AgentOrgScreen /.test(body)) bare.push(m.key);
+    if (!/<WideCard>|<SettingsGroup|<VoiceSettingsSection |<UserManagementPanel |<AgentOrgScreen |<SkillPlazaSection /.test(body)) bare.push(m.key);
   });
   ck('每一段都画在 WideCard / SettingsGroup 里', bare.length === 0, bare.join(','));
+  ck('技能广场目录和正文自己画成设置卡片', /<SkillPlazaSection layout="desktop"/.test(settings)
+    && /<SettingsGroup[^>]*testID="settings-skill-plaza-detail"/.test(code(read('./SkillPlazaSection.tsx')))
+    && /<SettingsGroup[^>]*testID="settings-skill-plaza"/.test(code(read('./SkillPlazaSection.tsx'))));
   ck('设置分类挂只读组织架构页', /<AgentOrgScreen /.test(settings) && /<SettingsGroup/.test(code(read('./AgentOrgScreen.tsx'))));
   ck('管理员用户管理仍挂 Agent 团队编辑器', /<AgentTeamsSection /.test(code(read('./UserManagementPanel.tsx'))) && /<SettingsGroup title="Agent 组织"/.test(code(read('./AgentTeams.tsx'))));
   ck('WideCard = SettingsGroup 卡片(不自带分隔,旧行自己画),空的不画', /function WideCard[\s\S]*?if \(!Children\.toArray\(children\)\.length\) return null;[\s\S]*?<SettingsGroup separators=\{false\}/.test(settings));

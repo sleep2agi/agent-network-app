@@ -1,0 +1,57 @@
+ANet #2013 / app PR #471 current-main adaptation
+Base: fe73432884e7d05be221e2a04f1ea339fa4ee127
+
+Delivered slice
+- Settings category directly after About, also in the phone Help/About group.
+- Public catalogue, search, verified SKILL.md displayed as selectable plain text.
+- Same-host HTTPS content URLs, SHA-256 required, 256 KiB UTF-8 display limit.
+- Existing pure-JS Sha256 works without crypto.subtle (addresses #471's P1).
+- Current phone detail/header/back contract and independent desktop settings window.
+- English/Chinese copy and existing theme tokens. No skill install/execution.
+- No version, Hub, provider/model switching, release or old-branch history changes.
+
+Focused local verification, Node v24.19.0 / Bun 1.4.0
+  bun src/skill-plaza-model.test.ts           20/20
+  bun src/settings-model.test.ts             55/55
+  bun src/settings-phone-list.test.ts        53/53
+  bun src/settings-subpages.test.ts          59/59
+  bun src/desktop-settings-window.test.ts     9/9
+  Total                                    196/196
+  npm ci --no-audit --no-fund                PASS, lockfile unchanged
+  npm run typecheck                         PASS (tsconfig.build.json)
+  npx expo export --platform web            PASS
+
+Focused Chromium acceptance: 13/13
+  Phone 390x844, Chinese/light: open > search > detail > header back;
+  retained search, HTTP 503 visible, retry, checksum mismatch visibly refused.
+  Desktop: actual separate settings-window route, English/dark, 960x720;
+  open > search > detail > back, retained search.
+  Both: no pageerror; public requests have no Hub Authorization header.
+
+Reproduction
+  WEB_DIR=<expo export directory> OUT=<artifact directory> \
+    PLAYWRIGHT_MODULE=<playwright/index.mjs> \
+    CHROMIUM_EXECUTABLE_PATH=<existing Chromium executable> \
+    node tests/test-skill-plaza/drive.mjs
+
+Artifacts (local, not assumed downloadable from a PR)
+  /tmp/opencode/skill-plaza-targeted.log
+  /tmp/opencode/skill-plaza-typecheck.log
+  /tmp/opencode/skill-plaza-export.log
+  /tmp/opencode/skill-plaza-browser.log
+  /tmp/opencode/skill-plaza-evidence/{phone,desktop}-{detail,catalogue}.png
+
+Evidence limits
+- Browser uses synthetic catalogue/transport via the established Tauri harness;
+  no production Hub, credentials or node session used or modified.
+- No native Android/iOS/Tauri binary acceptance or compatibility/performance sweep.
+- Headless host lacks CJK fonts: Chinese text-content assertions pass, but its
+  screenshots show missing glyphs and do not establish native Chinese typography.
+- Initial reused node_modules was stale: missing modules/plugin blocked typecheck
+  and export. Replaced only this worktree's own symlink with npm ci, then passed.
+- First browser launch failed before navigation because the default HOME did not
+  contain Playwright's executable. Used an existing /home/vansin/.cache browser;
+  no browser installation, no full-CI retry and no unrelated Docker sweep.
+- CI runs its own pinned Node22/Bun1.3.14; local results do not imply CI success.
+- Public SHA-256 checks catalogue/content consistency, not publisher trust or
+  permission to execute. The page never installs or executes the content.
