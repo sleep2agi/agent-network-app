@@ -347,6 +347,10 @@ ck('verify-draft 仍然把 release_id 传成 RELEASE_ID',
 ck('草稿建好后按 prepared release id 钉回真实构建提交',
   /- name: Pin the prepared draft to the exact built commit/.test(wf) &&
   /target_commitish='\$\{\{ inputs\.commit \}\}'/.test(wf));
+ck('钉提交同时写回 tag_name（只 PATCH target 会把 draft 变 untagged，PR1039）',
+  /pin the prepared draft to the exact built commit[\s\S]{0,900}tag_name=/i.test(wf)
+  && /-f tag_name="\$tag"/.test(wf)
+  && /-f target_commitish='\$\{\{ inputs\.commit \}\}'/.test(wf));
 ck('钉提交只在 macOS（创建者）执行',
   /Pin the prepared draft to the exact built commit[\s\S]{0,160}?runner\.os == 'macOS'/.test(wf));
 

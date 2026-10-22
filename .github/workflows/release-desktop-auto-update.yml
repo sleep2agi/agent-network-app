@@ -1774,9 +1774,9 @@ jobs:
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
-      # 草稿由 prepare-release 在构建前建好/复用，id 唯一；这里只按这个 id 把它钉到
-      # 本次真实构建提交（tauri-action 建草稿时会把 target 设成默认分支 HEAD）。
-      # 不再按 tag + created_at 猜「哪个草稿是这次 run 建的」。
+      # 草稿由 prepare-release 在构建前建好/复用，id 唯一；这里按这个 id 把它钉到
+      # 本次真实构建提交，并且**同时写回 tag_name**：只 PATCH target_commitish 会把
+      # draft 变成 untagged-…（PR1039 实测），之后任何按 tag 的查找都找不到它。
       - name: Pin the prepared draft to the exact built commit
         if: inputs.publish == true && runner.os == 'macOS'
         shell: bash
@@ -1785,14 +1785,25 @@ jobs:
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
-          current=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq .target_commitish)
-          if [ "$current" = '${{ inputs.commit }}' ]; then
-            echo "draft $RELEASE_ID already targets $current"
+          version=$(node -p 'require("./package.json").version')
+          tag="desktop-v$version"
+          read -r current tag_now <<<"$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            --jq '.target_commitish + " " + (.tag_name // "")')"
+          if [ "$current" = '${{ inputs.commit }}' ] && [ "$tag_now" = "$tag" ]; then
+            echo "draft $RELEASE_ID already targets $current with tag $tag"
             exit 0
           fi
           gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
-            -f target_commitish='${{ inputs.commit }}' --jq '{id,target_commitish}' >/dev/null
-          echo "pinned draft $RELEASE_ID to ${{ inputs.commit }} (was $current)"
+            -f tag_name="$tag" \
+            -f target_commitish='${{ inputs.commit }}' \
+            --jq '{id,tag_name,target_commitish}' >/dev/null
+          read -r pinned_tag pinned_commit <<<"$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" \
+            --jq '.tag_name + " " + .target_commitish')"
+          if [ "$pinned_commit" != '${{ inputs.commit }}' ] || [ "$pinned_tag" != "$tag" ]; then
+            echo "::error::draft $RELEASE_ID still reads tag=$pinned_tag target=$pinned_commit after PATCH"
+            exit 1
+          fi
+          echo "pinned draft $RELEASE_ID to $tag @ ${{ inputs.commit }} (was $current / $tag_now)"
 
       # Same bundles and signing material as the release step. Nothing is uploaded
       # to a GitHub Release. macOS still notarizes when this leg is approved.
