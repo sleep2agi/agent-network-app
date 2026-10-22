@@ -4,6 +4,7 @@ import { Sha256 } from './sha256';
 
 export const SKILL_CATALOG_URL = 'https://www.anet.sh/skillhub/catalog.json';
 export const SKILL_BODY_MAX_BYTES = 256 * 1024;
+const CATALOG_MAX_BYTES = 1024 * 1024;
 const SLUG = /^[A-Za-z0-9._-]{1,64}$/;
 const SHA = /^[0-9a-f]{64}$/i;
 
@@ -13,7 +14,9 @@ export type PublicSkill = {
   contentUrl: string; contentSha256: string;
 };
 export type SkillFetch = (url: string, init?: { signal?: AbortSignal }) => Promise<{
-  ok: boolean; status: number; text: () => Promise<string>;
+  ok: boolean; status: number; url?: string; redirected?: boolean;
+  headers?: { get: (name: string) => string | null };
+  body: ReadableStream<Uint8Array> | null;
 }>;
 export class SkillPlazaError extends Error {
   constructor(public readonly code: 'catalog' | 'body' | 'json' | 'tooLarge' | 'mismatch' | 'digest', public readonly status?: number) {
@@ -65,35 +68,74 @@ export function skillDetailMeta(skill: PublicSkill): string {
 export function isAbortError(e: unknown): boolean {
   return !!e && typeof e === 'object' && ((e as Error).name === 'AbortError' || /aborted|request cancel(?:l)?ed/i.test(String((e as Error).message || '')));
 }
+export function skillDetailNeedsReset(detailOpen: boolean | undefined, hasSelection: boolean): boolean {
+  return detailOpen === false && hasSelection || detailOpen === true && !hasSelection;
+}
 
 // Existing app SHA-256 implementation also works in native RN, where WebCrypto
 // subtle is not guaranteed. No new native module, no unchecked fallback.
-export async function sha256Hex(text: string): Promise<string> {
-  try { return new Sha256().update(new TextEncoder().encode(text)).hex(); }
+export async function sha256Hex(input: string | Uint8Array): Promise<string> {
+  try { return new Sha256().update(typeof input === 'string' ? new TextEncoder().encode(input) : input).hex(); }
   catch { throw new SkillPlazaError('digest'); }
 }
-async function readOk(fetchImpl: SkillFetch, url: string, signal: AbortSignal | undefined, what: 'catalog' | 'body'): Promise<string> {
+function decodeUtf8(bytes: Uint8Array, what: 'catalog' | 'body'): string {
+  // A BOM belongs to the checked file bytes, but is not visible content. Strip
+  // it only AFTER the hash. Round-trip checks also protect native decoders that
+  // ignore fatal:true and would silently replace malformed UTF-8.
+  const payload = bytes[0] === 0xef && bytes[1] === 0xbb && bytes[2] === 0xbf ? bytes.subarray(3) : bytes;
+  try {
+    const text = new TextDecoder('utf-8', { fatal: true, ignoreBOM: true }).decode(payload);
+    const encoded = new TextEncoder().encode(text);
+    if (encoded.length !== payload.length || encoded.some((b, i) => b !== payload[i])) throw new Error('invalid UTF-8');
+    return text;
+  } catch { throw new SkillPlazaError(what === 'catalog' ? 'json' : 'body'); }
+}
+async function readOk(fetchImpl: SkillFetch, url: string, signal: AbortSignal | undefined, what: 'catalog' | 'body'): Promise<Uint8Array> {
   try {
     const res = await fetchImpl(url, signal ? { signal } : undefined);
-    if (!res.ok) throw new SkillPlazaError(what, res.status);
-    return await res.text();
+    const limit = what === 'body' ? SKILL_BODY_MAX_BYTES : CATALOG_MAX_BYTES;
+    const tooLarge = () => new SkillPlazaError(what === 'body' ? 'tooLarge' : 'catalog');
+    const drop = () => { void res.body?.cancel().catch(() => {}); };
+    if (!res.ok || res.redirected || res.url && res.url !== url) { drop(); throw new SkillPlazaError(what, res.status); }
+    const length = res.headers?.get('content-length');
+    if (length && /^\d+$/.test(length) && Number(length) > limit) { drop(); throw tooLarge(); }
+    if (!res.body?.getReader) throw new SkillPlazaError(what);
+    const reader = res.body.getReader();
+    const abort = () => { void reader.cancel().catch(() => {}); };
+    signal?.addEventListener('abort', abort, { once: true });
+    let used = 0, complete = false;
+    const buffer = new Uint8Array(limit);
+    try {
+      while (true) {
+        if (signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+        const { done, value } = await reader.read();
+        if (signal?.aborted) throw Object.assign(new Error('aborted'), { name: 'AbortError' });
+        if (done) { complete = true; return buffer.subarray(0, used); }
+        if (!(value instanceof Uint8Array)) throw new SkillPlazaError(what);
+        if (value.byteLength > limit - used) throw tooLarge();
+        buffer.set(value, used); used += value.byteLength;
+      }
+    } finally {
+      signal?.removeEventListener('abort', abort);
+      if (!complete) abort();
+      reader.releaseLock();
+    }
   } catch (e) {
     if (isAbortError(e) || e instanceof SkillPlazaError) throw e;
     throw new SkillPlazaError(what);
   }
 }
 export async function loadPublicSkills(fetchImpl: SkillFetch, catalogUrl = SKILL_CATALOG_URL, signal?: AbortSignal): Promise<PublicSkill[]> {
-  const text = await readOk(fetchImpl, catalogUrl, signal, 'catalog');
+  const text = decodeUtf8(await readOk(fetchImpl, catalogUrl, signal, 'catalog'), 'catalog');
   let raw: unknown;
   try { raw = JSON.parse(text); } catch { throw new SkillPlazaError('json'); }
   if (!raw || typeof raw !== 'object' || !Array.isArray((raw as { skills?: unknown }).skills)) throw new SkillPlazaError('json');
   return parseSkillCatalog(raw, catalogUrl);
 }
 export async function loadSkillBody(fetchImpl: SkillFetch, skill: PublicSkill, signal?: AbortSignal,
-  digest: (text: string) => Promise<string> = sha256Hex): Promise<string> {
-  const text = await readOk(fetchImpl, skill.contentUrl, signal, 'body');
-  if (text.length > SKILL_BODY_MAX_BYTES || new TextEncoder().encode(text).length > SKILL_BODY_MAX_BYTES) throw new SkillPlazaError('tooLarge');
-  const actual = await digest(text);
+  digest: (bytes: Uint8Array) => Promise<string> = sha256Hex): Promise<string> {
+  const bytes = await readOk(fetchImpl, skill.contentUrl, signal, 'body');
+  const actual = await digest(bytes);
   if (!SHA.test(skill.contentSha256) || actual.toLowerCase() !== skill.contentSha256.toLowerCase()) throw new SkillPlazaError('mismatch');
-  return text;
+  return decodeUtf8(bytes, 'body');
 }

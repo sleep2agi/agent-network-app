@@ -12,10 +12,13 @@ const hash = createHash('sha256').update(body).digest('hex');
 const plazaStub = ({ language, body, hash }) => {
   localStorage.setItem('anet.language.v1', language);
   const inner = window.__TAURI_INTERNALS__, invoke = inner.invoke;
+  let rid = 10000;
+  const responses = new Map();
   window.__plazaMode = 'ready'; window.__plazaRequests = [];
   inner.invoke = async (cmd, args) => {
-    if (cmd === 'pooled_fetch' && new URL(args.request.url).hostname === 'www.anet.sh') {
-      const request = args.request;
+    if (cmd === 'plugin:http|fetch' && new URL(args.clientConfig.url).hostname === 'www.anet.sh') {
+      const request = args.clientConfig;
+      if (request.maxRedirections !== 0) throw Error('public fetch must prohibit redirects');
       window.__plazaRequests.push(request);
       const catalog = request.url.endsWith('/catalog.json');
       const failed = catalog && window.__plazaMode === 'catalog-failure';
@@ -23,11 +26,24 @@ const plazaStub = ({ language, body, hash }) => {
         { slug: 'example', name: 'Example skill', description: 'Review fixture', version: '1.0', content_sha256: hash, content_url: '/skillhub/example/SKILL.md' },
         { slug: 'second', name: 'Second skill', description: 'Other fixture', content_sha256: hash, content_url: '/skillhub/second/SKILL.md' },
       ] }) : window.__plazaMode === 'mismatch' ? 'unverified content must never appear' : body;
-      const meta = new TextEncoder().encode(JSON.stringify({ status: failed ? 503 : 200, statusText: failed ? 'Unavailable' : 'OK', url: request.url, headers: [] }));
-      const data = new TextEncoder().encode(text), bytes = new Uint8Array(4 + meta.length + data.length);
-      new DataView(bytes.buffer).setUint32(0, meta.length, false);
-      bytes.set(meta, 4); bytes.set(data, 4 + meta.length);
-      return bytes;
+      const id = ++rid;
+      responses.set(id, { status: failed ? 503 : 200, statusText: failed ? 'Unavailable' : 'OK', url: request.url,
+        headers: [], data: new TextEncoder().encode(text), sent: false });
+      return id;
+    }
+    if (cmd === 'plugin:http|fetch_send' && responses.has(args.rid)) {
+      const { status, statusText, url, headers } = responses.get(args.rid);
+      return { status, statusText, url, headers, rid: args.rid };
+    }
+    if (cmd === 'plugin:http|fetch_read_body' && responses.has(args.rid)) {
+      const response = responses.get(args.rid);
+      if (response.sent) { responses.delete(args.rid); return [1]; }
+      response.sent = true;
+      return [...response.data, 0];
+    }
+    if (cmd === 'plugin:http|fetch_cancel_body' && responses.has(args.rid)) {
+      responses.delete(args.rid);
+      return;
     }
     return invoke(cmd, args);
   };
@@ -84,6 +100,18 @@ try {
       await win.locator('[data-testid="skill-plaza-row-example"]').click();
       await retry.waitFor();
       ck('mismatch refuses content visibly', (await retry.innerText()).includes('拒绝打开') && await win.locator('[data-testid="skill-plaza-body"]').count() === 0);
+      await win.evaluate(() => { window.__plazaMode = 'ready'; });
+      await retry.click();
+      await win.locator('[data-testid="skill-plaza-body"]').waitFor();
+      await win.setViewportSize({ width: 900, height: 390 });
+      await win.locator('[data-testid="settings-sidebar"]').waitFor();
+      await win.setViewportSize({ width: 390, height: 844 });
+      await win.locator('[data-testid="skill-plaza-row-example"]').waitFor();
+      await win.locator('[data-testid="settings-subpage-title"]').filter({ hasText: '技能广场' }).waitFor();
+      ck('phone rotation reconciles lost selection with catalogue header', await win.locator('[data-testid="skill-plaza-body"]').count() === 0);
+      await win.locator('[data-testid="settings-back"]').click();
+      await win.locator('[data-testid="settings-row-skillPlaza"]').waitFor();
+      ck('one Back after rotation leaves catalogue, no phantom detail', true);
     }
     ck(`${language} no public request carries Hub authorization`, await win.evaluate(() => window.__plazaRequests.every(r => !r.headers.some(([key]) => key.toLowerCase() === 'authorization'))));
     ck(`${language} no page errors`, errors.length === 0);

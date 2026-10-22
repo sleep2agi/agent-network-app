@@ -3,17 +3,17 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing } from './theme';
-import { appFetch } from './app-fetch';
+import { fetchPublicSkill } from './skill-plaza-fetch';
 import { SettingsCardContent, SettingsGroup, SettingsRow, SettingsTextField } from './settings-kit';
 import type { SettingsHeaderOverride } from './settings-model';
 import { useTranslation } from './i18n-react';
 import { t } from './i18n';
 import './i18n-skill-plaza';
-import { filterPublicSkills, isAbortError, loadPublicSkills, loadSkillBody, skillDetailMeta, SkillPlazaError, type PublicSkill, type SkillFetch } from './skill-plaza-model';
+import { filterPublicSkills, isAbortError, loadPublicSkills, loadSkillBody, skillDetailMeta, skillDetailNeedsReset, SkillPlazaError, type PublicSkill } from './skill-plaza-model';
 
 type Navigation = { openDetail: () => void; closeDetail: () => void; setHeader: (header: SettingsHeaderOverride | null) => void };
 // No Hub config, credentials or authorization headers cross this boundary.
-const fetchSkill: SkillFetch = (url, init) => appFetch(url, { signal: init?.signal, credentials: 'omit', redirect: 'error' });
+const fetchSkill = fetchPublicSkill;
 function errorText(error: unknown): string {
   if (isAbortError(error)) return t('skillPlaza.timeout');
   if (error instanceof SkillPlazaError) return t(`skillPlaza.${error.code}`) + (error.status ? ` (HTTP ${error.status})` : '');
@@ -38,7 +38,7 @@ export default function SkillPlazaSection({ layout, navigation, detailOpen }: { 
   closeRef.current = close;
 
   useEffect(() => {
-    if (navigation && detailOpen === false && selected) closeRef.current();
+    if (navigation && skillDetailNeedsReset(detailOpen, !!selected)) closeRef.current();
   }, [detailOpen, selected]);
 
   useEffect(() => {
