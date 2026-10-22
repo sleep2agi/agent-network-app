@@ -13,6 +13,7 @@
 import { readFileSync } from 'node:fs';
 import {
   extractReleaseBody,
+  parseGhOutput,
   requireRequestedCommit,
   planReleaseDraft,
   prepareReleaseDraft,
@@ -244,6 +245,10 @@ ck('prepare 的 checkout 有完整历史', /prepare-release:[\s\S]{0,400}fetch-d
 ck('不再按 run_started/created_at 猜草稿归属', !wf.includes('run_started_at') && !wf.includes('created_at >'));
 ck('prepare-release 是唯一的创建入口',
   !/Remove stale draft releases for this tag/.test(wf) && /node scripts\/prepare-desktop-release\.mjs/.test(wf));
+
+// 10. 删除资产是 204 无正文：空 stdout 不能当 JSON 解析（TMA云欧审计 P1）
+ck('空 stdout（204 No Content）解析为 null 而不是抛错', parseGhOutput('') === null && parseGhOutput('  \n ') === null);
+ck('有正文时照常解析', parseGhOutput('{"id":7}')?.id === 7);
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

@@ -50,10 +50,17 @@ export const planReleaseDraft = (releases, tag) => {
   return { action: 'fail', reason: 'multiple-drafts', releaseIds: drafts.map((release) => release.id) };
 };
 
+// `DELETE /releases/assets/{id}` 返回 204 无正文：对空 stdout 做 JSON.parse 会抛
+// "Unexpected end of JSON input"（TMA云欧审计 P1）。空正文在这里就是 null，不是错误。
+export const parseGhOutput = (stdout) => {
+  const text = String(stdout ?? '').trim();
+  return text === '' ? null : JSON.parse(text);
+};
+
 const gh = (args, { parse = true } = {}) => {
   const result = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
   if (result.status !== 0) throw new Error(`gh ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
-  return parse ? JSON.parse(result.stdout) : result.stdout;
+  return parse ? parseGhOutput(result.stdout) : result.stdout;
 };
 
 export const staleAssetsFor = (assets, { includeLinux }) => {
