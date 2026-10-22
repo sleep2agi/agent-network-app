@@ -1,0 +1,39 @@
+#906 client explicit Provider collection — 2026-10-11T10:53Z / 18:53+08
+Base main: e499dd62df5bd11d150327ebd2c49b0d6a22588c (PR845).
+Branch feat/906-client-provider-collect. TEST ONLY, not a public release.
+
+Implementation: a separate Daemon Provider card explicitly selects an existing
+bound/versioned API-key Codex source, reviews IDs and label, then confirms collect.
+The POST contains identity/revisions/IDs only, not key/path/model values. A matched
+revision+1 and exact profile/configured-model receipt is required before confirmed
+save. Profile is then selectable in the separate application control. Source is
+not modified/restarted; ChatGPT and unbound local discovery are excluded.
+
+Layer 0 Docker environment: pinned Node22.22.2/Bun1.3.14/Playwright1.58.2,
+package-lock npm ci, source export (1233 modules) PASS. Tests used --network none;
+no production config, identity, auth.json or source credentials mounted.
+Layer 1 protocol intent/readback: existing management tests 27/27 PASS including
+one added collection group: confirmation, immutable source, occupied auth refusal,
+bound/versioned API-key filtering and wrong model/scope/revision receipt refusal.
+Full TypeScript build typecheck PASS in the same locked-dependency Docker image
+with current worktree src mounted read-only. No host npm install/global mutation.
+Layer 2 actual exported React UI + synthetic HTTP fixture: 8/8 PASS. Menu excludes
+unbound nodes; selecting and first confirm-open send zero collect requests; final
+confirmation sends exactly one request with exact source revision/destination IDs;
+new managed profile/model selectable and Apply enabled, zero automatic apply;
+zero browser page errors. No inference or native credential access was attempted.
+Browser image config sha256:cfc7948bdbbb2095b68a0bd6fcdc358f7b0ebc356b29e98db9fb47acd1e908ee.
+
+Reproduction:
+sg docker -c 'docker build --target core -f tests/provider-collection/Dockerfile -t anet-app:provider-collection-core .'
+sg docker -c 'docker run --rm --network none anet-app:provider-collection-core'
+sg docker -c 'docker build --target browser -f tests/provider-collection/Dockerfile -t anet-app:provider-collection-browser .'
+sg docker -c 'docker run --rm --network none anet-app:provider-collection-browser'
+
+Limits: synthetic Hub is not real daemon collection, native installer, live login,
+external entitlement or formal release proof. Backend PR2599/local PR2598 retain
+their independent actual-CLI/HTTP Docker evidence; no cross-head CI inheritance.
+Matching backend/client exact-main formal releases remain required. This change
+is not in client240's version-only release slice. No Linux work added.
+Cleanup: --rm test containers removed; TEST-ONLY images retained for reproduction.
+Only own worktree files changed. No production, node restart or business upgrades.

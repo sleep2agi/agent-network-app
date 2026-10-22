@@ -96,7 +96,7 @@ export type ProviderIssue =
 
 export const PROVIDER_ISSUE_ZH: Readonly<Record<ProviderIssue, string>> = {
   base_url_required: '请填写 Codex model_providers 的 base_url。',
-  base_url_invalid: 'base_url 只能是 https://，或本机回环上的 http://。',
+  base_url_invalid: 'base_url 必须是有效的 http:// 或 https:// 地址；推荐 HTTPS。',
   api_key_required: '请填写 API 密钥。',
   api_key_invalid: 'API 密钥不能包含换行或空字符。',
   api_key_too_long: `API 密钥过长（最多 ${API_KEY_MAX_LENGTH} 个字符）。`,
@@ -104,7 +104,7 @@ export const PROVIDER_ISSUE_ZH: Readonly<Record<ProviderIssue, string>> = {
   preset_not_for_runtime: '这个 runtime 不能使用该供应商预设。',
   hub_not_ready: '需升级 Hub 后才能保存供应商密钥。这一版不会把密钥发出去，也不会在没有密钥的情况下创建节点。',
   unsupported_hub: '目标 Hub 还不支持 provider 字段。需升级 Hub；不会丢弃已填写的密钥，也不会改成不带密钥的创建。',
-  insecure_transport: '当前 Hub 地址是明文 http（不是本机回环）。密钥不会通过这条连接发送。',
+  insecure_transport: 'Hub 地址无效，请使用 http:// 或 https:// 地址；推荐 HTTPS。',
 };
 
 const LOOPBACK_V4 = /^127(?:\.\d{1,3}){3}$/;
@@ -175,8 +175,7 @@ export function isLoopbackHost(hostname: string): boolean {
 export function hubTransportAllowsSecrets(serverUrl: string): boolean {
   let url: URL;
   try { url = new URL(serverUrl); } catch { return false; }
-  if (url.protocol === 'https:') return true;
-  return url.protocol === 'http:' && isLoopbackHost(url.hostname);
+  return !url.username && !url.password && ['https:', 'http:'].includes(url.protocol);
 }
 
 export function validateBaseUrl(raw: string): { ok: true; url: string } | { ok: false } {
@@ -185,8 +184,7 @@ export function validateBaseUrl(raw: string): { ok: true; url: string } | { ok: 
   let url: URL;
   try { url = new URL(s); } catch { return { ok: false }; }
   if (url.username || url.password) return { ok: false };
-  if (url.protocol === 'https:') return { ok: true, url: url.toString() };
-  if (url.protocol === 'http:' && isLoopbackHost(url.hostname)) return { ok: true, url: url.toString() };
+  if (url.protocol === 'https:' || url.protocol === 'http:') return { ok: true, url: url.toString() };
   return { ok: false };
 }
 
@@ -326,6 +324,10 @@ function mentionsProviderField(field: string | null | undefined, why: string): b
 export function describeProviderCreateError(e: { error?: string | null; field?: string | null }): string | null {
   const why = (e.error ?? '').trim();
   if (!why && !e.field) return null;
+  if ((why === 'flag_key_unknown' && e.field === 'daemonProvider')
+    || /\bflag_key_unknown[: ]+daemonProvider\b/.test(why)) {
+    return '当前管理端不支持使用已配置 Provider 创建节点。请先升级 Hub 至 0.9.0-preview.124，再将目标 Daemon 的 CLI 升至 2.3.0-preview.166、runtime 升至 2.5.0-preview.132；不会移除已选 Provider 后重试。';
+  }
   if ((why === 'flag_key_unknown' || why === 'unknown_field' || why === 'unknown-field') && mentionsProviderField(e.field, why)) {
     return PROVIDER_ISSUE_ZH.unsupported_hub;
   }

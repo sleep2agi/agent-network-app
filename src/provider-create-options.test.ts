@@ -70,18 +70,21 @@ check('opencode does not receive the codex model list',
   && suggestedProviderModels('claude-agent-sdk', 'minimax').length === 0
   && suggestedProviderModels('codex-app-server', 'deepseek')[0] === 'deepseek-v4-pro');
 
-check('https and loopback http allow a key; plain http does not',
+check('https and explicitly configured http allow a key, invalid transports do not',
   hubTransportAllowsSecrets('https://hub.example.com')
   && hubTransportAllowsSecrets('http://127.0.0.1:9999')
   && hubTransportAllowsSecrets('http://localhost:9999/')
   && hubTransportAllowsSecrets('http://[::1]:9999')
-  && !hubTransportAllowsSecrets('http://192.168.1.8:9999')
-  && !hubTransportAllowsSecrets('http://hub.example.com'));
+  && hubTransportAllowsSecrets('http://192.168.1.8:9999')
+  && hubTransportAllowsSecrets('http://hub.example.com')
+  && !hubTransportAllowsSecrets('ftp://hub.example.com')
+  && !hubTransportAllowsSecrets('http://user:pass@hub.example.com'));
 
-check('base_url accepts https and loopback http only',
+check('base_url accepts HTTP and HTTPS without URL credentials',
   validateBaseUrl('https://api.deepseek.com/v1').ok
   && validateBaseUrl('http://127.0.0.1:8080/v1').ok
-  && !validateBaseUrl('http://10.0.0.2/v1').ok
+  && validateBaseUrl('http://10.0.0.2/v1').ok
+  && !validateBaseUrl('file:///tmp/key').ok
   && !validateBaseUrl('').ok
   && !validateBaseUrl('https://user:secret@api.deepseek.com/v1').ok);
 
@@ -99,7 +102,7 @@ check('deepseek on opencode or claude is rejected',
   providerLocalIssues({ ...deepseek, runtimeId: 'opencode-cli' })[0] === 'preset_not_for_runtime'
   && providerLocalIssues({ ...deepseek, runtimeId: 'claude-agent-sdk', choice: 'minimax' })[0] === 'preset_not_for_runtime');
 
-check('plain http blocks before the key is required',
+check('invalid transport blocks before the key is required',
   providerLocalIssues({ ...deepseek, apiKey: '' }, false)[0] === 'insecure_transport');
 
 const built = buildNodeSpecProvider(deepseek);
@@ -116,9 +119,9 @@ check('a filled codex preset is not submitted and does not drop the key',
     const gate = codexSubmitGate(deepseek, 'https://hub.example.com');
     return gate.action === 'block' && gate.issue === 'hub_not_ready' && !PROVIDER_ISSUE_ZH.hub_not_ready.includes(KEY);
   })());
-check('plain http is blocked as insecure transport',
+check('HTTP is not the reason an unavailable legacy Hub contract is blocked',
   codexSubmitGate(deepseek, 'http://hub.example.com').action === 'block'
-  && (codexSubmitGate(deepseek, 'http://hub.example.com') as { issue: string }).issue === 'insecure_transport');
+  && (codexSubmitGate(deepseek, 'http://hub.example.com') as { issue: string }).issue === 'hub_not_ready');
 check('no provider choice is an omit, including on an old hub over http',
   codexSubmitGate({ ...deepseek, choice: 'none' }, 'http://10.0.0.8').action === 'omit'
   && codexSubmitGate({ ...deepseek, runtimeId: 'claude-agent-sdk', choice: 'none' }).action === 'omit');

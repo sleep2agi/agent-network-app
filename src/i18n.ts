@@ -30,12 +30,19 @@ const tables: TranslationTable = {
   'server.failed': ['连接失败', 'Connection failed'],
   'server.online': ['{online}/{total} 在线', '{online}/{total} online'],
   'server.management': ['Hub 管理', 'Hub management'],
+  'server.hub': ['Hub', 'Hub'],
+  'server.hub.skills': ['SKILLS', 'SKILLS'],
+  'server.hub.tokens': ['令牌', 'Tokens'],
+  'server.hub.env': ['环境变量', 'Environment'],
+  'server.hub.providers': ['Provider', 'Provider'],
   'server.navLabel': ['Hub：{label}', 'Hub: {label}'],
   'server.network': ['网络', 'Network'],
-  'server.integrations': ['集成', 'Integrations'],
+  'server.integrations': ['Hub 域集成', 'Hub integrations'],
+  'server.integrations.daemon': ['Daemon', 'Daemon'],
   'server.pendingTitle.skills': ['SKILLS', 'SKILLS'],
   'server.pendingTitle.tokens': ['令牌', 'Tokens'],
   'server.pendingTitle.provider': ['Provider', 'Provider'],
+  'server.pendingTitle.runtime': ['Runtime 支持', 'Runtime support'],
 };
 export function registerTranslations(table: TranslationTable): void { Object.assign(tables, table); }
 export function parseLanguagePreference(raw: unknown): LanguagePreference {

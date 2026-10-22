@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint } from './node-model-change';
+import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint, modelNotOnMachineNote } from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
 let passed = 0, total = 0;
@@ -49,14 +49,17 @@ check('unknown runtime suggests nothing (custom id still allowed)', suggestedMod
 // wiring contracts
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
 check('api reads GET /api/nodes/:id/config and treats 404 as no endpoint', api.includes('/api/nodes/${encodeURIComponent(nodeId)}/config') && api.includes('if (res.status === 404 || res.status === 501) return null;'));
-check('api calls update_node_config with base_revision and patch.model', api.includes("name: 'update_node_config'") && api.includes('base_revision: req.baseRevision') && api.includes('patch: { model: req.patch.model }'));
+check('api calls update_node_config with base_revision and patch fields', api.includes("name: 'update_node_config'") && api.includes('base_revision: req.baseRevision') && api.includes('req.patch.model') && api.includes('req.patch.flags'));
 check('api maps HTTP 409 to conflict', api.includes('if (res.status === 409) return { ok: false, conflict: true'));
 const section = readFileSync(new URL('./NodeModelSection.tsx', import.meta.url), 'utf8');
 check('section polls fetchNodeConfig while restarting and applies afterPoll', section.includes('fetchNodeConfig(cfg, node.node_id)') && section.includes('afterPoll('));
 check('section disables the control from modelControlAvailability and shows its hint', section.includes('modelControlAvailability(') && section.includes('availability.hint'));
 check('section offers suggested models plus a custom id input', section.includes('suggestedModels(') && section.includes('TextInput'));
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
-check('detail screen mounts the model section for editable nodes only', detail.includes('<NodeModelSection cfg={cfg} node={node} />') && detail.includes("!readOnly && node ? <NodeModelSection"));
+check('known node mounts daemon Provider control for co-presence and legacy model control for other runtimes',
+  detail.includes('{node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} />')
+  && detail.includes('{node && daemonProviderNodeRuntime(node.runtime) ? (')
+  && detail.includes('<NodeDaemonProviderSection cfg={cfg} node={node}'));
 
 // stale-catalog resilience (2026-09-23: mimo-v2.5-free withdrawn from OpenCode Zen while still listed)
 check('catalog no longer lists the withdrawn opencode/mimo-v2.5-free', !Object.values(RUNTIME_MODEL_SUGGESTIONS).flat().includes('opencode/mimo-v2.5-free'));
@@ -67,5 +70,9 @@ check('no current model → chips are exactly the catalog', JSON.stringify(model
 check('empty catalog with a current model still shows that model', JSON.stringify(modelChips([], 'p/m')) === JSON.stringify(['p/m']));
 check('opencode-cli gets the lagging-catalog hint; others get none', catalogHint('opencode-cli') !== null && catalogHint('opencode-cli')!.includes('OpenCode Zen') && catalogHint('claude-agent-sdk') === null && catalogHint(null) === null);
 check('section renders chips via modelChips and shows the catalog hint', section.includes('modelChips(') && section.includes('catalogHint('));
+check('a model the machine does not report gets a warning', (modelNotOnMachineNote('grok-4.7', ['grok-4.6', 'grok-4.5']) || '').includes('grok-4.7'));
+check('a model the machine reports gets no warning', modelNotOnMachineNote('grok-4.6', ['grok-4.6', 'grok-4.5']) === null);
+check('no catalog or no model → no warning', modelNotOnMachineNote('grok-4.7', []) === null && modelNotOnMachineNote(null, ['a/b']) === null && modelNotOnMachineNote('   ', ['a/b']) === null);
+check('section shows the not-on-machine warning', section.includes('modelNotOnMachineNote('));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

@@ -13,7 +13,7 @@ const base = { name: ' demo ', model: '', permissionMode: 'default', maxTurns: '
 const codex = buildCreateNodeSpec({ ...base, runtimeId: 'codex-app-server', runtimeModels: [] });
 check('🔴 codex-app-server → flags.copresence === true', codex.flags?.copresence === true);
 // #591:codex-app-server 不读 permissionMode,不再发(见 create-node-params.test.ts)。
-check('codex-app-server sends no permissionMode and omits model (co-presence follows the TUI login)', !('permissionMode' in (codex.flags ?? {})) && !('model' in codex) && codex.runtime === 'codex-app-server' && codex.name === 'demo');
+check('codex-app-server sends yolo + copresence, no permissionMode, omits model', !('permissionMode' in (codex.flags ?? {})) && !('model' in codex) && codex.runtime === 'codex-app-server' && codex.name === 'demo' && codex.flags?.copresence === true && codex.flags?.approvalPolicy === 'never');
 for (const rt of ['claude-agent-sdk', 'codex-sdk', 'grok-build-acp', 'claude-code-cli', 'grok-build-cli', 'opencode-cli']) {
   const s = buildCreateNodeSpec({ ...base, runtimeId: rt, runtimeModels: ['m1'] });
   check(`${rt} → no copresence key at all (hub rejects it for other runtimes)`, !('copresence' in (s.flags ?? {})));

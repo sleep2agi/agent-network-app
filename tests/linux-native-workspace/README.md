@@ -22,6 +22,14 @@ stub is installed. Python reads the persisted native credential in memory via
 Secret Service, authenticates `/api/auth/me` and `/api/status`, and requires 401
 for a deliberately invalid token. It prints no credentials or response bodies.
 
+Before starting the application, the isolated keyring helper keeps one foreground
+daemon, waits for D-Bus name ownership, and verifies real write/read/delete in
+the unlocked collection. This avoids racing D-Bus auto-activation against a
+daemonizing unlock. It requires `libsecret-tools` as well as `gnome-keyring`.
+CI also shadows the daemon with `/bin/false` in a disposable container: startup
+must fail with `FAIL: isolated Secret Service did not acquire D-Bus name` and
+must never reach the workload marker. No production credential path is changed.
+
 Review both screenshots: before must show the local-workspace button at the
 pinned click target; after must show the authenticated Agent list, not a spinner
 or error. Automation alone does not validate the visual result. Repeat in a new
@@ -30,6 +38,11 @@ container with `-e TEST_UI_MISS_CLICK=1`: it must exit nonzero specifically with
 Docker error is not a passing negative. This prevents automatic startup from
 being mistaken for successful interaction. Layout changes require screenshot
 review and intentional target updates, never skipping assertions.
+
+The login-before-update layout places the local-workspace button at `(600,422)`
+in the pinned1200x800 window. CI run38156879755's before/after screenshots
+show the old `(600,470)` hitting remote login instead. Keep the negative target
+on background `(30,30)` and retain profile/API/native-credential assertions.
 
 ## Recovery and scope
 

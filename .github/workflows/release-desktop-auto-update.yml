@@ -12,9 +12,15 @@ on:
         required: false
         default: true
         type: boolean
+      include_linux:
+        description: Also build and verify Ubuntu 24.04 amd64 (deferred by default)
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
+  actions: read
 
 concurrency:
   group: release-desktop-auto-update
@@ -26,16 +32,9 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        include:
-          - platform: macos-14
-            args: --bundles app,dmg
-          - platform: windows-latest
-            args: --bundles nsis,msi
-          # Ubuntu 24.04 amd64 matches tests/linux-deb-package. Production
-          # tauri.conf.json is used, so updater endpoints stay in the binary
-          # and the .deb is minisign-signed. The test overlay is not applied.
-          - platform: ubuntu-24.04
-            args: --bundles deb
+        # Linux is opt-in, not a skipped matrix job that delays the primary pair.
+        # When requested it still uses the production updater/signing/retention gates.
+        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-24.04","args":"--bundles deb"}]' || '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -162,12 +161,332 @@ jobs:
       # visible to installed clients. Linux signs ANet_<version>_amd64.deb;
       # tauri-action merges linux-x86_64 and linux-x86_64-deb into latest.json.
       #
+      # The Android universal APK is attached by `attach-android-apk` below with
+      # the updater's required file name (Agent.Network_<version>_android-universal.apk,
+      # src/android-update-core.ts). It used to be a hand upload, and a wrong name
+      # (ANet_<version>_android-universal.apk) silently broke the versioned path for
+      # 0.2.265/0.2.266; doing it here also lets modelscope-mirror see the APK
+      # immediately instead of waiting up to 30 minutes for a hand upload.
+      #
       # 🔴 `releaseBody` is USER-FACING, not a note to ourselves: tauri-action
       # copies it verbatim into latest.json `notes`, and the in-app updater
       # renders those notes in the update prompt. Release *discipline* (audit
       # the draft, publish only after the smoke gates pass, sync the manifest
       # afterwards) belongs in docs/desktop-release-sop.md — never in a string
       # that ships to users. src/release-notes-hygiene.test.ts enforces this.
+      # macOS DMG bundling flakes on GitHub macos-14 after notarization is
+      # already Accepted and stapled. create-dmg/hdiutil exits in a few seconds
+      # and leaves diskimages-helper behind; tauri hides that stderr unless
+      # --verbose is set. Re-running `tauri build` would delete the stapled
+      # .app and notarize again. The wrapper retries bundle_dmg.sh only, then
+      # codesigns the DMG with the same Developer ID certificate. It is written
+      # here because a re-dispatch checks out the release SHA, which does not
+      # contain files added on main after that commit.
+      - name: Prepare macOS DMG retry wrapper
+        if: runner.os == 'macOS'
+        shell: bash
+        run: |
+          set -euo pipefail
+          cat > "$RUNNER_TEMP/retry-macos-dmg.sh" << 'END_DMG_RETRY'
+          #!/usr/bin/env bash
+          # The release workflow embeds this file in a heredoc. CI runs that copy:
+          # workflow_dispatch checks out the release SHA, which does not contain this path.
+          # Retry only the macOS DMG step after the .app is already notarized and stapled.
+          #
+          # tauri-bundler 2.11.2 runs bundle_dmg.sh (create-dmg 1.2.1 / hdiutil) after
+          # notarization. On GitHub macos-14 that script often dies in a few seconds
+          # with "failed to run bundle_dmg.sh" and leaves diskimages-helper behind.
+          # Without --verbose, tauri drops the script's stderr. Running `tauri build`
+          # again deletes the stapled .app and notarizes a second time. This wrapper
+          # keeps that app, retries bundle_dmg.sh, then codesigns the DMG with the
+          # Developer ID certificate still in the job environment. Tauri deletes its
+          # temporary keychain on exit, so the DMG signature is a new import of the
+          # same certificate, not a second notarization.
+          set -u
+          set -o pipefail
+          
+          ATTEMPTS="${ANET_DMG_ATTEMPTS:-3}"
+          keychain_path=""
+          p12_path=""
+          
+          cleanup_signing() {
+            if [[ -n "$keychain_path" ]]; then
+              security delete-keychain "$keychain_path" >/dev/null 2>&1 || true
+              keychain_path=""
+            fi
+            if [[ -n "$p12_path" ]]; then
+              rm -f "$p12_path"
+              p12_path=""
+            fi
+          }
+          trap cleanup_signing EXIT
+          
+          run_tauri() {
+            if [[ -n "${ANET_TAURI_BIN:-}" ]]; then
+              "$ANET_TAURI_BIN" "$@"
+              return
+            fi
+            if command -v bun >/dev/null 2>&1; then
+              bun tauri "$@"
+              return
+            fi
+            npx --no-install tauri "$@"
+          }
+          
+          cleanup_disk_images() {
+            local bundle_dir="$1"
+            local line info token matched=0
+            if command -v hdiutil >/dev/null 2>&1; then
+              # hdiutil info prints "image-path      : <file>" and then the /dev/disk
+              # nodes for that image. Detach the whole disk, not a partition slice.
+              info="$(hdiutil info 2>/dev/null || true)"
+              while IFS= read -r line; do
+                case "$line" in
+                  image-path*)
+                    matched=0
+                    case "$line" in
+                      *"$bundle_dir"*) matched=1 ;;
+                    esac
+                    ;;
+                  /dev/disk*)
+                    token="${line%% *}"
+                    token="${token%%$'\t'*}"
+                    case "$token" in
+                      *s[0-9]*) ;;
+                      *)
+                        if [[ "$matched" -eq 1 ]]; then
+                          hdiutil detach "$token" >/dev/null 2>&1 || hdiutil detach -force "$token" >/dev/null 2>&1 || true
+                          matched=0
+                        fi
+                        ;;
+                    esac
+                    ;;
+                esac
+              done <<< "$info"
+            fi
+            if command -v pkill >/dev/null 2>&1; then
+              # GHA's orphan cleanup prints the truncated name diskimages-help.
+              pkill -x diskimages-helper >/dev/null 2>&1 || true
+              pkill -x diskimages-help >/dev/null 2>&1 || true
+              pkill -x diskimages-hel >/dev/null 2>&1 || true
+            fi
+          }
+          
+          sign_dmg() {
+            local dmg="$1"
+            local identity="${APPLE_SIGNING_IDENTITY:-}"
+            if [[ -z "$identity" || "$identity" == "-" ]]; then
+              echo "DMG left unsigned (APPLE_SIGNING_IDENTITY is unset or ad-hoc)."
+              return 0
+            fi
+            if [[ -z "${APPLE_CERTIFICATE:-}" || -z "${APPLE_CERTIFICATE_PASSWORD:-}" ]]; then
+              echo "DMG codesign needs APPLE_CERTIFICATE and APPLE_CERTIFICATE_PASSWORD." >&2
+              return 1
+            fi
+            local password dest
+            password="$(openssl rand -hex 16)"
+            dest="${RUNNER_TEMP:-/tmp}"
+            keychain_path="$dest/anet-dmg-$$.keychain-db"
+            p12_path="$(mktemp "$dest/anet-dmg-cert.XXXXXX")"
+            chmod 600 "$p12_path"
+            printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$p12_path"
+            security create-keychain -p "$password" "$keychain_path"
+            security unlock-keychain -p "$password" "$keychain_path"
+            security import "$p12_path" -k "$keychain_path" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            security set-keychain-settings -t 3600 -u "$keychain_path"
+            security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain_path"
+            rm -f "$p12_path"
+            p12_path=""
+            local args=(--force -s "$identity" --keychain "$keychain_path")
+            if [[ -n "${entitlements:-}" ]]; then
+              if [[ ! -f "$entitlements" ]]; then
+                echo "Entitlements file not found: $entitlements" >&2
+                return 1
+              fi
+              args+=(--entitlements "$entitlements")
+            fi
+            echo "Signing DMG with identity \"$identity\""
+            codesign "${args[@]}" "$dmg"
+            codesign --verify --verbose=2 "$dmg"
+            cleanup_signing
+          }
+          
+          has_dmg=0
+          prev=""
+          for arg in "$@"; do
+            if [[ "$prev" == "--bundles" && "$arg" == *dmg* ]]; then
+              has_dmg=1
+            fi
+            if [[ "$arg" == --bundles=* && "$arg" == *dmg* ]]; then
+              has_dmg=1
+            fi
+            prev="$arg"
+          done
+          
+          tauri_args=("$@")
+          seen_verbose=0
+          for arg in "${tauri_args[@]}"; do
+            if [[ "$arg" == "--verbose" || "$arg" == "-v" ]]; then
+              seen_verbose=1
+            fi
+          done
+          if [[ "$seen_verbose" -eq 0 ]]; then
+            tauri_args+=("--verbose")
+          fi
+          
+          set +e
+          run_tauri "${tauri_args[@]}"
+          status=$?
+          set -e
+          if [[ "$status" -eq 0 ]]; then
+            exit 0
+          fi
+          
+          if [[ "$has_dmg" -eq 0 ]]; then
+            echo "tauri build failed and --bundles did not include dmg; not retrying."
+            exit "$status"
+          fi
+          
+          if [[ "$(uname -s)" != "Darwin" && "${ANET_DMG_ASSUME_DARWIN:-}" != "1" ]]; then
+            echo "tauri build failed off macOS; not retrying the DMG."
+            exit "$status"
+          fi
+          
+          layout="$(node << 'END_LAYOUT'
+          const c = require('./src-tauri/tauri.conf.json');
+          const mac = (c.bundle && c.bundle.macOS) || {};
+          const dmg = mac.dmg || {};
+          const app = dmg.appPosition || { x: 180, y: 170 };
+          const folder = dmg.applicationFolderPosition || { x: 480, y: 170 };
+          const size = dmg.windowSize || { width: 660, height: 400 };
+          const ent = mac.entitlements || '';
+          process.stdout.write([c.productName, c.version, app.x, app.y, folder.x, folder.y, size.width, size.height, ent].join('\t') + '\n');
+          END_LAYOUT
+          )" || {
+            echo "Not retrying DMG: could not read src-tauri/tauri.conf.json."
+            exit "$status"
+          }
+          
+          IFS=$'\t' read -r product version ax ay fx fy ww hh entitlements <<< "$layout"
+          if [[ -z "${product:-}" || -z "${version:-}" ]]; then
+            echo "Not retrying DMG: tauri.conf.json has no productName or version."
+            exit "$status"
+          fi
+          if [[ -n "${entitlements:-}" && "${entitlements#/}" == "$entitlements" ]]; then
+            entitlements="src-tauri/${entitlements#./}"
+          fi
+          
+          case "$(uname -m)" in
+            arm64|aarch64) arch=aarch64 ;;
+            x86_64) arch=x64 ;;
+            *)
+              echo "Not retrying DMG: unsupported architecture $(uname -m)."
+              exit "$status"
+              ;;
+          esac
+          
+          root="$(pwd)"
+          bundle="$root/src-tauri/target/release/bundle"
+          macos_dir="$bundle/macos"
+          dmg_dir="$bundle/dmg"
+          app_path="$macos_dir/${product}.app"
+          dmg_name="${product}_${version}_${arch}.dmg"
+          script="$dmg_dir/bundle_dmg.sh"
+          
+          if [[ ! -d "$app_path" || ! -f "$script" ]]; then
+            echo "Not retrying DMG: stapled app or bundle_dmg.sh is missing (this failure is earlier than the hdiutil step)."
+            exit "$status"
+          fi
+          
+          if ! xcrun stapler validate "$app_path"; then
+            echo "Not retrying DMG: the app is not stapled, so notarization did not finish."
+            exit "$status"
+          fi
+          
+          echo "macOS DMG bundling failed after notarization was accepted. Retrying bundle_dmg.sh only; the stapled app is kept."
+          
+          dmg_args=(
+            --volname "$product"
+            --icon "${product}.app" "$ax" "$ay"
+            --app-drop-link "$fx" "$fy"
+            --window-size "$ww" "$hh"
+            --hide-extension "${product}.app"
+          )
+          if [[ -f "$dmg_dir/icon.icns" ]]; then
+            dmg_args+=(--volicon "$dmg_dir/icon.icns")
+          fi
+          dmg_args+=("$dmg_name" "${product}.app")
+          
+          attempt=2
+          while [[ "$attempt" -le "$ATTEMPTS" ]]; do
+            cleanup_disk_images "$bundle"
+            if [[ -n "${ANET_DMG_BACKOFF_SECONDS:-}" ]]; then
+              wait_s="$ANET_DMG_BACKOFF_SECONDS"
+            else
+              wait_s=$(( (attempt - 1) * 10 ))
+            fi
+            echo "DMG retry ${attempt}/${ATTEMPTS}: waiting ${wait_s}s for diskimages-helper to exit"
+            sleep "$wait_s"
+            cleanup_disk_images "$bundle"
+            rm -f "$macos_dir/$dmg_name" "$macos_dir"/rw.*.dmg "$dmg_dir"/rw.*.dmg
+            if (
+              cd "$macos_dir"
+              bash "$script" "${dmg_args[@]}"
+            ); then
+              if [[ -s "$macos_dir/$dmg_name" ]]; then
+                mv -f "$macos_dir/$dmg_name" "$dmg_dir/$dmg_name"
+                sign_dmg "$dmg_dir/$dmg_name"
+                echo "DMG retry ${attempt} produced $dmg_dir/$dmg_name"
+                exit 0
+              fi
+              echo "bundle_dmg.sh exited 0 but did not write $dmg_name"
+            fi
+            echo "DMG retry ${attempt} failed"
+            attempt=$((attempt + 1))
+          done
+          
+          echo "DMG bundling failed after ${ATTEMPTS} attempts. The stapled app was not re-notarized."
+          exit 1
+          END_DMG_RETRY
+          bash -n "$RUNNER_TEMP/retry-macos-dmg.sh"
+          chmod +x "$RUNNER_TEMP/retry-macos-dmg.sh"
+
+      # 一个 tag 只留一个 release 对象。
+      #
+      # 事故(2026-10-21 实测,来自发版速度分析):同一个 tag 上出现了**两个** release
+      # (desktop-v0.2.274:一个 draft、一个 published)—— tauri-action 每次跑都新建,
+      # 重跑就多一个草稿;最近 20 个 release 里 9 个是**从未发布**的草稿,
+      # 用户和更新器看到的是残缺版本,latest.json 也可能指向半个版本。
+      #
+      # 这里在构建之前先清掉同 tag 的**草稿**(已发布的不动:它带着已下载的资产,
+      # 删掉会毁掉用户的更新记录),让重跑变成「更新同一个 release」。
+      - name: Remove stale draft releases for this tag (idempotent release creation)
+        if: inputs.publish == true
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          tag="desktop-v$version"
+          drafts=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+            --jq ".[] | select(.tag_name == \"$tag\" and .draft == true) | .id")
+          for id in $drafts; do
+            echo "deleting stale draft release $id for $tag"
+            gh api -X DELETE "repos/$GITHUB_REPOSITORY/releases/$id"
+          done
+          echo "idempotent-release: $tag has no stale draft left"
+          # 已经**发布**过的 tag,不许再发一次。
+          # 只删草稿还不够:重发同一个已发布版本时,tauri-action 仍可能再造一个新对象
+          # (desktop-v0.2.274 就是 published 09:33 + draft 09:45 并存)。
+          # 这里直接 fail-fast:要重发就 bump 版本号,别在同一个 tag 上叠第二条。
+          published=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+            --jq ".[] | select(.tag_name == \"$tag\" and .draft == false) | .id")
+          if [ -n "$published" ]; then
+            echo "::error::$tag 已经发布过了(release id: $published)。重发请先 bump 版本号。"
+            exit 1
+          fi
+
       - uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
         if: inputs.publish == true
         env:
@@ -180,10 +499,240 @@ jobs:
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
           APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
         with:
+          # Empty on Windows and Linux, so those jobs keep using bun. The path
+          # has no spaces: tauri-action splits this input on spaces.
+          tauriScript: ${{ runner.os == 'macOS' && format('bash {0}/retry-macos-dmg.sh', runner.temp) || '' }}
           tagName: desktop-v__VERSION__
           releaseName: ANet Desktop v__VERSION__
           releaseBody: |-
-            Signed and notarized stable update for macOS (Apple Silicon) and Windows (x64), plus Ubuntu 24.04 (amd64).
+            Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
+
+            What's new in 0.2.284:
+            - 改进：定时任务卡片重新梳理信息层级，任务名称、执行状态和计划时间更容易一眼分清。
+            - 改进：「下次执行」与「上次执行」按真实执行数据显示时间和结果摘要，方便判断计划何时运行、最近一次是否成功。
+            - 改进：卡片操作更轻量，常用操作不再抢占任务内容；启用开关支持键盘操作与清晰的焦点提示，浅色、深色主题下都更易辨认。
+
+            What's new in 0.2.283:
+            - 修复：每天/每周的「时间」不再让你手打输入，改成选择器（小时网格 + 分钟网格 + 常用时刻）。单次的执行时间此前已换成日历 + 时分秒面板（0.2.282 之前），现在两处都不用手输。
+            - 修复：Agent 归属与人类部门是两个独立的 —— 只有显式指定部门才算归属，负责人属于哪个部门不再把 Agent 带过去（需要 Hub 0.9.0-preview.144 及以上）。
+            - 改进：同一个版本不再出现两个 release 对象；已发布过的版本重发会直接报错提示先 bump 版本号；iOS 构建卡住会在 4 小时内终止并自动重试一次。
+            - 改进：发版耗时与未发版积压各有一个可复跑的只读脚本（release-timeline.mjs / release-backlog.mjs），随仓交付。
+
+            What's new in 0.2.282:
+            - 修复：Hub 令牌 · API 密钥库里，名字只差大小写或下划线的密钥现在会互相提示（线上确实同时存在 TMPAT 与 TM_PAT 两个不同的密钥，肉眼分不出），并标出成对的那几行；Provider 选已存密钥时同样会提示。
+
+            What's new in 0.2.281:
+            - 修复：给别的网络里的 Agent 发消息不再「没有找到这个 Agent」。Agent 列表是跨网络的，发送却一直钉在登录时选中的那个网络上 —— 现在按目标 Agent 实际所在的网络发送。
+
+            What's new in 0.2.280:
+            - 修复：建节点的「选服务器」页好读了。标题不再露出 host_supervisor；卡片主标题是可辨认的名字，裸机器 ID 降成旁注；这台机器上没有的 runtime 改用中性灰（不再像报错）；选中态只留一处；点不动的「下一步」会说明为什么。
+            - 修复：节点页在「配置的模型不在这台机器上报的列表里」时给一句提醒（不拦提交，列表可能先于服务器更新）。
+
+            What's new in 0.2.279:
+            - 修复：任务仪表盘去掉「生成分享图」。手机底部那条按钮不再压住「最近完成」，桌面上的同一入口也一并撤掉。
+
+            What's new in 0.2.278:
+            - 建 OpenCode V2 节点时，这台机器已上报的模型可以直接点选，不必再对着一串不能点的名字手填。
+
+            What's new in 0.2.277:
+            - 定时任务的关注人改成头像胶囊，不再把全部账号平铺在表单里。点卡片即可添加或移除。
+
+            What's new in 0.2.276:
+            - OpenCode V2 节点切换模型时，列表来自该节点自己的模型目录，不再用内置名单。目录为空或不是 V2 时，仍可手填 provider/model。
+
+            What's new in 0.2.275:
+            - 关于页的标志居中，并缩小，不再贴在左边。
+
+            What's new in 0.2.274:
+            - 侧栏标志缩小到和下方图标一样大，不再压到旁边的文字。
+
+            What's new in 0.2.273:
+            - 换上新的 AN 标志。浅色和深色使用对应笔画，小图标用加粗版。
+
+            What's new in 0.2.272:
+            - 保存节点密钥后可以选择稍后重启。节点正在执行任务时不会强制重启。
+
+            What's new in 0.2.271:
+            - 定时任务可以添加关注人。被添加的人能看到并编辑该计划；不能改关注人名单，也不能取消或立即运行。
+
+            What's new in 0.2.270:
+            - 组织架构页调整 Agent 部门时，失败提示按真实原因显示：部门不存在、节点不存在、没有权限分别给出可读说明，不再都落到「操作失败」。
+
+            What's new in 0.2.269:
+            - 「环境变量 / 密钥」页标明只读，并新增一步跳转到「Hub 令牌 · API 密钥库」；添加或替换密钥不再需要自己找入口。
+            - Hub 老版本返回 HTML 时提示「当前 Hub 版本还没有密钥目录接口，请先升级 Hub」，不再显示成设置失败。
+
+            What's new in 0.2.268:
+            - 任务评论正文按 Markdown 显示：标题、粗体、行内代码、列表和表格不再露出原字符；「评论」区与「动态」区行为一致。
+            - 评论可复制 Markdown 原文：触屏长按正文，鼠标设备点「复制」；「动态」里的长评论保留 8 行折叠，可展开/收起。
+
+            What's new in 0.2.267:
+            - 桌面「立即更新并重启」点下去后有加载态：按钮变「更新中…」并禁用，避免重复点击。
+
+            What's new in 0.2.266:
+            - 老 Hub 返回 200 但内容是 HTML 时，技能与密钥页显示可读提示，不再弹 JSON 解析错误。
+
+            What's new in 0.2.265:
+            - 聊天头部显示该 Agent 正在使用的模型名（数据来自 /api/status，不新增请求；未上报时保持原样）。
+
+            What's new in 0.2.264:
+            - 节点详情可以直接管理密钥：列出 key 名、设置、删除；值只在输入时出现一次，保存后不再回显，改动在节点下次启动生效。
+            - 节点详情显示「到 Hub 的链路」：本机 / TLS / 明文（明文会明确警告密钥传输没有加密保护）。
+            - daemon 卡片显示密钥授权范围；现网大多显示「未授权任何密钥」，以前完全看不出来。
+            - 服务器管理的 SKILLS 与「环境变量/密钥」页改为真实数据（此前是演示数据）。
+            - 账号页头像提示在暗色下更清楚（按可读性对比度判定，而不是写死颜色）。
+            What's new in 0.2.263:
+            - Codex 节点概览在工作路径旁显示 codex_home，路径只使用节点上报的值，没有上报时显示未上报。
+
+            What's new in 0.2.262:
+            - Hub 返回非 JSON 内容（如网关错误页）时显示友好的中英文提示，不再直接弹出 JSON Parse error。
+
+            What's new in 0.2.261:
+            - 聊天输入 / 时显示命令和当前节点技能，输入 @ 时列出 Agent，点选只填入草稿，不自动发送。
+
+            What's new in 0.2.260:
+            - 修复 macOS 聊天输入卡顿：新消息通知改用现代系统通知接口，避免旧通知轮询阻塞主线程。
+
+            What's new in 0.2.259:
+            - 标签状态图表改为紧凑横向细条，降低色彩饱和度与灰色空槽面积，标签、总数和四状态计数统一对齐。
+            - 桌面和横屏按行比较，手机保留清晰的分层排列；继续支持项目范围、部分数据提示与点击状态筛选。
+
+            What's new in 0.2.258:
+            - 仪表盘新增按标签的四状态任务数量图，桌面显示堆叠柱、手机显示横条，可展开全部标签。
+            - 点击图中的状态可打开对应任务列表；统计跟随项目筛选，多标签与无标签分别计数。
+            - 支持全量统计的 Hub 显示当前全部可见任务；旧 Hub 明确显示已加载的部分数据。
+
+            What's new in 0.2.257:
+            - 消息发送后区分 Hub 已收到、已提交运行时、运行时已开始等待回复；旧节点没有证据时明确显示开始状态未确认。
+            - 任务详情显示 Hub 已知的等待或连接原因；节点任务列表按创建时间展示，不再把列表序号当成精确执行名次。
+
+            What's new in 0.2.256:
+            - 优化任务列表悬停：鼠标移入或移出只刷新对应行，减少大列表交互卡顿。
+            - 任务内容未变化时，后台刷新保留当前列表，避免重复重绘列表和侧栏；有变化的权限、评论和子任务进度仍正常更新。
+            - 保留每页 50 条分页、搜索、筛选、详情与编辑。
+
+            What's new in 0.2.255:
+            - 任务列表新增每页 50 条分页、上一页/下一页和范围提示；桌面和手机不再一次渲染所有任务行。
+            - 排序、筛选和搜索后再分页，条件变化回到第一页；详情和编辑仍对应原任务，已明确选择的任务不会被翻页扩选。
+            - 保留统计、看板与已有搜索加载更多；本版改善列表渲染，不会自动重启节点，也不改变服务端列表读取上限。
+
+            What's new in 0.2.254:
+            - 独立节点的“密钥”页前置检查已知旧 runtime，直接显示当前版本及所需 2.5.0-preview.137，避免填写后才发现保存不可用。
+            - 修复 Hub 通过 SSE 返回升级或权限提示时被误显示为“尚未确认保存”；未知响应仍需刷新确认，不会误报保存成功。
+            - 无需绑定 Daemon；此更新不会自动升级或重启节点，也不会切换账号、Provider 或模型。桌面本机安装继续配套 CLI .172 / runtime .138。
+
+            What's new in 0.2.253:
+            - 桌面本机 Daemon 的安装与升级入口配套 CLI 2.3.0-preview.172 / runtime 2.5.0-preview.138，包含 OpenCode V1 会话恢复与升级支持。
+            - CLI 下载继续支持经摘要校验的独立下载地址；保留停止旧进程、私有安装目录和安装后版本确认。
+            - 需手动点击本机安装或升级；不会自动升级远端节点，也不会切换账号、Provider 或模型。已有 OpenCode V1 节点首次升级需按文档保留原会话。
+
+            What's new in 0.2.252:
+            - Agent 会话列表新增“进行中”筛选，桌面和手机都能集中查看正在执行任务的 Agent。
+            - 执行状态随 Hub 状态刷新，任务结束后自动移出；保留搜索、置顶和分组，可随时返回“全部”。
+            - 此更新只调整客户端列表，不会升级、重启远端节点或切换账号、Provider 和模型。
+
+            What's new in 0.2.251:
+            - 未绑定 Daemon 的节点也可在“密钥”页面保存、修改和删除自己的环境密钥；无需绑定 Daemon，也不会替换节点身份令牌。
+            - 保存结果由目标节点确认，密钥不回显，后续完整启动时供运行时使用；当前会话不会自动重启。已绑定节点仍保留 Daemon 默认继承。
+            - 独立节点密钥需要 Hub 0.9.0-preview.128 和目标节点 runtime 2.5.0-preview.137；桌面配套 CLI 为 2.3.0-preview.171。更新客户端不会自动升级远端节点。
+
+            What's new in 0.2.250:
+            - OpenCode 创建页明确区分 V1 兼容后台模式与 V2 实验性 TUI 共存，确认页同步展示代际与模式，避免把后台节点误认为已打开 TUI。
+            - 修复节点启停确认按钮的文字对比度，确认和返回更易辨认；删除确认保留独立警示。
+            - V2 仍需要目标机器已有的 Provider/模型配置和明确工具授权；此更新不会自动切换账号、模型或重启节点。
+
+            What's new in 0.2.249:
+            - Daemon 和节点的环境密钥改为真实保存；节点继承 Daemon 默认值，也可单独覆盖。显示来源与保存回执，不回显密钥；下次完整启动时生效。
+            - 创建 Codex TUI 共存节点时，可选择目标机器已绑定的 API-key Provider，读取其配置与模型后继续创建，不再被“发现/扫描”入口挡住。
+            - 修复当前账号验证成功后仍残留“需要重新登录”红字：重新核实有效凭据后刷新状态，真正失效的账号仍提示登录。
+            - Hub / Daemon Provider 推荐 HTTPS，但允许明确配置 HTTP，并显示明文传输风险提示；保存、下发和切换仍需用户操作。
+            - 环境密钥与 HTTP 完整链路需要 Hub 0.9.0-preview.127、CLI 2.3.0-preview.170 / runtime 2.5.0-preview.136 配套升级；只更新客户端不会升级远端服务器或重启节点。
+
+            What's new in 0.2.248:
+            - 手机 Hub 页把管理入口放到标题下方，Provider 不再被长机器列表埋在页面底部。
+            - 点击 Hub Provider 打开已有管理页，可返回 Hub；仅调整入口位置，不会自动保存、下发或切换节点配置。
+
+            What's new in 0.2.247:
+            - Hub Provider 下发前展示 Provider、配置版本、模型列表和所选 Daemon 的名称与标识，方便确认目标。
+            - 可返回修改选择；取消确认或变更目标不会下发配置。下发仍需明确确认，不会自动切换或重启已有节点。
+
+            What's new in 0.2.246:
+            - 节点和 Daemon 的 Provider 页面在确认应用成功后自动刷新当前配置，无需手动刷新才能继续选择。
+            - 连续切换 Provider 或模型时使用最新回读配置；每次切换仍需明确确认，未确认生效的结果不会自动重试。
+
+            What's new in 0.2.245:
+            - macOS / Windows 的 Daemon 管理可打开独立窗口，调整窗口大小，同时保留主窗口对话；重复打开同一个 Daemon 会回到已有窗口。
+            - 独立窗口沿用所选 Hub、网络和 Daemon，Provider、已有 Codex、托管节点与日志在同一处管理；关闭窗口不会停止 Daemon 或切换账号。
+            - Android 和网页继续使用原有页面，不新增独立窗口，也不会自动更换节点的 Provider、账号或模型。
+
+            What's new in 0.2.244:
+            - Windows 安装器和卸载界面使用 ANet Logo，安装页头与侧栏统一品牌展示，不再显示默认安装图标。
+            - 保留原安装目录、升级识别与账号数据；Provider 配置和已有节点不会因本次外观更新自动切换。
+
+            What's new in 0.2.243:
+            - Hub Provider 可选择已保存在 Hub 密钥库中的 API 密钥名称，无需再次输入或读取密钥明文；也可输入新的 API 密钥。
+            - 配置回读显示引用名称；下发到所选 Daemon 和应用到节点仍需明确确认，不会自动切换已有节点或覆盖共享密钥。
+            - 已存密钥引用需要 Hub 0.9.0-preview.125、CLI 2.3.0-preview.166、runtime 2.5.0-preview.132；旧 Hub 会显示具体升级版本。
+
+            What's new in 0.2.242:
+            - 首次打开和登录页面也可检查客户端更新，无需先填写 Hub、用户名或密码；使用原有更新提示与安装流程。
+            - Hub 令牌页接入真实共享 API 密钥库，支持查看名称、添加和替换；密钥加密保存在 Hub，提交后清空，不回显明文。
+            - 密钥保存需当前网络所有者权限，失败可刷新重试；不会自动下发、替换节点身份令牌或切换已有节点。Provider 对已存密钥名称的引用复用仍在接入。
+
+            What's new in 0.2.241:
+            - 修复改密码后重新登录又被旧请求踢回登录页，以及账号仍显示需要重新登录的状态竞争；真正失效的新凭据仍会要求验证。
+            - Hub Provider 可配置并明确绑定到所选 Daemon；首个应用链路支持 Codex Responses/API-key，不会自动给所有节点复制账号或凭据。
+            - 创建 Codex TUI 共存节点可选择 Daemon 已管理的 Provider、认证方式和模型；确认页可返回修改节点名字，保留已选配置。
+            - 扫描到的已有 Codex 配置可以明确收录到 Daemon；发现、收录、应用与供应商实际模型权限分别显示。
+            - 新 Provider 创建/绑定核心需要 Hub 0.9.0-preview.124、CLI 2.3.0-preview.166、runtime 2.5.0-preview.132；升级客户端不能代替升级管理端软件。
+
+            What's new in 0.2.240:
+            - Codex TUI 共存节点详情新增 Daemon Provider、认证方式与模型选择；聊天中的节点信息也可直接操作，不必返回 Daemon 设置。
+            - 选择仅针对当前节点，确认后才应用；未绑定 Daemon 时显示管理引导，不会自动收编。列表只展示该 Daemon 已管理的配置，扫描到的配置不会自动收录。
+            - 配置与实际模型权限分开显示；真实账号登录和模型调用仍取决于供应商，选择或保存不等于调用成功。
+
+            What's new in 0.2.239:
+            - Daemon Provider 页可只读发现工作区及已登记子工作区中已有的 Codex，展示模型、Provider、认证方式和扫描时间；不复制账号、不导入配置、不自动重启。
+            - 未绑定的 Codex 使用独立区域展示，不会误出现在 Provider 切换目标中。旧目录布局也可读取状态，无法读取时明确提示，不再误显示为没有 Codex。
+            - 本机发现需要 Hub 0.9.0-preview.123、CLI 2.3.0-preview.165、runtime 2.5.0-preview.131；缺少能力时显示具体升级版本和顺序。登录文件存在不代表账号或模型调用仍可用。
+            - 任务侧栏标签按当前显示的任务数量降序排列；同数量按名称排序，已选的零任务标签仍可取消筛选。
+            - 进入 Daemon 管理时收起无关的 Agent/人员/消息列表，保留 Daemon 设置导航；返回 Agents 时恢复列表。
+
+            What's new in 0.2.238:
+            - Daemon Provider 页新增托管 ChatGPT 账号登录与账号列表；登录需由本人在官方页面完成。可明确选择账号和模型，确认后只重启所选 Codex TUI 共存节点并保留会话。
+            - 账号登录与 API-key Provider 分开管理；新登录能力需要 Hub 0.9.0-preview.122、CLI 2.3.0-preview.164、runtime 2.5.0-preview.130，旧版本显示明确升级目标。
+            - 已有 Codex 状态拆分为清晰卡片；修复设置头像区深色说明文字、输入框和主次按钮配色。
+            - 节点详情和 Daemon 节点列表新增「复制节点」入口，可选择是否复制会话；提交后显示待创建状态，旧 Hub 缺少能力时明确提示，不冒称创建成功。
+            - 本地核心链路已验证；真实 OAuth 登录及模型权限由账户服务端决定，配置保存不等于远端模型可用。
+
+            What's new in 0.2.237:
+            - Provider 页面显示所选 Daemon 的实际 runtime 版本；遇到接口缺失或回读异常时，列出明确的 Hub、CLI、runtime 已验证升级目标和处理步骤。
+            - 超时、离线与接口缺失分别提示，不再把超时等同版本过旧；较新版本无需降级。修正 API-key 节点应用已支持的说明，ChatGPT 账号切换仍在开发中。
+
+            What's new in 0.2.236:
+            - 本机 Daemon 安装遇到 npm 版本暂不可下载时，改用同版本的 GitHub 正式包，校验固定 SHA256 后再安装，避免一直卡在 npm 重试。
+            - 延续 Daemon Provider 管理与已有 Codex 状态展示；ChatGPT 登录账号切换仍在开发中，本版不宣称支持。
+
+            What's new in 0.2.235:
+            - Daemon 的 Provider 页接入实际配置，展示已有 Codex 节点状态，支持管理 API-key Provider 和模型。
+            - 可将所选 Provider 和模型应用到一个已有 Codex TUI 共存节点；确认后重启该节点、保留原会话，并展示本次应用结果。
+            - 本版 API-key 路径使用 Responses 兼容接口，配置成功不代表供应商端点可用；ChatGPT 登录账号切换暂不支持。远程 Hub 与 Daemon 需要升级后使用。
+
+            What's new in 0.2.233:
+            - 修复创建节点时的模型目录范围：只展示所选 Daemon 已上报的 Provider 和模型，不再把网络级目录当成本机可用模型。
+            - 切换到尚未上报目录的 Daemon 时保留升级提示，避免沿用其他机器的模型列表。
+
+            What's new in 0.2.232:
+            - Codex 节点可编辑思考程度与自动执行权限，配置经 Hub 下发到节点。
+            - Daemon 设置新增「全览」：探测本机 CPU/内存/磁盘、工具链与各 Agent 运行时就绪状态，缺口提供可复制安装命令。
+            - Daemon / Hub 设置新增「Runtime 支持」页，按功能 × 运行时展示支持矩阵。
+            - 本机 Daemon 安装与升级更安全：固定 CLI / agent-node 版本，先确认旧进程退出再换包，避免误发新令牌。
+
+            What's new in 0.2.231:
+            - Hub 概览里点一台机器，可直接进入该守护进程（Daemon）的管理页。
+            - Hub 侧栏新增 SKILLS、令牌、环境变量、Provider 四个管理页（目前为演示数据，标明「演示数据 · 后端开发中」）。
+            - 支持打开托管节点的对话；域集成相关入口已接通。
+            - 新建节点时若旧版 Hub/daemon 不接受中文名，会提示升级到 commhub-server 0.9.0-preview.66 / agent-node 2.5.0-preview.76，或改用小写英文名。
 
             What's new in 0.2.230:
             - 设置页重新整理：Hub、守护进程（Daemon）管理页采用左侧导航，包含节点、SKILLS、令牌和 Provider；节点页新增密钥分区。
@@ -1207,7 +1756,13 @@ jobs:
           APPLE_SIGNING_IDENTITY: "${{ runner.os == 'macOS' && 'Developer ID Application: wenxing hu (446BLT75JZ)' || '' }}"
           APPLE_API_ISSUER: ${{ runner.os == 'macOS' && secrets.APPLE_API_ISSUER || '' }}
           APPLE_API_KEY: ${{ runner.os == 'macOS' && secrets.APPLE_API_KEY || '' }}
-        run: npx tauri build ${{ matrix.args }}
+        run: |
+          set -euo pipefail
+          if [ "$RUNNER_OS" = "macOS" ]; then
+            bash "$RUNNER_TEMP/retry-macos-dmg.sh" build ${{ matrix.args }}
+          else
+            npx tauri build ${{ matrix.args }}
+          fi
 
       - name: Assert Linux release deb, signature, endpoints, and checksums
         if: runner.os == 'Linux'
@@ -1495,8 +2050,86 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
-      - name: Require draft assets, Linux updater entries, and checksums
+      - name: Require selected platform draft assets, updater entries, and checksums
         env:
           GH_TOKEN: ${{ github.token }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
+          INCLUDE_LINUX: ${{ inputs.include_linux }}
         run: node scripts/verify-desktop-release-draft.mjs
+
+  # 0.2.265/0.2.266 的教训:`ANet_<ver>_android-universal.apk` 也能当 release 资产,但安卓更新器找的是
+  # `Agent.Network_<ver>_android-universal.apk`(src/android-update-core.ts apkCacheFileName),版本化路径
+  # 因此 404,只能靠 android 通道兜底。这里在 draft 发布前把 APK 按更新器的名字挂上去:
+  #   * 只认 head_sha == inputs.commit 且 success 的 android-build run;
+  #   * 用 aapt2 再核一次 versionName,避免「同 commit 但版本号不对」的包被挂上去;
+  #   * 找不到 android-build 就 warning 跳过,不拖住桌面发布(镜像会等 30 分钟后照常同步)。
+  attach-android-apk:
+    needs: [build-release, verify-draft]
+    if: inputs.publish == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Find the successful android-build for this commit
+        id: find
+        env:
+          GH_TOKEN: ${{ github.token }}
+          COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          # android-build is triggered by the push that produced the bump commit and
+          # usually finishes after the desktop release starts. Wait for THIS commit's
+          # run instead of silently skipping the attach.
+          for attempt in $(seq 1 40); do
+            line=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-build.yml/runs?head_sha=$COMMIT&per_page=1" --jq '.workflow_runs[0] | "\(.id // "") \(.status // "") \(.conclusion // "")"')
+            read -r run_id status conclusion <<<"$line"
+            if [ -z "$run_id" ]; then
+              echo "::warning::no android-build run for $COMMIT; attach the APK to desktop-v<version> by hand"
+              exit 0
+            fi
+            if [ "$status" = "completed" ]; then
+              if [ "$conclusion" != "success" ]; then
+                echo "::warning::android-build $run_id for $COMMIT concluded '$conclusion'; attach the APK by hand"
+                exit 0
+              fi
+              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+              echo "using android-build $run_id"
+              exit 0
+            fi
+            echo "android-build $run_id is $status; waiting ($attempt/40)"
+            sleep 30
+          done
+          echo "::warning::android-build for $COMMIT did not finish in 20 minutes; attach the APK by hand"
+          exit 0
+      - name: Attach the APK with the updater's file name
+        if: steps.find.outputs.run_id != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ steps.find.outputs.run_id }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          name="Agent.Network_${version}_android-universal.apk"
+          tmp="$RUNNER_TEMP/apk"; mkdir -p "$tmp"
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n agent-network-android-apk -D "$tmp"
+          apk=$(find "$tmp" -name '*.apk' -print -quit)
+          [[ -n "$apk" ]] || { echo "::error::android-build artifact has no APK"; exit 1; }
+          aapt2=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name aapt2 -type f 2>/dev/null | sort -V | tail -1 || true)
+          if [ -n "$aapt2" ]; then
+            apk_version=$(sed -n "s/^package: .*versionName='\([^']*\)'.*/\1/p" <<<"$("$aapt2" dump badging "$apk")")
+            if [ "$apk_version" != "$version" ]; then
+              echo "::error::APK versionName '$apk_version' does not match release $version"
+              exit 1
+            fi
+          else
+            echo "::warning::aapt2 not found; skipping the APK versionName assertion"
+          fi
+          cp "$apk" "$tmp/$name"
+          gh release upload "desktop-v$version" "$tmp/$name" --clobber --repo "$GITHUB_REPOSITORY"
+          echo "attached $name to desktop-v$version"

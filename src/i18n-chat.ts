@@ -64,6 +64,10 @@ export const chatTranslations = {
   // board #449 会话列表顶部「全部 / 未读 N」(飞书同款,「标记」暂缓)。
   'chat.tabAll': ['全部', 'All'],
   'chat.tabUnread': ['未读', 'Unread'],
+  'chat.tabWorking': ['进行中', 'In progress'],
+  'chat.workingEmpty': ['没有正在执行任务的 Agent', 'No agents are working right now'],
+  'chat.workingSearchEmpty': ['没有匹配的进行中 Agent', 'No matching agents in progress'],
+  'chat.workingEmptyHint': ['Agent 开始执行后会出现在这里', 'Agents will appear here when they start working'],
   'chat.tabsLabel': ['会话筛选', 'Conversation filter'],
   'chat.unreadEmpty': ['没有未读消息', 'No unread messages'],
   'chat.unreadEmptyHint': ['新消息到达后会出现在这里', 'New messages will show up here'],
@@ -170,6 +174,17 @@ export const chatTranslations = {
   'chat.statusOffline': ['离线', 'Offline'],
   'chat.statusOnline': ['在线', 'Online'],
   'chat.messagePlaceholder': ['发消息给 {alias}…', 'Message {alias}…'],
+  'chat.slash.commands': ['ANet 命令', 'ANet commands'],
+  'chat.slash.skills': ['节点技能', 'Node skills'],
+  'chat.slash.empty': ['没有匹配的命令或技能', 'No matching commands or skills'],
+  'chat.slash.loading': ['正在读取节点技能…', 'Loading node skills…'],
+  'chat.slash.unsupported': ['这个节点没有上报技能列表', 'This node does not report skills'],
+  'chat.slash.failed': ['技能列表读取失败', 'Could not load skills'],
+  'chat.mention.agents': ['Agent', 'Agents'],
+  'chat.mention.online': ['在线', 'Online'],
+  'chat.mention.offline': ['离线', 'Offline'],
+  'chat.mention.empty': ['没有匹配的 Agent', 'No matching agents'],
+
   'chat.shortcutMod': ['{modifier}+Enter 发送 · Enter 换行', '{modifier}+Enter to send · Enter for a new line'],
   'chat.shortcutEnter': ['Enter 发送 · Shift/Ctrl/⌘+Enter 换行', 'Enter to send · Shift/Ctrl/⌘+Enter for a new line'],
   'chat.previewName': ['预览 {name}', 'Preview {name}'],
@@ -186,7 +201,7 @@ export const chatTranslations = {
   'chat.imagesLostBody': ['这条消息里的图片没有保存下来，无法重新发送（不会只发文字）。请删掉这条，重新选择图片发送。', 'The images in this message were not saved, so it cannot be resent (text alone is never sent). Delete it and pick the images again.'],
   'chat.deleteUnsent': ['删除这条', 'Delete message'],
   // #692 守护节点(host_supervisor)会话页:输入框换成这一行 + 入口。
-  'chat.daemon.notice': ['守护节点只执行创建 / 停止 / 重启 / 删除等结构化命令，不能对话', 'Daemon nodes only run structured commands such as create / stop / restart / delete. They cannot chat.'],
+  'chat.daemon.notice': ['这是守护进程管理页，托管的 Agent 可以照常对话', 'This is the daemon management page; managed agents can still be chatted with normally'],
   'chat.daemon.managed': ['托管的节点（{count}）', 'Managed nodes ({count})'],
 } satisfies Record<string, readonly [string, string]>;
 registerTranslations(chatTranslations);

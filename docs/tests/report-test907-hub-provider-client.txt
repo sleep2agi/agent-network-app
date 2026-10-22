@@ -1,0 +1,59 @@
+TEST ONLY — Hub Provider client implementation slice (#907)
+Observed: 2026-10-11 19:30 +08; base main 897f27ed2b66283104f6d74a3f1000b251752d73.
+
+All execution in Docker with sg docker; no host npm/test/global install.
+Standalone suite: tests/hub-provider-management/Dockerfile, core then browser.
+Core: 3/3 groups PASS; full client typecheck PASS. Final core image config:
+17f94c8e5469049959b3fc6a5f919c537b52160ed9a62844a773c38e40d45480.
+Browser: real Expo-exported React app, synthetic Hub/native HTTP fixture,
+Docker Chromium, network none. 17/17 interaction assertions PASS, desktop
+1200x900 and phone 390x844. Initial fixture requested dark but visual inspection
+showed phone light; that run does NOT establish dark coverage. Browser image config:
+b79a74b714b6130350c88fa899f0ddcd5362c57285e04edc55ca1b884eaf386d.
+
+Checks: actual save receipt and key field clearing; zero implicit binding;
+separate source/target selection and confirmation; exact daemon catalog receipt;
+wrong-daemon receipt fails unconfirmed; no private key in visible readback;
+no React page errors. Both Hub navigation paths render the real page.
+
+Failures retained: initial core typecheck found typography.subtitle (fixed to
+existing typography.title). Initial browser run exposed missing mobile route
+and raced profile hydration; added actual mobile Provider entry/rendering and
+waited for fixture profile hydration without relaxing product receipt assertions.
+Final browser and core above passed after these fixes. Visual review then fixed
+the fixture's persistent theme preference and added actual palette assertions;
+the revised 19-assertion result is PASS. Main-agent visual inspection confirms
+actual light desktop and dark phone surfaces, grouped catalog/distribution/form
+cards and unchanged semantic theme tokens. Screenshots: temporary fixture-only
+/tmp/anet907-ui-2RudRp/light.png and dark.png (not durable repository evidence).
+
+Restacked product head f15a4f14932394d1d43614319b9b626522856fdd on main
+18063db2e40b571576920c64b2b4cd036e3fdffd: rebuilt core 3/3 + full typecheck
+PASS (config ae0455bd83f9c1f486e146c73ae8f5dcc7a3ad71ad64aac3ea860c6944a060c4),
+rebuilt exported product 17/17 interaction PASS (browser config
+8bd63e9169f2f36672e771fa6fab28ce0152034b651ee6ca418a6118b3105914).
+Revised drive read-only mounted against that exact exported product: 19/19 PASS,
+including actual palette assertions. Drive registration 12/12 PASS in Docker;
+new drive runs through dedicated hub-provider-core.yml, not shared stub shards.
+No product source changed after the restacked successful export/typecheck.
+
+Not evidence of native packages, real Hub deployment, real TLS, OAuth,
+supplier model access, inference, all runtime adapters or automatic inheritance.
+This slice is NOT in formal client 0.2.240. Public release requires merged exact
+main SHA and independent formal platform workflows. No production changes.
+Containers --rm; no real credentials, databases or node identities used.
+Screenshot capture is test-fixture only; outside-container capture/visual review
+is recorded separately if retained. No complete disaster-recovery claim.
+
+2026-10-11T11:44Z exact changed transport rebuild:
+Hub RPCs now use existing daemon_provider_snapshot hub_read/hub_put/hub_bind
+actions to match backend PR2601's required tools/list budget correction.
+Scope, consent and matched Daemon receipt assertions were not relaxed.
+Core Docker3/3 + full client typecheck PASS; image config
+6682fee80a6b526509be724f2272043f097c310419fc1356947237924058d0ab.
+Rebuilt Expo-exported actual page: Docker Chromium19/19 PASS, desktop/light
+and phone/dark with actual palette assertions; browser image config
+cae619b165aacda9d920f96ee9f9b0c9e96353531e929c8ac4a34af1a547be43.
+No mounted driver/product source, no real credentials or host test execution.
+Containers removed; images retained as development cache. Not native/package,
+real inference, remote Hub deployment or exact-head CI completion evidence.

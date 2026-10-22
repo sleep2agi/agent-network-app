@@ -12,6 +12,7 @@ import { SETTINGS_WINDOW_LABEL } from './desktop-settings-window';
 import { IMAGE_WINDOW_LABEL } from './image-window-model';
 import { chatWindowLabel, workspaceWindowLabel } from './desktop-chat-menu';
 import { taskWindowLabel } from './task-window-model';
+import { daemonSettingsWindowLabel } from './daemon-settings-window';
 
 let p = 0, t = 0;
 const ck = (name: string, cond: boolean, extra = '') => { t++; if (cond) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` (${extra})` : ''}`); };
@@ -72,6 +73,7 @@ for (const file of [...walk('src'), 'App.tsx']) {
 
 // ── 清单:每一种窗口的 label 和它应有的边框 ─────────────────────────────────────
 const REGISTRY: Record<string, { name: string; label: string }> = {
+  'src/daemon-settings-window.ts daemonSettingsWindowLabel()': { name: 'Daemon 设置窗', label: daemonSettingsWindowLabel({ profileId: 'p1', networkId: 'net1', alias: 'daemon-a' }) },
   'src/desktop-settings-window.ts SETTINGS_WINDOW_LABEL': { name: '设置窗(#483)', label: SETTINGS_WINDOW_LABEL },
   'src/image-window.ts IMAGE_WINDOW_LABEL': { name: '看图窗(#464)', label: IMAGE_WINDOW_LABEL },
   'src/desktop-chat-menu.ts chatWindowLabel()': { name: '分离聊天窗', label: chatWindowLabel('示例', 'p1') },

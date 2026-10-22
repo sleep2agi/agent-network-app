@@ -1,0 +1,25 @@
+name: Prelogin update core
+on:
+  pull_request:
+    paths:
+      - 'App.tsx'
+      - 'src/PreloginUpdateCheck.tsx'
+      - 'src/prelogin-update.test.ts'
+      - 'src/*updater*'
+      - 'tests/test1018-prelogin-update/**'
+      - '.github/workflows/prelogin-update.yml'
+permissions:
+  contents: read
+jobs:
+  core-and-entry:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Core update behavior and types (Docker)
+        run: |
+          sg docker -c 'docker build --target core -f tests/test1018-prelogin-update/Dockerfile -t anet-app:prelogin-core .'
+          sg docker -c 'docker run --rm --init --network none anet-app:prelogin-core'
+      - name: Empty-account entry and existing prompt (Docker)
+        run: |
+          sg docker -c 'docker build --target browser -f tests/test1018-prelogin-update/Dockerfile -t anet-app:prelogin-ui .'
+          sg docker -c 'docker run --rm --init --network none anet-app:prelogin-ui'

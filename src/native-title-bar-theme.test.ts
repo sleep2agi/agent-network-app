@@ -86,7 +86,7 @@ const ctor = src.match(/new WebviewWindow\(SETTINGS_WINDOW_LABEL, \{[\s\S]*?\}\)
 ck('设置窗构造参数带 theme', /\btheme: settingsWindowTheme\(\)/.test(ctor));
 const app = read('App.tsx');
 ck('设置窗里订阅主题 → 标题栏', /settingsWindow \? followThemeInSettingsTitleBar\(\)/.test(app));
-ck('Windows 设置窗不订阅 matchMedia(被钉住会失真)', app.includes('installSystemThemeFollower({ subscribe: !(requestedSettingsWindow() && isWindowsTauriShell()) })'));
+ck('Windows 设置窗和 Daemon 设置窗不订阅 matchMedia(被钉住会失真)', app.includes('installSystemThemeFollower({ subscribe: !((requestedSettingsWindow() || readDaemonSettingsWindow()) && isWindowsTauriShell()) })'));
 ck('系统读数取自主窗,不取设置窗自己', /byLabel: label => Window\.getByLabel\(label\)/.test(src) && /feedSystem: setSystemColorScheme/.test(src));
 const caps = JSON.parse(read('src-tauri/capabilities/default.json')) as { permissions: string[] };
 ck('capability 放行 set-theme', caps.permissions.includes('core:window:allow-set-theme'));

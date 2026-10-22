@@ -1,0 +1,20 @@
+Client240 version preflight — 2026-10-11T10:44Z / 18:44+08
+Exact main base: e499dd62df5bd11d150327ebd2c49b0d6a22588c (PR845 merged).
+Scope: node-detail/chat-info Daemon Provider/auth/model control. No automatic collection.
+Product-core Docker UI 5/5 from PR845 retained; same product source, version/notes-only bump.
+PR845 critical CI at head4952: core/discovery/web export, Ubuntu push+PR and Windows
+push+PR SUCCESS. Eight unrelated general stub drives were queued at merge; not PASS.
+
+Version consistency: 14/14 PASS (8 files, Android code2240).
+Bundled changelog: 7/7 PASS. Release-note hygiene: 9/9 PASS.
+Executed in --rm --network none Docker with checked-out source mounted read-only.
+Cargo.lock changed only root agent-network-desktop version, no dependency changes.
+Actual candidate version PR CI still required before merge/official build.
+
+Not yet released: no tag/draft/npm/upload/update activation for240 in this preflight.
+Formal build must use a full40 merged main SHA and new main-built artifacts.
+Selected platforms macOS arm64, Windows x64, Android; Linux deferred.
+No production Hub/Daemon/business Agent/config/credential mutation.
+Existing deploy/rollback and user-state backup procedures remain authoritative.
+Remote Provider collect transport, client collect button and creation initialization
+are NOT part of240; no live OAuth or model entitlement claim.

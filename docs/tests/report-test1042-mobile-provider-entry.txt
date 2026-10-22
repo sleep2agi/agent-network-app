@@ -1,0 +1,58 @@
+#1042 / app#878 — mobile Hub Provider entry (candidate0.2.248, NOT PUBLISHED)
+OBSERVED_AT=2026-10-12 07:06+08
+
+Cause / narrow implementation
+- Base maina98106bc656a7ad3ca768fcc6077337ef4290189 in a clean owned worktree.
+- The phone route already passed onOpenProviders and opened the real shared
+  HubProviderManagementScreen. ServerScreen's single-column actionPanel was
+  placed after overview, hostPanel and connection; long machine lists buried it.
+- Move only that existing actionPanel immediately below the Hub header in the
+  single-column branch. Desktop two-column placement, permissions, Provider
+  data/API, account/session selection and confirmation semantics unchanged.
+- User attachment369eb033581f4cd7baa6deafcb862fd2 inspected; do not infer the
+  installed app version or phone OS from that screenshot.
+- Read repository AGENTS and the exact Expo SDK56 versioned documentation
+  before editing. No dependency, Expo, native toolchain or schema upgrade.
+
+Core Docker chain (synthetic Hub, actual exported React page)
+- Existing independent tests/hub-provider-management/Dockerfile; browser image
+  manifest-list927c19910edceb91cceffe14325dc75e860fb7c9f4ea0bdfcd8de48294a0c1af.
+- Export contains the actual ServerScreen product patch at package247, before
+  metadata bump. The same UI patch is unchanged in candidate248; do not label
+  this web fixture as a signed248 native package or a live Hub test.
+- Updated drive mounted read-only; ENTRY_ONLY=1, --network none. Phone390x844
+  light+dark;12 synthetic machine rows with CPU/memory/disk telemetry.
+- 16/16 assertions PASS: Provider button fully inside initial viewport; actual
+  mouse tap (no locator auto-scroll) opens real Provider page; on-screen Back
+  returns to Hub; opening/back produce zero saves and zero daemon bindings;
+  no browser errors. Light screenshot visually inspected, entry is second row.
+- Only this entry chain run locally; old save/distribution suites not repeated.
+  Default CI retains its existing tests plus the new phone-entry coverage.
+
+Version and release metadata
+- Candidate0.2.248 in all eight version locations, Android versionCode2248.
+  Cargo.lock changes exactly the app root stanza, no dependency versions changed.
+- Changelog generator --no-dates synchronizes bundled/workflow notes, retaining
+  known dates; no GitHub credential/date query by generator.
+- Before report, staged candidate treef2eddba23b35401ef216d3adfefa11605a1819d8.
+- Core image manifest-list0e6c903d8c4b41dc91e5f34fcb62a12606e2fbeffc7a0f5ad3a1ae3bc548c66e;
+  fresh generated changelog mounted read-only. Offline Docker version14/14 and
+  changelog7/7 PASS; full TypeScript check exit0. No host/global npm install.
+- At07:03, desktop-v0.2.248 draft absent and remote tag absent (unspent).
+  No branch artifact publicly released; normal main merge/full40 source and
+  official package/signing/updater gates still required.
+
+Recovery / cleanup / delivery boundary
+- Existing authority: docs/desktop-release-sop.md, docs/ios-release-runbook.md,
+  main-only Android/Desktop/iOS workflows and ModelScope publication workflow.
+- No service startup, port, proxy/tunnel, Hub credential or backup source change.
+  Existing user profiles/native secure storage and Hub data remain untouched;
+  Git/code does not contain production accounts, databases or conversations.
+- Preserve immutable tags/assets; if a shipped client regresses, stop promotion
+  or publish a higher repair version, not uninstall/erase user state or silently
+  replace a published asset. Desktop retention/rollback follows existing SOP.
+- Test container exited and was removed after screenshot extraction; --rm core
+  container removed. Owned screenshots and images retained, not claimed deleted.
+- Main review and actual Android channel/TestFlight availability remain separate
+  from this source/fixture PASS. iOS goes after the primary desktop/Android
+  delivery per existing SOP; do not claim TestFlight upload or on-device proof.

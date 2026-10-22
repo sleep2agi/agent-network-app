@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { groupNodeTasks, isSelfTask } from './node-task-groups';
 import { partitionNodeTasks } from './node-tasks';
-import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
+import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) p++; else console.log(`  ✗ ${n}`); };
@@ -56,10 +56,24 @@ const facts = [
 ];
 const split = splitOverviewFacts(facts);
 ck('主要字段按固定顺序', split.primary.map(f => f.label).join(',') === '节点 ID,服务器,Hostname,工作路径,所属 team,最后更新');
+const withCodexHome = splitOverviewFacts([...facts, { label: 'codex_home', value: '/srv/codex-home' }]);
+ck('codex_home 紧跟工作路径，没有这条时不占位', withCodexHome.primary.map(f => f.label).join(',') === '节点 ID,服务器,Hostname,工作路径,codex_home,所属 team,最后更新');
 ck('其余字段进「更多信息」且不重复', split.secondary.length === facts.length - split.primary.length && !split.secondary.some(f => split.primary.includes(f)));
 ck('头部标签:运行时 · 模型 · 版本 · 主机', JSON.stringify(headerChips(facts)) === JSON.stringify(['codex-sdk', 'gpt-5.5', 'v2.5.0-preview.83', 'devbox']));
 ck('头部标签:缺的不显示,版本不重复加 v', JSON.stringify(headerChips([{ label: '版本', value: 'v1.2' }])) === JSON.stringify(['v1.2']));
 ck('空值显示「—」', factText('') === '—' && factText(null) === '—' && factText('  ') === '—' && factText('x') === 'x');
+const runtime = modelSectionFacts([
+  { label: 'session-id', value: 'sess_01' },
+  { label: '状态', value: 'working' },
+  { label: '版本', value: '2.5.0-preview.126' },
+  { label: '模型', value: 'gpt-6-astra' },
+  { label: 'Agent', value: 'agent-node:codex-app-server' },
+  { label: 'Runtime', value: 'codex-app-server' },
+  { label: '节点类型', value: undefined },
+]);
+ck('模型与运行时:session-id 紧挨在版本后面(两列时落在版本右边)', runtime.map(f => f.label).join(',') === '节点类型,Runtime,Agent,模型,版本,session-id');
+ck('模型与运行时不带状态等其它字段', !runtime.some(f => f.label === '状态'));
+ck('没有 session-id 行时不补造', modelSectionFacts([{ label: '版本', value: '1' }]).map(f => f.label).join(',') === '版本');
 
 // 宽窗布局(Vincent 09-24「空了」)
 ck('内容列随窗口变宽', nodePageContentWidth(900, 24) === 852 && nodePageContentWidth(1100, 24) === 1052);

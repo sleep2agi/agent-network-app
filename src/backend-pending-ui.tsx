@@ -6,19 +6,21 @@ import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing, type, weight } from './theme';
 import { ds } from './ui-scale';
 
-export type PendingTab = 'skills' | 'tokens' | 'provider';
+export type PendingTab = 'skills' | 'tokens' | 'provider' | 'runtime';
 export type PendingLayer = 'hub' | 'daemon' | 'node';
 
 const TAB_ITEMS: readonly { key: PendingTab; labelKey: string }[] = [
   { key: 'skills', labelKey: 'backendPending.tab.skills' },
   { key: 'tokens', labelKey: 'backendPending.tab.tokens' },
   { key: 'provider', labelKey: 'backendPending.tab.provider' },
+  { key: 'runtime', labelKey: 'backendPending.tab.runtime' },
 ];
 
 const TAB_ICONS: Record<PendingTab, keyof typeof Ionicons.glyphMap> = {
   skills: 'extension-puzzle-outline',
   tokens: 'key-outline',
   provider: 'cube-outline',
+  runtime: 'layers-outline',
 };
 
 /** 与 WeakPasswordBanner / 设置说明条同款 token。 */
@@ -60,16 +62,20 @@ export function PendingSegmentedTabs({
   testID,
   stacked,
   t,
+  after,
 }: {
   value: PendingTab | null;
   onChange: (tab: PendingTab) => void;
   testID: string;
   stacked?: boolean;
   t: (key: string) => string;
+  /** Stacked nav only: a row after the tabs, inside the same gap (Hub 域集成 → Daemon). */
+  after?: ReactNode;
 }) {
   if (stacked) {
     return (
-      <View style={styles.stacked} accessibilityRole="tablist" testID={testID}>
+      <View style={styles.stacked}>
+        <View style={styles.stackedTabs} accessibilityRole="tablist" testID={testID}>
         {TAB_ITEMS.map(item => {
           const on = value !== null && item.key === value;
           return (
@@ -86,6 +92,8 @@ export function PendingSegmentedTabs({
             </Pressable>
           );
         })}
+        </View>
+        {after}
       </View>
     );
   }
@@ -216,6 +224,7 @@ const makeStyles = () =>
     segmentText: { color: colors.textSecondary, fontSize: 13 },
     segmentTextSelected: { color: colors.text, fontWeight: weight.strong },
     stacked: { gap: 3, paddingHorizontal: spacing.sm },
+    stackedTabs: { gap: 3 },
     stackedItem: {
       minHeight: 42,
       borderRadius: radius.item,

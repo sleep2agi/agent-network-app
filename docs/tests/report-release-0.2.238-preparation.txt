@@ -1,0 +1,62 @@
+0.2.238 preparation — not a published release
+Base main ccf611a29ffdd3e0ed2792491af90dca52264cd5.
+Includes merged managed-account UI (PR836) and avatar-theme correction (PR839).
+
+2026-10-11: version metadata and bundled release notes prepared.
+Readonly Docker check in anet-app:provider-hierarchy-web, --rm --network none:
+  bun src/version-consistency.test.ts: 14 checks PASS
+  bun src/changelog-bundled.test.ts: 7/7 PASS
+No native package build or publication is claimed by these metadata tests.
+
+Still required before release:
+- Publish and verify downloadable main-built Hub .122, runtime .130 and CLI .164.
+- Replace installer/sidecar exact pins and integrity from those verified bytes.
+  Current .163/.129/.121 pins remain unchanged while the new packages are pending.
+- Merge final candidate, bind macOS/Windows/Android builds to full40 main SHA,
+  verify actual signed artifacts and download/update paths before announcing.
+- Old business-node runtime upgrades are not a prerequisite. Upgrade software
+  and selected daemon management capability without bulk node restarts.
+
+Existing evidence is preserved separately in report-test906-provider-login-client.txt
+and report-test963-settings-avatar-colors.txt; no unchanged core sample rerun.
+
+2026-10-11 15:34 +08: preparation branch incorporates main
+d9ef6aa685462c90f72f02e0b7bef7b4bceaf036 (PR831 same-daemon node clone).
+Release notes include that merged feature; no rollback of concurrent main work.
+Hub .122 formal run 38121256184 remains queued, not a published dependency.
+
+2026-10-11 16:14 +08 increment (supersedes earlier pending package facts):
+Hub .122 is formally published with exact CI-byte GitHub download and registry
+readback SUCCESS. Client lock now uses that available download and verified SRI.
+Runtime .130 all four gates PASS and same-byte GitHub package public; original
+npm publish job remains queued. Native daemon pair .164/.130 draft pins added,
+core initialization/upgrade/identity-preserving repair checked in Docker only.
+CLI .164 old-source publication is stopped after a real documentation stamp
+failure. Backend PR2589 corrects only two guide candidate references/stamps;
+final exact main-built CLI bytes/hash and public download must replace the draft
+hash before this client can be released. Details, including environment failures,
+are in report-release-0.2.238-core-package-pins.txt. No signed .238 claimed.
+
+2026-10-11 16:26 +08 increment:
+Runtime .130 formal npm publication and registry readback completed SUCCESS.
+Hub .122 is now activated: deployment PR2590/main e80a1af396009e3077fc546bb07feea809195f88,
+actual listener PID2824768/runtime-v106-preview122, 318 sessions preserved,
+107 fresh post-cutover node heartbeats; task delivery/start/reply continues.
+CLI documentation PR2589 is merged as main
+bbc7035155c8b49bc977cf7f103bd1ecdddaa78f. Corrected formal .164 run38124619816
+is waiting for its build runner. Do not use the old failed run's draft hash.
+Unchanged full QA/E2E reruns for our doc/deployment-only merges were cancelled
+to keep the core release focused; cancellations are not PASS evidence.
+No business Agent was restarted. Public client remains .237 until the final
+exact package pin, one fallback install check and main-bound signing complete.
+
+2026-10-11 16:36 +08 increment:
+CLI .164 corrected main package is now anonymously available; four formal
+publication gates PASS, tag target equals bbc7035155c8b49bc977cf7f103bd1ecdddaa78f,
+public download matches artifact11696519273. Final installer SHA256 pin
+2c0d292b095005f35e28d1bde77ac23ee502c4d80a299729ab9e8e075a570453.
+Single existing Docker registry-failure fallback test PASS (1/1, 19 filtered).
+All three exact packages are available; CLI npm publish is still queued but
+the validated public fallback is sufficient for the core install path.
+Final candidate is ready for normal merge and full40-main-bound signing.
+No signed client artifact or updater activation is claimed by this report.

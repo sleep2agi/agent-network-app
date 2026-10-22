@@ -1,0 +1,32 @@
+name: Windows installer brand (Docker)
+
+on:
+  pull_request:
+    paths:
+      - 'assets/icon.png'
+      - 'scripts/generate-windows-installer-brand.mjs'
+      - 'src/windows-installer-brand.test.ts'
+      - 'src-tauri/tauri.conf.json'
+      - 'src-tauri/windows/**'
+      - 'tests/windows-installer-brand/**'
+      - 'package-lock.json'
+      - '.github/workflows/windows-installer-brand.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  brand:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+      - name: Configuration, reproducible pixels and unchanged installer identity
+        run: |
+          docker build --target core -f tests/windows-installer-brand/Dockerfile -t installer-brand-core .
+          docker run --rm --network none installer-brand-core
+      - name: Real full-template NSIS compilation with inert payload
+        run: |
+          docker build --target compile -f tests/windows-installer-brand/Dockerfile -t installer-brand-compile .
+          docker run --rm --network none installer-brand-compile

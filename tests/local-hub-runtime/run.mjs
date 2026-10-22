@@ -4,6 +4,7 @@ import { join } from 'node:path';
 import { spawn } from 'node:child_process';
 
 const binary = process.env.LOCAL_HUB_BINARY || '/work/commhub';
+const expectedVersion = process.env.LOCAL_HUB_EXPECTED_VERSION || '0.9.0-preview.29';
 const root = await mkdtemp(join(tmpdir(), 'anet-local-hub-e2e-'));
 const database = join(root, 'commhub.db');
 const uploads = join(root, 'uploads');
@@ -76,7 +77,7 @@ try {
     const value = await json('/health');
     return value.ok ? value : null;
   });
-  if (health.version !== '0.9.0-preview.29' || health.api_version !== 'v3' || health.security !== 'secured') {
+  if (health.version !== expectedVersion || health.api_version !== 'v3' || health.security !== 'secured') {
     throw new Error(`unexpected health contract: ${JSON.stringify(health)}`);
   }
 

@@ -3,10 +3,15 @@
 import { readFileSync } from 'node:fs';
 import { setLanguagePreference } from './i18n';
 import { chatTranslations } from './i18n-chat';
+import { daemonTranslations } from './i18n-daemon';
 import {
   actionReason,
   createAction,
   daemonMgmtLayout,
+  stackShowsMenu,
+  stackShowsSection,
+  daemonPresence,
+  isDaemonOffline,
   DAEMON_MGMT_COMPACT_WIDTH,
   lifecycleErrorMessage,
   lifecycleTool,
@@ -34,6 +39,10 @@ const ck = (name: string, condition: boolean) => {
 setLanguagePreference('en');
 
 ck('phone width stacks; wide pane splits', daemonMgmtLayout(390) === 'stack' && daemonMgmtLayout(DAEMON_MGMT_COMPACT_WIDTH) === 'split' && daemonMgmtLayout(1200) === 'split');
+ck('phone shows the menu OR a section, never both; wide pane always shows the section',
+  stackShowsMenu('stack', true) && !stackShowsSection('stack', true)
+  && !stackShowsMenu('stack', false) && stackShowsSection('stack', false)
+  && !stackShowsMenu('split', true) && stackShowsSection('split', true));
 ck('SKILLS Provider tokens normalize', typeToken('SKILLS Provider') === 'skills_provider' && typeToken('skills-provider') === 'skills_provider');
 
 const skills = nodeTypeView('skills_provider');
@@ -80,6 +89,16 @@ ck('session status offline is down', statusView({ alias: 'a', status: 'offline' 
 ck('lifecycle stopped is down without a session', statusView(undefined, 'stopped').online === false && statusView(undefined, 'stopped').source === 'lifecycle');
 ck('lifecycle active without a session is not treated as online or offline', statusView(undefined, 'active').online === null && statusView(undefined, 'active').text === 'active');
 ck('nothing reported stays unreported', statusView(undefined, null).kind === 'unreported' && statusLabel(statusView(undefined, '  ')) === 'Not reported');
+{
+  const idle = statusView({ alias: 'a', status: 'idle' }, 'active');
+  ck('stale heartbeat overrides a session that still says idle (crashed daemon)', daemonPresence(idle, false).online === false && daemonPresence(idle, false).text === 'offline' && daemonPresence(idle, false).source === 'heartbeat');
+  ck('fresh heartbeat keeps the session status', daemonPresence(idle, true) === idle);
+  ck('Hub did not list the daemon: never turned into offline', daemonPresence(idle, undefined) === idle && daemonPresence(statusView(undefined, null), undefined).online === null);
+  const off = statusView({ alias: 'a', status: 'offline' }, 'active');
+  ck('session offline stays offline even when the heartbeat is still fresh', daemonPresence(off, true) === off && isDaemonOffline(daemonPresence(off, true)));
+  ck('header text is offline when either clock says so', daemonPresence(statusView(undefined, null), false).text === 'offline');
+  ck('starting is not shown as offline snapshot', !isDaemonOffline(statusView(undefined, 'starting')) && isDaemonOffline(statusView(undefined, 'stopped')) && !isDaemonOffline(idle));
+}
 ck('runtime falls back node then agent, never role', runtimeView(undefined, 'grok').text === 'grok' && runtimeView({ alias: 'a', agent: 'codex-sdk' }, null).source === 'agent' && runtimeView(undefined, null).kind === 'unreported');
 
 const sup = (over = {}) => ({ daemon_node_id: 'node_d1', alias: 'daemon-a', ...over });
@@ -122,13 +141,22 @@ const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
 ck('management screen calls the existing lifecycle helper and the create callback', screen.includes('runNodeLifecycleAction(cfg, lifecycleTool(id), selected.node)') && screen.includes('onCreate(lookup.daemon)'));
 ck('management screen does not invent a probe call', !/probe_provider_model|probe_node|\/api\/probe/.test(screen));
 ck('logs entry is on the management page', screen.includes('testID="daemon-mgmt-logs"') && screen.includes('onOpenLogs'));
+ck('daemon node settings and VM domain settings are in the header', screen.includes('testID="daemon-mgmt-node-settings"') && screen.includes('testID="daemon-mgmt-domain-settings"') && screen.includes("t('daemon.mgmt.nodeSettings')") && screen.includes("t('daemon.mgmt.domainSettings')"));
+ck('settings card and sidebar entries spell node vs VM domain', screen.includes('testID="daemon-mgmt-settings-card"') && screen.includes('testID="daemon-mgmt-settings-node"') && screen.includes('testID="daemon-mgmt-settings-domain"') && screen.includes('testID="daemon-section-node-settings"') && screen.includes('testID="daemon-section-domain-settings"') && screen.includes("t('daemon.mgmt.levelNode')") && screen.includes("t('daemon.mgmt.levelDomain')"));
+ck('domain settings title includes Daemon / VM domain', daemonTranslations['daemon.mgmt.domainSettings'][0].includes('虚拟机域') && daemonTranslations['daemon.mgmt.domainSettings'][1].includes('VM domain'));
+ck('managed nodes can open chat when a handler is passed', screen.includes('testID="daemon-mgmt-open-chat"') && screen.includes('onOpenManagedChat'));
+ck('daemon integration nav uses daemon.integrations label', screen.includes("t('daemon.integrations')") && screen.includes('testID="daemon-integrations-label"') && !screen.includes("t('server.integrations')"));
+ck('ChatScreen passes node settings and managed chat into the management page', /onOpenNodeSettings=\{onOpenNodeSettings\}/.test(chat) && /onOpenManagedChat=\{onOpenManagedChat\}/.test(chat));
+ck('App wires managed chat from the daemon page', (app.match(/onOpenManagedChat=\{managedAlias => setScreen\(\{ name: 'chat', alias: managedAlias/g) ?? []).length >= 3);
 ck('back affordance is hidden on desktop and in the two-pane', /const showBack = !desktop && !hideBack;/.test(screen) && screen.includes('testID={PANE_BACK_TEST_ID}'));
 ck('ChatScreen replaces the daemon chat with the management page', /if \(composerKind === 'daemon'\) \{\s*return \(\s*<DaemonManagementScreen/.test(chat));
 ck('daemon logs still open the node page on the logs section', /requestNodeSection\(nodeInfoSectionKey\([^)]*\), 'logs'\);\s*onOpenNodeSettings\(\)/.test(chat));
 ck('the chat composer notice is no longer the daemon view', !chat.includes('DaemonComposerNotice'));
 ck('phone, two-pane, and desktop chats can open the existing wizard and return here', (app.match(/onCreateNode=\{daemon => setScreen\(\{ name: 'wizard', daemon, back: \{ name: 'chat', alias:/g) ?? []).length === 3);
 ck('wizard back returns to whoever opened it', app.includes('screen.back ?? { name: \'picker\' }') && app.includes("if (screen.name === 'wizard' && screen.back)"));
-ck('the old notice sentence remains translated', chatTranslations['chat.daemon.notice'][0].includes('不能对话') && !!chatTranslations['chat.daemon.notice'][1]);
+ck('daemon notice copy mentions managed agents can chat', chatTranslations['chat.daemon.notice'][0].includes('托管') && chatTranslations['chat.daemon.notice'][0].includes('对话') && !!chatTranslations['chat.daemon.notice'][1]);
+ck('managed node row opens chat when a handler is wired', screen.includes('onOpenManagedChat?.(row.alias)') && screen.includes('opensChat={!!onOpenManagedChat}'));
+ck('intro no longer tells users managed agents cannot chat', !daemonTranslations['daemon.mgmt.intro'][0].includes('不能对话') && daemonTranslations['daemon.mgmt.intro'][0].includes('对话'));
 
 setLanguagePreference('system');
 console.log(`\n${passed}/${total} passed`);

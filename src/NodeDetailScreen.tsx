@@ -79,10 +79,17 @@ import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
+import NodeCodexExecutionSection from './NodeCodexExecutionSection';
+import NodeCodexReasoningSection from './NodeCodexReasoningSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
+import NodeDaemonProviderSection from './NodeDaemonProviderSection';
+import { daemonProviderNodeRuntime } from './node-provider-target';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
-import { NodeSecretPendingSection } from './BackendPendingDemo';
+import NodeSecretsSection from './NodeSecretsSection';
+import { envTransportHint } from './env-transport-hint';
+import { parseSecretKeys } from './node-secret-keys';
+import ScopedSecretsSection from './ScopedSecretsSection';
 import NodeFilesSection from './NodeFilesSection';
 import NodeSchedulesSection from './NodeSchedulesSection';
 import NodeLogsSection from './NodeLogsSection';
@@ -93,12 +100,16 @@ import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { elevated } from './elevation';
 import { actionMessageTone, dangerActions, START_OUTCOME_MESSAGE, START_SUBMITTED_MESSAGE, START_WAIT_MS, startErrorMessage, startWatchOutcome } from './node-danger-actions';
+import CloneNodeDialog, { CloneNodeButton } from './CloneNodeDialog';
+import { cloneAvailability, cloneNoticeMessage } from './node-clone';
+import { isHostSupervisorNode } from './daemon-node';
+import './i18n-node-clone';
 
 // board #694 —— 只读页(节点信息)唯一放开的两个变更:概览卡片里的重启 / 停止。删除 / 启动仍只在节点详情。
 const OVERVIEW_ACTIONS: readonly NodeLifecycleAction[] = ['restart_node', 'stop_node'];
@@ -149,12 +160,22 @@ function NodeActionButton({
   );
 }
 
-/** 概览网格里的一格:小号灰色标签在上,值在下;空值显示「—」(分得清「没上报」和「坏了」)。 */
+/** 概览网格里的一格:小号灰色标签在上,值在下;空值显示「—」(分得清「没上报」和「坏了」)。
+ *  wrap 的格子(session-id)不截成两行省略:整段留在格子里,桌面可划选,手机换行可读。 */
 function FactCell({ fact, columns }: { fact: NodeInfoFact; columns: number }) {
   return (
     <View style={{ width: `${100 / columns}%`, paddingVertical: spacing.sm, paddingRight: spacing.lg, gap: 2 }}>
       <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{fact.label}</Text>
-      <Text style={{ color: colors.text, fontSize: typeScale.body }} selectable numberOfLines={2}>{factText(fact.value)}</Text>
+      <Text
+        testID={fact.testID}
+        style={[
+          { color: colors.text, fontSize: typeScale.body },
+          fact.wrap ? ({ overflowWrap: 'anywhere', wordBreak: 'break-all' } as any) : null,
+        ]}
+        selectable
+        // 0 is not "unlimited" on web / Android (line-clamp 0 hides the text). Omit the cap instead.
+        {...(fact.wrap ? {} : { numberOfLines: 2 })}
+      >{factText(fact.value)}</Text>
     </View>
   );
 }
@@ -281,7 +302,12 @@ export default function NodeDetailScreen({
     // 拉取失败时**保留上一次的 node**:否则一次超时就让操作区/规则区整块消失,
     // 文案还会说「没有权威节点 ID」,和上面显示的 ID 自相矛盾(Vincent 09-03 截图)。
     void fetchHubNodes(cfg)
-      .then(result => { setNode((result.nodes ?? []).find(candidate => candidate.alias === alias) ?? null); setNodeListState('loaded'); })
+      .then(result => {
+        const list = result.nodes ?? [];
+        setNode(list.find(candidate => candidate.alias === alias) ?? null);
+        setKnownNames(list.flatMap(item => [item.alias, item.node_name ?? ''].map(value => value.trim()).filter(Boolean)));
+        setNodeListState('loaded');
+      })
       .catch(() => setNodeListState('failed'));
     try {
       const data = await fetchNodeStatus(cfg, alias);
@@ -326,6 +352,9 @@ export default function NodeDetailScreen({
   // undefined = 读取中 / 读失败 ⇒ 卡片不下结论。只在概览、且节点是手动启动时读一次。
   const [hostDaemons, setHostDaemons] = useState<HostSupervisorDaemon[] | undefined>(undefined);
   const [adoptOpen, setAdoptOpen] = useState(false);
+  const [knownNames, setKnownNames] = useState<string[]>([]);
+  const [cloneOpen, setCloneOpen] = useState(false);
+  const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; pending: boolean; text: string } | null>(null);
   const onOverviewTab = activeSection === 'overview';
   useEffect(() => {
     setHostDaemons(undefined);
@@ -469,7 +498,7 @@ export default function NodeDetailScreen({
   const guardLeave = (go: () => void) => { if (needConfirm) setPendingLeave(() => go); else go(); };
   const chrome = nodePageChrome({ section, keyboardVisible });
   const pageScrolls = nodePageScrolls(section);
-  const runtimeFacts = facts.filter(f => ['Runtime', 'Agent', '模型', '版本', '节点类型'].includes(f.label));
+  const runtimeFacts = modelSectionFacts(facts);
 
   // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
   const headerCard = (
@@ -533,6 +562,15 @@ export default function NodeDetailScreen({
   );
 
   const card = { backgroundColor: colors.card, borderRadius: radius.surface, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm } as const;
+  const cloneGate = cloneAvailability({
+    pending: nodeListState === 'loading',
+    nodeId: node?.node_id,
+    daemonNodeId: node?.lifecycle_daemon_node_id,
+    hostSupervisor: node ? isHostSupervisorNode(node) : false,
+  });
+  const cloneSource = node?.node_id && node.lifecycle_daemon_node_id && !isHostSupervisorNode(node)
+    ? { nodeId: node.node_id, alias: node.alias, name: node.node_name?.trim() || node.alias, daemonNodeId: node.lifecycle_daemon_node_id }
+    : null;
 
   const content = (() => {
     if (section === 'overview') return (
@@ -574,6 +612,58 @@ export default function NodeDetailScreen({
             />
           </View>
         ) : null}
+        {!readOnly ? (
+          <View>
+            <SectionTitle title={t('nodeClone.title')} hint={t('nodeClone.sectionHint')} />
+            <View testID="node-clone-card" style={[card, { paddingVertical: spacing.md, gap: spacing.sm }]}>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.body, lineHeight: 20 }}>{t('nodeClone.cardBody')}</Text>
+              <View style={{ flexDirection: 'row' }}>
+                <CloneNodeButton testID="node-clone-open" disabled={!cloneGate.enabled} onPress={() => { setCloneNotice(null); setCloneOpen(true); }} />
+              </View>
+              {cloneGate.reasonKey ? (
+                <Text testID="node-clone-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t(cloneGate.reasonKey)}</Text>
+              ) : null}
+              {cloneNotice ? (
+                <Text testID="node-clone-message" style={{ color: cloneNotice.demo || cloneNotice.pending ? colors.blocked : colors.running, fontSize: typeScale.small, lineHeight: 18 }}>{cloneNotice.text}</Text>
+              ) : null}
+            </View>
+          </View>
+        ) : null}
+        {/* #1510 — 节点自己上报的 Hub 链路形态。只提示，不拦截。 */}
+        {(() => {
+          const hint = envTransportHint(s.env_transport);
+          if (hint.kind === 'unknown') return null;
+          return (
+            <Text
+              testID={`node-env-transport-${hint.kind}`}
+              style={{ color: hint.kind === 'warn' ? colors.blocked : colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }}
+            >
+              {hint.text}
+            </Text>
+          );
+        })()}
+        {/* #1474 — env key NAMES only. `undefined` means this hub/node predates
+            the field: render nothing rather than claiming "no secrets". */}
+        {(() => {
+          const v = parseSecretKeys(s.secret_keys);
+          if (v.kind === 'unknown') return null;
+          return (
+            <View>
+              <SectionTitle title="密钥（仅名字）" hint="节点本机 secrets.env 里的 key 名。**值永远不显示**，这里只用于确认「这台机器有没有配」。 Hub 不持有这些值。" />
+              <View testID="node-secret-keys-card" style={[card, { paddingVertical: spacing.md, gap: spacing.xs }]}>
+                {v.kind === 'none' ? (
+                  <Text testID="node-secret-keys-none" style={{ color: colors.textMuted, fontSize: typeScale.small }}>该节点没有配置密钥。</Text>
+                ) : (
+                  <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.xs }}>
+                    {v.keys.map(k => (
+                      <Text key={k} testID={`node-secret-key-${k}`} style={{ color: colors.text, fontSize: typeScale.small, backgroundColor: colors.groupedRow, borderRadius: radius.mark, paddingHorizontal: spacing.sm, paddingVertical: 2 }}>{k}</Text>
+                    ))}
+                  </View>
+                )}
+              </View>
+            </View>
+          );
+        })()}
         <View>
           <SectionTitle title={taskSectionTitle(s.status)} />
           <View style={[card, { paddingVertical: spacing.md }]}>
@@ -590,7 +680,7 @@ export default function NodeDetailScreen({
     );
     if (section === 'model') return (
       <View>
-        <SectionTitle title="模型与运行时" hint={readOnly ? '只读视图:在节点详情里可以直接改模型。' : '改模型会让节点重启一次,不经过大模型。'} />
+        <SectionTitle title="模型与运行时" hint={readOnly ? '可改模型与 Codex 思考程度,会经 Hub 下发到节点。' : '改模型会让节点重启一次;思考程度热更新,不经过大模型。'} />
         <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
           {runtimeFacts.map(fact => <FactCell key={fact.label} fact={fact} columns={factColumns} />)}
         </View>
@@ -602,8 +692,17 @@ export default function NodeDetailScreen({
           </Pressable>
         ) : null}
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
-        {!readOnly && node ? <NodeModelSection cfg={cfg} node={node} /> : null}
-        {!readOnly && node && isCodexRuntime(node.runtime) ? (
+        {node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} /> : null}
+        {node && daemonProviderNodeRuntime(node.runtime) ? (
+          <NodeDaemonProviderSection cfg={cfg} node={node} onManageBinding={() => setActiveSection('overview')} />
+        ) : null}
+        {node && (node.runtime === 'codex-app-server' || node.runtime === 'codex-sdk') ? (
+          <>
+            <NodeCodexExecutionSection cfg={cfg} node={node} />
+            <NodeCodexReasoningSection cfg={cfg} node={node} />
+          </>
+        ) : null}
+        {!readOnly && node && isCodexRuntime(node.runtime) && !daemonProviderNodeRuntime(node.runtime) ? (
           <NodeCodexProviderSection runtimeId={node.runtime} serverUrl={cfg.serverUrl} />
         ) : null}
       </View>
@@ -611,7 +710,7 @@ export default function NodeDetailScreen({
     if (section === 'secrets') return (
       <View>
         <SectionTitle title="密钥" />
-        <NodeSecretPendingSection />
+        <ScopedSecretsSection cfg={cfg} daemonId={node?.lifecycle_daemon_node_id} nodeId={node?.node_id} nodeRuntimeVersion={s.version} />
       </View>
     );
     if (section === 'rules') return (
@@ -628,6 +727,17 @@ export default function NodeDetailScreen({
       <View>
         <SectionTitle title="技能" />
         <NodeSkillsSection cfg={cfg} alias={alias} node={rulesTarget} session={s} readOnly={readOnly} />
+        {/* #1491 E2 — 节点密钥。只有节点上报了 node_secrets_capable 才显示：
+            没升级的节点没有这条 lane，显示一个永远失败的按钮比不显示更糟。 */}
+        {!readOnly && s.node_secrets_capable && s.node_id ? (
+          <NodeSecretsSection
+            cfg={cfg}
+            nodeId={s.node_id}
+            alias={alias}
+            configUpdateCapable={configUpdateCapable}
+            online={online}
+          />
+        ) : null}
       </View>
     );
     if (section === 'files') return (
@@ -816,17 +926,29 @@ export default function NodeDetailScreen({
             <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm }}>
               <Pressable style={styles.retryBtn} onPress={() => { setPendingAction(null); setConfirmAlias(''); }}><Text style={styles.retryBtnText}>返回</Text></Pressable>
               <Pressable
-                style={[styles.retryBtn, pendingAction === 'delete_node' && { borderColor: colors.failed }, (actionBusy || (pendingAction === 'delete_node' && confirmAlias !== alias)) && { opacity: 0.4 }]}
+                style={[styles.retryBtn, pendingAction === 'delete_node' && { backgroundColor: colors.card, borderColor: colors.failed, borderWidth: 1 }, (actionBusy || (pendingAction === 'delete_node' && confirmAlias !== alias)) && { opacity: 0.4 }]}
                 disabled={actionBusy || (pendingAction === 'delete_node' && confirmAlias !== alias)}
                 onPress={() => void executeLifecycle()}
               >
-                <Text style={{ color: pendingAction === 'delete_node' ? colors.failed : colors.accent, fontWeight: '600' }}>{actionBusy ? '提交中…' : '确认'}</Text>
+                <Text style={[styles.retryBtnText, pendingAction === 'delete_node' && { color: colors.failed }]}>{actionBusy ? '提交中…' : '确认'}</Text>
               </Pressable>
             </View>
           </View>
         </View>
         </ModalKeyboardAvoider>
       </Modal>
+
+      {cloneOpen && cloneSource ? (
+        <CloneNodeDialog
+          cfg={cfg}
+          source={cloneSource}
+          takenNames={knownNames}
+          onClose={() => setCloneOpen(false)}
+          onDone={outcome => {
+            setCloneNotice({ demo: outcome.demo, pending: outcome.pending, text: cloneNoticeMessage(outcome, t) });
+          }}
+        />
+      ) : null}
     </KeyboardAvoidingView>
   );
 }

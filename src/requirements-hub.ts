@@ -9,6 +9,7 @@ import { lastEventFromHub } from './requirement-last-event';
 import { normalizeTags } from './requirement-tags';
 import { seqFromHub } from './task-short-id';
 import type { HubConfig } from './api';
+import { parseJsonOrFriendly } from './api';
 import { readEpoch, readStatusCountsAsFailure, reportReadFailure, reportReadSuccess } from './connectivity';
 import { withDeadline } from './deadline';
 import { assignmentsFromHub } from './requirement-people-api';
@@ -150,12 +151,12 @@ async function call(cfg: HubConfig, path: string, init?: RequestInit): Promise<u
           const text = await readConditionalText(cfg, path, res);
           if (text === null) throw new RequirementsHubError('HTTP 304', 304);
           status = 200;
-          return { body: JSON.parse(text) as unknown };
+          return { body: parseJsonOrFriendly<unknown>(text, 200, res.headers?.get?.('content-type') ?? null) };
         }
         if (res.status === 404) throw new RequirementsHubError('这个 Hub 还没有需求池', 404);
         if (!res.ok) throw new RequirementsHubError(`HTTP ${res.status}`, res.status);
         if (!isRead) return { body: await res.json() as unknown };
-        return { body: JSON.parse((await readConditionalText(cfg, path, res))!) as unknown };
+        return { body: parseJsonOrFriendly<unknown>((await readConditionalText(cfg, path, res))!, res.status, res.headers?.get?.('content-type') ?? null) };
       })(),
       deadlineMs,
       () => null,
@@ -311,8 +312,8 @@ export async function fetchRequirementEvents(cfg: HubConfig, q: { since?: string
 }
 
 /** GET /api/requirements/stats(capability stats)。原样返回 JSON,由 task-dashboard-model.parseHubStats 校验。 */
-export async function fetchRequirementStats(cfg: HubConfig, q: { from: number | null; tz: string; days: number; recent: number }): Promise<unknown> {
-  const qs = `tz=${encodeURIComponent(q.tz)}&days=${q.days}&recent=${q.recent}${q.from !== null ? `&from=${encodeURIComponent(new Date(q.from).toISOString())}` : ''}`;
+export async function fetchRequirementStats(cfg: HubConfig, q: { from: number | null; tz: string; days: number; recent: number; projectId?: string | null }): Promise<unknown> {
+  const qs = `tz=${encodeURIComponent(q.tz)}&days=${q.days}&recent=${q.recent}${q.from !== null ? `&from=${encodeURIComponent(new Date(q.from).toISOString())}` : ''}${q.projectId ? `&project_id=${encodeURIComponent(q.projectId)}` : ''}`;
   return call(cfg, scoped(cfg, `/api/requirements/stats?${qs}`));
 }
 

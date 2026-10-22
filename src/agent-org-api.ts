@@ -16,6 +16,8 @@ export type DirectoryPage = {
   unowned: OrgAgent[];
   hasMore: boolean;
   nextOffset: number | null;
+  /** #1976 —— Hub 支持显式给 Agent 设部门。没有这一格 = 老 Hub(客户端保留旧的推断口径)。 */
+  agentDepartmentSupported: boolean;
 };
 
 function agentOf(value: unknown): OrgAgent | null {
@@ -23,7 +25,11 @@ function agentOf(value: unknown): OrgAgent | null {
   const row = value as Record<string, unknown>;
   if (typeof row.node_id !== 'string' || !row.node_id.trim()) return null;
   const alias = typeof row.alias === 'string' && row.alias.trim() ? row.alias : row.node_id;
-  return { nodeId: row.node_id, alias };
+  // 只在 Hub 显式给出 department_id 时带上;没有这个键 = 仍按负责人部门推断(旧 Hub 形状)。
+  let departmentId: string | null | undefined;
+  if (row.department_id === null) departmentId = null;
+  else if (typeof row.department_id === 'string' && row.department_id.trim()) departmentId = row.department_id.trim();
+  return departmentId === undefined ? { nodeId: row.node_id, alias } : { nodeId: row.node_id, alias, departmentId };
 }
 
 function agentsOf(value: unknown): OrgAgent[] {
@@ -65,7 +71,7 @@ function personOf(value: unknown): DirectoryPerson | null {
 
 /** 缺字段、垃圾项丢掉,不把整页判死。 */
 export function parseDirectoryPage(json: unknown): DirectoryPage {
-  if (!json || typeof json !== 'object') return { people: [], unowned: [], hasMore: false, nextOffset: null };
+  if (!json || typeof json !== 'object') return { people: [], unowned: [], hasMore: false, nextOffset: null, agentDepartmentSupported: false };
   const row = json as Record<string, unknown>;
   const people = Array.isArray(row.people) ? row.people.flatMap(item => { const person = personOf(item); return person ? [person] : []; }) : [];
   return {
@@ -73,6 +79,7 @@ export function parseDirectoryPage(json: unknown): DirectoryPage {
     unowned: agentsOf(row.agents_without_owner),
     hasMore: row.has_more === true,
     nextOffset: typeof row.next_offset === 'number' && Number.isFinite(row.next_offset) ? row.next_offset : null,
+    agentDepartmentSupported: row.agent_department_supported === true,
   };
 }
 
@@ -97,13 +104,15 @@ async function getJson(cfg: HubConfig, path: string): Promise<{ status: number; 
   }
 }
 
-type DirectoryRead = { missing: true } | { missing: false; owners: OrgOwner[]; unowned: OrgAgent[]; deptNames: Map<string, string> };
+type DirectoryRead = { missing: true } | { missing: false; owners: OrgOwner[]; unowned: OrgAgent[]; deptNames: Map<string, string>; agentDepartmentSupported: boolean };
 
 async function readDirectory(cfg: HubConfig, networkId: string): Promise<DirectoryRead> {
   const owners = new Map<string, OrgOwner>();
   const deptNames = new Map<string, string>();
   let unowned: OrgAgent[] = [];
   let offset = 0;
+  // #1976 —— 能力位只看第一页(顶层字段,每页都一样)。
+  let agentDepartmentSupported = false;
   for (let page = 0; page < DIRECTORY_MAX_PAGES; page++) {
     const path = `/api/requirements/people/directory?network_id=${encodeURIComponent(networkId)}&limit=${DIRECTORY_PAGE_LIMIT}&offset=${offset}`;
     const res = await getJson(cfg, path);
@@ -112,7 +121,7 @@ async function readDirectory(cfg: HubConfig, networkId: string): Promise<Directo
     if (res.status < 200 || res.status >= 300) throw new Error(`directory HTTP ${res.status}`);
     if (res.body && typeof res.body === 'object' && (res.body as { ok?: unknown }).ok === false) throw new Error('directory not ok');
     const parsed = parseDirectoryPage(res.body);
-    if (offset === 0) unowned = parsed.unowned;
+    if (offset === 0) { unowned = parsed.unowned; agentDepartmentSupported = parsed.agentDepartmentSupported; }
     for (const person of parsed.people) {
       if (person.departmentId && person.departmentName && !deptNames.has(person.departmentId)) deptNames.set(person.departmentId, person.departmentName);
       if (owners.has(person.userId)) continue;
@@ -121,7 +130,7 @@ async function readDirectory(cfg: HubConfig, networkId: string): Promise<Directo
     if (!parsed.hasMore || parsed.nextOffset === null || parsed.nextOffset <= offset) break;
     offset = parsed.nextOffset;
   }
-  return { missing: false, owners: [...owners.values()], unowned, deptNames };
+  return { missing: false, owners: [...owners.values()], unowned, deptNames, agentDepartmentSupported };
 }
 
 function flatDepartments(names: Map<string, string>, owners: readonly OrgOwner[]): Department[] {
@@ -135,6 +144,54 @@ function flatDepartments(names: Map<string, string>, owners: readonly OrgOwner[]
       sort,
       member_count: owners.filter(o => o.departmentId === id).length,
     }));
+}
+
+/** 把 Agent 显式移到某个部门(departmentId=null 表示清空,回到按负责人推断)。
+ *  写接口:PUT /api/networks/:net/nodes/:nodeId/department,需要网络 owner/admin 或该部门负责人。 */
+export type MoveAgentResult =
+  | { ok: true }
+  | { ok: false; reason: 'forbidden' | 'node' | 'department' | 'unsupported' | 'error' };
+
+export async function moveAgentDepartment(
+  cfg: HubConfig,
+  networkId: string,
+  nodeId: string,
+  departmentId: string | null,
+): Promise<MoveAgentResult> {
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), TIMEOUT_MS);
+  try {
+    const res = await appFetch(
+      `${cfg.serverUrl}/api/networks/${encodeURIComponent(networkId)}/nodes/${encodeURIComponent(nodeId)}/department`,
+      {
+        method: 'PUT',
+        headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json', Accept: 'application/json' },
+        body: JSON.stringify({ department_id: departmentId }),
+        signal: ctrl.signal,
+      },
+    );
+    const text = await res.text().catch(() => '');
+    let body: unknown = null;
+    try { body = text ? JSON.parse(text) : null; } catch { body = null; }
+    // Hub .140 返回 {ok:false,error:"department_not_found"};早期草案用 code。两种都认。
+    const contractError = body && typeof body === 'object'
+      ? ((body as { code?: unknown }).code ?? (body as { error?: unknown }).error)
+      : undefined;
+    if (res.status === 403) return { ok: false, reason: 'forbidden' };
+    if (res.status === 405 || res.status === 501) return { ok: false, reason: 'unsupported' };
+    if (res.status === 404) {
+      // 契约里的 404 带 node_not_found;旧 Hub 的路由不存在时是 404 + HTML/空正文。
+      return { ok: false, reason: contractError === 'node_not_found' ? 'node' : 'unsupported' };
+    }
+    if (res.status === 400) return { ok: false, reason: contractError === 'department_not_found' ? 'department' : 'error' };
+    if (res.status < 200 || res.status >= 300) return { ok: false, reason: 'error' };
+    if (body && typeof body === 'object' && (body as { ok?: unknown }).ok === false) return { ok: false, reason: 'error' };
+    return { ok: true };
+  } catch {
+    return { ok: false, reason: 'error' };
+  } finally {
+    clearTimeout(timer);
+  }
 }
 
 /** null = 部门接口和通讯录都没有(旧 Hub)。其它 HTTP 错误抛出去,让页面重试。 */
@@ -152,5 +209,7 @@ export async function loadAgentOrg(cfg: HubConfig, networkId: string): Promise<A
     unowned: directory.missing ? [] : directory.unowned,
     directory: !directory.missing,
     departmentsApi: !org.missing,
+    // #1976 —— 目录接口说「不支持显式 Agent 部门」时,Agent 的位置退回旧的推断口径。
+    agentDepartmentSupported: !directory.missing && directory.agentDepartmentSupported,
   };
 }

@@ -1,0 +1,49 @@
+TEST ONLY — #998 password-change re-login loop
+Observed: 2026-10-11 20:31 Asia/Shanghai
+Base: main2843b5bafabd94609c8312b00ce407f4cb24e687 + narrow auth fix.
+User screenshot: Android0.2.239, saved account still says re-login.
+The screenshot alone does not establish a server/token defect.
+
+Pre-fix reproduction, actual profile-auth-state + session-registry, Docker:
+old401 -> mark reauth -> save new credential -> clear unauthorized -> late
+old401. Expected one redirect, observed two. Exit1; AssertionError 2 !== 1.
+Image config fe67b35219a1731d4d924f0dbd44416b9f5692ba3480d9ed655c0250ea96e7ca.
+
+Fix: accept a replacement only AFTER credential persistence succeeds;
+ignore late401 carrying a superseded token, but not current-token401.
+Serialize only credential save/reauth-mark writes so a pending old flag
+cannot overwrite the clean new-login index. Marks check persisted tokens
+(including another desktop window). App checks supersession again after
+the awaited mark before navigating. Saved-account probes forward their
+request token. Password rotation and legacy profile identity are retained.
+
+Focused core Docker PASS, exit0:
+10/10 race assertions; session registry39/39; existing auth-state,
+login-device/probe tests PASS; password change66/66; full app typecheck PASS.
+Initial fix core config8f196758047a86b250994d13a35bd32e040af96096dbe12bd92acca1bf3030a4.
+Final source core + full typecheck exit0; drive registry12/12 PASS.
+Final core config9576b8edf10167057936bbcf567980bccb16a6732c03fbbb57b0edb068b19a21.
+
+Actual freshly exported app in Chromium, phone viewport390x844:
+8/8 PASS. Holds two synthetic old-token HTTP requests; releases one401;
+actual login form saves new credential through actual mobile storage;
+releases the remaining old401; user remains in workspace, no stale account
+flag, no duplicate account, no page errors. Not a real Android/native
+installation, OAuth flow, server password mutation or production Hub test.
+Initial browser config deac1456005804b777d48e2df9875a60bacb84cab74ccbcf8ba936003cd6bb53.
+Final source actual export/UI8/8 PASS, exit0.
+Final browser confige90f494abeb5d6e5a07271ad4845970ce5c0ed86cee0f85ade2982daa30911e2.
+
+Reproduction commands (sg docker -c):
+docker build --target core -t anet-app:test998-reauth-core -f tests/test998-reauth/Dockerfile .
+docker run --rm --network none anet-app:test998-reauth-core
+docker build --target browser -t anet-app:test998-reauth-ui -f tests/test998-reauth/Dockerfile .
+docker run --rm --network none anet-app:test998-reauth-ui
+
+Recovery: no new service/port/proxy/tunnel or schema. Startup/build and
+rollback use existing repository desktop/Android workflows. Credentials
+remain in existing platform keystore/profile storage, never this report.
+No production account/password/token changes, restarts, global npm writes
+or public package upload. Branch images are TEST ONLY; formal package must
+be rebuilt from exact full40 main ancestor. Existing backup procedures,
+not Git clone, restore user data. --rm containers; cached images retained.

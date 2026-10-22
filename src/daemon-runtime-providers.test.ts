@@ -129,8 +129,29 @@ const fromTool = displayDaemonProviders({
   read: 'ok',
   runtimeId: 'codex-app-server',
 });
-check('a runtime-tagged list_providers row is Codex model_providers',
-  fromTool.kind === 'codex' && fromTool.providers[0].id === 'minimax' && fromTool.providers[0].models[0] === 'MiniMax-M3' && !JSON.stringify(fromTool).includes(KEY));
+check('a runtime tag on a network provider is not daemon availability', fromTool.kind === 'upgrade');
+
+const isolated = displayDaemonProviders({ daemon: codexDaemon, rows: tagged, read: 'ok', runtimeId: 'codex-app-server' });
+check('network rows cannot add a runtime to a daemon catalog', isolated.kind === 'unlisted');
+const localBefore = displayDaemonProviders({ daemon: codexDaemon, read: 'ok', runtimeId: 'codex-sdk' });
+const localAfter = displayDaemonProviders({ daemon: codexDaemon, rows: taggedFromPayload({ providers: [
+  { id: 'foreign', runtime: 'codex-sdk', models: ['foreign-model'] },
+] }), read: 'ok', runtimeId: 'codex-sdk' });
+check('network rows cannot extend a locally reported runtime', JSON.stringify(localBefore) === JSON.stringify(localAfter));
+check('switching to an unreported daemon never reuses the network catalog',
+  displayDaemonProviders({ daemon: {}, rows: tagged, read: 'ok', runtimeId: 'codex-app-server' }).kind === 'upgrade');
+check('no selected daemon never shows a network provider as available',
+  displayDaemonProviders({ daemon: null, rows: tagged, read: 'ok', runtimeId: 'codex-app-server' }).kind === 'upgrade');
+check('network rows do not conceal an explicitly empty local catalog',
+  displayDaemonProviders({ daemon: { runtime_readiness: { 'codex-app-server': { providers: [] } } },
+    rows: tagged, read: 'ok', runtimeId: 'codex-app-server' }).kind === 'empty');
+const networkOpenCode = taggedFromPayload({ providers: [
+  { id: 'foreign', runtime: 'opencode-cli', models: ['foreign-model'] },
+] });
+check('OpenCode V2 does not inherit network providers either',
+  displayDaemonProviders({ daemon: {}, rows: networkOpenCode, read: 'ok', runtimeId: 'opencode-cli', opencodeGeneration: 'v2' }).kind === 'upgrade');
+check('OpenCode V2 native catalog remains authoritative', JSON.stringify(v2) === JSON.stringify(
+  displayDaemonProviders({ daemon: opencodeDaemon, rows: networkOpenCode, read: 'ok', runtimeId: 'opencode-cli', opencodeGeneration: 'v2' })));
 
 const onDaemon = displayDaemonProviders({
   daemon: {

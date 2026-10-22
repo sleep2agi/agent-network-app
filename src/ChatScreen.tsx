@@ -3,6 +3,8 @@ import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
 import './i18n-tasks';
+import TaskExecutionNotice from './TaskExecutionNotice';
+import { taskExecutionState } from './task-execution';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -16,7 +18,7 @@ import AttachmentFileDesktop from './AttachmentFileDesktop';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import { sendFailureReason, type SendFailureReason } from './send-failure-reason';
-import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
@@ -94,6 +96,11 @@ import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
 import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 import { parseBtwFirstToken } from './btw-command';
+import { slashCandidates, slashGroupLabel, slashMenuOpen, moveSlashIndex } from './slash-menu';
+import { mentionCandidates, mentionMenuOpen } from './mention-menu';
+import { ComposerSuggest } from './ComposerSuggest';
+import { parseSkillsPayload, skillsTarget, type SkillSummary } from './node-skills';
+import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
 import { SHOW_BOLT_ENTRY, SHOW_BTW_ENTRY } from './chat-entry-flags';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
@@ -285,8 +292,12 @@ interface Props {
   onOpenTask?: (requirementId: string, networkId: string | null) => void;
   /** #908 守护进程管理页的「新建节点」:打开现有向导。不传(分离聊天窗)= 按钮置灰。 */
   onCreateNode?: (daemon: HostSupervisorDaemon) => void;
+  /** 守护进程管理页里点托管节点的「对话」。 */
+  onOpenManagedChat?: (alias: string) => void;
   /** #769: 点开这个会话的那一行所在网络。发送 / 历史 / 已读 / 附件都打到它,不是账号当前网络。 */
   networkId?: string;
+  /** Hub 概览点机器进守护进程管理:角色尚未从 /api/nodes 确认时也显示管理页与设置入口。 */
+  daemonMgmt?: boolean;
 }
 
 // Module level on purpose: the cache has to outlive a screen unmount, or
@@ -297,7 +308,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onCreateNode }: Props) {
+export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, daemonMgmt = false }: Props) {
   useTranslation();
   // #769: everything below is agent-scoped — use THIS agent's network, not the account's current one.
   const cfg = useMemo(() => cfgForAgent(accountCfg, alias, networkId), [accountCfg, alias, networkId]);
@@ -320,15 +331,111 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraftState] = useState('');
+  const [slashSkills, setSlashSkills] = useState<SkillSummary[]>([]);
+  const [slashSkillNote, setSlashSkillNote] = useState('');
+  const [mentionAgents, setMentionAgents] = useState<Array<{ alias: string; online: boolean }>>([]);
+  const [suggestIndex, setSuggestIndex] = useState(0);
   // #632 草稿(微信同款):按 账号 + Hub + 网络 + 会话 存在本机,离开 / 切会话 / 退后台 / 重启后放回。
   // 主窗口复用同一个 ChatScreen 切会话 —— key 变就等于离开旧会话、进新会话(composer-drafts.ts)。
+
+  const slashRows = useMemo(() => slashMenuOpen(draft) ? slashCandidates(draft, slashSkills).map(item => ({
+    id: item.id,
+    group: item.group === "command" ? t("chat.slash.commands") : t("chat.slash.skills"),
+    label: item.label,
+    description: item.description,
+    insert: item.insert,
+  })) : [], [draft, slashSkills]);
+  const mentionRows = useMemo(() => mentionMenuOpen(draft) ? mentionCandidates(draft, mentionAgents).map(item => ({
+    id: `agent:${item.alias}`,
+    group: t("chat.mention.agents"),
+    label: `@${item.alias}`,
+    description: item.online ? t("chat.mention.online") : t("chat.mention.offline"),
+    insert: item.insert,
+  })) : [], [draft, mentionAgents]);
+  const suggestRows = slashRows.length || slashMenuOpen(draft) ? slashRows : mentionRows;
+  const suggestOpen = slashMenuOpen(draft) || mentionMenuOpen(draft);
+  useEffect(() => { setSuggestIndex(0); }, [draft, suggestRows.length]);
+  useEffect(() => {
+    if (!slashMenuOpen(draft)) return;
+    let live = true;
+    setSlashSkillNote(t("chat.slash.loading"));
+    (async () => {
+      try {
+        const status = await fetchStatus(cfg);
+        const session = (status.sessions ?? []).find(item => item.alias === alias);
+        const target = skillsTarget({ node: session?.node_id ? { node_id: session.node_id, alias, runtime: session.runtime } : null, session: session ? { alias, skills_capable: session.skills_capable } : null });
+        if (!target) {
+          if (live) { setSlashSkills([]); setSlashSkillNote(t("chat.slash.unsupported")); }
+          return;
+        }
+        const enq = await listNodeSkills(cfg, target);
+        const follow = requestIdToFollow(enq);
+        if (!follow) {
+          if (live) setSlashSkillNote(enq.ok ? t("chat.slash.failed") : enq.error);
+          return;
+        }
+        const result = await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => !live });
+        if (!live) return;
+        const problem = resultProblem(result);
+        if (problem !== null || !result.ok || result.status !== 'done') {
+          setSlashSkillNote(problem || (!result.ok ? result.error : t("chat.slash.failed")));
+          return;
+        }
+        setSlashSkills(parseSkillsPayload(result.content).skills);
+        setSlashSkillNote('');
+      } catch (error) {
+        if (live) setSlashSkillNote(error instanceof Error ? error.message : t("chat.slash.failed"));
+      }
+    })();
+    return () => { live = false; };
+  }, [cfg, alias, slashMenuOpen(draft)]);
+  useEffect(() => {
+    if (!mentionMenuOpen(draft)) return;
+    let live = true;
+    Promise.all([fetchHubNodes(cfg), fetchStatus(cfg)]).then(([nodes, status]) => {
+      if (!live) return;
+      const online = new Set((status.sessions ?? []).filter(item => item.status && item.status !== 'offline').map(item => item.alias));
+      const fromNodes = (nodes.nodes ?? []).map(item => ({ alias: item.alias, online: online.has(item.alias) }));
+      const extras = (status.sessions ?? []).filter(item => item.alias && !fromNodes.some(row => row.alias === item.alias)).map(item => ({ alias: item.alias, online: item.status !== 'offline' }));
+      setMentionAgents([...fromNodes, ...extras]);
+    }).catch(() => { if (live) setMentionAgents([]); });
+    return () => { live = false; };
+  }, [cfg, mentionMenuOpen(draft)]);
+  const pickSuggest = (index: number) => {
+    const row = suggestRows[index];
+    if (!row) return;
+    setDraft(row.insert);
+    setSuggestIndex(0);
+    mainComposerRef.current?.focus?.();
+  };
+  const onSuggestKey = (event: { key?: string; preventDefault?: () => void; nativeEvent?: { key?: string } }) => {
+    if (!suggestOpen || suggestRows.length === 0) return false;
+    const key = event.key || event.nativeEvent?.key;
+    if (key === 'ArrowDown' || key === 'ArrowUp') {
+      event.preventDefault?.();
+      setSuggestIndex(index => moveSlashIndex(index, suggestRows.length, key === 'ArrowDown' ? 'down' : 'up'));
+      return true;
+    }
+    if (key === 'Enter' || key === 'Tab') {
+      event.preventDefault?.();
+      pickSuggest(suggestIndex);
+      return true;
+    }
+    if (key === 'Escape') {
+      event.preventDefault?.();
+      setDraft(draft.replace(/^\s*[\/@]/, ''));
+      return true;
+    }
+    return false;
+  };
+
   const composerDraftKey = conversationDraftKey(cfg, { kind: 'node', alias });
   const { setDraft } = useComposerDraft(composerDraftKey, draft, setDraftState);
   // 设置 → 快捷键:Enter 发送(默认)还是 Ctrl/⌘+Enter 发送。
   const sendKey = useSyncExternalStore(subscribeShortcuts, sendKeyPref, sendKeyPref);
   // #908 守护节点(host_supervisor):整页换成管理页,不进对话。角色还没到时仍先按普通会话画。
   useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
-  const composerKind = chatComposerKind(isHostSupervisorAlias(alias));
+  const composerKind = chatComposerKind(isHostSupervisorAlias(alias) || daemonMgmt);
   // Fold/unfold remounts this screen (phone stack ⇄ two-pane); carry the unsent
   // draft across that remount only. Ordinary back/leave still drops it, as before.
   const draftHandoffKey = `chatDraft:${cfg.profileId ?? cfg.serverUrl}:${alias}`;
@@ -1841,6 +1948,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // while a recent task has no result yet, otherwise the session status
   // so he can tell whether the agent is even online.
   const [sessionStatus, setSessionStatus] = useState('');
+  // Vincent 2026-10-19: the chat header had empty space next to the name —
+  // show which model this agent is running (same row the 30s poll already has).
+  const [sessionModel, setSessionModel] = useState('');
   // 聊天信息里「规则文件」「技能」出不出现,口径同节点信息页(visibleNodeSections)。
   // 能力位只在全量 /api/status 里有(chat-info-model.ts chatInfoCaps 顶部):下面 30s 的 light 轮询
   // 只给得出 agent-node 那一半(lightCaps,兜底);全量行在进聊天和每次打开聊天信息时取一次(fullCaps)。
@@ -1859,6 +1969,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         const s = (data.sessions ?? []).find(x => x.alias === alias);
         if (live) {
           setSessionStatus(s?.status ?? 'offline');
+          setSessionModel(typeof s?.model === 'string' ? s.model : '');
           const next = chatInfoCaps(s);
           setLightCaps(c => (c.rules === next.rules && c.skills === next.skills ? c : next));
         }
@@ -1901,7 +2012,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     m =>
       !m._localId &&
       !m.result &&
-      ['created', 'delivered', 'started'].includes(m.status ?? '') &&
+      taskExecutionState(m) === 'consumed' &&
       m.created_at &&
       Date.now() - new Date(`${m.created_at.replace(' ', 'T')}Z`).getTime() < 10 * 60 * 1000,
   );
@@ -1982,7 +2093,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         desktop={desktop}
         hideBack={hideBack}
         onBack={onBack}
+        onOpenNodeSettings={onOpenNodeSettings}
         onOpenLogs={onOpenNodeSettings ? () => { requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), 'logs'); onOpenNodeSettings(); } : undefined}
+        onOpenManagedChat={onOpenManagedChat}
         onCreate={onCreateNode}
       />
     );
@@ -2038,6 +2151,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
+        {sessionModel ? (
+          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+            {sessionModel}
+          </Text>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.info')}
@@ -2367,7 +2485,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
                   // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
                   // 只对自己发出的消息成立:别人派来的任务标「已送达」等于说这条是你发的。
-                  <Text style={styles.deliveredMark}>{t('chat.delivered')}</Text>
+                  <View>
+                    <Text style={styles.deliveredMark}>{t('chat.delivered')}</Text>
+                    <TaskExecutionNotice task={item} />
+                  </View>
                 ) : null}
               </View>
             );
@@ -2613,6 +2734,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Pressable>
           </View>
         ) : null}
+{suggestOpen ? (
+          <ComposerSuggest
+            rows={suggestRows}
+            active={suggestIndex}
+            empty={slashMenuOpen(draft) ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
+            onPick={pickSuggest}
+          />
+        ) : null}
         <View style={styles.desktopComposerWrap}>
         <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]} testID="desktop-composer-card">
           {/* 内容高度量尺:同宽、同字号行高的隐形文字。不用 TextInput 的 onContentSizeChange —— web 上那是
@@ -2637,7 +2766,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             selection={forcedSelection}
             onKeyPress={(event) => {
               const key = event.nativeEvent as typeof event.nativeEvent & { ctrlKey?: boolean; metaKey?: boolean; shiftKey?: boolean; isComposing?: boolean; keyCode?: number; which?: number };
-              if (!shouldSendOnEnter(key, sendKey)) return;
+              if (onSuggestKey(key)) return;
+            if (!shouldSendOnEnter(key, sendKey)) return;
               event.preventDefault?.();
               void submit();
             }}
@@ -2705,6 +2835,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onClear={() => { setDraft(''); selectionCaptureRef.current.reset(); }}
         />
       ) : null}
+{suggestOpen ? (
+          <ComposerSuggest
+            rows={suggestRows}
+            active={suggestIndex}
+            empty={slashMenuOpen(draft) ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
+            onPick={pickSuggest}
+          />
+        ) : null}
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
@@ -2755,6 +2893,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
               keyCode?: number;
               which?: number;
             };
+            if (onSuggestKey(key)) return;
             if (!shouldSendOnEnter(key, sendKey)) return;
             event.preventDefault?.();
             void submit();
@@ -2882,6 +3021,12 @@ const makeStyles = (B = bubbleLayout()) =>
   // The single ⋯: a 36 dp target flush with the right padding. Icon buttons are measured by their box
   // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
+  // Model id chip: secondary, one line, never steals width from the name column.
+  modelChip: {
+    maxWidth: 132, marginRight: 6, paddingHorizontal: 6, paddingVertical: 2,
+    borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
+    fontSize: ds(11), overflow: 'hidden',
+  },
   headerTitleCol: { flex: 1, minWidth: 0 },
   beginning: {
     color: colors.textMuted,

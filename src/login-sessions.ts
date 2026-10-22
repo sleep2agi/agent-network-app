@@ -205,7 +205,7 @@ export type ProbeDeps = {
   load: (profileId: string) => Promise<{ serverUrl: string; token: string } | null>;
   /** 用这个令牌打 GET /api/auth/me 的 HTTP 状态;请求本身失败返回 null。 */
   status: (cfg: { serverUrl: string; token: string }) => Promise<number | null>;
-  mark: (profileId: string) => Promise<void>;
+  mark: (profileId: string, requestToken?: string) => Promise<void>;
 };
 
 /**
@@ -220,7 +220,7 @@ export async function probeSavedSessionsWith(profiles: readonly ProbeProfile[], 
       const cfg = await deps.load(p.profileId);
       if (!cfg?.token) return;
       if ((await deps.status(cfg)) !== 401) return;
-      await deps.mark(p.profileId);
+      await deps.mark(p.profileId, cfg.token);
       marked.push(p.profileId);
     } catch {
       /* 读不到凭据 / 标记失败:保持原样,点过去时照常走重新登录 */

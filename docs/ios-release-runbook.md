@@ -42,6 +42,21 @@ Use `.github/workflows/ios-build.yml`.
    team-qualified application identifier.
 6. Export creates an App Store IPA and uploads it as an artifact before the
    optional TestFlight step.
+7. After a successful TestFlight upload, the same approved job waits up to
+   15 minutes for that exact build number to become `VALID`, attaches it to
+   every existing ordinary internal group, and reads back membership. Groups
+   with `hasAccessToAllBuilds=true` receive no manual attachment; their automatic
+   membership is also confirmed. No testers or public groups are changed.
+   Failure leaves the IPA/upload evidence intact and reports distribution as
+   failed. After correcting the reported cause, dispatch `ios-testflight-status`
+   with the same build number and `distribute_to_groups=all-internal` to retry
+   distribution without rebuilding or uploading again.
+
+The shared `scripts/ios-distribute-internal.mjs` helper is checked out separately
+from the workflow dispatch's exact main SHA. The IPA still uses the requested
+release SHA; this lets a current workflow distribute an older main build whose
+source predates the helper. Both paths use the existing protected ASC key, with
+no additional environment approval between upload and automatic distribution.
 
 First run with `upload_testflight=false`. Inspect and retain the IPA artifact.
 Only after that gate succeeds should a maintainer run the same workflow with
@@ -103,6 +118,17 @@ The actual workflow additionally supplies App Store Connect API-key arguments
 to both commands. Never print those secret values.
 
 ## TestFlight and App Store Connect API
+
+To inspect an existing upload, dispatch `ios-testflight-status.yml` from `main`
+with its numeric build number, `include_app_store_versions=true`, and all write
+options disabled (`enable_public_testing=false`,
+`set_export_compliance_only=false`, `distribute_to_groups=""`). The protected
+job reports App Store version/review states and linked build numbers separately
+from TestFlight status. Its App Store response uses a field allowlist, omitting
+review accounts and credentials. `complete=false` means more than one response
+page exists; do not infer the absence of a public version from that partial
+list. A TestFlight upload or Beta Review approval does not establish an App
+Store public release.
 
 After upload, use an ES256 JWT (`kid`, issuer, `aud=appstoreconnect-v1`) with
 the App Store Connect REST API to:

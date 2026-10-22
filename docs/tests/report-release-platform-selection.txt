@@ -1,0 +1,39 @@
+Observed: 2026-10-11 15:37 +08
+Scope: owner requested macOS / Windows / Android first, Linux deferred.
+No public release, production write or signed-binary acceptance in this report.
+
+Implementation
+- Desktop workflow include_linux=false builds only the macOS/Windows matrix.
+- include_linux=true retains Ubuntu deb signing, update, smoke and retention gates.
+- Draft verifier receives the same selection, requires all selected assets and
+  matching updater entries, rejects stale/unselected Linux assets and entries.
+- Main ancestor/full40 source checks and signing secrets are unchanged.
+- Android remains a separate exact-main release. No installer dependency changed.
+- SOP documents dispatch, selected-platform acceptance and keeping the previous
+  verified Linux download without relabeling it as this release.
+
+Docker-only validation
+Dockerfile: tests/release-platform-selection/Dockerfile (pinned Bun/Node digests)
+Image config SHA256: 754d025bc27c37bab13001432515504777b8fee8c2f491b634f11c8b24e63106
+docker run --rm --network none anet-app:release-platform-selection
+- linux-desktop-release: 28 PASS, including both selections and negative cases
+  (missing selected Linux package, unexpected Linux files/entries, missing Windows
+  installer, missing macOS updater signature, mismatched source SHA).
+- version-consistency: 14 PASS, version 0.2.238 / Android versionCode 2238.
+- changelog-bundled: 7/7 PASS.
+Exit 0; no account, token, signing material or network mounted into the test.
+Only the test image retained. The workflow still needs hosted CI and selected
+signed-package checks before any release. Hub .122 release remains queued.
+
+2026-10-11 15:43 +08 incremental correction
+Windows CI on 71569d06: 398/399 files passed; modelscope-mirror alone failed
+because release notes extraction expects the existing "Signed and notarized"
+opening. Kept that opening while accurately limiting notarization to macOS and
+describing Windows as signed. No assertion changed or removed.
+Rebuilt targeted Docker suite with the mirror/Android-notes test included:
+platform 28 PASS, version 14 PASS, bundled notes 7/7 PASS, mirror 62 PASS, exit 0.
+Image config SHA256: 45aa8162810d089c648caa8376d28fd214188bca5d01a733f8e127f55143f207
+Container --rm --network none, no credentials or native package build.
+Also corrected SOP to match the existing dynamic /download catalog: a deferred
+Linux platform is shown as missing for this version, with old packages available
+in release history, not as a relabeled stale current-version download.

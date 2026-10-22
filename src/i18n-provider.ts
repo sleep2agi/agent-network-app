@@ -23,7 +23,7 @@ registerTranslations({
   'provider.opencodeTitle': ['OpenCode 供应商', 'OpenCode provider'],
   'provider.opencodeBody': ['供应商、密钥和模型列表由 OpenCode 在目标机器上管理（opencode.json 与 anet opencode auth-login）。请填写 OpenCode 已经配置好的 provider/model。这里不收集密钥，填写模型也不会打开本地工具授权。', 'OpenCode manages providers, keys, and its model list on the target machine (opencode.json and anet opencode auth-login). Enter a provider/model OpenCode already has. This screen does not collect a key, and choosing a model does not allow local tools.'],
   'provider.err.base_url_required': [PROVIDER_ISSUE_ZH.base_url_required, 'Enter the Codex model_providers base_url.'],
-  'provider.err.base_url_invalid': [PROVIDER_ISSUE_ZH.base_url_invalid, 'base_url must be https://, or http:// on a loopback address.'],
+  'provider.err.base_url_invalid': [PROVIDER_ISSUE_ZH.base_url_invalid, 'base_url must be a valid HTTP or HTTPS address. HTTPS is recommended.'],
   'provider.err.api_key_required': [PROVIDER_ISSUE_ZH.api_key_required, 'Enter an API key.'],
   'provider.err.api_key_invalid': [PROVIDER_ISSUE_ZH.api_key_invalid, 'The API key cannot contain a line break or a null character.'],
   'provider.err.api_key_too_long': [PROVIDER_ISSUE_ZH.api_key_too_long, 'The API key is too long.'],
@@ -31,7 +31,7 @@ registerTranslations({
   'provider.err.preset_not_for_runtime': [PROVIDER_ISSUE_ZH.preset_not_for_runtime, 'This runtime cannot use that provider preset.'],
   'provider.err.hub_not_ready': [PROVIDER_ISSUE_ZH.hub_not_ready, 'Upgrade the Hub before a provider key can be saved. This version will not send the key, and it will not create the node without one.'],
   'provider.err.unsupported_hub': [PROVIDER_ISSUE_ZH.unsupported_hub, 'This Hub does not accept the provider field yet. Upgrade the Hub. The key will not be dropped, and the app will not create the node without it.'],
-  'provider.err.insecure_transport': [PROVIDER_ISSUE_ZH.insecure_transport, 'This Hub URL is plain http and is not loopback. The key will not be sent over that connection.'],
+  'provider.err.insecure_transport': [PROVIDER_ISSUE_ZH.insecure_transport, 'Invalid Hub URL. Use HTTP or HTTPS; HTTPS is recommended.'],
   'daemonProviders.pending': ['正在查看这台 Hub 是否按 runtime 上报了可用的供应商和模型。', 'Checking whether this Hub reports providers and models per runtime.'],
   'daemonProviders.upgrade': ['这台 Hub 还没有按 runtime 上报可用的供应商和模型（runtime_readiness / list_providers 里没有这一格）。升级 Hub 和这台机器上的 agent-node 后再看。', 'This Hub does not report providers and models per runtime yet (runtime_readiness / list_providers has no such field). Upgrade the Hub and this machine\'s agent-node, then look again.'],
   'daemonProviders.upgradeCodex': ['这台 Hub 还没有按 Codex model_providers 上报这台机器可用的模型。升级 Hub 和这台机器上的 agent-node 后再看。', 'This Hub does not report this machine\'s models through Codex model_providers yet. Upgrade the Hub and this machine\'s agent-node, then look again.'],
@@ -46,4 +46,5 @@ registerTranslations({
   'daemonProviders.opencodeTitle': ['这台机器上 OpenCode 已有的 provider/model', 'provider/model OpenCode already has on this machine'],
   'daemonProviders.opencodeHint': ['这是 OpenCode 自己的 provider/model，不是 Codex 的 model_providers。这里不收集密钥，也不会打开本地工具授权。', 'This is OpenCode\'s own provider/model, not Codex model_providers. This screen does not collect a key, and it does not allow local tools.'],
   'daemonProviders.listedTitle': ['这台机器上报的模型', 'Models reported by this machine'],
+  'daemonProviders.selectModel': ['选择模型 {model}', 'Select model {model}'],
 });

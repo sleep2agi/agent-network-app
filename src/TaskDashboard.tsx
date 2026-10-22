@@ -6,8 +6,8 @@ import { useTranslation } from './i18n-react';
 // 拿去发社交媒体」;设计稿通过后加了主角「最近完成的任务是什么」。
 // 桌面:一行四个大数字(进场数字滚动)→ 整行「最近完成」时间线(新完成的滑进来,点一行开详情)→
 //       近 30 天柱图 + 完成榜 → 全年热力图 + 按项目。
-// 手机:单列 ——「今天完成」大卡 → 最近完成 5 行 + 展开 → 三个小数 → 柱图 → 完成榜 → 按项目 → 近 6 个月;
-//       底部常驻「生成分享图」。不是把桌面挤窄。
+// 手机:单列 ——「今天完成」大卡 → 最近完成 5 行 + 展开 → 三个小数 → 柱图 → 完成榜 → 按项目 → 近 6 个月。
+//       不是把桌面挤窄。
 // 数据:Hub 有 stats(capability,#2168)就问 Hub(真完成时刻、含归档、按可见范围);否则本机从整张表(含归档,
 //       按 cursor 翻页)估,用 updatedAt 的地方标「近似」。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
@@ -34,6 +34,10 @@ import { SHARE_W, renderShareCardPng, shareCardLayout, shareFileName, specOf, ty
 import { shareModel } from './task-share-model';
 import { saveImageObjectUrl } from './web-image-download';
 import { copyImageBlob } from './image-clipboard';
+import TaskTagStatusChart from './TaskTagStatusChart';
+import { inStatsProject, loadedTagSnapshot, parseTagSnapshot, type TagSnapshot } from './task-tag-status';
+import type { ReqColumn } from './requirements-model';
+import { SelectField } from './TaskSelectMenu';
 
 const POLL_MS = 15_000;
 /** 本机估的时候整张表读得比较重(含归档):一分钟一次就够,看板自己的 15 秒轮询会把没归档的卡带进来。 */
@@ -52,42 +56,58 @@ type Props = {
   /** Hub 有没有 GET /api/requirements/stats(capability stats)。 */
   statsCapable: boolean;
   onOpen: (id: string) => void;
+  projectFilter?: string | null;
+  onTagStatus: (tag: string | null, status: ReqColumn) => void;
+  onProject: (project: string | null) => void;
 };
 
 /** 读数据:Hub stats 或本机估。返回的 data 为 null = 还没读到。 */
-export function useDashData(cfg: HubConfig, period: DashPeriod, statsCapable: boolean, storeItems: readonly Requirement[]) {
-  const [hub, setHub] = useState<{ period: DashPeriod; raw: unknown } | null>(null);
-  const [all, setAll] = useState<{ rows: Requirement[]; partial: boolean } | null>(null);
+export function useDashData(cfg: HubConfig, period: DashPeriod, statsCapable: boolean, storeItems: readonly Requirement[], projectFilter: string | null = null) {
+  const key = JSON.stringify([cfg.serverUrl, cfg.token, cfg.networkId, period, projectFilter]);
+  const current = useRef(key);
+  current.current = key;
+  const [hub, setHub] = useState<{ key: string; period: DashPeriod; raw: unknown } | null>(null);
+  const [all, setAll] = useState<{ key: string; rows: Requirement[]; partial: boolean } | null>(null);
   const [error, setError] = useState('');
   const [now, setNow] = useState(() => Date.now());
-  const useHub = statsCapable && !(hub && hub.period === period && parseHubStats(hub.raw) === null);
+  const useHub = statsCapable && !(hub && hub.key === key && parseHubStats(hub.raw) === null);
   const load = useCallback(async () => {
     try {
       if (useHub) {
-        const raw = await fetchRequirementStats(cfg, { from: periodStart(period, Date.now()), tz: localTimeZone(), days: DASH_DAYS, recent: DASH_RECENT });
-        setHub({ period, raw });
+        const raw = await fetchRequirementStats(cfg, { from: periodStart(period, Date.now()), tz: localTimeZone(), days: DASH_DAYS, recent: DASH_RECENT, projectId: projectFilter });
+        if (current.current !== key) return;
+        setHub({ key, period, raw });
       } else {
-        setAll(await listAllRequirementsForDashboard(cfg));
+        const result = await listAllRequirementsForDashboard(cfg);
+        if (current.current !== key) return;
+        setAll({ key, ...result });
       }
       setNow(Date.now());
       setError('');
     } catch (e) {
+      if (current.current !== key) return;
       setError(e instanceof Error ? e.message : String(e));
     }
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, period, useHub]);
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, period, projectFilter, key, useHub]);
   usePoll(load, useHub ? POLL_MS : CLIENT_POLL_MS, [load]);
   const data = useMemo<DashData | null>(() => {
     if (useHub) {
-      const stats = hub && hub.period === period ? parseHubStats(hub.raw) : null;
-      return stats ? fromHubStats(stats, now) : null;
+      const raw = hub && hub.key === key ? hub.raw : null;
+      const stats = parseHubStats(raw);
+      if (!stats) return null;
+      // Old Hubs can ignore project_id. Do not label their global totals as project totals.
+      return projectFilter && !parseTagSnapshot(raw, projectFilter)
+        ? fromItems(storeItems.filter(r => inStatsProject(r, projectFilter)), period, now, true)
+        : fromHubStats(stats, now);
     }
-    if (!all) return null;
+    if (!all || all.key !== key) return null;
     // 看板的轮询比这里勤:没归档的卡以看板那份为准(刚拖进「完成」的马上算上),归档的用这里读的。
     const merged = new Map(all.rows.map(r => [r.id, r]));
     for (const item of storeItems) merged.set(item.id, item);
-    return fromItems([...merged.values()], period, Math.max(now, Date.now() - 1000), all.partial);
-  }, [useHub, hub, all, storeItems, period, now]);
-  return { data, error, reload: load };
+    return fromItems([...merged.values()].filter(r => inStatsProject(r, projectFilter)), period, Math.max(now, Date.now() - 1000), all.partial);
+  }, [useHub, hub, all, storeItems, period, projectFilter, key, now]);
+  const tagSnapshot = useMemo(() => parseTagSnapshot(hub?.key === key ? hub.raw : null, projectFilter) ?? loadedTagSnapshot(storeItems, projectFilter), [hub, key, storeItems, projectFilter]);
+  return { data, tagSnapshot, error, reload: load };
 }
 
 /** 进场滚动的数字(约 0.9 s,ease-out)。值变了从当前显示值滚到新值。 */
@@ -123,16 +143,9 @@ export default function TaskDashboard(props: Props) {
   const c = useDashStyles();
   const [period, setPeriodState] = useState<DashPeriod>(lastPeriod);
   const setPeriod = (p: DashPeriod) => { lastPeriod = p; setPeriodState(p); };
-  const { data, error, reload } = useDashData(props.cfg, period, props.statsCapable, props.items);
-  const [sharing, setSharing] = useState(false);
+  const { data, tagSnapshot, error, reload } = useDashData(props.cfg, period, props.statsCapable, props.items, props.projectFilter);
   const periods = DASH_PERIODS.map(key => ({ key, label: tr(PERIOD_KEY[key]) }));
   const periodSeg = <Segmented s={props.s} items={periods} value={period} onChange={setPeriod} testID="dash-period" />;
-  const shareButton = (
-    <Pressable accessibilityRole="button" onPress={() => setSharing(true)} style={({ pressed }) => [c.shareBtn, pressed && { opacity: 0.85 }]} testID="dash-share">
-      <Ionicons name="image-outline" size={16} color={colors.onAccent} />
-      <Text style={c.shareBtnText} numberOfLines={1}>{tr('dash.share')}</Text>
-    </Pressable>
-  );
   if (!data) {
     return (
       <View style={c.center} testID="dash-loading">
@@ -145,16 +158,15 @@ export default function TaskDashboard(props: Props) {
       </View>
     );
   }
-  const view = { ...props, data, period, c };
+  const view = { ...props, data, tagSnapshot, period, c };
   return (
     <View style={{ flex: 1 }} testID="task-dashboard" {...({ dataSet: { dashSource: data.source } } as object)}>
-      {props.phone ? <DashPhone {...view} periodSeg={periodSeg} onShare={() => setSharing(true)} /> : <DashDesktop {...view} periodSeg={periodSeg} shareButton={shareButton} />}
-      {sharing ? <ShareDialog {...view} onClose={() => setSharing(false)} /> : null}
+      {props.phone ? <DashPhone {...view} periodSeg={periodSeg} /> : <DashDesktop {...view} periodSeg={periodSeg} />}
     </View>
   );
 }
 
-type ViewProps = Props & { data: DashData; period: DashPeriod; c: DashStyles };
+type ViewProps = Props & { data: DashData; tagSnapshot: TagSnapshot; period: DashPeriod; c: DashStyles };
 
 function Notes({ data, c }: { data: DashData; c: DashStyles }) {
   if (!data.approx && !data.partial) return null;
@@ -386,7 +398,12 @@ function CardHead({ title, sub, right, c }: { title: string; sub?: string; right
   );
 }
 
-function DashDesktop(props: ViewProps & { periodSeg: React.ReactNode; shareButton: React.ReactNode }) {
+function DashboardProject(props: Props) {
+  if (!props.projects) return null;
+  return <View style={{ minWidth: 150, maxWidth: 280 }}><SelectField testID="dash-project" value={props.projectFilter ?? null} touch={props.phone} title={tr('tasks.copy.30')} noneLabel={tr('tagStats.allProjects')} placeholder={tr('tagStats.allProjects')} options={[{ id: 'none', label: tr('tasks.copy.31') }, ...props.projects.filter(p => !p.archived).map(p => ({ id: p.id, label: p.name, color: p.color }))]} onPick={props.onProject} /></View>;
+}
+
+function DashDesktop(props: ViewProps & { periodSeg: React.ReactNode }) {
   const { data, c, period } = props;
   const last30 = data.daily.slice(-30);
   const sum30 = last30.reduce((a, d) => a + d.n, 0);
@@ -397,15 +414,16 @@ function DashDesktop(props: ViewProps & { periodSeg: React.ReactNode; shareButto
     <ScrollView style={{ flex: 1 }} contentContainerStyle={c.desktopBody} testID="dash-desktop">
       <View style={c.toolbar}>
         {props.periodSeg}
+        <DashboardProject {...props} />
         <View style={{ flex: 1 }} />
         <Notes data={data} c={c} />
-        {props.shareButton}
       </View>
       <View style={c.heroRow}>{heroes(props)}</View>
       <View style={[c.card, c.recentCard]} testID="dash-recent-card">
         <CardHead c={c} title={tr('dash.recent')} sub={tr(PERIOD_KEY[period])} right={tr('dash.total', { n: data.periodDone })} />
         <Timeline {...props} limit={8} testID="dash-recent" />
       </View>
+      <View style={c.card}><TaskTagStatusChart snapshot={props.tagSnapshot} phone={false} onPick={props.onTagStatus} /></View>
       <View style={c.row}>
         <View style={[c.card, { flex: 2 }]}>
           <CardHead c={c} title={tr('dash.daily')} sub={tr('dash.last30')} right={`${tr('dash.avg', { n: (sum30 / 30).toFixed(1) })} · ${tr('dash.total', { n: sum30 })}`} />
@@ -431,7 +449,7 @@ function DashDesktop(props: ViewProps & { periodSeg: React.ReactNode; shareButto
   );
 }
 
-function DashPhone(props: ViewProps & { periodSeg: React.ReactNode; onShare: () => void }) {
+function DashPhone(props: ViewProps & { periodSeg: React.ReactNode }) {
   const { data, c, period } = props;
   const [expanded, setExpanded] = useState(false);
   const today = useCountUp(data.todayDone);
@@ -440,6 +458,7 @@ function DashPhone(props: ViewProps & { periodSeg: React.ReactNode; onShare: () 
     <View style={{ flex: 1 }}>
       <ScrollView style={{ flex: 1 }} contentContainerStyle={c.phoneBody} testID="dash-phone">
         {props.periodSeg}
+        <DashboardProject {...props} />
         <View style={c.phoneHero} testID="dash-hero-today">
           <Text style={c.phoneHeroLabel}>{tr('dash.todayDone')}</Text>
           <Text style={c.phoneHeroValue} testID="dash-hero-today-value">{today}</Text>
@@ -465,6 +484,7 @@ function DashPhone(props: ViewProps & { periodSeg: React.ReactNode; onShare: () 
           <PhoneKpi label={tr('dash.rate')} value={pct(data.rate)} c={c} testID="dash-hero-rate" />
         </View>
         <Notes data={data} c={c} />
+        <View style={c.card}><TaskTagStatusChart snapshot={props.tagSnapshot} phone onPick={props.onTagStatus} /></View>
         <View style={c.card}>
           <CardHead c={c} title={tr('dash.daily')} sub={tr('dash.last30')} />
           <DailyChart data={data} c={c} height={170} />
@@ -483,10 +503,6 @@ function DashPhone(props: ViewProps & { periodSeg: React.ReactNode; onShare: () 
           <Streaks data={data} c={c} />
         </View>
       </ScrollView>
-      <Pressable accessibilityRole="button" onPress={props.onShare} style={c.phoneCta} testID="dash-share">
-        <Ionicons name="image-outline" size={18} color={colors.onAccent} />
-        <Text style={c.phoneCtaText}>{tr('dash.share')}</Text>
-      </Pressable>
     </View>
   );
 }
@@ -721,7 +737,7 @@ const makeDashStyles = () => {
     shareBtnText: { color: colors.onAccent, fontSize: 13, fontWeight: weight.strong },
     ghostBtn: { height: 36, paddingHorizontal: spacing.lg, borderRadius: radius.control, backgroundColor: colors.inputBg, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
     ghostText: { color: colors.text, fontSize: 13, fontWeight: weight.strong },
-    phoneBody: { paddingHorizontal: spacing.lg, paddingBottom: 110, gap: spacing.md },
+    phoneBody: { paddingHorizontal: spacing.lg, paddingBottom: spacing.xl, gap: spacing.md },
     phoneHero: { borderRadius: radius.surface, padding: 18, backgroundColor: '#0c1a3a', overflow: 'hidden' },
     phoneHeroLabel: { color: 'rgba(255,255,255,0.85)', fontSize: 13 },
     phoneHeroValue: { color: '#ffffff', fontSize: 64, lineHeight: 72, fontWeight: weight.strong, fontVariant: ['tabular-nums'] },
@@ -734,8 +750,6 @@ const makeDashStyles = () => {
     phoneKpiValue: { color: colors.text, fontSize: 22, fontWeight: weight.strong, marginTop: 2, fontVariant: ['tabular-nums'] },
     expand: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, paddingVertical: spacing.sm },
     expandText: { color: colors.accent, fontSize: 13, fontWeight: weight.medium },
-    phoneCta: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: spacing.lg, height: 50, borderRadius: radius.control, backgroundColor: colors.accent, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
-    phoneCtaText: { color: colors.onAccent, fontSize: 15, fontWeight: weight.strong },
     dialogFoot: { flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm },
     previewBox: { alignSelf: 'center', borderRadius: radius.thumb, overflow: 'hidden', backgroundColor: colors.subtleFill, flexShrink: 0 },
     fieldLabel: { color: colors.textMuted, fontSize: typeScale.small },

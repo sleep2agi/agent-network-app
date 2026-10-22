@@ -4,8 +4,10 @@ import UserAvatarEditor from '../../src/UserAvatarEditor';
 import HumanAvatar from '../../src/HumanAvatar';
 import { setLocalAvatarEcho } from '../../src/lib/avatars';
 import { setLanguagePreference } from '../../src/i18n';
-import { setThemePreference } from '../../src/theme';
-setLanguagePreference('zh'); setThemePreference('light');
+import { colors, setThemePreference } from '../../src/theme';
+setLanguagePreference('zh'); setThemePreference(new URLSearchParams(location.search).get('theme') === 'dark' ? 'dark' : 'light');
+document.body.style.backgroundColor = colors.bg;
+window.avatarTheme = colors;
 function Fixture() {
  const [account,setAccount] = useState('a');
  const [human,setHuman] = useState({user_id:'a',username:'same-name',avatar_url:'/avatars/avatar-03.webp'});

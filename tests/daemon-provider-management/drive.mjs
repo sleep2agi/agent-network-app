@@ -1,0 +1,353 @@
+// Real exported React UI, synthetic HTTP fixture, Chromium in Docker.
+import assert from 'node:assert/strict';
+import { serveExport, initScript, findChromium, TEST_LOCALE } from '../test-layout-sweep/harness.mjs';
+const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
+const web = await serveExport(process.env.WEB_DIR);
+const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
+let passed = 0;
+try {
+  for (const viewport of [{ width: 1200, height: 850 }]) {
+    const ctx = await browser.newContext({ locale: TEST_LOCALE, viewport });
+    const page = await ctx.newPage();
+    const errors = []; page.on('pageerror', e => errors.push(String(e)));
+    await page.addInitScript({ content: `(${initScript.toString().replace('http://mock-hub.invalid', 'http://127.0.0.1:9200')})({theme:'light'});` });
+    await page.addInitScript(createCollection => {
+      window.__createCollectionOnly = createCollection; window.__createNodeCalls = [];
+      window.__providerMode = 'ready'; window.__providerCalls = []; window.__savedProviders = {}; window.__providerRevision = 3;
+      window.__providerApplyEnabled = false; window.__applicationIntent = null;
+      window.__appliedIntent = null; window.__wrongApplicationReceipt = false;
+      window.__nodeBinding = 'daemon-a';
+      const daemon = { node_id: 'daemon-a', alias: 'daemon-a', role: 'host_supervisor', lifecycle_state: 'running', config_snapshot: { role: 'host_supervisor' } };
+      const requestId = 'dps_00000000-0000-0000-0000-000000000001';
+      const envelope = payload => ({ jsonrpc: '2.0', id: 1, result: { content: [{ type: 'text', text: JSON.stringify(payload) }] } });
+      window.__routeOverride = (url, text) => {
+        const existing = { node_id: 'n_existing', alias: 'existing-codex', runtime: 'codex-app-server', model: 'existing-model', lifecycle_daemon_node_id: window.__nodeBinding };
+        if (url.pathname === '/api/nodes') return { nodes: [daemon, existing] };
+        if (url.pathname === '/api/status') return { sessions: [daemon, existing].map(n => ({ ...n, version: '2.5.0-preview.129', status: 'idle', updated_at: new Date().toISOString() })) };
+        if (url.pathname === '/api/host-supervisors') return { ok: true, daemons: [{ daemon_node_id: daemon.node_id, alias: daemon.alias, online: true, runtimes_supported: ['codex-app-server'] }] };
+        if (url.pathname !== '/mcp') return;
+        const params = JSON.parse(text || '{}').params;
+        if (window.__createCollectionOnly && params?.name === 'create_node') {
+          window.__createNodeCalls.push(params.arguments);
+          return envelope({ ok: true, request_id: 'fixture-create905', status: 'pending' });
+        }
+        if (params?.name !== 'daemon_provider_snapshot') return;
+        window.__providerCalls.push(params);
+        const applicationId = 'dpa_00000000-0000-0000-0000-000000000002';
+        if (params.arguments.action === 'apply') {
+          window.__applicationIntent = params.arguments;
+          return envelope({ ok: true, request_id: applicationId, status: 'pending' });
+        }
+        if (params.arguments.action === 'read' && params.arguments.id === applicationId) {
+          const intent = window.__applicationIntent;
+          if (!window.__wrongApplicationReceipt) window.__appliedIntent = intent;
+          return envelope({ ok: true, request_id: applicationId, daemon_node_id: 'daemon-a', status: 'succeeded', application: {
+            status: 'applied', request_id: applicationId, node_id: intent.provider.node_id, provider_id: intent.provider.provider_id,
+            auth_id: intent.provider.auth_id, model: window.__wrongApplicationReceipt ? 'wrong-model' : intent.provider.model, runtime_provider: 'anet_' + 'b'.repeat(20),
+            node_revision: 'c'.repeat(64), provider_revision: intent.revision, verification: 'runtime_confirmed', applied_at: Date.now(),
+          } });
+        }
+        if (params.arguments.action === 'put') {
+          if (params.arguments.revision !== window.__providerRevision) return envelope({ ok: false, error: 'revision_conflict' });
+          window.__savedProviders[params.arguments.provider.id] = params.arguments.provider;
+          window.__providerRevision++;
+          return envelope({ ok: true, request_id: requestId, status: 'pending' });
+        }
+        if (params.arguments.action === 'collect') {
+          const intent = params.arguments;
+          if (intent.revision !== window.__providerRevision) return envelope({ ok: false, error: 'revision_conflict' });
+          window.__savedProviders[intent.provider.provider_id] = { id: intent.provider.provider_id, label: intent.provider.label, enabled: true,
+            runtimes: [{ runtime: 'codex-tui', auth: [{ id: intent.provider.auth_id, kind: 'api_key', models: ['existing-model'], baseUrl: 'https://api.example.test/v1' }] }] };
+          window.__providerRevision++;
+          return envelope({ ok: true, request_id: requestId, status: 'pending' });
+        }
+        if (window.__providerMode === 'forbidden') return envelope({ ok: false, error: 'provider_admin_required' });
+        if (window.__providerMode === 'unsupported') return { jsonrpc: '2.0', id: 1, error: { message: 'Unknown tool daemon_provider_snapshot' } };
+        if (window.__providerMode === 'timeout') return envelope({ ok: true, request_id: requestId, daemon_node_id: daemon.node_id, status: 'pending' });
+        if (params.arguments.action === 'refresh') return envelope({ ok: true, request_id: requestId, status: 'pending' });
+        const value = { network_id: 'net-sweep', daemon_node_id: window.__providerMode === 'foreign' ? 'daemon-b' : 'daemon-a', source: 'daemon', revision: 3, providers: [
+          { id: 'deepseek', label: 'DeepSeek', enabled: true, runtimes: [{ runtime: 'codex-tui', auth: [
+            { id: 'work', kind: 'api_key', models: ['deepseek-chat', 'deepseek-reasoner'], baseUrl: 'https://api.example.test/v1', credential_present: true, verification: 'not_checked', application: 'not_applied' },
+          ] }] },
+          { id: 'openai', label: 'OpenAI', enabled: false, runtimes: [{ runtime: 'codex-tui', auth: [
+            { id: 'personal', kind: 'chatgpt', models: ['model-fixture'], credential_present: false, verification: 'not_checked', application: 'not_applied' },
+          ] }] },
+        ], codex_inventory: { observed_at: Date.now(), scope: 'hub_bound_nodes', installation: { status: 'found', version: '0.133.0' }, rows: [{
+          node_id: 'n_existing', alias: 'existing-codex', status: 'observed', runtime: 'codex-app-server', home_ref: '1234567890abcdef', home_source: 'node-codex-home',
+          config_status: 'read', configured_provider: window.__appliedIntent ? 'anet_' + 'b'.repeat(20) : 'configured-custom',
+          configured_model: window.__appliedIntent?.provider.model ?? 'existing-model', node_configured_model: window.__appliedIntent?.provider.model ?? 'node-model', provider_ids: ['configured-custom'],
+          auth_kind: 'api_key', credential_status: 'unknown', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked',
+          ...(window.__providerApplyEnabled ? { config_revision: (window.__appliedIntent ? 'c' : 'a').repeat(64) } : {}),
+        }], local_discovery: { status: 'observed', rows: [{
+          node_id: 'n_manual', alias: 'manual-codex', status: 'observed', runtime: 'codex-app-server', home_ref: '2234567890abcdef', home_source: 'node-codex-home',
+          config_status: 'read', configured_provider: 'openai', configured_model: 'manual-model', node_configured_model: 'manual-model', provider_ids: ['openai'],
+          auth_kind: 'chatgpt', credential_status: 'present', account_fingerprint: null, verification: 'not_checked', effective_state: 'not_checked', config_revision: null,
+        }] } } };
+        if (window.__providerMode === 'empty') value.providers = [];
+        if (window.__createCollectionOnly) value.providers = [];
+        if (window.__providerMode === 'ready') {
+          value.revision = window.__providerRevision;
+          for (const p of Object.values(window.__savedProviders)) {
+            value.providers = value.providers.filter(old => old.id !== p.id);
+            value.providers.push({ ...p, runtimes: p.runtimes.map(r => ({ ...r, auth: r.auth.map(({ key, ...a }) => ({ ...a,
+              credential_present: a.kind === 'api_key', verification: 'not_checked', application: 'not_applied',
+            })) })) });
+          }
+        }
+        return envelope({ ok: true, request_id: requestId, daemon_node_id: 'daemon-a', status: 'succeeded', observed_at: Date.now(), snapshot: value });
+      };
+    }, process.env.CORE_CREATE_COLLECTION === '1');
+    await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+    await page.waitForFunction(() => !!window.__anetLayoutSweep);
+    if (process.env.CORE_CREATE_COLLECTION === '1') {
+      await page.evaluate(() => {
+        window.__providerApplyEnabled = true;
+        window.__anetLayoutSweep.setScreen({ name: 'wizard', daemon: {
+          daemon_node_id: 'daemon-a', alias: 'daemon-a', online: true,
+          runtimes_supported: ['codex-app-server'], can_create_nodes: true,
+        } });
+      });
+      await page.getByPlaceholder('例如 my-agent-1').fill('provider-demo');
+      await page.getByText('下一步', { exact: true }).click();
+      await page.getByTestId('create-daemon-provider-mode-true').click();
+      await page.getByTestId('daemon-provider-collect-source').click();
+      await page.getByTestId('daemon-provider-collect-source-menu-opt-n_existing').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-collect-source-menu-opt-n_manual').count(), 0); passed++;
+      await page.getByTestId('daemon-provider-collect-source-menu-opt-n_existing').click();
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect').length), 0);
+      assert.equal(await page.evaluate(() => window.__createNodeCalls.length), 0); passed++;
+      await page.getByTestId('daemon-provider-collect').click();
+      await page.getByTestId('daemon-provider-collect-confirm').waitFor();
+      await page.getByText('取消', { exact: true }).click();
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect').length), 0); passed++;
+      await page.getByTestId('daemon-provider-collect').click();
+      await page.getByTestId('daemon-provider-collect-confirm').click();
+      await page.waitForFunction(() => document.querySelector('[data-testid="create-daemon-provider-collection-status"]')?.textContent?.includes('已收录并选用'));
+      const collected = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect'));
+      assert.equal(collected.length, 1);
+      assert.deepEqual(collected[0].arguments.provider, { node_id: 'n_existing', alias: 'existing-codex',
+        node_revision: 'a'.repeat(64), provider_id: 'configured-custom', auth_id: 'source_n_existing', label: 'configured-custom' }); passed++;
+      assert.equal(await page.evaluate(() => window.__createNodeCalls.length), 0); passed++;
+      assert((await page.getByTestId('create-daemon-provider-providerId').innerText()).includes('configured-custom'));
+      assert((await page.getByTestId('create-daemon-provider-model').innerText()).includes('existing-model')); passed++;
+      if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/create-collected-provider.png`, fullPage: true });
+      await page.getByText('下一步', { exact: true }).click();
+      await page.getByTestId('create-node-submit').waitFor();
+      assert((await page.getByTestId('create-step-body').innerText()).includes('configured-custom')); passed++;
+      await page.getByTestId('create-node-submit').click();
+      await page.waitForFunction(() => window.__createNodeCalls.length === 1);
+      const created = await page.evaluate(() => window.__createNodeCalls[0]);
+      assert.equal(created.daemon_node_id, 'daemon-a');
+      assert.equal(created.node_spec.model, 'existing-model');
+      assert.deepEqual(created.node_spec.flags.daemonProvider, { revision: 4, provider_id: 'configured-custom', auth_id: 'source_n_existing', model: 'existing-model' }); passed++;
+      assert(!JSON.stringify(created).includes('baseUrl') && !JSON.stringify(created).includes('key')); passed++;
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), 0); passed++;
+      assert.deepEqual(errors, []); passed++;
+      await ctx.close(); continue;
+    }
+    const chooseProfile = async (model, includeNode = false) => {
+      for (const [field, id] of Object.entries({ ...(includeNode ? { nodeId: 'n_existing' } : {}), providerId: 'deepseek', authId: 'work', model })) {
+        const control = `daemon-provider-select-${field}`;
+        await page.getByTestId(control).click();
+        await page.getByTestId(`${control}-menu-opt-${id}`).click();
+      }
+    };
+    const applyAndObserve = async (model, includeNode = false) => {
+      await chooseProfile(model, includeNode);
+      const writes = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length);
+      await page.getByTestId('daemon-provider-apply').click();
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), writes); passed++;
+      await page.getByTestId('daemon-provider-apply-confirm').click();
+      await page.waitForFunction(({ model, daemon }) => {
+        const panel = document.querySelector(`[data-testid="${daemon ? 'daemon-codex-row-n_existing' : 'node-provider-current-config'}"]`);
+        return panel?.textContent?.includes('anet_' + 'b'.repeat(20)) && panel.textContent.includes(model);
+      }, { model, daemon: includeNode });
+      await page.getByTestId('daemon-provider-select-providerId').waitFor();
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), writes + 1); passed++;
+    };
+    if (process.env.CORE_NODE_SWITCH === '1') {
+      await page.evaluate(() => { window.__providerApplyEnabled = true; window.__anetLayoutSweep.setScreen({ name: 'nodeInfo', alias: 'existing-codex' }); });
+      await page.getByTestId('node-section-nav').getByText('模型与运行时', { exact: true }).click();
+      await page.getByTestId('daemon-provider-select-providerId').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-select-nodeId').count(), 0); passed++;
+      await applyAndObserve('deepseek-chat');
+      const applied = await page.evaluate(() => window.__applicationIntent);
+      assert.equal(applied.provider.node_id, 'n_existing');
+      assert.equal(applied.provider.provider_id, 'deepseek');
+      assert.equal(applied.provider.model, 'deepseek-chat'); passed++;
+      await applyAndObserve('deepseek-reasoner');
+      assert.equal(await page.evaluate(() => window.__applicationIntent.provider.node_revision), 'c'.repeat(64)); passed++;
+      if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/node-provider-refreshed.png`, fullPage: true });
+      await page.evaluate(() => { window.__wrongApplicationReceipt = true; });
+      await chooseProfile('deepseek-chat');
+      const scans = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'refresh').length);
+      await page.getByTestId('daemon-provider-apply').click();
+      await page.getByTestId('daemon-provider-apply-confirm').click();
+      await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-application-status"]')?.textContent?.includes('尚未确认'));
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'refresh').length), scans);
+      assert((await page.getByTestId('node-provider-current-config').innerText()).includes('deepseek-reasoner'));
+      assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), true); passed++;
+      await page.evaluate(() => { window.__nodeBinding = null; window.__anetLayoutSweep.setScreen({ name: 'agents' }); });
+      await page.getByTestId('node-daemon-provider').waitFor({ state: 'detached' });
+      await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'nodeInfo', alias: 'existing-codex' }));
+      await page.getByTestId('node-section-nav').getByText('模型与运行时', { exact: true }).click();
+      await page.getByTestId('node-provider-manage-binding').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-apply').count(), 0); passed++;
+      assert.deepEqual(errors, []); passed++;
+      if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/node-provider-binding.png`, fullPage: true });
+      await ctx.close(); continue;
+    }
+    await page.getByTestId('desktop-workspace-sidebar').waitFor();
+    assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 1); passed++;
+    await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: 'daemon-a', daemonMgmt: true }));
+    await page.getByTestId('daemon-section-tabs-provider').click();
+    assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 0); passed++;
+    const panel = page.getByTestId('daemon-providers-real');
+    await page.getByTestId('daemon-provider-deepseek').waitFor();
+    if (process.env.CORE_APPLY_REFRESH === '1') {
+      await page.evaluate(() => { window.__providerApplyEnabled = true; });
+      await page.getByTestId('daemon-providers-refresh').click();
+      await page.getByTestId('daemon-provider-deepseek').waitFor();
+      await applyAndObserve('deepseek-chat', true);
+      await applyAndObserve('deepseek-reasoner', true);
+      assert.equal(await page.evaluate(() => window.__applicationIntent.provider.node_revision), 'c'.repeat(64)); passed++;
+      assert.deepEqual(errors, []); passed++;
+      if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/daemon-provider-refreshed.png`, fullPage: true });
+      await ctx.close(); continue;
+    }
+    if (process.env.CORE_COLLECTION_ONLY === '1') {
+      await page.evaluate(() => { window.__providerApplyEnabled = true; });
+      await page.getByTestId('daemon-providers-refresh').click();
+      await page.getByTestId('daemon-provider-collect-source').click();
+      await page.getByTestId('daemon-provider-collect-source-menu-opt-n_existing').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-collect-source-menu-opt-n_manual').count(), 0); passed++;
+      await page.getByTestId('daemon-provider-collect-source-menu-opt-n_existing').click();
+      assert.equal(await page.getByTestId('daemon-provider-collect-providerId').inputValue(), 'configured-custom');
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect').length), 0); passed++;
+      await page.getByTestId('daemon-provider-collect').click();
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect').length), 0); passed++;
+      await page.getByTestId('daemon-provider-collect-confirm').click();
+      await page.getByTestId('daemon-provider-configured-custom').waitFor();
+      const calls = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'collect'));
+      assert.equal(calls.length, 1);
+      assert.deepEqual(calls[0].arguments.provider, { node_id: 'n_existing', alias: 'existing-codex', node_revision: 'a'.repeat(64),
+        provider_id: 'configured-custom', auth_id: 'source_n_existing', label: 'configured-custom' });
+      assert.equal(calls[0].arguments.revision, 3); passed++;
+      for (const [field, id] of Object.entries({ nodeId: 'n_existing', providerId: 'configured-custom', authId: 'source_n_existing', model: 'existing-model' })) {
+        const control = `daemon-provider-select-${field}`;
+        await page.getByTestId(control).click(); await page.getByTestId(`${control}-menu-opt-${id}`).click();
+      }
+      assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), false);
+      assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), 0); passed++;
+      assert.deepEqual(errors, []); passed++;
+      if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/provider-collection.png`, fullPage: true });
+      await ctx.close(); continue;
+    }
+    assert((await panel.innerText()).includes('deepseek-chat')); passed++;
+    assert((await panel.innerText()).includes('未验证')); passed++;
+    assert((await panel.innerText()).includes('尚未应用')); passed++;
+    assert((await page.getByTestId('daemon-provider-current-version').innerText()).includes('2.5.0-preview.129')); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-upgrade-guidance').count(), 0); passed++;
+    const inventory = await page.getByTestId('daemon-codex-inventory').innerText();
+    assert(inventory.includes('existing-codex') && inventory.includes('existing-model') && inventory.includes('0.133.0')); passed++;
+    assert(inventory.includes('凭据状态未知') && inventory.includes('不重启')); passed++;
+    const discovery = await page.getByTestId('daemon-codex-local-discovery').innerText();
+    assert(discovery.includes('manual-codex') && discovery.includes('manual-model') && discovery.includes('未绑定')); passed++;
+    assert(discovery.includes('不复制登录') && discovery.includes('不能直接切换')); passed++;
+    const discoveryCalls = await page.evaluate(() => window.__providerCalls);
+    assert(discoveryCalls.some(c => c.arguments.action === 'read' && c.arguments.include_discovery === true)); passed++;
+    if (process.env.CORE_DISCOVERY_ONLY === '1') {
+      await page.screenshot({ path: '/output/codex-discovery.png', fullPage: true });
+      await page.getByTestId('daemon-provider-select-nodeId').click();
+      await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_existing').waitFor();
+      assert.equal(await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_manual').count(), 0); passed++;
+      assert.equal(await page.getByTestId('daemon-provider-select-nodeId-menu-opt-n_existing').count(), 1); passed++;
+      await page.screenshot({ path: '/output/codex-discovery-selection.png', fullPage: true });
+      await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'agents' }));
+      await page.getByTestId('desktop-workspace-sidebar').waitFor();
+      assert.equal(await page.getByTestId('desktop-workspace-sidebar').count(), 1); passed++;
+      assert.deepEqual(errors, []); passed++;
+      await ctx.close(); continue;
+    }
+    for (const [field, id] of Object.entries({ nodeId: 'n_existing', providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' })) {
+      const control = `daemon-provider-select-${field}`;
+      await page.getByTestId(control).click();
+      await page.getByTestId(`${control}-menu-search`).fill(id);
+      await page.getByTestId(`${control}-menu-opt-${id}`).click();
+    }
+    const selection = await page.getByTestId('daemon-provider-selection-summary').innerText();
+    assert(selection.includes('n_existing') && selection.includes('deepseek-chat') && selection.includes('work'));
+    assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), true); passed++;
+    assert((await page.getByTestId('daemon-providers-counts').innerText()).includes('2')); passed++;
+    const calls = await page.evaluate(() => window.__providerCalls);
+    assert.equal(calls[0].arguments.id, 'daemon-a'); assert.equal(calls[0].arguments.network_id, 'net-sweep'); passed++;
+    for (const [field, value] of Object.entries({ id: 'custom', label: 'My provider', authId: 'work', baseUrl: 'https://api.example.test/v1', models: 'model-save', key: 'TEST-ONLY-UI-KEY' })) {
+      await page.getByTestId(`daemon-provider-input-${field}`).fill(value);
+    }
+    await page.getByTestId('daemon-provider-save').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-save-status"]')?.textContent?.includes('已确认保存'));
+    assert((await page.getByTestId('daemon-provider-custom').innerText()).includes('model-save'));
+    assert.equal(await page.getByTestId('daemon-provider-input-key').inputValue(), '');
+    assert(!(await panel.innerText()).includes('TEST-ONLY-UI-KEY')); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-selection-summary').count(), 0); passed++;
+    const writesBefore = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').length);
+    await page.getByTestId('daemon-provider-toggle-custom').click();
+    assert((await page.getByTestId('daemon-provider-toggle-confirm-custom').innerText()).includes('不会停止'));
+    assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').length), writesBefore); passed++;
+    await page.getByTestId('daemon-provider-toggle-submit-custom').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-custom"]')?.textContent?.includes('已停用配置'));
+    const toggleWrite = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').at(-1).arguments);
+    assert.equal(toggleWrite.revision, 4); assert.equal(toggleWrite.provider.enabled, false);
+    assert.equal(toggleWrite.provider.runtimes[0].auth[0].key, undefined);
+    assert((await page.getByTestId('daemon-provider-custom').innerText()).includes('model-save')); passed++;
+    await page.getByTestId('daemon-provider-toggle-custom').click();
+    await page.getByTestId('daemon-provider-toggle-submit-custom').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-provider-custom"]')?.textContent?.includes('已启用配置'));
+    assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'put').at(-1).arguments.revision), 5); passed++;
+    await page.evaluate(() => { window.__providerApplyEnabled = true; });
+    await page.getByTestId('daemon-providers-refresh').click();
+    await page.getByTestId('daemon-provider-custom').waitFor();
+    assert.equal(await page.getByTestId('daemon-provider-save-status').count(), 0); passed++;
+    for (const [field, id] of Object.entries({ nodeId: 'n_existing', providerId: 'deepseek', authId: 'work', model: 'deepseek-chat' })) {
+      const control = `daemon-provider-select-${field}`;
+      await page.getByTestId(control).click();
+      await page.getByTestId(`${control}-menu-search`).fill(id);
+      await page.getByTestId(`${control}-menu-opt-${id}`).click();
+    }
+    await page.getByTestId('daemon-provider-apply').click();
+    assert.equal(await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply').length), 0); passed++;
+    await page.getByTestId('daemon-provider-apply-confirm').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-codex-row-n_existing"]')?.textContent?.includes('deepseek-chat'));
+    const applied = await page.evaluate(() => window.__providerCalls.filter(c => c.arguments.action === 'apply'));
+    assert.equal(applied.length, 1); assert.equal(applied[0].arguments.revision, 6);
+    assert.deepEqual(applied[0].arguments.provider, { node_id: 'n_existing', node_revision: 'a'.repeat(64), provider_id: 'deepseek', auth_id: 'work', model: 'deepseek-chat', confirm_restart: true }); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-apply').isDisabled(), true); passed++;
+    await page.evaluate(() => { window.__providerMode = 'unsupported'; });
+    await page.getByTestId('daemon-providers-refresh').click();
+    await page.getByTestId('daemon-provider-upgrade-guidance').waitFor();
+    assert((await page.getByTestId('daemon-providers-state').innerText()).includes('路由配置')); passed++;
+    const targets = await page.getByTestId('daemon-provider-upgrade-guidance').innerText();
+    for (const version of ['0.9.0-preview.121', '2.3.0-preview.163', '2.5.0-preview.129']) assert(targets.includes(version));
+    assert(targets.includes('无需降级')); passed++;
+    if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/provider-upgrade-targets.png`, fullPage: true });
+    await page.evaluate(() => { window.__providerMode = 'timeout'; });
+    await page.getByTestId('daemon-providers-refresh').click();
+    await page.waitForFunction(() => document.querySelector('[data-testid="daemon-providers-state"]')?.textContent?.includes('超时不能证明'), undefined, { timeout: 25000 });
+    assert((await page.getByTestId('daemon-provider-upgrade-guidance').innerText()).includes('不要反复升级')); passed++;
+    assert.equal(await page.getByTestId('daemon-provider-deepseek').count(), 0); passed++;
+    if (process.env.OUT_DIR) await page.screenshot({ path: `${process.env.OUT_DIR}/provider-timeout-not-version.png`, fullPage: true });
+    assert.deepEqual(errors, []); passed++;
+    await ctx.close();
+  }
+  console.log(process.env.CORE_CREATE_COLLECTION === '1'
+    ? `PASS create existing Provider UI ${passed}/${passed} (explicit collect/cancel, exact saved selection and identifier-only create request; synthetic Hub, not a native registered node)`
+    : process.env.CORE_APPLY_REFRESH === '1'
+    ? `PASS daemon Provider apply refresh UI ${passed}/${passed} (two confirmed switches, authoritative scan, renewed node revision; synthetic Hub, no real runtime)`
+    : process.env.CORE_COLLECTION_ONLY === '1'
+    ? `PASS Provider collection UI ${passed}/${passed} (opt-in source, confirm once, exact intent, saved profile selectable; synthetic Hub, no native credential access)`
+    : process.env.CORE_NODE_SWITCH === '1'
+    ? `PASS node Provider switch UI ${passed}/${passed} (two switches, refreshed configuration/CAS, wrong receipt no refresh/retry, unbound refusal; synthetic Hub, no real runtime)`
+    : process.env.CORE_DISCOVERY_ONLY === '1'
+    ? `PASS existing Codex discovery UI ${passed}/${passed} (bound/manual readback, opt-in request, read-only boundary, selection exclusion; synthetic Hub, no real runtime)`
+    : `PASS daemon Provider management UI ${passed}/${passed} (inventory, save, enable/disable, application, exact version guidance, unsupported and timeout; synthetic Hub, no real runtime)`);
+} finally { await browser.close(); web.close(); }

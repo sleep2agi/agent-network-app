@@ -201,9 +201,9 @@ eq('no schedules at all → onboarding copy regardless of filter', emptyStateFor
 const screen = readFileSync(new URL('./ScheduledTasksScreen.tsx', import.meta.url), 'utf8');
 const has = (label: string, needle: string) => ck(`wiring: ${label}`, screen.includes(needle), needle);
 has('filter state starts at the default', 'useState<ScheduleFilter>(DEFAULT_SCHEDULE_FILTER)');
-has('list = filtered + sorted', 'visibleSchedules(items, filter)');
+has('list = filtered + sorted', 'visibleSchedules(hubScoped, filter)');
 has('chips come from counts', 'filterChips(counts, filter)');
-has('counts from all items', 'countByStatus(items)');
+has('counts follow the search and node scope', 'countByStatus(hubScoped)');
 has('rows use the row model', 'scheduleRowModel(row, now, DEVICE_TIMEZONE)');
 has('row time only when present', '{vm.when ? <Text');
 has('status pill uses the Chinese label', '<StatusPill label={vm.status.label} tone={vm.status.tone} />');
@@ -220,7 +220,7 @@ has('history is loaded for the selected schedule', 'fetchScheduledRuns(cfg, sche
 has('prompt is selectable', '<Text style={s.prompt} selectable testID="schedule-content-card">{row.task_content}</Text>');
 has('detail actions gated by scheduledTaskActions', 'scheduledTaskActions(row.status)');
 has('run-now action', "onAction(row, 'run')");
-has('empty state per filter', 'emptyStateFor(filter, items.length)');
+has('empty state per filter', 'emptyStateFor(filter, hubNarrowed ? hubScoped.length : items.length, hubNarrowed)');
 ck('wiring: raw status is never rendered as text', !screen.includes('>{row.status}<'));
 ck('wiring: the old full-card history modal is gone', !screen.includes('HistoryModal'));
 ck('wiring: old big subtitle is gone', !screen.includes('Hub 统一调度 · 节点离线自动排队'));

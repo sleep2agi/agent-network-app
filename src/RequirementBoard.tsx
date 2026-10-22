@@ -1,9 +1,12 @@
 import { ownerCounts, ownerLabel } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import TaskListTable from './TaskListTable';
+import TaskListPager from './TaskListPager';
+import { taskListPage } from './task-list-pagination';
 import TaskGantt from './TaskGantt';
 import TaskCalendar from './TaskCalendar';
 import TaskDashboard from './TaskDashboard';
+import { statsProject, tagStatusFilter } from './task-tag-status';
 import TaskActivity from './TaskActivity';
 import { TaskTagFilter } from './TaskTags';
 import { useTranslation } from './i18n-react';
@@ -153,6 +156,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const [drawerWidth, setDrawerWidth] = useDrawerWidth(width);
   const pagerRef = useRef<ScrollView>(null);
   const [page, setPage] = useState(0);
+  const [listPaging, setListPaging] = useState({ key: '', page: 0 });
+  const listScrollRef = useRef<ScrollView>(null);
   const pageWidth = layout.mode === 'paged' ? layout.pageWidth : 0;
   // 旋转 / 折叠后页宽变了:停在同一列上,而不是停在旧偏移量(两列中间)。
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -760,8 +765,21 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const owners = useMemo(() => ownerCounts(items, people), [items, people, language]);
   const draggingItem = dragView.phase === 'dragging' ? items.find(row => row.id === dragView.id) || null : null;
   const listRows = useMemo(() => sortRows(visible, sort, people, projects ?? []), [visible, sort, people, projects]);
+  // Bound mounted rows without changing the existing loaded-data/filter/count contract.
+  const listQueryKey = JSON.stringify([scope, filter, sort, search.q, search.archived, narrow]);
+  const orderedListRows = useMemo(() => narrow ? columns.flatMap(col => col.items) : listRows, [narrow, columns, listRows]);
+  const listWindow = taskListPage(orderedListRows.length, listPaging.key === listQueryKey ? listPaging.page : 0);
+  const pageRows = useMemo(() => orderedListRows.slice(listWindow.start, listWindow.end), [orderedListRows, listWindow.start, listWindow.end]);
+  const pageColumns = useMemo(() => {
+    const ids = new Set(pageRows.map(row => row.id));
+    return columns.map(col => ({ ...col, matchedCount: col.items.length, items: col.items.filter(item => ids.has(item.id)) })).filter(col => col.items.length);
+  }, [columns, pageRows]);
+  useEffect(() => {
+    setListPaging(current => current.key !== listQueryKey || current.page !== listWindow.page ? { key: listQueryKey, page: listWindow.page } : current);
+    listScrollRef.current?.scrollTo({ y: 0, animated: false });
+  }, [listQueryKey, listWindow.page]);
   // Shift 单击连选按「当前显示的顺序」:列表按排序后的行,看板按 需求池 → 进行中 → 完成 各列从上到下。
-  const order = useMemo(() => (section === 'list' ? listRows.map(r => r.id) : columns.flatMap(c => c.items.map(i => i.id))), [section, listRows, columns]);
+  const order = useMemo(() => (section === 'list' ? pageRows.map(r => r.id) : columns.flatMap(c => c.items.map(i => i.id))), [section, pageRows, columns]);
   useEffect(() => { setSel(cur => pruneSelection(cur, items.map(i => i.id))); }, [items]);
   useEffect(() => { setSel(NO_SELECTION); }, [section, scope]);
   const onCardPress = (id: string, e?: { nativeEvent?: any }) => {
@@ -1253,16 +1271,18 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   ) : null);
 
   const list = () => {
+    const pager = <TaskListPager page={listWindow} onPage={page => setListPaging({ key: listQueryKey, page })} partial={truncated || (serverCurrent && !!serverHits.next)} />;
     if (narrow) {
       // 手机:按状态分组的列表。
       return (
-        <ScrollView style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl }} testID="req-list">
-          {columns.map(col => (
+        <View style={{ flex: 1, minHeight: 0 }}><ScrollView ref={listScrollRef} style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.xl }} testID="req-list">
+          {!pageRows.length ? <Text style={[s.muted, { padding: spacing.lg }]}>{tr(filterActive(filter) ? 'tasks.copy.46' : 'tasks.copy.55')}</Text> : null}
+          {pageColumns.map(col => (
             <View key={col.column} testID={`req-group-${col.column}`}>
               <View style={s.groupHead}>
                 <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
                 <Text style={[s.columnName, statusCapsuleText(col.column, col.column === 'abandoned' ? colors.textMuted : colors.text)]}>{taskText(REQ_COLUMN_LABEL[col.column])}</Text>
-                <View style={s.countPill}><Text style={s.countText}>{col.items.length}</Text></View>
+                <View style={s.countPill}><Text style={s.countText}>{col.matchedCount}</Text></View>
               </View>
               {col.items.length ? (
                 <View style={s.groupList}>
@@ -1290,14 +1310,14 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
             </View>
           ))}
           {abandonedToggle()}
-        </ScrollView>
+        </ScrollView>{pager}</View>
       );
     }
-    const rows = listRows;
-    return <View style={{ flex: 1, minHeight: 0 }}><TaskListTable rows={rows} terms={terms} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
+    const rows = pageRows;
+    return <View style={{ flex: 1, minHeight: 0 }}><TaskListTable rows={rows} pageKey={`${listQueryKey}:${listWindow.page}`} terms={terms} people={people} projects={projects} sort={sort} setSort={setSort} s={s} today={today} selectedId={selectedId} onOpen={openDetail} touch={!pointer} onMenu={openMenuAt} filtered={filterActive(filter)} needsUpdateUpgrade={items.some(item => item.updatedAt === undefined)} items={items}
       selection={pointer ? { ids: sel.ids, onToggle: id => setSel(cur => toggleSelected(cur, id)), onPress: (id, e) => onCardPress(id, e as { nativeEvent?: any }) } : undefined}
       onProject={(id, pid) => { void setProject(id, pid); }} seqCapable={seqCapable}
-      edit={{ onEdit: editCell, onLoadPeople: () => { void loadPeople(); }, ctx: { people, peopleLoading, projects, networkId: cfg.networkId || '', twoRoles, lowestPriority, allowTime: dueDatetime, tagChoices: tagCatalog?.tags ?? [...new Set(items.flatMap(it => it.tags ?? []))], tagColors: tagCatalog?.colors } }} />{abandonedToggle()}</View>;
+      edit={{ onEdit: editCell, onLoadPeople: () => { void loadPeople(); }, ctx: { people, peopleLoading, projects, networkId: cfg.networkId || '', twoRoles, lowestPriority, allowTime: dueDatetime, tagChoices: tagCatalog?.tags ?? [...new Set(items.flatMap(it => it.tags ?? []))], tagColors: tagCatalog?.colors } }} />{abandonedToggle()}{pager}</View>;
   };
 
   // 搜索时结果上方:数量 + 被筛选挡住了几个(一键清掉)+ 服务端的「加载更多」。
@@ -1328,7 +1348,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
         ) : section !== 'dashboard' && section !== 'activity' && terms.length && !visible.length && !searchBlockedByAbandoned ? <SearchEmpty q={search.q} s={s} filtered={filterActive(filter)} partial={truncated && !serverSearchCap} onClear={closeSearch} />
         : section === 'list' ? list()
           : section === 'calendar' ? <TaskCalendar items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
-          : section === 'dashboard' ? <TaskDashboard cfg={cfg} items={items} projects={projects} people={people} s={s} phone={narrow} statsCapable={statsCapable} onOpen={openFromDashboard} />
+          : section === 'dashboard' ? <TaskDashboard cfg={cfg} items={items} projects={projects} people={people} s={s} phone={narrow} statsCapable={statsCapable} projectFilter={statsProject(filter.project)} onProject={project => setTaskFilter({ ...filter, project: project === 'none' ? NO_PROJECT : project ?? '' })} onOpen={openFromDashboard} onTagStatus={(tag, status) => { clearSearch(); setTaskSearch({ ...EMPTY_SEARCH }); setTaskFilter(tagStatusFilter(tag, status, filter.project)); setTaskSection('list'); }} />
           : section === 'activity' && eventsCapable ? <TaskActivity cfg={cfg} items={items} projects={projects} people={people} meId={meId} s={s} phone={narrow} onOpen={openFromDashboard} />
           : section === 'gantt' ? <TaskGantt items={visible} terms={terms} projects={projects} people={people} today={today} s={s} onOpen={openDetail} selectedId={selectedId} phone={narrow} startCapable={startCapable} onDue={pointer ? (id, due) => { void setDue(id, due); } : undefined} />
             : kanban();

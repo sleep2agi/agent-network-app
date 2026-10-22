@@ -4,6 +4,7 @@ registerTranslations({
   'backendPending.tab.skills': ['SKILLS', 'SKILLS'],
   'backendPending.tab.tokens': ['令牌', 'Tokens'],
   'backendPending.tab.provider': ['Provider', 'Provider'],
+  'backendPending.tab.runtime': ['Runtime 支持', 'Runtime support'],
   'backendPending.layer.hub': ['Hub 层', 'Hub layer'],
   'backendPending.layer.daemon': ['Daemon 层', 'Daemon layer'],
   'backendPending.layer.node': ['Node 层', 'Node layer'],

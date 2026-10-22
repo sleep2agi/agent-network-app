@@ -1,0 +1,24 @@
+PUBLIC RELEASE DELIVERY, 2026-10-11T11:49Z, no production-node changes.
+Source main897f27ed2b66283104f6d74a3f1000b251752d73; selected platforms macOS
+Apple Silicon / Windows x64 / Android. Linux not selected.
+Desktop GitHub/updater and installer proof remains independent of this note.
+
+Desktop China mirror continuation38136281592 SUCCESS, finished11:46:51Z;
+anonymous desktop/latest/VERSION=0.2.240. SHA256SUMS matches the original
+public DMG7e3b7be45d6777323b83ad324eec7db5f3b731f0eaf3fd6f2648e5c22f3564dd
+and EXEce5ff7fde8c9490e10ee41c0981a4dddf70945b4e86d1485f54156b7345d9559.
+Earlier mirrors38135839439/38135840982 were CANCELLED, not successful.
+
+Android build38134486043 SUCCESS; exact-main publisher38136239391 SUCCESS,
+job114460572746 completed2026-10-11T11:47:32Z. All source/version gates passed.
+Publisher verified four anonymous paths including full APK byte hash; root
+independently read android/latest/VERSION0.2.240 and notes for0.2.240, then
+downloaded the complete anonymous APK:83712713 bytes and SHA256
+ba6805363463fad69cce699d319967ca9c380aa9e4f61db31e0a1e175fcba1c2,
+matching the anonymous .apk.sha256. Official updater channel is populated.
+URL: https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android/agent-network-0.2.240.apk
+Temporary root download: /tmp/anet-release240-android-y54CU5/agent-network-0.2.240.apk.
+No install or real-device execution was performed. Existing Android signing
+channel is unchanged; no Play Store publication or real inference claim.
+This version contains node Provider/auth/model switching, NOT Hub907,
+collection848 or creation2600. Those require their own merged main release.

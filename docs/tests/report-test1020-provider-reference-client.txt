@@ -1,0 +1,46 @@
+Saved Hub key → Provider → explicit Daemon selection (TEST ONLY)
+OBSERVED_AT=2026-10-11T14:50Z / 22:50 Asia/Shanghai
+Base main 15756698b9cc9b3e6a760959b2a730ece9352c8c; refs #1020 / #907.
+
+All tests in independent tests/hub-provider-management/Dockerfile, pinned public
+Bun/Node/Playwright bases and repo npm lockfile. No host package installation.
+Core image sha256:65e1f9a3f81203983fb7861a5876c61613db8a84b29842b2eb01d41d9e64d7a6:
+4/4 parser/form/routes groups PASS; npm run typecheck exit0.
+Core backend dependency passed separately in agent-network PR2607, actual Hub
+registered handler + vault + daemon queue + pinned CLI store, 6/6,43 assertions.
+
+Exported React Chromium image
+sha256:062b86a9818b6e49de980194e9741c9a7fb9ec9a262752b1e4760dafec53fc3f:
+25/25 assertions PASS, desktop/light and phone/dark. Synthetic HTTP/native IPC
+fixture checks new-key save, key clearing, no automatic bind, confirmed exact
+Daemon receipt, wrong-target failure, name-only saved-key selection, absent
+plaintext field, reference-only write and separate confirmed bind. Theme palette
+and no page errors asserted. This is not a real native installation, live Hub
+credential read, vendor/model entitlement or inference proof.
+
+Commands: sg docker build --target core/browser; docker run --rm --init
+--network none (browser --shm-size=1g). No production write/restart/node mutation.
+Cleanup: containers removed; screenshots remain only within removed containers.
+No branch public artifact, npm publication or updater channel change. Full
+main-based formal publication remains a separate step. Older Hub catalogs remain
+readable; saved-key mode requires opt-in Hub capability, release target125.
+Other runtime adapters/automatic rotation remain open under parent #907.
+
+Increment OBSERVED_AT=2026-10-11T15:02:28Z / 23:02 Asia/Shanghai
+Original e74929c CI Ubuntu job114497757331: actual job logs show 404/405 files,
+sole failure src/ui-scale-wiring.test.ts from base PreloginUpdateCheck raw Text.
+The initial gh cached log was partial; the exact jobs/<id>/logs endpoint supplied
+the terminal failure. No Provider-reference core assertion failed in that job.
+Merged current main83b02824241880f460d2a4ae9197b6adcc594c10 into the original
+feature branch (merge17b58568ea33c8f2ed8b1b69cff591d2533b4567), reusing its
+existing scaled Text correction without relaxing the guard or duplicating it.
+
+Independent source Docker image rebuilt:
+sha256:3f880e03f85f8dd15f65ace8e0e62c6950b6099bc35937378f8f46868b712b97.
+--rm --init --network none: reference core4/4 PASS, UI scaling48/48 PASS,
+npm run typecheck exit0. A premature attempt before image export finished exited
+125 (image unavailable); it was setup-only, not test execution or a product FAIL.
+The finished-image run above is the accepted result. No unchanged browser drive
+or native installer suite rerun; their earlier evidence remains scoped to e749.
+Containers removed, no production calls. New cloud head must earn its own CI;
+this report does not inherit old successes or establish formal publication.

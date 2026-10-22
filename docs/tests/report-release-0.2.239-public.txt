@@ -1,0 +1,40 @@
+Client239 public release observation — 2026-10-11T10:22Z / 18:22+08
+
+Exact main source: 43995b64f3d8f377860da262f2b22f9f0fd05b22
+Fresh origin/main ancestry check PASS.
+Formal desktop run38130394180 SUCCESS: macOS, Windows, verify-draft all SUCCESS.
+Release observed public at10:21:39Z, tag commit exactly matches the source.
+No root publication command was run this turn: state changed from draft during
+the read-only audit. No duplicate publish or tag mutation was performed.
+Linux was not selected; no Linux assets/manifest entries claimed.
+
+Anonymous full downloads in --rm Docker, actual size and GitHub asset SHA256
+matched for all three requested platforms:
+ANet_0.2.239_aarch64.dmg 38922000B
+  38916e47e532ace582d0cc6a4583558a41f308765c445ac9a045d18a03eb3156
+ANet_0.2.239_x64-setup.exe 37127915B
+  6ab4b6f343a63a8cb44a3e3ef46ec0d32ebc147f859b021422b2af6ff362fbc1
+Agent.Network_0.2.239_android-universal.apk 83701905B
+  89d371eea38ec6f686af12e5181d668ba31a5cc0a9cf56d5c86336fc9f458deb
+
+Dynamic https://www.anet.sh/desktop/update/latest.json anonymous200/version239;
+darwin-aarch64/app and windows-x86_64/nsis/msi aliases preserved, no Linux.
+Android source38130396137 SUCCESS; mirror38130992066 SUCCESS, anonymous full
+APK verification in that workflow. This node independently read VERSION239,
+notes200 and sha256200. Android GitHub/ModelScope SHA256 identical.
+Desktop mirror38131672585 and38131680279 still in progress/pending at this
+observation. No mirror-completion claim. Drift workflow dispatched.
+
+Audit setup corrections: an initial anonymous VERSION probe incorrectly used
+--network none and failed DNS; the correctly networked Docker read was200/239.
+An initial hand-written manifest audit incorrectly assumed exactly two keys
+and tag-based URLs; actual Tauri aliases/API asset URLs are valid. It failed
+without modifying the artifact. The checked-in verifier succeeded in CI.
+While switching to that authoritative draft verifier, the release became
+public; the draft-only assertion appropriately refused the public state.
+Fresh tag/source/full-download checks above supersede that obsolete draft read.
+
+This version includes earlier discovery/sidebar work. Node-detail Provider
+switch PR845 and local CLI collection PR2598 are NOT included in239 and must
+not be claimed usable merely by upgrading to239. #906 remains incomplete.
+No production Daemon/Hub/business-node restart or credential mutation.

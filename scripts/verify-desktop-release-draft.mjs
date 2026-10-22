@@ -17,9 +17,8 @@ export const LINUX_UPDATER_PLATFORMS = ['linux-x86_64', 'linux-x86_64-deb'];
 
 const SHA256_DIGEST = /^sha256:([0-9a-f]{64})$/;
 
-export const releaseAssetNames = (product, version) => [
-  `${product}_${version}_amd64.deb`,
-  `${product}_${version}_amd64.deb.sig`,
+export const releaseAssetNames = (product, version, includeLinux = true) => [
+  ...(includeLinux ? [`${product}_${version}_amd64.deb`, `${product}_${version}_amd64.deb.sig`] : []),
   `${product}_${version}_aarch64.dmg`,
   `${product}_${version}_aarch64.app.tar.gz`,
   `${product}_${version}_aarch64.app.tar.gz.sig`,
@@ -40,7 +39,8 @@ const matchesAsset = (entryUrl, asset) => urlCandidates(asset).includes(entryUrl
  * `gh release view --json assets` returns (name, state, digest, apiUrl, url).
  * Throws on the first broken contract.
  */
-export function assertDesktopReleaseDraft({ product, version, release, manifest, expectedCommit }) {
+export function assertDesktopReleaseDraft({ product, version, release, manifest, expectedCommit, includeLinux = true }) {
+  if (typeof includeLinux !== 'boolean') throw new Error('includeLinux must be boolean');
   if (!product || !version) throw new Error('product and version are required');
   if (!release || typeof release !== 'object') throw new Error('release is required');
   if (release.isDraft !== true) throw new Error(`desktop-v${version} is not a draft`);
@@ -50,7 +50,7 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
   if (!Array.isArray(release.assets)) throw new Error('release assets missing');
   const names = release.assets.map((asset) => asset?.name);
   if (new Set(names).size !== names.length) throw new Error('release has duplicate asset names');
-  for (const name of releaseAssetNames(product, version)) {
+  for (const name of releaseAssetNames(product, version, includeLinux)) {
     if (!names.includes(name)) throw new Error(`draft is missing ${name}`);
   }
   for (const asset of release.assets) {
@@ -58,12 +58,15 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
   }
   const debName = `${product}_${version}_amd64.deb`;
   const deb = release.assets.find((asset) => asset.name === debName);
-  const digest = SHA256_DIGEST.exec(deb.digest ?? '');
-  if (!digest) throw new Error(`${debName} has no sha256 digest`);
+  const digest = SHA256_DIGEST.exec(deb?.digest ?? '');
+  if (includeLinux && !digest) throw new Error(`${debName} has no sha256 digest`);
   const sigName = `${debName}.sig`;
   const sig = release.assets.find((asset) => asset.name === sigName);
-  const sigDigest = SHA256_DIGEST.exec(sig.digest ?? '');
-  if (!sigDigest) throw new Error(`${sigName} has no sha256 digest`);
+  const sigDigest = SHA256_DIGEST.exec(sig?.digest ?? '');
+  if (includeLinux && !sigDigest) throw new Error(`${sigName} has no sha256 digest`);
+  if (!includeLinux && release.assets.some(asset => /\.deb(?:\.sig)?$/.test(asset.name))) {
+    throw new Error('Linux assets present but Linux was not selected');
+  }
 
   if (manifest?.version !== version) {
     throw new Error(`latest.json version ${JSON.stringify(manifest?.version)} is not ${version}`);
@@ -71,14 +74,18 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
   if (!manifest.platforms || typeof manifest.platforms !== 'object' || Array.isArray(manifest.platforms)) {
     throw new Error('latest.json platforms missing');
   }
-  for (const key of ['darwin-aarch64', 'windows-x86_64', ...LINUX_UPDATER_PLATFORMS]) {
+  const linuxPlatforms = includeLinux ? LINUX_UPDATER_PLATFORMS : [];
+  if (!includeLinux && Object.keys(manifest.platforms).some(key => key.startsWith('linux-'))) {
+    throw new Error('Linux updater entries present but Linux was not selected');
+  }
+  for (const key of ['darwin-aarch64', 'windows-x86_64', ...linuxPlatforms]) {
     const entry = manifest.platforms[key];
     if (!entry || typeof entry.url !== 'string' || !entry.url) throw new Error(`latest.json missing ${key} url`);
     if (typeof entry.signature !== 'string' || !entry.signature) throw new Error(`latest.json missing ${key} signature`);
   }
-  const linuxSignatures = LINUX_UPDATER_PLATFORMS.map((key) => manifest.platforms[key].signature);
-  if (new Set(linuxSignatures).size !== 1) throw new Error('linux updater entries do not share one signature');
-  for (const key of LINUX_UPDATER_PLATFORMS) {
+  const linuxSignatures = linuxPlatforms.map((key) => manifest.platforms[key].signature);
+  if (includeLinux && new Set(linuxSignatures).size !== 1) throw new Error('linux updater entries do not share one signature');
+  for (const key of linuxPlatforms) {
     if (!matchesAsset(manifest.platforms[key].url, deb)) {
       throw new Error(`latest.json ${key} does not point at ${debName}`);
     }
@@ -93,7 +100,7 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
   if (!matchesAsset(manifest.platforms['darwin-aarch64'].url, mac)) {
     throw new Error(`latest.json darwin-aarch64 does not point at ${macName}`);
   }
-  return { debSha256: digest[1], sigSha256: sigDigest[1] };
+  return { debSha256: digest?.[1] ?? null, sigSha256: sigDigest?.[1] ?? null };
 }
 
 function ghJson(args) {
@@ -101,6 +108,9 @@ function ghJson(args) {
 }
 
 function main() {
+  const linuxInput = process.env.INCLUDE_LINUX ?? 'true';
+  if (!['true', 'false'].includes(linuxInput)) throw new Error('INCLUDE_LINUX must be true or false');
+  const includeLinux = linuxInput === 'true';
   const expectedCommit = process.env.EXPECTED_COMMIT || '';
   if (!/^[0-9a-f]{40}$/.test(expectedCommit)) throw new Error('EXPECTED_COMMIT must be a 40-character SHA');
   const repository = process.env.GITHUB_REPOSITORY || 'sleep2agi/agent-network-app';
@@ -122,20 +132,22 @@ function main() {
     release,
     manifest,
     expectedCommit,
+    includeLinux,
   });
   const debName = `${config.productName}_${config.version}_amd64.deb`;
-  console.log(`draft ${tag} includes ${debName}`);
-  console.log(`${debSha256}  ${debName}`);
-  console.log(`${sigSha256}  ${debName}.sig`);
+  const evidence = includeLinux
+    ? [`${debSha256}  ${debName}`, `${sigSha256}  ${debName}.sig`]
+    : ['Linux deferred: macOS and Windows assets and updater entries verified.'];
+  console.log(`draft ${tag} verified; include_linux=${includeLinux}`);
+  console.log(evidence.join('\n'));
   if (process.env.GITHUB_STEP_SUMMARY) {
     appendFileSync(process.env.GITHUB_STEP_SUMMARY, [
       '### Draft release check',
       '',
-      `Tag \`${tag}\` is still a draft. Linux updater platforms: ${LINUX_UPDATER_PLATFORMS.join(', ')}.`,
+      `Tag \`${tag}\` is still a draft. include_linux=${includeLinux}.`,
       '',
       '```',
-      `${debSha256}  ${debName}`,
-      `${sigSha256}  ${debName}.sig`,
+      ...evidence,
       '```',
       '',
     ].join('\n'));

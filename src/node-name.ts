@@ -129,10 +129,20 @@ export function folderError(value: string): string | null {
   return '文件夹名只能用小写英文字母、数字和 -';
 }
 
+/** Hub 起支持 checkNodeName 中文/Unicode 规则的 commhub-server 版本(#652,与 app 0.2.217 同期)。 */
+export const NODE_NAME_MIN_HUB = '0.9.0-preview.66';
+/** 目标机 agent-node 需同步支持同一套名字规则。 */
+export const NODE_NAME_MIN_AGENT_NODE = '2.5.0-preview.76';
+export const NODE_NAME_HUB_UPGRADE_CMD = 'npm i -g @sleep2agi/commhub-server@latest';
+export const NODE_NAME_AGENT_NODE_UPGRADE_CMD = 'npm i -g @sleep2agi/agent-node@latest';
+export const NODE_NAME_HUB_DOCS_URL = 'https://anet.sh';
+
 /** 老 Hub(#652 之前)对新规则才允许的名字回 node_name_invalid。 */
-export const OLD_HUB_NAME_REJECTED = '当前 Hub 版本不支持这个名字（旧版只允许小写英文），请升级 Hub 或改用小写英文名';
+export const OLD_HUB_NAME_REJECTED =
+  `当前 Hub 版本不支持这个名字（旧版只允许小写英文）。请把 Hub（commhub-server）升级到 ${NODE_NAME_MIN_HUB} 或更高：在 Hub 所在机器执行「${NODE_NAME_HUB_UPGRADE_CMD}」并重启 Hub；安装与升级说明见 ${NODE_NAME_HUB_DOCS_URL} 。若暂不升级，可把节点名改成小写英文（例如 my-bot）。`;
 /** 老 daemon 同理(Hub 已放行,daemon 侧旧规则拒)。 */
-export const OLD_DAEMON_NAME_REJECTED = '目标机器上的 daemon 版本不支持这个名字（旧版只允许小写英文），请升级该机器的 agent-node 或改用小写英文名';
+export const OLD_DAEMON_NAME_REJECTED =
+  `目标机器上的 agent-node 版本不支持这个名字（旧版只允许小写英文）。请在该机器升级到 ${NODE_NAME_MIN_AGENT_NODE} 或更高：执行「${NODE_NAME_AGENT_NODE_UPGRADE_CMD}」并重启该 daemon。若暂不升级，可把节点名改成小写英文（例如 my-bot）。`;
 
 /**
  * create_node / 创建请求的报错里带 node_name_invalid,而这个名字按本地(= 新 Hub)规则是合法的

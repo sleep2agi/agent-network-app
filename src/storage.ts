@@ -6,6 +6,7 @@ import { LEGACY_SESSION_ID, accountScopedFile as scopedFile, createSessionStore,
 import { loadDesktopThemeMode, loadDesktopUiScale, saveDesktopThemeMode, saveDesktopUiScale } from './desktop-theme-storage';
 export { onDesktopThemeStorageChange, onDesktopUiScaleStorageChange } from './desktop-theme-storage';
 import { UI_SCALE_STORAGE_KEY, parseStoredUiScale, serializeUiScale, type UiScalePrefs } from './ui-scale';
+import { acceptProfileCredential, serializeCredentialWrite, profileAuthRevision } from './profile-auth-state';
 
 // Token + server persist in the platform keystore (Android Keystore /
 // iOS Keychain) so login survives app restarts. Vincent tg 683 known
@@ -80,14 +81,18 @@ const sessionKv: SessionKv = {
 };
 const mobileSessions = createSessionStore(sessionKv);
 
-export const saveConfig = async (cfg: HubConfig): Promise<HubConfig> => {
+export const saveConfig = (cfg: HubConfig): Promise<HubConfig> => serializeCredentialWrite(async () => {
+  let saved: HubConfig;
   if (isTauriDesktop()) {
     const { invoke } = await import('@tauri-apps/api/core');
-    return parseConfig(await invoke<string>('save_desktop_profile', { sessionJson: JSON.stringify(cfg) })) ?? cfg;
+    saved = parseConfig(await invoke<string>('save_desktop_profile', { sessionJson: JSON.stringify(cfg) })) ?? cfg;
+  } else {
+    // 新增或更新一个账号并设为当前;其他账号的登录状态原样保留。
+    saved = await mobileSessions.save(cfg);
   }
-  // 新增或更新一个账号并设为当前;其他账号的登录状态原样保留。
-  return mobileSessions.save(cfg);
-};
+  acceptProfileCredential(sessionIdOf(saved), saved.token);
+  return saved;
+});
 
 export const loadConfig = async (): Promise<HubConfig | null> => {
   if (isTauriDesktop()) {
@@ -179,11 +184,26 @@ export const removeHubProfile = async (profileId: string): Promise<void> => {
   await invoke('remove_desktop_profile', { profileId });
 };
 
-export const markHubProfileRequiresReauth = async (profileId: string, required = true): Promise<void> => {
-  if (!isTauriDesktop()) { await mobileSessions.markReauth(profileId, required); return; }
-  const { invoke } = await import('@tauri-apps/api/core');
-  await invoke('mark_desktop_profile_requires_reauth', { profileId, required });
-};
+export const markHubProfileRequiresReauth = (profileId: string, required = true, requestToken?: string, expectedAuthRevision?: number): Promise<boolean> => serializeCredentialWrite(async () => {
+  if (expectedAuthRevision !== undefined && profileAuthRevision(profileId) !== expectedAuthRevision) return false;
+  // Read the persisted token too: another desktop window can have signed in.
+  if (requestToken) {
+    const current = await loadSavedProfileConfig(profileId);
+    if (!current) return false;
+    if (current.token !== requestToken) {
+      acceptProfileCredential(profileId, current.token);
+      return false;
+    }
+  }
+  if (expectedAuthRevision !== undefined && profileAuthRevision(profileId) !== expectedAuthRevision) return false;
+  if (!isTauriDesktop()) {
+    await mobileSessions.markReauth(profileId, required);
+  } else {
+    const { invoke } = await import('@tauri-apps/api/core');
+    await invoke('mark_desktop_profile_requires_reauth', { profileId, required });
+  }
+  return expectedAuthRevision === undefined || profileAuthRevision(profileId) === expectedAuthRevision;
+});
 
 /** 设置 → 账号 →「编辑」:原地改显示名 / Hub 地址,凭据不动、当前账号不变。调用前先 validateHubEdit。 */
 export const updateHubProfile = async (profileId: string, patch: { serverUrl: string; displayName?: string }): Promise<void> => {
