@@ -15,7 +15,7 @@ export const sessionControlTranslations = {
   'sessionControl.stale': ['状态已过期，请先刷新。', 'Status is stale. Refresh it first.'],
   'sessionControl.error.unavailable': ['未能读取原会话，请稍后刷新状态。', 'Could not read the original session. Refresh status later.'],
   'sessionControl.error.unsupported': ['当前 Hub、Bridge 或 OpenCode 尚不支持此控制；没有发送按键或命令。', 'This Hub, Bridge or OpenCode does not support this control. No keys or commands were sent.'],
-  'sessionControl.error.access': ['需要此网络的所有者或管理员权限。', 'Network owner or admin access is required.'],
+  'sessionControl.error.access': ['需要此节点所有者或网络所有者、管理员权限。', 'Node owner or network owner/admin access is required.'],
   'sessionControl.error.changed': ['原节点或会话绑定已变化，已拒绝操作，请刷新状态。', 'The node or session binding changed. The action was refused. Refresh status.'],
   'sessionControl.error.unknown': ['无法确认请求结果，未自动重试。请查看原会话；本页不再重复发送。', 'The request outcome is unknown and was not retried. Check the original session; this view will not resend it.'],
   'sessionControl.error.expired': ['状态请求已过期，请刷新。', 'The status request expired. Refresh it.'],

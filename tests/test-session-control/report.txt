@@ -48,6 +48,9 @@ Browser reproduction (uses existing local Playwright/Chromium, no download):
   Subsequent integration correction preserves a typed HTTP409 binding refusal
   instead of a generic error. Only that adapter path changed; its regression is
   in the final 45/45 core result and final typecheck, not a repeated browser run.
+  Final permission-copy-only correction matches the actual Hub: node owner or
+  network owner/admin (not only network owner/admin). No behavior changed; no
+  repeated suite, typecheck, export or screenshot for that wording-only update.
 
 Boundaries
 - Not native Android/iOS/Tauri binaries or live OpenCode/Bridge acceptance.
