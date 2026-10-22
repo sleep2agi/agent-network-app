@@ -7,7 +7,7 @@
 // 纯逻辑,不 import react-native。
 
 import { settingsPair } from './i18n-settings';
-export type SettingsCategoryKey = 'account' | 'users' | 'agentTeams' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
+export type SettingsCategoryKey = 'account' | 'users' | 'agentTeams' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about' | 'skillPlaza';
 
 export type SettingsRow = {
   readonly key: string;
@@ -154,6 +154,10 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       // (diagnostics-reveal.ts)。存储没动 —— 以前关掉的人仍是关。
     ],
   },
+  {
+    key: 'skillPlaza', label: '技能广场', icon: 'library-outline',
+    rows: [{ key: 'catalog', label: '公开技能目录', keywords: ['skill', 'skills', 'plaza', 'catalog', 'skillhub', '搜索', '技能广场'] }],
+  },
 ];
 
 const normalize = (s: string) => s.trim().toLowerCase();
@@ -288,7 +292,7 @@ export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
   { title: null, keys: ['account'] },
   { title: '通用', keys: ['users', 'agentTeams', 'notifications', 'appearance', 'localHub'] },
   { title: '功能', keys: ['voice', 'shortcuts'] },
-  { title: '帮助与关于', keys: ['about'] },
+  { title: '帮助与关于', keys: ['about', 'skillPlaza'] },
 ];
 
 /** 列表行与子页标题用的名字;没写就用分类名。 */
@@ -312,7 +316,7 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
 // ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
 // 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
 // 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
-export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'changePassword' | 'userMember' | 'userGroup' | 'changelog';
+export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'changePassword' | 'userMember' | 'userGroup' | 'changelog' | 'skillBody';
 
 export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   voiceApiKey: 'API Key',
@@ -323,6 +327,7 @@ export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   userMember: '成员',
   userGroup: '分组',
   changelog: '更新日志',
+  skillBody: '技能正文',
 };
 
 /**
@@ -346,6 +351,7 @@ export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryK
   userMember: 'users',
   userGroup: 'users',
   changelog: 'about',
+  skillBody: 'skillPlaza',
 };
 
 /**

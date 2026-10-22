@@ -56,6 +56,7 @@ export type PhonePagesCtx = {
   /** 用户管理子页(宽屏右栏同一个组件)。memberOpen = 三级页「成员」开着(点了某个成员)。 */
   renderUsers: (detail: 'userMember' | 'userGroup' | null) => ReactNode;
   renderAgentOrg: () => ReactNode;
+  renderSkillPlaza: (bodyOpen: boolean) => ReactNode;
   show: (cat: SettingsCategoryKey, row: string) => boolean;
   detail: SettingsDetailKey | null;
   openDetail: (key: SettingsDetailKey) => void;
@@ -138,6 +139,7 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
     case 'voice': return <VoicePhonePage ctx={ctx} />;
     case 'shortcuts': return <ShortcutsPage ctx={ctx} />;
     case 'about': return <AboutPage ctx={ctx} />;
+    case 'skillPlaza': return <>{ctx.renderSkillPlaza(ctx.detail === 'skillBody')}</>;
     default: return null;
   }
 }

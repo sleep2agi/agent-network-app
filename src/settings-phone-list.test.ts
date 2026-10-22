@@ -40,7 +40,7 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
 {
   const android = phoneSettingsGroups(filterSettings('', { localHub: false }, undefined, 'android'));
   const keys = android.flatMap((g) => g.rows.map((r) => r.key));
-  ck('安卓成员:账号 Agent组织 通知 外观 语音输入 关于', JSON.stringify(keys) === JSON.stringify(['account', 'agentTeams', 'notifications', 'appearance', 'voice', 'about']));
+  ck('安卓成员:账号 Agent组织 通知 外观 语音输入 关于 技能广场', JSON.stringify(keys) === JSON.stringify(['account', 'agentTeams', 'notifications', 'appearance', 'voice', 'about', 'skillPlaza']));
   const withLocal = phoneSettingsGroups(filterSettings('', { localHub: true }, undefined, 'desktop')).flatMap((g) => g.rows.map((r) => r.key));
   ck('装了本地 Hub → 本地 Hub 行出现在「通用」里', withLocal.includes('localHub'));
   const web = phoneSettingsGroups(filterSettings('', {}, undefined, 'web'));
