@@ -1108,6 +1108,7 @@ export default function AgentsScreen({
           loaded={agentDirectory.loaded}
           collapsed={registeredCollapsed}
           onToggle={() => setRegisteredCollapsed(v => !v)}
+          query={query}
           compact={compact}
         />
         {compact && managedDepts.ids.length ? (
