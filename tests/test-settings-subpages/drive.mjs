@@ -94,7 +94,12 @@ const titleIs = async (page, want) => {
 
 const table = [];
 const checkPage = async (page, name, theme) => {
-  await page.waitForTimeout(500);
+  // 卡片可能比子页容器晚一拍挂载：CI 上多次出现「容器到了、卡片还是 0」被当场量成 FAIL
+  // （同一份代码在本地全绿，且无关 PR #1018 上也逐字复现）。这里只做**有界等待内容**，
+  // 不放松任何断言：5 s 内仍无卡片，下面 `至少一张卡片` 照样红。
+  await page.locator('[data-testid="settings-kit-card"]').first()
+    .waitFor({ state: 'visible', timeout: 5000 }).catch(() => {});
+  await page.waitForTimeout(150);
   if (OUT) await page.screenshot({ path: `${OUT}/phone-${name}-${theme}.png`, fullPage: true });
   const m = await page.evaluate(measure);
   const rows = m.cards.flatMap(c => c.rows);
