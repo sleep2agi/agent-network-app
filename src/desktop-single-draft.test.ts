@@ -71,6 +71,7 @@ ck('release 列表用 --slurp 分页再摊平', (() => {
       return [{ id: 1, tag_name: 'desktop-v0.2.287', draft: true }];
     },
     listAssets: () => [[{ id: 3, name: 'ANet_0.2.287_x64_en-US.msi' }]],
+    deleteAsset: () => ({}),
     log: () => {},
   });
   return calls.length === 1;
@@ -148,6 +149,7 @@ ck('复用指向分支名的草稿：resolve 成 SHA 后相等 → 允许', (() 
     commit: 'b'.repeat(40),
     listReleases: () => [{ id: 7, tag_name: tag, draft: true, target_commitish: 'main' }],
     listAssets: () => [[]],
+    deleteAsset: () => ({}),
     resolveRef: () => ({ sha: 'b'.repeat(40) }),
     log: () => {},
   });
@@ -214,6 +216,21 @@ ck('include_linux=false 时即使只剩 latest.json 也回收并如实返回 rem
   });
   return deleted.join(',') === '34'
     && JSON.stringify(result.removedAssets) === JSON.stringify([{ id: 34, name: 'latest.json' }]);
+})());
+ck('prior-run partial draft 不允许静默沿用（removedAssets 非空且等于既有资产数）', (() => {
+  const assets = [
+    { id: 51, name: 'ANet_0.2.287_aarch64.app.tar.gz' },
+    { id: 52, name: 'ANet_0.2.287_x64-setup.exe' },
+    { id: 53, name: 'latest.json' },
+  ];
+  const result = prepareReleaseDraft({
+    version: '0.2.287',
+    listReleases: () => [{ id: 22, tag_name: tag, draft: true, target_commitish: 'main' }],
+    listAssets: () => [assets],
+    deleteAsset: () => ({}),
+    log: () => {},
+  });
+  return result.action === 'reuse' && result.removedAssets.length === assets.length;
 })());
 ck('创建/复用 release 之前先跑 exact-merged-commit 门',
   /prepare-release:[\s\S]{0,900}- name: Require exact merged commit[\s\S]{0,1200}node scripts\/prepare-desktop-release\.mjs/.test(wf));

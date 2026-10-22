@@ -58,9 +58,10 @@ const gh = (args, { parse = true } = {}) => {
 
 export const staleAssetsFor = (assets, { includeLinux }) => {
   if (!Array.isArray(assets)) throw new Error('assets must be an array');
+  // 复用草稿时不再按 include_linux 挑着删：partial draft 里的 mac/windows 分片同样是旧构建，
+  // 一律清空（prepareReleaseDraft 的 reuse 分支直接删全部资产）。这个函数保留给
+  // 「只想删 Linux 残留」的调用方做显式查询。
   if (includeLinux) return [];
-  // 上一次 include_linux=true 的失败尝试会留下 .deb / .deb.sig；这次不编 Linux 时必须清掉，
-  // 否则 verify-draft 会看到「Linux assets present but Linux was not selected」。
   return assets
     .filter((asset) => /_amd64\.deb(?:\.sig)?$/.test(asset?.name ?? ''))
     .map((asset) => ({ id: asset.id, name: asset.name }));
@@ -132,21 +133,19 @@ export function prepareReleaseDraft({
     }
     const pages = listAssets(plan.releaseId);
     const assets = (Array.isArray(pages) ? pages : []).flat();
-    const stale = staleAssetsFor(assets, { includeLinux });
-    // include_linux=false 时旧 latest.json 可能仍带 linux 条目，即使 .deb/.sig
-    // 已被上一次失败尝试删掉也必须独立回收，让本次构建重写它。
-    const staleManifests = includeLinux
-      ? []
-      : assets.filter((candidate) => candidate?.name === 'latest.json')
-        .map((asset) => ({ id: asset.id, name: asset.name }));
-    const removedAssets = [...stale, ...staleManifests];
-    for (const asset of removedAssets) {
-      const reason = asset.name === 'latest.json' ? 'so this run rewrites it' : `because include_linux=${includeLinux}`;
-      log(`${tag}: removing stale asset ${asset.name} (id ${asset.id}) ${reason}`);
+    // 方案 A（TMA云欧审计 P1）：复用草稿时**清空它已有的全部资产**，不只是 .deb/latest。
+    // 上一 run 留下的 mac/windows 分片是「partial draft」：asset 在、内容却是旧构建，
+    // 若静默沿用，verify-draft 与用户下载都会指向半成品。这里全删，本次 matrix 用同一
+    // releaseId 完整重传，故不存在「沿用旧资产」的路径。
+    const stale = assets
+      .filter((asset) => Number.isInteger(asset?.id))
+      .map((asset) => ({ id: asset.id, name: typeof asset.name === 'string' ? asset.name : '' }));
+    for (const asset of stale) {
+      log(`${tag}: removing prior-run asset ${asset.name} (id ${asset.id}) before this run re-uploads it`);
       deleteAsset(asset.id);
     }
-    log(`${tag}: reusing draft release ${plan.releaseId}${removedAssets.length ? ` after removing ${removedAssets.length} stale asset(s)` : ''}`);
-    return { action: 'reuse', tag, releaseId: plan.releaseId, removedAssets };
+    log(`${tag}: reusing draft release ${plan.releaseId} after clearing ${stale.length} prior-run asset(s)`);
+    return { action: 'reuse', tag, releaseId: plan.releaseId, removedAssets: stale };
   }
   const created = createRelease(tag, `ANet Desktop v${version}`);
   if (!Number.isInteger(created?.id)) throw new Error(`${tag}: created release has no numeric id`);
