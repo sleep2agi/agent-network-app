@@ -51,6 +51,12 @@ Browser reproduction (uses existing local Playwright/Chromium, no download):
   Final permission-copy-only correction matches the actual Hub: node owner or
   network owner/admin (not only network owner/admin). No behavior changed; no
   repeated suite, typecheck, export or screenshot for that wording-only update.
+  CI subsequently exposed chat-info-caps.test.ts's exact-source assertion:
+  it expected only setFullCaps(null) in the navigation-reset effect, while this
+  feature also clears setControlSession(null) in that same [cfg, alias] effect.
+  Updated that one assertion to require BOTH resets with the same dependencies,
+  not to omit the existing caps gate. Product code and original browser snapshot
+  remain unchanged. Only this affected test is rerun for that test-only fix.
 
 Boundaries
 - Not native Android/iOS/Tauri binaries or live OpenCode/Bridge acceptance.
