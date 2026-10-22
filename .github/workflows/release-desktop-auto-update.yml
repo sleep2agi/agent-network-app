@@ -525,6 +525,12 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.288:
+            - 新增：Agent 详情里可看到原 OpenCode 会话的运行状态，并在支持时「转到后台」（需要 Hub 提供会话控制能力；当前 Hub 未上线时只读提示，不会伪装成功）。
+            - 修复：共享 OpenCode 会话的「负责人离开」判定更严格 —— 中间夹一次状态读取失败/忙碌/畸形状态会重新计数，不再因为不连续的 404 提前终止排队任务。
+            - 修复：已知的 OpenCode 超时/归属/供应商失败不再走通用「供应商抖动」重放，避免重复执行同一轮。
+            - 修复：头像上传会校验 PNG 交错方式（2..255 一律拒绝）、清空/替换时撤销旧托管图片，并限制单个 Hub 的头像总容量。
+
             What's new in 0.2.287:
             - 修复：Agent 列表最上面的「已登记节点」默认折叠，展开时也只列前 8 个，不再把在线 Agent 挤出首屏（admin 反馈「这些东西放前面太碍事」）。
 
