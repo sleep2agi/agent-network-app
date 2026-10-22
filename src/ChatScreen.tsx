@@ -56,6 +56,8 @@ import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { bubbleInk, MineBubble } from './bubble-ink';
 import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
+import NodeSessionControl from './NodeSessionControl';
+import { sessionControlTarget } from './node-session-control';
 import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
@@ -1948,6 +1950,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // while a recent task has no result yet, otherwise the session status
   // so he can tell whether the agent is even online.
   const [sessionStatus, setSessionStatus] = useState('');
+  const [controlSession, setControlSession] = useState<Session | null>(null);
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
   const [sessionModel, setSessionModel] = useState('');
@@ -1986,13 +1989,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   }, [cfg, alias]);
   // 全量行:能力位很少变,不跟 30s 轮询(全量投影比 light 大一个量级)。失败就保留上一次 / 退回 light。
   // 换了聊天对象先清掉,别让上一个 agent 的能力位挂在这一个的聊天信息里。
-  useEffect(() => { setFullCaps(null); }, [cfg, alias]);
+  useEffect(() => { setFullCaps(null); setControlSession(null); }, [cfg, alias]);
   useEffect(() => {
     let live = true;
     fetchNodeStatus(cfg, alias)
       .then(data => {
         if (!live) return;
         const s = (data.sessions ?? []).find(x => x.alias === alias);
+        setControlSession(s ?? null);
         if (!s) return;
         const next = chatInfoCaps(s);
         setFullCaps(c => (c && c.rules === next.rules && c.skills === next.skills ? c : next));
@@ -2017,6 +2021,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       Date.now() - new Date(`${m.created_at.replace(' ', 'T')}Z`).getTime() < 10 * 60 * 1000,
   );
   const subtitle = processing ? t('chat.processing') : sessionStatus ? t(sessionStatus === 'working' || sessionStatus === 'running' ? 'chat.statusWorking' : sessionStatus === 'offline' ? 'chat.statusOffline' : 'chat.statusOnline') : '';
+  const backgroundTarget = sessionControlTarget(cfg, controlSession, alias);
 
   // One tap = one action (no intermediate 「发送附件」 Alert any more). Picked items go
   // to the main composer draft, exactly as the old 图片/文件 Alert buttons did.
@@ -2169,6 +2174,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         </Pressable>
       </View>
 
+      {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
       {searchOpen ? (
 
         <View style={styles.searchPanel}>

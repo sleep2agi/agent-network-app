@@ -1,0 +1,81 @@
+#2014 / #2018 client status and semantic background button
+Base: fe73432884e7d05be221e2a04f1ea339fa4ee127
+
+Scope
+- Same component on chat and node Overview, only for a scoped immutable
+  OpenCode node target. Chat identity comes from its existing full scoped
+  status read, never the narrow light heartbeat or an alias guess.
+- Explicit Read/Refresh status, independent of message reads. No eager control
+  polling or new first-paint dependency. This is not a terminal/TUI mirror.
+- Button requires affirmative actual runtime capability and a locally fresh
+  read (<30s). Fixed state/background operations only, expected original
+  session and Bridge-handle binding on every mutation.
+- Exactly one enqueue. Subsequent polling only reads that request receipt.
+  Unknown write/ACK, missing receipt or invalid response never auto-resubmits.
+  An unknown outcome locks this view's mutation button; read-only refresh
+  cannot unlock it or re-enqueue the mutation.
+- request_processed does not claim that a tool moved to the background.
+  already_idle is an explicit no-op. Old Hub/access/binding errors are visible.
+- Component key includes Hub/token/network/node/session to isolate navigation.
+- No lifecycle, model selection, Hub implementation or release changes.
+
+Necessary verification
+  npm ci --no-audit --no-fund
+  bun src/node-session-control.test.ts
+    45/45 PASS (target scope, schema, freshness, actual enqueue/read adapter,
+    one mutation, unknown/missing ACK, old Hub, permission, wrong receipt,
+    expected-session mismatch, real Hub HTTP409 binding refusal, bilingual keys
+    and both UI entry points)
+  bun src/drive-registry.test.ts
+    12/12 PASS; test-session-control/drive.mjs registered as stub in tests/drives.json
+  npm run typecheck
+    PASS: tsc --noEmit -p tsconfig.build.json (not bare tsc)
+  npx expo export --platform web --output-dir /tmp/opencode/2014-ui-web-final
+    PASS (aa7f3f14747620d36172a789c71978fa0947adaf application snapshot)
+
+Browser reproduction (uses existing local Playwright/Chromium, no download):
+  WEB_DIR=/tmp/opencode/2014-ui-web-final \
+  PLAYWRIGHT_MODULE=<existing-playwright>/index.mjs \
+  CHROMIUM_EXECUTABLE_PATH=<existing-chromium> \
+  node tests/test-session-control/drive.mjs
+
+  22/22 PASS on aa7f3f14747620d36172a789c71978fa0947adaf's application snapshot,
+  actual exported App, synthetic Tauri/Hub transport, two viewports:
+  phone390 Chinese/light, desktop1200 English/dark. Chat and node Overview,
+  no pre-read control traffic, disabled until positive state, processed wording,
+  exact original target, unknown lock after read-only refresh, old-Hub refusal,
+  no horizontal overflow and no pageerror. No real Hub, credentials or inference.
+  Subsequent integration correction preserves a typed HTTP409 binding refusal
+  instead of a generic error. Only that adapter path changed; its regression is
+  in the final 45/45 core result and final typecheck, not a repeated browser run.
+  Final permission-copy-only correction matches the actual Hub: node owner or
+  network owner/admin (not only network owner/admin). No behavior changed; no
+  repeated suite, typecheck, export or screenshot for that wording-only update.
+  CI subsequently exposed chat-info-caps.test.ts's exact-source assertion:
+  it expected only setFullCaps(null) in the navigation-reset effect, while this
+  feature also clears setControlSession(null) in that same [cfg, alias] effect.
+  Updated that one assertion to require BOTH resets with the same dependencies,
+  not to omit the existing caps gate. Product code and original browser snapshot
+  remain unchanged. Only this affected test is rerun for that test-only fix.
+
+Boundaries
+- Not native Android/iOS/Tauri binaries or live OpenCode/Bridge acceptance.
+- Host lacks CJK fonts: Chinese strings/roles pass, screenshot glyphs do not
+  establish native Chinese typography. Screenshots use placeholder identities.
+- Local Node24.19/Bun1.4 are not CI's Node22/Bun1.3.14; required CI remains separate.
+- First browser attempt omitted safeAreaSim and stopped before opening any
+  feature (missing test-only navigation hook). Corrected drive URL, not product.
+- No full unit suite, platform/latency/performance/Docker sweep or CI reruns.
+- Hub relay #2017 and runtime #2016/PR2889 must integrate before feature release;
+  real installed versions and original-session control remain unaccepted here.
+- No merge, version bump, packaging, publication, production changes, restarts,
+  key/identity/database edits or active-session input. Client release Owner is
+  通信客户端欧; latest/preview release and node activation are separate gates.
+
+Local logs
+  /tmp/opencode/2014-ui-targeted-final.log
+  /tmp/opencode/2014-ui-registry.log
+  /tmp/opencode/2014-ui-typecheck-final.log
+  /tmp/opencode/2014-ui-export-final.log
+  /tmp/opencode/2014-ui-browser-final.log
+Screenshots: /tmp/opencode/2014-ui-evidence/{phone,desktop}-unknown.png

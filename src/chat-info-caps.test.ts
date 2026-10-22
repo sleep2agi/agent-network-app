@@ -76,7 +76,7 @@ ck('api: the agent list read remembers alias -> network (#1974)', api.includes('
 ck('chat: caps come from the full status (fetchNodeStatus → chatInfoCaps → setFullCaps)', /fetchNodeStatus\(cfg, alias\)[\s\S]{0,400}chatInfoCaps\(s\)[\s\S]{0,200}setFullCaps\(/.test(chat));
 ck('chat: the full read re-runs when the info panel opens', /\}, \[cfg, alias, infoOpen\]\);/.test(chat));
 ck('chat: full caps win, light only as fallback', /const sessionCaps = fullCaps \?\? lightCaps;/.test(chat));
-ck('chat: switching chats clears the previous caps', /useEffect\(\(\) => \{ setFullCaps\(null\); \}, \[cfg, alias\]\);/.test(chat));
+ck('chat: switching chats clears the previous caps and session-control identity', /useEffect\(\(\) => \{ setFullCaps\(null\); setControlSession\(null\); \}, \[cfg, alias\]\);/.test(chat));
 ck('chat: no inline caps judgement left (one rule, in chat-info-model)', !/rules_file_capable === true/.test(chat) && !/skills_capable === true/.test(chat));
 ck('chat: info groups fed from sessionCaps', /hasRulesTarget: sessionCaps\.rules,\s*skillsCapable: sessionCaps\.skills,/.test(chat));
 ck('node page: reads the full status by alias (no node_id join)', /const data = await fetchNodeStatus\(cfg, alias\);\s*const found = \(data\.sessions \?\? \[\]\)\.find\(s => s\.alias === alias\);/.test(detail));
