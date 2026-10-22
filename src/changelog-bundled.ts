@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.285:",
+  "- 修复：共存节点不支持交由 daemon 管理时，显示明确拒绝提示，保留原启动方式，无需停止节点或会话（需 Hub 返回对应安全错误码）。",
+  "",
   "What's new in 0.2.284:",
   "- 改进：定时任务卡片重新梳理信息层级，任务名称、执行状态和计划时间更容易一眼分清。",
   "- 改进：「下次执行」与「上次执行」按真实执行数据显示时间和结果摘要，方便判断计划何时运行、最近一次是否成功。",
@@ -1240,6 +1243,9 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.284": "2026-10-21T23:44:00Z",
+  "0.2.283": "2026-10-21T13:50:25Z",
+  "0.2.282": "2026-10-21T11:31:13Z",
   "0.2.281": "2026-10-21T09:52:06Z",
   "0.2.280": "2026-10-21T08:34:41Z",
   "0.2.279": "2026-10-21T05:27:04Z",
