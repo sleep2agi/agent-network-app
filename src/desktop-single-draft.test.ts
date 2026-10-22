@@ -279,7 +279,10 @@ ck('prepare 的 checkout 有完整历史', /prepare-release:[\s\S]{0,400}fetch-d
 // 残留的旧草稿 420987662，macOS 后来把它删掉，Windows 上传就 Not Found。
 // #1034 的最终形态不再靠 created_at 猜：prepare-release 在构建前就确定唯一 release_id，
 // 所有 matrix 只认它，因此这里断言「不再有按 run_started/created_at 的等待步」。
-ck('不再按 run_started/created_at 猜草稿归属', !wf.includes('run_started_at') && !wf.includes('created_at >'));
+ck('不再按 run_started/created_at 猜草稿归属', !wf.includes('created_at >') && !wf.includes('run_started_at'));
+ck('钉 target 只按 prepared release id（不再按 tag + created_at 找草稿）',
+  /Pin the prepared draft to the exact built commit[\s\S]{0,900}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(wf)
+  && /releases\/\$RELEASE_ID/.test(wf));
 ck('prepare-release 是唯一的创建入口',
   !/Remove stale draft releases for this tag/.test(wf) && /node scripts\/prepare-desktop-release\.mjs/.test(wf));
 
@@ -341,11 +344,11 @@ ck('verify-draft 仍然把 release_id 传成 RELEASE_ID',
 // 6. 草稿必须指向真实构建提交。tauri-action 建草稿时用的是默认分支 HEAD
 // （0.2.287 run 39831958589 实测 targetCommitish=7551c09f，而二进制是 1f86099f 构建的），
 // verify-draft 因此报 `draft targetCommitish … is not …`。
-ck('草稿建好后钉回真实构建提交',
-  /- name: Pin the draft release to the exact built commit/.test(wf) &&
+ck('草稿建好后按 prepared release id 钉回真实构建提交',
+  /- name: Pin the prepared draft to the exact built commit/.test(wf) &&
   /target_commitish='\$\{\{ inputs\.commit \}\}'/.test(wf));
 ck('钉提交只在 macOS（创建者）执行',
-  /Pin the draft release to the exact built commit[\s\S]{0,120}?runner\.os == 'macOS'/.test(wf));
+  /Pin the prepared draft to the exact built commit[\s\S]{0,160}?runner\.os == 'macOS'/.test(wf));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
