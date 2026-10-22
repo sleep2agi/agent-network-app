@@ -1774,6 +1774,35 @@ jobs:
           updaterJsonPreferNsis: true
           args: ${{ matrix.args }}
 
+      # tauri-action 建草稿时把 target_commitish 设成默认分支 HEAD（0.2.287 实测是
+      # 7551c09f），而这次二进制是从 inputs.commit 构建的 —— verify-draft 因此报
+      # `draft targetCommitish … is not 1f86099f…`。草稿还没打 tag，这里把它钉回
+      # 真实构建提交：发布时 tag 才会落在真正被构建的那次提交上。
+      - name: Pin the draft release to the exact built commit
+        if: inputs.publish == true && runner.os == 'macOS'
+        shell: bash
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          tag="desktop-v$version"
+          run_started=$(gh api "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID" --jq .run_started_at)
+          id=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=100" --paginate \
+            --jq ".[] | select(.tag_name == \"$tag\" and .draft == true and .created_at > \"$run_started\") | .id" | head -1)
+          if [ -z "$id" ]; then
+            echo "::error::no draft release for $tag created during this run"
+            exit 1
+          fi
+          current=$(gh api "repos/$GITHUB_REPOSITORY/releases/$id" --jq .target_commitish)
+          if [ "$current" = '${{ inputs.commit }}' ]; then
+            echo "draft $id already targets $current"
+            exit 0
+          fi
+          gh api -X PATCH "repos/$GITHUB_REPOSITORY/releases/$id" \
+            -f target_commitish='${{ inputs.commit }}' --jq '{id,target_commitish}' >/dev/null
+          echo "pinned draft $id to ${{ inputs.commit }} (was $current)"
+
       # Same bundles and signing material as the release step. Nothing is uploaded
       # to a GitHub Release. macOS still notarizes when this leg is approved.
       - name: Build signed bundles without uploading a release

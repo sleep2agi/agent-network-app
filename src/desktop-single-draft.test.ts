@@ -337,5 +337,15 @@ ck('verify-draft 不再按 tag 列举/计数草稿', !wf.includes('Require exact
 ck('verify-draft 仍然把 release_id 传成 RELEASE_ID',
   /verify-draft:[\s\S]{0,2500}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(wf));
 
+
+// 6. 草稿必须指向真实构建提交。tauri-action 建草稿时用的是默认分支 HEAD
+// （0.2.287 run 39831958589 实测 targetCommitish=7551c09f，而二进制是 1f86099f 构建的），
+// verify-draft 因此报 `draft targetCommitish … is not …`。
+ck('草稿建好后钉回真实构建提交',
+  /- name: Pin the draft release to the exact built commit/.test(wf) &&
+  /target_commitish='\$\{\{ inputs\.commit \}\}'/.test(wf));
+ck('钉提交只在 macOS（创建者）执行',
+  /Pin the draft release to the exact built commit[\s\S]{0,120}?runner\.os == 'macOS'/.test(wf));
+
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
