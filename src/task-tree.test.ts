@@ -1,7 +1,7 @@
 // #2098 / #2102:项目树与标签层级的纯判定。
 // 关键约束:**没有 parent 数据时必须与旧的平铺完全一致**(顺序、深度、计数都不变)。
 import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, includeTagAncestors, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagRows, tagWithDescendants } from './task-tree';
-import { applyFilter, tagFilterAfterPick } from './task-board-model';
+import { applyFilter, commitOnNameBlur, parentPatchForPick, projectRenamePatch, tagFilterAfterPick } from './task-board-model';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra = '') => { t++; if (ok) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` — ${extra}` : ''}`); };
@@ -83,7 +83,7 @@ ck('管理页:Hub 没字段时整块父项目控件不渲染', /const supportsPa
   && /supportsParent \? parentChips\(parentId, createParents/.test(manager));
 ck('管理页:新建把 parentId 传给 onCreate', /onCreate\(c\.name, color, parentId\)/.test(manager));
 ck('管理页:编辑用完整图 + available 排除自身与后代', /parentProjectOptions\(projects, editing\.id/.test(manager));
-ck('管理页:编辑保存时只在父项目变化时发 parentId', /if \(parentChanged\) patch\.parentId = nextParent \?\? null;/.test(manager));
+ck('管理页:编辑保存走 projectRenamePatch(只在父项目/名字真变时发字段)', /projectRenamePatch\(current, c\.name, supportsParent \?/.test(manager));
 
 
 // ── #2106 反例(行为级)─────────────────────────────────────────────────
@@ -225,6 +225,46 @@ ck('F4 TaskTagFilter 的 onPress 调 tagFilterAfterPick', /setTaskFilter\(tagFil
 ck('F4 TaskTagFilter 不再只替换 tag(旧写法已消失)', !/setTaskFilter\(\{ \.\.\.filter, tag, untagged: false \}\)/.test(tagFilterSrc));
 ck('F4 两个入口共用同一个函数', /tagFilterAfterPick\(filter, tag, tagCatalog\?\.parents \?\? null\)/.test(side)
   && /tagFilterAfterPick\(filter, tag, tagParents\)/.test(tagFilterSrc));
+
+// ── #2138:父项目 chip × 名称框 blur 的真实事件顺序(可重复事件模型)──────
+// 浏览器顺序:pointerdown(chip) → blur(input) → press(chip);编辑行里的 chip 随编辑结束一起卸载。
+// 模型里的 rename() 用的就是组件那份判定 projectRenamePatch,onUpdate 收到什么 = updates。
+const runPick = (o: { guarded: boolean; picked: string | null; draft?: string; supportsParent?: boolean; current?: { name: string; parentId: string | null } }) => {
+  const current = o.current ?? { name: 'A', parentId: null };
+  const supports = o.supportsParent ?? true;
+  const updates: { name?: string; parentId?: string | null }[] = [];
+  let editing = true, parent: string | null = current.parentId, picking = false;
+  const rename = (pickedArg?: string | null) => {
+    const patch = projectRenamePatch(current, o.draft ?? current.name, pickedArg !== undefined ? pickedArg : parent, supports);
+    if (patch) updates.push(patch);
+    editing = false;
+  };
+  if (o.guarded) picking = true;                          // chip onPressIn(pointerdown)
+  if (commitOnNameBlur(picking)) rename();                // 名称框 blur
+  if (editing) { parent = o.picked; rename(o.picked); }   // chip press(行还在才发生)
+  return { updates, editing, parent };
+};
+const lostClick = runPick({ guarded: false, picked: 'B' });
+ck('#2138 反例:不守卫时 blur 先关编辑,父项目没换成(0 次 PATCH)', lostClick.updates.length === 0 && lostClick.parent === null);
+const kept = runPick({ guarded: true, picked: 'B' });
+ck('#2138 守卫后:onUpdate 只收到 { parentId: "B" },不多发 name', JSON.stringify(kept.updates) === '[{"parentId":"B"}]');
+const toNone = runPick({ guarded: true, picked: null, current: { name: 'A', parentId: 'B' } });
+ck('#2138 点「无父项目」:发显式 null(不是省略字段)', JSON.stringify(toNone.updates) === '[{"parentId":null}]');
+const same = runPick({ guarded: true, picked: 'B', current: { name: 'A', parentId: 'B' } });
+ck('#2138 父项目没变:不 PATCH(no-op),编辑照样收起', same.updates.length === 0 && same.editing === false);
+const plainBlur = runPick({ guarded: false, picked: 'B', draft: 'A2' });
+ck('#2138 普通 blur 改名仍保存 { name: "A2" }', JSON.stringify(plainBlur.updates) === '[{"name":"A2"}]');
+const plainEnter = runPick({ guarded: true, picked: 'B', draft: 'A2', current: { name: 'A', parentId: null } });
+ck('#2138 名字 + 父项目一起换:一次 PATCH 带两个字段', JSON.stringify(plainEnter.updates) === '[{"name":"A2","parentId":"B"}]');
+const oldHub = runPick({ guarded: true, picked: 'B', draft: 'A2', supportsParent: false });
+ck('#2138 旧 Hub:永不发 parentId', JSON.stringify(oldHub.updates) === '[{"name":"A2"}]');
+ck('#2138 旧 Hub 无变化:不 PATCH', projectRenamePatch({ name: 'A', parentId: null }, 'A', 'B', false) === null);
+const managerNow = readFileSync(new URL('./TaskProjectManager.tsx', import.meta.url), 'utf8');
+ck('#2138 接线:名称框 onBlur 先看 pickingParent', /onBlur=\{\(\) => \{ if \(!commitOnNameBlur\(pickingParent\.current\)\) return; void rename\(\); \}\}/.test(managerNow));
+ck('#2138 接线:编辑行 chip 在 pointerdown 置位', /onChipPressIn/.test(managerNow) && /pickingParent\.current = true/.test(managerNow));
+ck('#2138 接线:点 chip 用点到的那一个值提交', /rename\(parentPatchForPick\(id\)\.parentId\)/.test(managerNow));
+ck('#2138 接线:旧 Hub 不渲染父项目控件', /supportsParent \? parentChips\(editParentId/.test(managerNow) || /editing\?\.id === p\.id && supportsParent \? parentChips/.test(managerNow));
+ck('#2138 接线:新建表单 chip 不传 onPressIn(不受影响)', /parentChips\(parentId, createParents, setParentId, 'project-new-parent'\)/.test(managerNow));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

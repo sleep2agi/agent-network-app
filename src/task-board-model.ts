@@ -215,6 +215,35 @@ export function tagFilterAfterPick(current: BoardFilter, tag: string, parents: T
   return { ...current, ...tagPickPatch(tag, parents) };
 }
 
+/**
+ * #2127(parent_forms):项目改名时,名称输入框失焦要不要**立刻**提交?
+ * 编辑行里的父项目 chip 会随编辑结束一起卸载 —— 浏览器顺序是 pointerdown(chip) → blur(input) → press(chip),
+ * 所以「正在点父项目」时 blur 不能提交,否则 chip 的点击被吞掉(父项目根本没换成)。
+ */
+export const commitOnNameBlur = (pickingParent: boolean): boolean => !pickingParent;
+
+/** #2127:点父项目 chip 时发出去的补丁 —— 用**点到的那一个**值,不依赖还没刷新的 state。 */
+export const parentPatchForPick = (picked: string | null): { parentId: string | null } => ({ parentId: picked });
+
+/**
+ * #2138:项目改名要发出去的补丁 —— 纯函数,组件与事件顺序测试共用同一份判定。
+ * 返回 null = 什么都没变(不 PATCH,只关掉编辑态)。supportsParent=false(旧 Hub)永不发 parentId。
+ */
+export function projectRenamePatch(
+  current: { name: string; parentId?: string | null } | undefined,
+  draft: string,
+  pickedParent: string | null,
+  supportsParent: boolean,
+): { name?: string; parentId?: string | null } | null {
+  const nextParent = supportsParent ? (pickedParent ?? null) : undefined;
+  const parentChanged = supportsParent && (current?.parentId ?? null) !== (nextParent ?? null);
+  if (current && draft === current.name && !parentChanged) return null;
+  const patch: { name?: string; parentId?: string | null } = {};
+  if (!current || draft !== current.name) patch.name = draft;
+  if (parentChanged) patch.parentId = nextParent ?? null;
+  return Object.keys(patch).length ? patch : null;
+}
+
 /** 多选筛选里点一项:有就去掉,没有就加上。 */
 export function toggleIn<T>(list: readonly T[], value: T): T[] {
   return list.includes(value) ? list.filter(v => v !== value) : [...list, value];

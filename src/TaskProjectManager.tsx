@@ -5,7 +5,7 @@ import { useTranslation } from './i18n-react';
 import { taskText } from './i18n-tasks';
 // 管理项目:新建、改名、换颜色、归档 / 恢复。桌面是居中对话框,手机是底部面板。
 // 军团项目 / TMAI 由 owner 在这里建(Hub 不预置任何项目)。每个动作立即写 Hub,失败留在原处提示。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Modal, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
@@ -13,7 +13,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import type { RequirementProject } from './requirements-model';
-import { activeProjects, checkProjectName, nextProjectColor, PROJECT_COLORS } from './task-board-model';
+import { activeProjects, checkProjectName, commitOnNameBlur, nextProjectColor, parentPatchForPick, projectRenamePatch, PROJECT_COLORS } from './task-board-model';
 import { hubExposesProjectParent, parentProjectOptions } from './task-tree';
 import { liftedShadow, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
@@ -43,6 +43,9 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
   const [editParentId, setEditParentId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
+  // #2127(parent_forms):点父项目 chip 时 pointerdown(→onPressIn) 先于名称框 blur。先记下「正在选父项目」,
+  // blur 就不提交;否则编辑行连同 chip 一起消失,父项目选择被吞掉。
+  const pickingParent = useRef(false);
   useEffect(() => {
     const p = open && focus ? projects.find(x => x.id === focus) : undefined;
     if (p) { setEditing({ id: p.id, name: p.name }); setEditParentId(p.parentId ?? null); }
@@ -70,17 +73,14 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
     if (!c.ok) { setError(validationText(c.message)); return; }
     if (await run(() => onCreate(c.name, color, parentId))) { setName(''); setColor(nextProjectColor(color)); setParentId(null); }
   };
-  const rename = async () => {
+  // #2127(parent_forms):pickedParent = 刚刚点下的父项目 chip(不传 = 用当前 state)。
+  const rename = async (pickedParent?: string | null) => {
     if (!editing) return;
     const current = projects.find(p => p.id === editing.id);
     const c = checkProjectName(editing.name, projects, editing.id);
     if (!c.ok) { setError(validationText(c.message)); return; }
-    const nextParent = supportsParent ? editParentId : undefined;
-    const parentChanged = supportsParent && (current?.parentId ?? null) !== (nextParent ?? null);
-    if (current && c.name === current.name && !parentChanged) { setEditing(null); return; }
-    const patch: { name?: string; parentId?: string | null } = {};
-    if (!current || c.name !== current.name) patch.name = c.name;
-    if (parentChanged) patch.parentId = nextParent ?? null;
+    const patch = projectRenamePatch(current, c.name, supportsParent ? (pickedParent !== undefined ? pickedParent : editParentId) : null, supportsParent);
+    if (!patch) { setEditing(null); return; }
     if (await run(() => onUpdate(editing.id, patch))) setEditing(null);
   };
   const row = (p: RequirementProject) => (
@@ -89,29 +89,29 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
         <View style={[styles.swatch, { backgroundColor: p.color, opacity: p.archived ? 0.4 : 1 }]} />
       </Pressable>
       {editing?.id === p.id ? (
-        <TextInput autoFocus value={editing.name} onChangeText={v => setEditing({ id: p.id, name: v })} onSubmitEditing={() => { void rename(); }} onBlur={() => { void rename(); }} maxLength={40} style={[f.input, { flex: 1, minHeight: 34, paddingVertical: 4 }]} testID={`project-name-input-${p.id}`} accessibilityLabel={tr('tasks.copy.205')} />
+        <TextInput autoFocus value={editing.name} onChangeText={v => setEditing({ id: p.id, name: v })} onSubmitEditing={() => { void rename(); }} onBlur={() => { if (!commitOnNameBlur(pickingParent.current)) return; void rename(); }} maxLength={40} style={[f.input, { flex: 1, minHeight: 34, paddingVertical: 4 }]} testID={`project-name-input-${p.id}`} accessibilityLabel={tr('tasks.copy.205')} />
       ) : (
         <Pressable style={{ flex: 1 }} disabled={p.archived} onPress={() => { setEditing({ id: p.id, name: p.name }); setEditParentId(p.parentId ?? null); }} accessibilityRole="button" accessibilityLabel={tr('tasks.copy.206', { v0: p.name })} testID={`project-name-${p.id}`}>
           <Text style={{ color: p.archived ? colors.textMuted : colors.text, fontSize: typeScale.body }} numberOfLines={1}>{p.name}</Text>
         </Pressable>
       )}
-      {editing?.id === p.id && supportsParent ? parentChips(editParentId, editParents, setEditParentId, `project-parent-${p.id}`) : <Text style={s.muted}>{counts.get(p.id) ?? 0} {tr('tasks.copy.207')}</Text>}
+      {editing?.id === p.id && supportsParent ? parentChips(editParentId, editParents, id => { pickingParent.current = false; setEditParentId(id); void rename(parentPatchForPick(id).parentId); }, `project-parent-${p.id}`, () => { pickingParent.current = true; }) : <Text style={s.muted}>{counts.get(p.id) ?? 0} {tr('tasks.copy.207')}</Text>}
       <Pressable accessibilityRole="button" onPress={() => { void run(() => onUpdate(p.id, { archived: !p.archived })); }} style={styles.action} testID={`project-${p.archived ? 'restore' : 'archive'}-${p.id}`}>
         <Text style={s.link}>{p.archived ? tr('tasks.copy.208') : tr('tasks.copy.209')}</Text>
       </Pressable>
     </View>
   );
   // 父项目 chips:只列未归档候选;编辑时已排除自己与后代(服务端仍拒绝环/超深)。
-  const parentChips = (value: string | null, options: RequirementProject[], onPick: (id: string | null) => void, testID: string) => (
+  const parentChips = (value: string | null, options: RequirementProject[], onPick: (id: string | null) => void, testID: string, onChipPressIn?: () => void) => (
     <View style={{ gap: 4 }} testID={testID}>
       <Text style={[s.muted, { fontSize: typeScale.caption }]}>{tr('tasks.copy.244')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, alignItems: 'center' }}>
-        <Pressable accessibilityRole="button" {...a11yStateLocal(value === null)} onPress={() => onPick(null)} testID={`${testID}-none`}
+        <Pressable accessibilityRole="button" {...a11yStateLocal(value === null)} {...(onChipPressIn ? { onPressIn: onChipPressIn } : {})} onPress={() => onPick(null)} testID={`${testID}-none`}
           style={[styles.chip, value === null && { borderColor: colors.accent }]}>
           <Text style={{ color: value === null ? colors.accent : colors.textSecondary, fontSize: 12 }}>{tr('tasks.copy.243')}</Text>
         </Pressable>
         {options.map(p => (
-          <Pressable key={p.id} accessibilityRole="button" {...a11yStateLocal(value === p.id)} onPress={() => onPick(p.id)} testID={`${testID}-${p.id}`}
+          <Pressable key={p.id} accessibilityRole="button" {...a11yStateLocal(value === p.id)} {...(onChipPressIn ? { onPressIn: onChipPressIn } : {})} onPress={() => onPick(p.id)} testID={`${testID}-${p.id}`}
             style={[styles.chip, value === p.id && { borderColor: colors.accent }]}>
             <View style={[styles.chipDot, { backgroundColor: p.color }]} />
             <Text style={{ color: value === p.id ? colors.accent : colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{p.name}</Text>
