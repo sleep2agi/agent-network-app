@@ -15,6 +15,8 @@ import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-nat
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { useBubbleInk } from './bubble-ink';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 
 // Server-side attachment thumbnails were black boxes on device (Vincent
 // tg 756): the hub serves /api/files with nosniff + octet-stream +
@@ -64,6 +66,7 @@ export function AttachmentFile({
   label?: string;
   size?: number;
 }) {
+  const { t } = useTranslation();
   const ink = useBubbleInk('link');
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
@@ -89,7 +92,7 @@ export function AttachmentFile({
     }
   };
 
-  if (!label) return <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} detail={error ?? '下载后使用系统分享或打开方式'} onPress={() => { void open(); }} />;
+  if (!label) return <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} detail={error ?? t('chat.file.nativeHint')} onPress={() => { void open(); }} />;
 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? name} onPress={open} hitSlop={6}>

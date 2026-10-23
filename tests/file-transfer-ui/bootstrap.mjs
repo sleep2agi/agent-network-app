@@ -1,7 +1,7 @@
-export function bootstrap({ theme, browser = false }) {
+export function bootstrap({ theme, browser = false, language = 'zh' }) {
   localStorage.clear();
   localStorage.setItem('theme_mode_v1', theme);
-  localStorage.setItem('anet.language.v1', 'zh-CN');
+  localStorage.setItem('anet.language.v1', language);
   localStorage.setItem('voice_composer_input_mode_v1', 'keyboard');
   localStorage.setItem('anet.pooledHttp.off', '1');
   const profile = { serverUrl: location.origin, token: 'file_fixture_only', username: 'tester', profileId: 'file-fixture', displayName: 'tester', networkId: 'net-fixture' };

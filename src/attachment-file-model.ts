@@ -3,9 +3,9 @@ import type { UploadState } from './upload-queue';
 export type FileCardStatus = 'queued' | 'uploading' | 'uploaded' | 'waitingSend' | 'sendFailed' | 'ready' | 'downloading' | 'saved' | 'error';
 
 export const fileStatusText: Record<FileCardStatus, string> = {
-  queued: '等待上传', uploading: '上传中', uploaded: '已上传', waitingSend: '等待发送',
-  sendFailed: '发送失败 · 点击重试整条消息', ready: '点击下载', downloading: '下载中',
-  saved: '已保存', error: '下载失败 · 点击重试',
+  queued: 'chat.file.queued', uploading: 'chat.file.uploading', uploaded: 'chat.file.uploaded', waitingSend: 'chat.file.waitingSend',
+  sendFailed: 'chat.file.sendFailed', ready: 'chat.file.ready', downloading: 'chat.file.downloading',
+  saved: 'chat.file.saved', error: 'chat.file.error',
 };
 
 export function localFileStatus(upload?: UploadState, pending = false, failed = false, uploaded = false): FileCardStatus {

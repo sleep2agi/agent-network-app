@@ -5,6 +5,8 @@ import { saveBrowserDownload, downloadAuthedBytes } from './desktop-download';
 import { dmSendBody } from './human-dm';
 import { groupSendBody } from './group-chat';
 import { localAttachmentViews } from './dm-attachment-model';
+import { setLanguagePreference, languagePreference, t } from './i18n';
+import { chatTranslations } from './i18n-chat';
 
 assert.equal(formatFileSize(0), '0 B');
 assert.equal(formatFileSize(1), '1 B');
@@ -30,6 +32,17 @@ assert.equal(localFileStatus(undefined, true, false, true), 'waitingSend', 'rest
 assert.equal(localFileStatus(undefined, false, false, true), 'uploaded');
 assert.equal(localFileStatus(undefined, false, true, true), 'sendFailed', 'Hub upload does not override whole-message failure');
 assert.deepEqual(Object.keys(fileStatusText), ['queued', 'uploading', 'uploaded', 'waitingSend', 'sendFailed', 'ready', 'downloading', 'saved', 'error']);
+const previousLanguage = languagePreference();
+try {
+  for (const language of ['zh', 'en'] as const) {
+    setLanguagePreference(language);
+    for (const key of Object.values(fileStatusText)) {
+      assert.equal(t(key), chatTranslations[key as keyof typeof chatTranslations][language === 'zh' ? 0 : 1]);
+      assert.notEqual(t(key), key);
+      if (language === 'en') assert.ok(!/[\u4e00-\u9fff]/.test(t(key)), 'English file states contain no Chinese copy');
+    }
+  }
+} finally { setLanguagePreference(previousLanguage); }
 
 // Real send bodies must preserve all available metadata, including zero bytes.
 const attachment = { file_id: 'f1', name: 'empty.txt', mime: 'text/plain', size: 0 };
@@ -107,6 +120,7 @@ assert.ok(card.includes('numberOfLines={2}') && card.includes('attachment-file-e
 assert.ok(card.includes("extension: { flexShrink: 0, maxWidth: '45%' }") && card.includes('stem: { flexShrink: 1, minWidth: 0 }'), 'normal extensions never shrink; short names stay adjacent to their extension');
 assert.ok(card.includes('<ActivityIndicator') && card.includes("status === 'uploading' || status === 'downloading'") && !/progress\s*=/.test(card), 'transport activity is indeterminate, not fabricated byte progress');
 assert.ok(card.includes('backgroundColor: colors.card') && card.includes('color: colors.text'));
+assert.ok(card.includes('useTranslation()') && card.includes('t(fileStatusText[status])'), 'file cards resolve current language reactively');
 assert.ok(desktop.indexOf('busy.current = true') < desktop.indexOf('await chooseSavePath(name)'));
 assert.ok(!desktop.includes('openPath') && !desktop.includes('shell'));
 assert.ok(native.includes('await downloadAttachment(serverUrl, token, fileId, name, resolvedMime)') && native.includes('await Sharing.shareAsync(local'));

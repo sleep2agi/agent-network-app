@@ -27,6 +27,27 @@ const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail }); 
 const tid = id => `[data-testid="${id}"]`;
 const shot = async (page, name) => { await page.evaluate(() => document.fonts.ready); const path = resolve(out, `${name}.png`); await page.screenshot({ path }); screenshots.push(path); };
 const wait = (page, f) => page.waitForFunction(f, null, { timeout: 12000 });
+// Independent acceptance dictionary, not imported from production translations.
+const copy = {
+  zh: { queued: '等待上传', uploading: '上传中', uploaded: '已上传', waitingSend: '等待发送', sendFailed: '发送失败 · 点击重试整条消息', ready: '点击下载', downloading: '下载中', saved: '已保存', error: '下载失败 · 点击重试', saveHint: '选择位置保存 · Alt 点击直接存到下载', browserHint: '安全下载到浏览器', handedOff: '已交给浏览器下载 · 点击可再次下载', reveal: '在文件夹中显示', saveAs: '另存为' },
+  en: { queued: 'Waiting to upload', uploading: 'Uploading', uploaded: 'Uploaded', waitingSend: 'Waiting to send', sendFailed: 'Send failed · Retry the whole message', ready: 'Click to download', downloading: 'Downloading', saved: 'Saved', error: 'Download failed · Click to retry', saveHint: 'Choose a save location · Alt-click to save to Downloads', browserHint: 'Download securely in your browser', handedOff: 'Handed to your browser · Click to download again', reveal: 'Show in folder', saveAs: 'Save as' },
+};
+async function statusCopy(page, status, language, tag) {
+  const nodes = page.locator(tid(`attachment-file-status-${status}`));
+  await nodes.first().waitFor();
+  const texts = await nodes.allTextContents();
+  check(`${tag}: ${language} ${status} exact dictionary`, texts.length > 0 && texts.every(t => t === copy[language][status]), texts);
+  check(`${tag}: ${language} ${status} accessible label`, await nodes.evaluateAll((nodes, expected) => nodes.every(n => n.closest('[aria-label]')?.getAttribute('aria-label').includes(expected)), copy[language][status]));
+}
+async function switchLanguage(page, language) {
+  // Exercise the installed cross-tab storage listener without reloading/remounting App.
+  await page.evaluate(language => {
+    const key = 'anet.language.v1', oldValue = localStorage.getItem(key);
+    localStorage.setItem(key, language);
+    window.dispatchEvent(new StorageEvent('storage', { key, oldValue, newValue: language, storageArea: localStorage }));
+  }, language);
+  await page.waitForFunction(expected => [...document.querySelectorAll('[data-testid="attachment-file-status-ready"]')].every(n => n.textContent === expected), copy[language].ready);
+}
 async function openAgent(page) {
   await page.locator(tid('agent-row-Fixture-Agent')).first().click({ timeout: 20000 });
   await page.locator(tid('chat-pane')).waitFor();
@@ -54,10 +75,11 @@ async function inspectCards(page, tag) {
   return data;
 }
 try {
-  for (const c of [ { name: 'desktop-light', width: 1440, height: 1000, theme: 'light' }, { name: 'desktop-dark', width: 1440, height: 1000, theme: 'dark' }, { name: 'mobile-light', width: 390, height: 844, theme: 'light' }, { name: 'mobile-dark', width: 390, height: 844, theme: 'dark' } ]) {
-    const context = await browser.newContext({ viewport: { width: c.width, height: c.height }, colorScheme: c.theme, deviceScaleFactor: 1, acceptDownloads: true, serviceWorkers: 'block', ...(c.width === 390 ? { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36', hasTouch: true } : {}) });
+  for (const c of [ { name: 'desktop-light', width: 1440, height: 1000, theme: 'light' }, { name: 'desktop-dark', width: 1440, height: 1000, theme: 'dark' }, { name: 'mobile-light', width: 390, height: 844, theme: 'light' }, { name: 'mobile-dark', width: 390, height: 844, theme: 'dark' }, { name: 'desktop-en', width: 1440, height: 1000, theme: 'light', language: 'en' } ]) {
+    const language = c.language || 'zh';
+    const context = await browser.newContext({ locale: 'en-US', viewport: { width: c.width, height: c.height }, colorScheme: c.theme, deviceScaleFactor: 1, acceptDownloads: true, serviceWorkers: 'block', ...(c.width === 390 ? { userAgent: 'Mozilla/5.0 (Linux; Android 14; Pixel 8) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0 Mobile Safari/537.36', hasTouch: true } : {}) });
     await context.route('**/*', route => { if (new URL(route.request().url()).origin !== new URL(url).origin) { blocked.push(route.request().url()); return route.abort(); } return route.continue(); });
-    await context.addInitScript(bootstrap, { theme: c.theme });
+    await context.addInitScript(bootstrap, { theme: c.theme, language });
     const page = await context.newPage();
     page.on('pageerror', e => errors.push({ case: c.name, error: e.message }));
     try {
@@ -65,8 +87,20 @@ try {
       await openAgent(page);
       await page.waitForTimeout(600);
       await inspectCards(page, `${c.name}/agent`);
+      await statusCopy(page, 'ready', language, `${c.name}/agent`);
+      check(`${c.name}: explicit stored language`, await page.evaluate(() => localStorage.getItem('anet.language.v1')) === language);
+      check(`${c.name}: desktop save hint translated`, (await page.locator(tid('attachment-file-card')).allTextContents()).every(t => t.includes(copy[language].saveHint)));
+      if (language === 'en') {
+        await page.locator(tid('attachment-file-card')).first().evaluate(n => { window.__mountedFileCard = n; });
+        for (const next of ['zh', 'en']) {
+          await switchLanguage(page, next);
+          await statusCopy(page, 'ready', next, 'runtime receive');
+          check(`runtime receive: ${next} same mounted card and translated hint`, await page.locator(tid('attachment-file-card')).first().evaluate((n, hint) => n === window.__mountedFileCard && n.innerText.includes(hint), copy[next].saveHint));
+          await shot(page, `runtime-receive-${next}`);
+        }
+      }
       await shot(page, `${c.name}-agent-received`);
-      if (c.name === 'desktop-light') {
+      if (c.name === 'desktop-light' || language === 'en') {
         const card = page.locator(tid('attachment-file-card')).filter({ has: page.locator(tid('attachment-file-extension'), { hasText: '.pdf' }) }).first();
         const downloads = () => page.evaluate(() => window.__fixture.requests.filter(r => r.path === '/api/files/f_pdf00000001').length);
         const before = await downloads();
@@ -75,8 +109,11 @@ try {
         await page.evaluate(() => { window.__fixture.savePath = '/Fixture/Chosen/Acceptance.pdf'; window.__fixture.delay.download = 600; });
         await card.click();
         await page.locator(tid('attachment-file-status-downloading')).waitFor();
+        await statusCopy(page, 'downloading', language, c.name);
         check('desktop: downloading status and busy indicator', await page.locator(tid('attachment-file-busy')).count() === 1);
         await page.locator(tid('attachment-file-status-saved')).waitFor();
+        await statusCopy(page, 'saved', language, c.name);
+        check(`${c.name}: translated reveal and Save As controls`, await page.locator(tid('attachment-file-reveal')).innerText() === copy[language].reveal && await page.locator(tid('attachment-file-save-as')).innerText() === copy[language].saveAs);
         let calls = await page.evaluate(() => window.__fixture.calls);
         check('desktop: authenticated bytes saved to chosen path', calls.some(x => x.cmd === 'save_download' && x.args.targetPath === '/Fixture/Chosen/Acceptance.pdf' && Buffer.from(x.args.bytesBase64, 'base64').toString() === 'LOCAL ACCEPTANCE FILE BYTES') && await page.evaluate(() => window.__fixture.requests.some(r => r.path.endsWith('f_pdf00000001') && r.authorization === 'Bearer file_fixture_only')));
         await page.locator(tid('attachment-file-reveal')).click();
@@ -87,12 +124,21 @@ try {
         await page.locator(tid('attachment-file-save-as')).click();
         await wait(page, () => window.__fixture.calls.some(c => c.cmd === 'save_download' && c.args.targetPath === '/Fixture/Second/Copy.pdf'));
         check('desktop: explicit Save As and remembered directory', await page.evaluate(() => window.__fixture.calls.filter(c => c.cmd === 'plugin:dialog|save').at(-1).args.options.defaultPath === '/Fixture/Chosen/Acceptance.pdf'));
-        await shot(page, 'desktop-light-saved');
+        await shot(page, `${c.name}-saved`);
         const ppt = page.locator(tid('attachment-file-card')).filter({ has: page.locator(tid('attachment-file-extension'), { hasText: '.pptx' }) }).first();
         await page.evaluate(() => { window.__fixture.fail.download = 1; });
         await ppt.click(); await page.locator(tid('attachment-file-status-error')).waitFor();
-        check('desktop: download failure visible with retry', await ppt.innerText().then(t => t.includes('503') && t.includes('点击重试')));
-        await shot(page, 'desktop-light-download-error');
+        check('desktop: download failure visible with retry', await ppt.innerText().then(t => t.includes('503') && t.includes(copy[language].error)));
+        await statusCopy(page, 'error', language, c.name);
+        if (language === 'en') {
+          for (const next of ['zh', 'en']) {
+            await switchLanguage(page, next);
+            await statusCopy(page, 'error', next, 'runtime download error');
+            await statusCopy(page, 'saved', next, 'runtime saved');
+            check(`runtime saved: ${next} reveal and Save As`, await page.locator(tid('attachment-file-reveal')).innerText() === copy[next].reveal && await page.locator(tid('attachment-file-save-as')).innerText() === copy[next].saveAs);
+          }
+        }
+        await shot(page, `${c.name}-download-error`);
         await ppt.click(); await wait(page, () => document.querySelectorAll('[data-testid="attachment-file-status-saved"]').length === 2);
         check('desktop: download retry succeeds', true);
       }
@@ -101,22 +147,24 @@ try {
         await page.locator(tid('person-row-peer')).first().click();
         await page.locator(tid('dm-pane')).waitFor(); await page.locator(tid('attachment-file-card')).first().waitFor(); await page.waitForTimeout(400);
         await inspectCards(page, `${c.name}/dm`); await shot(page, `${c.name}-dm-received`);
+        await statusCopy(page, 'ready', language, `${c.name}/dm`);
         if (c.width === 390) {
           await page.locator(tid('dm-header-back')).click();
         }
         await page.locator(tid('group-row-group-fixture')).first().click();
         await page.locator(tid('attachment-file-card')).first().waitFor(); await page.waitForTimeout(400);
         await inspectCards(page, `${c.name}/group`); await shot(page, `${c.name}-group-received`);
+        await statusCopy(page, 'ready', language, `${c.name}/group`);
       }
     } catch (e) { check(`${c.name}: scenario completes`, false, e.message); await shot(page, `${c.name}-blocked`); }
     evidence.push({ case: c.name, text: await page.locator('body').innerText(), state: await page.evaluate(() => window.__fixture) });
     await context.close();
   }
-  for (const width of [1440, 390]) for (const fail of ['upload', 'task']) {
-    const tag = `${width === 390 ? 'mobile-dark' : 'desktop-light'}-${fail}-failure`;
-    const context = await browser.newContext({ viewport: { width, height: width === 390 ? 844 : 1000 }, colorScheme: width === 390 ? 'dark' : 'light', serviceWorkers: 'block' });
+  for (const { width, language } of [{ width: 1440, language: 'zh' }, { width: 390, language: 'zh' }, { width: 1440, language: 'en' }]) for (const fail of ['upload', 'task']) {
+    const tag = `${language === 'en' ? 'desktop-en' : width === 390 ? 'mobile-dark' : 'desktop-light'}-${fail}-failure`;
+    const context = await browser.newContext({ locale: 'en-US', viewport: { width, height: width === 390 ? 844 : 1000 }, colorScheme: width === 390 ? 'dark' : 'light', serviceWorkers: 'block' });
     await context.route('**/*', r => new URL(r.request().url()).origin === new URL(url).origin ? r.continue() : r.abort());
-    await context.addInitScript(bootstrap, { theme: width === 390 ? 'dark' : 'light' });
+    await context.addInitScript(bootstrap, { theme: width === 390 ? 'dark' : 'light', language });
     const page = await context.newPage();
     page.on('pageerror', e => errors.push({ case: tag, error: e.message }));
     try {
@@ -135,17 +183,30 @@ try {
       await page.locator(tid('composer-draft-file')).first().waitFor();
       check(`${tag}: real chooser creates file draft`, await page.locator(tid('composer-draft-file')).count() === (width > 390 ? 4 : 1));
       if (width > 390) check(`${tag}: mixed image and files in draft`, await page.locator(tid('composer-draft-thumb')).count() === 1);
-      await page.evaluate(fail => { window.__fixture.requests = []; window.__fixture.fail[fail] = 1; window.__fixture.delay.upload = 1200; window.__fixture.delay.task = 800; window.__statusSeen = []; const observer = new MutationObserver(() => { for (const e of document.querySelectorAll('[data-testid^="attachment-file-status-"]')) { const s = e.getAttribute('data-testid'); if (!window.__statusSeen.includes(s)) window.__statusSeen.push(s); } }); observer.observe(document.body, { subtree: true, childList: true, attributes: true }); }, fail);
+      await page.evaluate(fail => { window.__fixture.requests = []; window.__fixture.fail[fail] = 1; window.__fixture.delay.upload = 2500; window.__fixture.delay.task = 800; window.__statusSeen = []; window.__statusTextSeen = []; const observer = new MutationObserver(() => { for (const e of document.querySelectorAll('[data-testid^="attachment-file-status-"]')) { const s = e.getAttribute('data-testid'); if (!window.__statusSeen.includes(s)) window.__statusSeen.push(s); const value = `${s}:${e.textContent}`; if (!window.__statusTextSeen.includes(value)) window.__statusTextSeen.push(value); } }); observer.observe(document.body, { subtree: true, childList: true, characterData: true, attributes: true }); }, fail);
       const input = page.locator('textarea').filter({ visible: true }).last();
       await input.fill('File transfer acceptance message');
       if (width > 390) await input.press('Enter'); else await page.locator(tid('composer-send')).click();
       await page.locator(tid('chat-local-file-card')).first().waitFor();
       await page.locator(tid('attachment-file-status-uploading')).first().waitFor();
       check(`${tag}: actual local card uploading`, true);
+      await statusCopy(page, 'uploading', language, tag);
+      if (width > 390) await statusCopy(page, 'queued', language, tag);
+      if (language === 'en') for (const next of ['zh', 'en']) {
+        await switchLanguage(page, next);
+        await statusCopy(page, 'uploading', next, `${tag}/runtime`);
+        await statusCopy(page, 'queued', next, `${tag}/runtime`);
+      }
       if (width > 390) check(`${tag}: concurrency queue visible`, await page.locator(tid('attachment-file-status-queued')).count() > 0);
       await shot(page, `${tag}-uploading`);
       await page.locator(tid('attachment-file-status-sendFailed')).first().waitFor({ timeout: 20000 });
       await page.getByText(/^(Not delivered · Tap to retry|未送达 · 点击重试)$/).first().waitFor({ timeout: 20000 });
+      await statusCopy(page, 'sendFailed', language, tag);
+      if (language === 'en') for (const next of ['zh', 'en']) {
+        await switchLanguage(page, next);
+        await statusCopy(page, 'sendFailed', next, `${tag}/runtime`);
+        await shot(page, `${tag}-runtime-${next}`);
+      }
       const before = await page.evaluate(() => ({ posts: window.__fixture.requests.filter(r => r.method === 'POST' && ['/api/upload', '/api/task'].includes(r.path)), calls: window.__fixture.calls, seen: window.__statusSeen }));
       check(`${tag}: failed file still visible and retryable`, await page.locator(tid('chat-local-file-card')).first().getAttribute('role') === 'button');
       const localGeometry = await page.locator(tid('chat-local-file-card')).evaluateAll(cards => cards.map(e => {
@@ -172,36 +233,46 @@ try {
       check(`${tag}: upload memo reused across chat remount`, after.posts.filter(r => r.path === '/api/upload').length === expectedUploads, { uploads: after.posts.filter(r => r.path === '/api/upload').length, expectedUploads });
       check(`${tag}: retry preserves correlation ID`, !!failedId && body.meta?.client_request_id === failedId && tasks.every(t => JSON.parse(t.body).meta?.client_request_id === failedId), { failedId, requestIds: tasks.map(t => JSON.parse(t.body).meta?.client_request_id) });
       check(`${tag}: waitingSend and uploaded states observed`, after.seen.includes('attachment-file-status-waitingSend') && after.seen.includes('attachment-file-status-uploaded'), after.seen);
+      const textSeen = await page.evaluate(() => window.__statusTextSeen);
+      for (const status of ['waitingSend', 'uploaded']) check(`${tag}: ${language} ${status} observed exact dictionary`, textSeen.includes(`attachment-file-status-${status}:${copy[language][status]}`), textSeen);
       check(`${tag}: message text preserved`, body.task?.startsWith('File transfer acceptance message'));
       await shot(page, `${tag}-delivered`);
     } catch (e) { check(`${tag}: scenario completes`, false, e.message); await shot(page, `${tag}-blocked`); }
     evidence.push({ case: tag, text: await page.locator('body').innerText(), state: await page.evaluate(() => window.__fixture) });
     await context.close();
   }
-  {
-    const context = await browser.newContext({ viewport: { width: 1440, height: 1000 }, acceptDownloads: true, serviceWorkers: 'block' });
+  for (const language of ['zh', 'en']) {
+    const context = await browser.newContext({ locale: 'en-US', viewport: { width: 1440, height: 1000 }, acceptDownloads: true, serviceWorkers: 'block' });
     await context.route('**/*', r => new URL(r.request().url()).origin === new URL(url).origin ? r.continue() : r.abort());
-    await context.addInitScript(bootstrap, { theme: 'light', browser: true }); const page = await context.newPage();
-    page.on('pageerror', e => errors.push({ case: 'browser-from-start', error: e.message }));
+    await context.addInitScript(bootstrap, { theme: 'light', browser: true, language }); const page = await context.newPage();
+    page.on('pageerror', e => errors.push({ case: `browser-from-start-${language}`, error: e.message }));
     try {
       await page.goto(url); await openAgent(page);
       await page.waitForTimeout(600);
       check('browser: mixed authenticated image remains an image', await page.locator('img').evaluateAll(imgs => imgs.some(i => i.complete && i.naturalWidth > 0 && i.src.startsWith('blob:'))), 'Diagram.png must not become a generic FILE card in browser mode');
       const card = page.locator(tid('attachment-file-card')).filter({ has: page.locator(tid('attachment-file-extension'), { hasText: '.pdf' }) }).first();
+      await statusCopy(page, 'ready', language, `browser-${language}`);
+      check(`browser-${language}: translated secure download hint`, (await card.innerText()).includes(copy[language].browserHint));
       const downloadPromise = page.waitForEvent('download'); await card.click(); const download = await downloadPromise;
       await download.saveAs(resolve(out, 'browser-Acceptance.pdf'));
       const state = await page.evaluate(() => window.__fixture);
       check('browser: authenticated blob download without URL credentials', download.url().startsWith('blob:') && state.anchors.some(a => a.download === 'Acceptance.pdf' && a.href.startsWith('blob:') && !a.href.includes('file_fixture_only')) && state.requests.some(r => r.path.endsWith('f_pdf00000001') && r.authorization === 'Bearer file_fixture_only'));
       check('browser: downloaded bytes match response', readFileSync(resolve(out, 'browser-Acceptance.pdf'), 'utf8') === 'LOCAL ACCEPTANCE FILE BYTES');
-      check('browser: no false saved-to-disk confirmation', await card.innerText().then(t => t.includes('已交给浏览器下载') && !t.includes('已保存')));
-      await shot(page, 'browser-authenticated-download');
+      check('browser: no false saved-to-disk confirmation', await card.innerText().then(t => t.includes(copy[language].handedOff) && !t.includes(copy[language].saved)));
+      await shot(page, language === 'zh' ? 'browser-authenticated-download' : 'browser-en-authenticated-download');
+      if (language === 'en') for (const next of ['zh', 'en']) {
+        await switchLanguage(page, next);
+        await statusCopy(page, 'ready', next, 'runtime browser handoff');
+        check(`runtime browser handoff: ${next} translated confirmation`, (await card.innerText()).includes(copy[next].handedOff), await card.innerText());
+        await shot(page, `browser-handoff-runtime-${next}`);
+      }
       const zero = page.locator(tid('attachment-file-card')).filter({ has: page.locator(tid('attachment-file-extension'), { hasText: '.zip' }) }).first();
       await zero.click();
       await page.waitForTimeout(600);
       check('browser: legitimate zero-byte file downloads', await page.evaluate(() => window.__fixture.anchors.some(a => a.download === 'Empty.zip')), 'A 200 response with zero bytes must still download');
-      await shot(page, 'browser-zero-byte-error');
-    } catch (e) { check('browser: nonempty download completes', false, e.message); await shot(page, 'browser-blocked'); }
-    evidence.push({ case: 'browser-from-start', text: await page.locator('body').innerText(), state: await page.evaluate(() => window.__fixture) });
+      await shot(page, language === 'zh' ? 'browser-zero-byte-error' : 'browser-en-zero-byte');
+    } catch (e) { check(`browser-${language}: nonempty download completes`, false, e.message); await shot(page, `browser-${language}-blocked`); }
+    evidence.push({ case: `browser-from-start-${language}`, text: await page.locator('body').innerText(), state: await page.evaluate(() => window.__fixture) });
     await context.close();
   }
   check('security: no arbitrary open command in exercised flows', evidence.every(e => e.state.calls.every(c => !/open_path|open_url|shell\|open|shell\|execute|shell\|spawn/.test(c.cmd))));

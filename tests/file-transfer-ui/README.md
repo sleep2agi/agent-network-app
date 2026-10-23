@@ -23,6 +23,9 @@ Optional overrides: `PLAYWRIGHT_MODULE` (absolute module filename), `CHROME_PATH
 - Receive matrix: agent, human DM, and group at 1440x1000 and 390x844, light and dark. PPTX/PDF/zero-byte ZIP and a decoded image appear together.
 - Agent send matrix: desktop light and mobile dark, upload failure and task-send failure, real HTML file chooser, then chat remount and retry. Desktop includes four files and one image to exercise the upload concurrency queue. Mobile uses the real single-document chooser.
 - Asserts card/ancestor containment, maximum 300px width, horizontal overflow, right-side icons, zero-byte size, visible extension width, download cancel, authenticated save, reveal, explicit Save As, download error/retry, upload memo, and stable request correlation ID.
+- The original 156 functional checks run with explicit `anet.language.v1=zh`, even under browser locale `en-US`. `zh-CN` is not a valid stored preference; the accepted values are `zh`, `en`, and `system`.
+- Additional English desktop flows navigate normally into agent/DM/group, save/download/error/retry, both outgoing failure types with queue/upload/waiting-send/uploaded statuses, and plain-browser authenticated downloads. An independent bilingual dictionary checks exact visible status text and accessible card labels, rather than importing production translations or accepting either language.
+- Runtime `en -> zh -> en` checks exercise the installed storage-event subscription on mounted received, queued/uploading, failed-send, saved/error, and browser-handoff cards. The test writes the preference and dispatches the cross-tab `storage` notification; it does not reload App or call internal language setters. Received-card DOM identity is asserted. This does not exercise the Settings language picker itself.
 
 ## Evidence
 

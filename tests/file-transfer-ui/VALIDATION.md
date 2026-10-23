@@ -2,9 +2,17 @@
 
 ## Result
 
-The final installed Chrome/Playwright run against the compiled full App completed with **156/156 assertions passed**. TypeScript, Expo production export, and the complete **444/444 test-file** regression suite passed.
+The current installed Chrome/Playwright bilingual run against the existing compiled full App completed with **365/366 assertions passed, 1 failed**, reproduced in two consecutive runs. The original **156 functional assertions remain passing**, with explicit Chinese preference; 210 additional assertions cover bilingual copy and the added English flows. The current run produced **49 distinct screenshots**, **0 uncaught page errors**, and **0 blocked external requests**. Export bundle bytes were verified unchanged. No build, typecheck, or unit-test suite was run in this tests-only follow-up.
 
-The first run exposed three production issues listed below; each was fixed and the original assertions passed without removal or weakening. There were no uncaught page errors. Export bundle bytes were verified unchanged during the run. See `artifacts/report.json` for exact bundle SHA-256 and individual results.
+The earlier acceptance run passed 156/156 after the three production fixes listed below; its reported typecheck/export/444-test-file results are historical, not checks repeated here. See `artifacts/report.json` for current exact bundle SHA-256 and individual results.
+
+## Current I18n Regression
+
+The former hardcoded-Chinese file-card statuses are no longer an issue: all nine status dictionary values pass in both languages, including real queued/uploading/waiting-send/uploaded/send-failure and download/error/saved flows. Save hints, reveal, Save As, and fresh browser hints/handoff confirmations pass in their initial language. `anet.language.v1` must contain `zh` or `en`, not `zh-CN`; the original fixture's invalid preference fell back to system English despite asserting old Chinese hardcodes.
+
+**Remaining bug: browser handoff confirmation retains the download-time language.** Start in English, navigate into Fixture-Agent, download Acceptance.pdf, then switch to Chinese without remounting. The status updates to Chinese but the footer remains `Handed to your browser · Click to download again` instead of the Chinese dictionary value. `src/AttachmentFileDesktop.tsx:36` stores the translated string in `state.message`, and line 54 reuses it after language changes. Evidence: `artifacts/browser-handoff-runtime-zh.png`; exact failing check: `runtime browser handoff: zh translated confirmation`. The failing assertion is retained and the runner exits 1. No source fix was made in this tests-only scope.
+
+Runtime switching uses the app's installed cross-tab storage-event listener, not a reload or internal module hook. Received cards retain DOM identity. The Settings language-picker UI and reveal-error localization are not exercised.
 
 ## Fixed Regressions
 
@@ -31,7 +39,7 @@ and failed sends keep their original request IDs and upload memoization.
 
 ## Screenshots And Traces
 
-The final report lists **28 screenshots**. Important examples:
+The current report lists **49 distinct screenshots**. Important examples:
 
 - `artifacts/desktop-light-agent-received.png`
 - `artifacts/desktop-dark-dm-received.png`
@@ -45,6 +53,16 @@ The final report lists **28 screenshots**. Important examples:
 - `artifacts/desktop-light-download-error.png`
 - `artifacts/browser-authenticated-download.png`
 - `artifacts/browser-zero-byte-error.png`
+- `artifacts/desktop-en-agent-received.png`
+- `artifacts/desktop-en-dm-received.png`
+- `artifacts/desktop-en-group-received.png`
+- `artifacts/runtime-receive-zh.png`
+- `artifacts/runtime-receive-en.png`
+- `artifacts/desktop-en-upload-failure-runtime-zh.png`
+- `artifacts/desktop-en-task-failure-runtime-en.png`
+- `artifacts/browser-en-authenticated-download.png`
+- `artifacts/browser-handoff-runtime-zh.png`
+- `artifacts/browser-handoff-runtime-en.png`
 
 `artifacts/evidence.json` preserves actual body text and synthetic Hub/IPC requests for each final scenario. Earlier exploratory screenshots not listed in the final report are not part of the final result.
 
