@@ -41,6 +41,7 @@ import HubSecretsPane from './src/HubSecretsPane';
 import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtureScreen';
 import DaemonOverviewFixtureScreen, { readDaemonOverviewFixture } from './src/DaemonOverviewFixtureScreen';
 import CloneNodeFixtureScreen, { readCloneNodeFixture } from './src/CloneNodeFixtureScreen';
+import ChatSessionStripFixtureScreen, { readChatSessionStripFixture } from './src/ChatSessionStripFixtureScreen';
 import { hubSectionForScreen, screenForHubSection, type HubSection } from './src/hub-scope-demo';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
@@ -293,6 +294,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <DaemonOverviewFixtureScreen theme={daemonOverviewFixture.theme} mode={daemonOverviewFixture.mode} />
+      </SafeAreaProvider>
+    );
+  }
+
+  const chatStripFixture = readChatSessionStripFixture();
+  if (chatStripFixture) {
+    if (themeMode() !== chatStripFixture.theme) setThemeMode(chatStripFixture.theme);
+    return (
+      <SafeAreaProvider>
+        <ChatSessionStripFixtureScreen />
       </SafeAreaProvider>
     );
   }

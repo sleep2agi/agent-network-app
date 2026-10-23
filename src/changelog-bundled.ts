@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.295:",
+  "- 手机聊天顶部「原会话」那一条再收一档：只留「原会话 · 读取 · 转后台」三个短标签，一行放得下，不再挤掉标题、也不压住消息。",
+  "",
   "What's new in 0.2.294:",
   "- 修复：「OpenCode 原会话」那一行的「转到后台」变灰时不说原因；现在状态超过 30 秒会写一句「状态已过期，重新读取后再转后台」。",
   "",
@@ -1282,6 +1285,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.294": "2026-10-23T17:01:01Z",
   "0.2.293": "2026-10-23T14:05:04Z",
   "0.2.292": "2026-10-23T12:39:38Z",
   "0.2.291": "2026-10-23T10:47:28Z",
