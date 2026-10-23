@@ -152,3 +152,47 @@ export function tagAncestors(tag: string, parents: TagParents | null | undefined
   }
   return out;
 }
+
+
+// ── 新建 / 编辑项目时选父项目(#2113)──────────────────────────────────────
+
+/**
+ * Hub 到底有没有「父项目」这个字段?
+ * 判据是 payload 里**出现过** parent_id(哪怕是 null),不是「有没有非空值」:
+ * 新 Hub 的根项目 parent_id 也是 null,照样应该能选父项目。
+ */
+export function hubExposesProjectParent(nodes: readonly Parented[] | null | undefined): boolean {
+  if (!nodes?.length) return false;
+  return nodes.some(n => n.parentId !== undefined);
+}
+
+/** 一个节点的所有后代(用于「编辑时不能把自己挂到自己的后代下」)。 */
+export function descendantIds(nodes: readonly Parented[], id: string): string[] {
+  const out: string[] = [];
+  const seen = new Set<string>([id]);
+  let frontier = [id];
+  while (frontier.length) {
+    const next: string[] = [];
+    for (const parent of frontier) {
+      for (const n of nodes) {
+        const p = parentOf(n);
+        if (p !== parent || seen.has(n.id)) continue;
+        seen.add(n.id);
+        out.push(n.id);
+        next.push(n.id);
+      }
+    }
+    frontier = next;
+  }
+  return out;
+}
+
+/**
+ * 选父项目的候选:未归档、且编辑时排除自己与自己的后代(服务端仍做最终拒绝)。
+ * 没有层级数据时返回空数组 —— 调用方据此完全不渲染控件。
+ */
+export function parentProjectOptions<T extends Parented>(nodes: readonly T[], editingId?: string | null): T[] {
+  if (!hubExposesProjectParent(nodes)) return [];
+  const banned = editingId ? new Set([editingId, ...descendantIds(nodes, editingId)]) : new Set<string>();
+  return nodes.filter(n => !banned.has(n.id));
+}

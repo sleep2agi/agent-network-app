@@ -572,14 +572,14 @@ export async function listProjects(cfg: HubConfig): Promise<RequirementProject[]
   return data.projects.map(projectFromHub).filter((p: RequirementProject | null): p is RequirementProject => !!p);
 }
 
-export async function createProject(cfg: HubConfig, input: { name: string; color?: string }): Promise<RequirementProject> {
+export async function createProject(cfg: HubConfig, input: { name: string; color?: string; parentId?: string | null }): Promise<RequirementProject> {
   const { status, data } = await projectCall(cfg, '/api/requirements/projects', { method: 'POST', body: JSON.stringify({ ...input, network_id: cfg.networkId }) });
   const row = projectFromHub(data?.project);
   if (status !== 201 || !row) throw projectError(status, data?.error);
   return row;
 }
 
-export async function updateProject(cfg: HubConfig, id: string, patch: { name?: string; color?: string; sort?: number; archived?: boolean }): Promise<RequirementProject> {
+export async function updateProject(cfg: HubConfig, id: string, patch: { name?: string; color?: string; sort?: number; archived?: boolean; parentId?: string | null }): Promise<RequirementProject> {
   const { status, data } = await projectCall(cfg, `/api/requirements/projects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
   const row = projectFromHub(data?.project);
   if (status !== 200 || !row) throw projectError(status, data?.error);

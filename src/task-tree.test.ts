@@ -1,6 +1,6 @@
 // #2098 / #2102:项目树与标签层级的纯判定。
 // 关键约束:**没有 parent 数据时必须与旧的平铺完全一致**(顺序、深度、计数都不变)。
-import { aggregateCounts, hasHierarchy, projectRows, tagAncestors, tagRows, tagWithDescendants } from './task-tree';
+import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, parentProjectOptions, projectRows, tagAncestors, tagRows, tagWithDescendants } from './task-tree';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra = '') => { t++; if (ok) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` — ${extra}` : ''}`); };
@@ -55,6 +55,28 @@ ck('侧栏用 projectRows 渲染项目树', /projectRows\(activeProjects\(projec
 ck('侧栏用 aggregateCounts 聚合祖先计数', /aggregateCounts\(rows, p => pCounts\.get\(p\.id\) \?\? 0\)/.test(side));
 ck('侧栏用 tagRows + tagCatalog.parents 渲染标签层级', /tagRows\(tagNames, tagCatalog\?\.parents \?\? null\)/.test(side));
 ck('折叠只在有子节点时出现', /r\.hasChildren\s*\?\s*<View/.test(side));
+
+
+// ── #2113:父项目候选 ────────────────────────────────────────────────────
+ck('旧 Hub(没有 parent_id 字段)不暴露父项目', hubExposesProjectParent([P('A'), P('B')]) === false);
+ck('新 Hub 根项目 parent_id=null 也算暴露该字段', hubExposesProjectParent([P('A', null), P('B', null)]) === true);
+ck('空列表不暴露', hubExposesProjectParent([]) === false && hubExposesProjectParent(null) === true === false);
+ck('旧 Hub 时父项目候选为空(控件完全不渲染)', parentProjectOptions([P('A'), P('B')]).length === 0);
+
+const three = [P('root', null), P('child', 'root'), P('grand', 'child'), P('other', null)];
+const created = parentProjectOptions(three);
+ck('新建:所有未归档项目都可当父', created.map(n => n.id).join(',') === 'root,child,grand,other');
+const edited = parentProjectOptions(three, 'root');
+ck('编辑:排除自己与后代', edited.map(n => n.id).join(',') === 'other');
+ck('后代计算覆盖多层', descendantIds(three, 'root').join(',') === 'child,grand');
+ck('编辑叶子项目:只排除自己', parentProjectOptions(three, 'grand').map(n => n.id).join(',') === 'root,child,other');
+
+const manager = readFileSync(new URL('./TaskProjectManager.tsx', import.meta.url), 'utf8');
+ck('管理页:Hub 没字段时整块父项目控件不渲染', /const supportsParent = hubExposesProjectParent\(projects\);/.test(manager)
+  && /supportsParent \? parentChips\(parentId, createParents/.test(manager));
+ck('管理页:新建把 parentId 传给 onCreate', /onCreate\(c\.name, color, parentId\)/.test(manager));
+ck('管理页:编辑用 parentProjectOptions(active, editing.id) 排除自身与后代', /parentProjectOptions\(active, editing\.id\)/.test(manager));
+ck('管理页:编辑保存时只在父项目变化时发 parentId', /if \(parentChanged\) patch\.parentId = nextParent \?\? null;/.test(manager));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
