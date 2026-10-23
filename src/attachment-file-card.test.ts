@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { filePresentation, fileStatusText, formatFileSize, localFileStatus } from './attachment-file-model';
+import { filePresentation, fileStatusKey, formatFileSize, localFileStatus } from './attachment-file-model';
 import { saveBrowserDownload, downloadAuthedBytes } from './desktop-download';
 import { dmSendBody } from './human-dm';
 import { groupSendBody } from './group-chat';
@@ -29,7 +29,9 @@ assert.equal(localFileStatus(undefined, false, true), 'sendFailed');
 assert.equal(localFileStatus(undefined, true, false, true), 'waitingSend', 'restored Hub ID proves upload even without transient upload state');
 assert.equal(localFileStatus(undefined, false, false, true), 'uploaded');
 assert.equal(localFileStatus(undefined, false, true, true), 'sendFailed', 'Hub upload does not override whole-message failure');
-assert.deepEqual(Object.keys(fileStatusText), ['queued', 'uploading', 'uploaded', 'waitingSend', 'sendFailed', 'ready', 'downloading', 'saved', 'error']);
+assert.deepEqual(Object.keys(fileStatusKey), ['queued', 'uploading', 'uploaded', 'waitingSend', 'sendFailed', 'ready', 'downloading', 'saved', 'error']);
+// #1051 P2 —— 模型只给 i18n key，绝不再存死文案（英文界面曾显示中文）。
+for (const key of Object.values(fileStatusKey)) assert.match(key, /^chat\.fileStatus\./, `status key must be an i18n key, got ${key}`);
 
 // Real send bodies must preserve all available metadata, including zero bytes.
 const attachment = { file_id: 'f1', name: 'empty.txt', mime: 'text/plain', size: 0 };

@@ -1,17 +1,19 @@
 import { ActivityIndicator, Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, radius, weight } from './theme';
-import { filePresentation, fileStatusText, formatFileSize, type FileCardStatus } from './attachment-file-model';
+import { filePresentation, fileStatusKey, formatFileSize, type FileCardStatus } from './attachment-file-model';
+import { useTranslation } from './i18n-react';
 
 export default function AttachmentFileCard({ name, mime, size, status = 'ready', detail, onPress, testID = 'attachment-file-card' }: {
   name: string; mime?: string; size?: number; status?: FileCardStatus; detail?: string;
   onPress?: (event: GestureResponderEvent) => void; testID?: string;
 }) {
+  const { t } = useTranslation();
   const file = filePresentation(name, mime);
   const busy = status === 'uploading' || status === 'downloading';
   const failed = status === 'error' || status === 'sendFailed';
   const sizeText = formatFileSize(size);
-  const statusText = fileStatusText[status];
+  const statusText = t(fileStatusKey[status]);
   return (
     <Pressable testID={testID} style={({ pressed }) => [styles.card, pressed && onPress && styles.pressed]}
       accessibilityRole={onPress ? 'button' : undefined} accessibilityLabel={`${name}, ${sizeText ?? ''}, ${statusText}${detail ? `, ${detail}` : ''}`}
@@ -34,7 +36,7 @@ export default function AttachmentFileCard({ name, mime, size, status = 'ready',
         </View>
       </View>
       <View style={styles.footer}>
-        <Text style={[styles.footerText, failed && styles.error]} numberOfLines={2}>{detail || `${file.extension ? file.extension.slice(1).toUpperCase() : file.label} 文件`}</Text>
+        <Text style={[styles.footerText, failed && styles.error]} numberOfLines={2}>{detail || `${file.extension ? file.extension.slice(1).toUpperCase() : file.label} ${t('chat.fileKindSuffix')}`}</Text>
       </View>
     </Pressable>
   );
