@@ -17,7 +17,8 @@ const seed = populated => Array.from({ length: 329 }, (_, i) => ({ node_id: `ori
 export async function startServer(port = 0) {
   const index = readFileSync(resolve(dist, 'index.html'), 'utf8');
   const assets = [...index.matchAll(/<script[^>]+src="([^"]+)"/g)].map(m => ({ path: m[1], sha256: createHash('sha256').update(readFileSync(resolve(dist, `.${m[1]}`))).digest('hex') }));
-  let agents = seed(false), departments = structuredClone(departmentSeed), deny = false, fail = false, refreshFail = false, restricted = false;
+  const bulkConfirmExported = assets.some(a => readFileSync(resolve(dist, `.${a.path}`), 'utf8').includes('agent-org-bulk-confirm'));
+  let agents = seed(false), departments = structuredClone(departmentSeed), deny = false, fail = false, refreshFail = false, restricted = false, failNodes = new Set();
   const members = [
     { user_id: 'self', username: 'fixture-viewer', display_name: 'Fixture Owner', role: 'owner', agent_access: 'all' },
     { user_id: 'admin', username: 'admin.fixture', display_name: 'Fixture Admin', role: 'admin', agent_access: 'all' },
@@ -29,13 +30,14 @@ export async function startServer(port = 0) {
   const server = createServer(async (req, res) => {
     const u = new URL(req.url, 'http://127.0.0.1'), p = u.pathname;
     const json = (body, status = 200) => { res.writeHead(status, { 'content-type': 'application/json', 'cache-control': 'no-store' }); res.end(JSON.stringify(body)); };
-    if (p === '/__fixture/reset' && req.method === 'POST') { agents = seed(u.searchParams.get('populated') === '1'); departments = structuredClone(departmentSeed); deny = fail = refreshFail = restricted = false; requests.length = writes.length = unhandled.length = 0; return json({ ok: true }); }
+    if (p === '/__fixture/reset' && req.method === 'POST') { agents = seed(u.searchParams.get('populated') === '1'); departments = structuredClone(departmentSeed); deny = fail = refreshFail = restricted = false; failNodes = new Set(); requests.length = writes.length = unhandled.length = 0; return json({ ok: true }); }
     if (p === '/__fixture/mode' && req.method === 'POST') {
       fail = u.searchParams.get('fail') === '1'; refreshFail = u.searchParams.get('refreshFail') === '1'; restricted = u.searchParams.get('restricted') === '1';
+      failNodes = new Set((u.searchParams.get('failNodes') || '').split(',').filter(Boolean));
       return json({ fail, refreshFail, restricted });
     }
     if (p === '/__fixture/deny' && req.method === 'POST') { deny = u.searchParams.get('value') !== '0'; return json({ deny }); }
-    if (p === '/__fixture/state') return json({ agents, departments, members, deny, requests, writes, unhandled, assets, indexSha256: createHash('sha256').update(index).digest('hex') });
+    if (p === '/__fixture/state') return json({ agents, departments, members, deny, requests, writes, unhandled, assets, bulkConfirmExported, indexSha256: createHash('sha256').update(index).digest('hex') });
     if (p.startsWith('/api/')) {
       const entry = { method: req.method, path: p, query: u.search }; requests.push(entry);
       if (req.headers.authorization !== 'Bearer utok_local_fixture_only') return json({ error: 'fixture_token_required' }, 401);
@@ -80,7 +82,7 @@ export async function startServer(port = 0) {
         let raw = ''; for await (const chunk of req) raw += chunk;
         let body; try { body = JSON.parse(raw); } catch { return json({ error: 'invalid_json' }, 400); }
         const agent = agents.find(a => a.node_id === decodeURIComponent(match[1]));
-        const status = deny ? 403 : !agent ? 404 : body.department_id !== null && !departments.some(d => d.id === body.department_id) ? 400 : 200;
+        const status = deny || restricted ? 403 : failNodes.has(agent?.node_id) ? 500 : !agent ? 404 : body.department_id !== null && !departments.some(d => d.id === body.department_id) ? 400 : 200;
         writes.push({ ...entry, body, status });
         // Delay makes the optimistic state observable without changing App code.
         await new Promise(r => setTimeout(r, 350));

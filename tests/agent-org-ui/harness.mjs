@@ -5,7 +5,7 @@ import { startServer } from './server.mjs';
 
 export const cases = ['desktop', 'mobile'].flatMap(device => ['light', 'dark'].map(theme => ({ name: `${device}-${theme}`, theme, phone: device === 'mobile', width: device === 'mobile' ? 390 : 1440, height: device === 'mobile' ? 844 : 1100 })));
 
-export async function run(out, scenario) {
+export async function run(out, scenario, matrix = cases) {
   mkdirSync(out, { recursive: true });
   for (const name of readdirSync(out)) {
     if (/^(desktop|mobile)-(light|dark)-.*\.(png|txt|json)$/.test(name) || name === 'report.json') rmSync(resolve(out, name));
@@ -18,7 +18,7 @@ export async function run(out, scenario) {
   const check = (name, ok, detail) => { results.push({ name, ok: !!ok, detail }); console.log(`${ok ? 'PASS' : 'FAIL'} ${name}${detail ? ` ${JSON.stringify(detail)}` : ''}`); };
   const state = async () => (await fetch(`${url}__fixture/state`)).json();
   try {
-    for (const c of cases) {
+    for (const c of matrix) {
       await fetch(`${url}__fixture/reset`, { method: 'POST' });
       const context = await browser.newContext({ viewport: { width: c.width, height: c.height }, colorScheme: c.theme, locale: 'zh-CN', serviceWorkers: 'block', ...(c.phone ? { hasTouch: true, isMobile: true, userAgent: 'Mozilla/5.0 (Linux; Android 14) AppleWebKit/537.36 Chrome/140.0 Mobile Safari/537.36' } : {}) });
       await context.route('**/*', route => { if (new URL(route.request().url()).origin !== new URL(url).origin) { blocked.push(route.request().url()); return route.abort(); } return route.continue(); });
@@ -27,7 +27,7 @@ export async function run(out, scenario) {
       const test = (name, ok, detail) => check(`${c.name} ${name}`, ok, detail);
       const shot = async name => { await page.evaluate(() => document.fonts.ready); await page.waitForTimeout(150); const path = resolve(out, `${c.name}-${name}.png`); await page.screenshot({ path }); screenshots.push(path); };
       const navigate = async category => {
-        await page.goto(`${url}?theme=${c.theme}&safeAreaSim=${c.phone ? '32,0,24,0' : '0,0,0,0'}`);
+        await page.goto(`${url}?theme=${c.theme}&safeAreaSim=${c.phone ? '32,0,24,0' : '0,0,0,0'}${c.scale ? `&osFontScale=${c.scale}&uiScaleSim=legacy` : ''}`);
         if (c.phone) await page.getByText('设置', { exact: true }).last().click();
         else await page.locator('[data-testid="desktop-rail"] [aria-label="设置"]').click();
         if (c.phone) await page.getByTestId(`settings-row-${category}`).click();
