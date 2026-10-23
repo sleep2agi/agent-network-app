@@ -1,6 +1,6 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
-import { filePresentation, fileStatusText, formatFileSize, localFileStatus } from './attachment-file-model';
+import { filePresentation, fileStatusKey, formatFileSize, localFileStatus } from './attachment-file-model';
 import { saveBrowserDownload, downloadAuthedBytes } from './desktop-download';
 import { dmSendBody } from './human-dm';
 import { groupSendBody } from './group-chat';
@@ -31,12 +31,14 @@ assert.equal(localFileStatus(undefined, false, true), 'sendFailed');
 assert.equal(localFileStatus(undefined, true, false, true), 'waitingSend', 'restored Hub ID proves upload even without transient upload state');
 assert.equal(localFileStatus(undefined, false, false, true), 'uploaded');
 assert.equal(localFileStatus(undefined, false, true, true), 'sendFailed', 'Hub upload does not override whole-message failure');
-assert.deepEqual(Object.keys(fileStatusText), ['queued', 'uploading', 'uploaded', 'waitingSend', 'sendFailed', 'ready', 'downloading', 'saved', 'error']);
+assert.deepEqual(Object.keys(fileStatusKey), ['queued', 'uploading', 'uploaded', 'waitingSend', 'sendFailed', 'ready', 'downloading', 'saved', 'error']);
+// #1051 P2: the model exposes translation keys, never language-specific copy.
+for (const key of Object.values(fileStatusKey)) assert.match(key, /^chat\.fileStatus\./, `status key must be an i18n key, got ${key}`);
 const previousLanguage = languagePreference();
 try {
   for (const language of ['zh', 'en'] as const) {
     setLanguagePreference(language);
-    for (const key of Object.values(fileStatusText)) {
+    for (const key of Object.values(fileStatusKey)) {
       assert.equal(t(key), chatTranslations[key as keyof typeof chatTranslations][language === 'zh' ? 0 : 1]);
       assert.notEqual(t(key), key);
       if (language === 'en') assert.ok(!/[\u4e00-\u9fff]/.test(t(key)), 'English file states contain no Chinese copy');
@@ -120,7 +122,7 @@ assert.ok(card.includes('numberOfLines={2}') && card.includes('attachment-file-e
 assert.ok(card.includes("extension: { flexShrink: 0, maxWidth: '45%' }") && card.includes('stem: { flexShrink: 1, minWidth: 0 }'), 'normal extensions never shrink; short names stay adjacent to their extension');
 assert.ok(card.includes('<ActivityIndicator') && card.includes("status === 'uploading' || status === 'downloading'") && !/progress\s*=/.test(card), 'transport activity is indeterminate, not fabricated byte progress');
 assert.ok(card.includes('backgroundColor: colors.card') && card.includes('color: colors.text'));
-assert.ok(card.includes('useTranslation()') && card.includes('t(fileStatusText[status])'), 'file cards resolve current language reactively');
+assert.ok(card.includes('useTranslation()') && card.includes('t(fileStatusKey[status])'), 'file cards resolve current language reactively');
 assert.ok(desktop.indexOf('busy.current = true') < desktop.indexOf('await chooseSavePath(name)'));
 assert.ok(!desktop.includes('openPath') && !desktop.includes('shell'));
 assert.ok(native.includes('await downloadAttachment(serverUrl, token, fileId, name, resolvedMime)') && native.includes('await Sharing.shareAsync(local'));

@@ -2,10 +2,16 @@ import type { UploadState } from './upload-queue';
 
 export type FileCardStatus = 'queued' | 'uploading' | 'uploaded' | 'waitingSend' | 'sendFailed' | 'ready' | 'downloading' | 'saved' | 'error';
 
-export const fileStatusText: Record<FileCardStatus, string> = {
-  queued: 'chat.file.queued', uploading: 'chat.file.uploading', uploaded: 'chat.file.uploaded', waitingSend: 'chat.file.waitingSend',
-  sendFailed: 'chat.file.sendFailed', ready: 'chat.file.ready', downloading: 'chat.file.downloading',
-  saved: 'chat.file.saved', error: 'chat.file.error',
+/**
+ * 状态 → i18n key（#1051 P2）。原来这里直接存中文文案，英文界面里文件卡片会一直显示
+ * 「等待上传 / 点击下载 / 下载失败 · 点击重试」。渲染处必须 `t(fileStatusKey[status])`，
+ * 不在模型里拼死文案 —— 模型不该知道用户的语言。
+ */
+export const fileStatusKey: Record<FileCardStatus, string> = {
+  queued: 'chat.fileStatus.queued', uploading: 'chat.fileStatus.uploading', uploaded: 'chat.fileStatus.uploaded',
+  waitingSend: 'chat.fileStatus.waitingSend', sendFailed: 'chat.fileStatus.sendFailed',
+  ready: 'chat.fileStatus.ready', downloading: 'chat.fileStatus.downloading',
+  saved: 'chat.fileStatus.saved', error: 'chat.fileStatus.error',
 };
 
 export function localFileStatus(upload?: UploadState, pending = false, failed = false, uploaded = false): FileCardStatus {
