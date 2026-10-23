@@ -244,6 +244,7 @@ export const taskCopy = [
  ['日期写成 2026-10-01,或留空','Use a date such as 2026-10-01, or leave blank'],
  ['极低','Lowest'],
  ['废弃','Abandoned'],
+ ['显示空项目','Show empty projects'],
 ] as const;
 export const taskTranslations = Object.fromEntries(taskCopy.map((pair,i)=>[`tasks.copy.${i}`, pair]));
 registerTranslations(taskTranslations);
