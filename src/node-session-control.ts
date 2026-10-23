@@ -42,6 +42,20 @@ export function readSessionControlState(v: unknown): SessionControlState | null 
 export function canBackgroundSession(state: SessionControlState | null, readAt: number, now: number): boolean {
   return !!state?.can_request_background && readAt > 0 && now >= readAt && now - readAt < 30_000;
 }
+/**
+ * 那一条解释文字说什么(没有就不显示)。存在的理由:状态超过 30 秒后「转到后台」会被禁用,
+ * 不给理由只剩一个灰按钮 —— 用户只会觉得坏了(2026-10-23 收窄卡片时补的)。
+ */
+export function sessionControlLine(input: {
+  notice: string; unknown: boolean; unsupported: boolean; stale: boolean;
+  labels: { unknown: string; unsupported: string; stale: string };
+}): string {
+  if (input.notice) return input.notice;
+  if (input.unknown) return input.labels.unknown;
+  if (input.unsupported) return input.labels.unsupported;
+  return input.stale ? input.labels.stale : '';
+}
+
 function errorCode(error: unknown, mutation: boolean, detail?: string): SessionControlResult {
   const withDetail = (r: SessionControlResult) => (detail ? { ...r, detail } : r);
   if (typeof error !== 'string') return withDetail({ ok: false, error: mutation ? 'unknown' : 'unavailable' });
