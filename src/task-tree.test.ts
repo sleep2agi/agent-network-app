@@ -259,7 +259,24 @@ ck('#2138 名字 + 父项目一起换:一次 PATCH 带两个字段', JSON.string
 const oldHub = runPick({ guarded: true, picked: 'B', draft: 'A2', supportsParent: false });
 ck('#2138 旧 Hub:永不发 parentId', JSON.stringify(oldHub.updates) === '[{"name":"A2"}]');
 ck('#2138 旧 Hub 无变化:不 PATCH', projectRenamePatch({ name: 'A', parentId: null }, 'A', 'B', false) === null);
+// Enter 路径:名字框 onSubmitEditing 直接 rename() —— 没有 picked 参数,用当前 editParentId state。
 const managerNow = readFileSync(new URL('./TaskProjectManager.tsx', import.meta.url), 'utf8');
+const enterAfterPick = (() => {
+  const current = { name: 'A', parentId: null };
+  let parent: string | null = current.parentId, editing = true;
+  const updates: { name?: string; parentId?: string | null }[] = [];
+  parent = 'B';                                        // 先点 chip(未失焦前 state 已更新)
+  const patch = projectRenamePatch(current, 'A', parent, true); // Enter → rename()
+  if (patch) updates.push(patch);
+  editing = false;
+  return { updates, editing };
+})();
+ck('#2138 Enter 改名:先点父项目再回车,一次 PATCH { parentId: "B" }', JSON.stringify(enterAfterPick.updates) === '[{"parentId":"B"}]' && enterAfterPick.editing === false);
+// 归档候选:编辑行的可选父项目来自 parentProjectOptions(⋯ p => !p.archived),归档项目不可选。
+const editCandidates = parentProjectOptions([P('A', null), P('B', null), { ...P('Z', null), archived: true }], 'A', p => !p.archived);
+ck('#2138 归档项目不出现在父项目候选里', !editCandidates.some(n => n.id === 'Z') && editCandidates.some(n => n.id === 'B'));
+ck('#2138 编辑行的候选 = parentProjectOptions(projects, editing.id, !archived)', /editing \? parentProjectOptions\(projects, editing\.id, p => !p\.archived\) : \[\]/.test(managerNow) || /parentProjectOptions\(projects, editing\.id, p => !p\.archived\)/.test(managerNow));
+
 ck('#2138 接线:名称框 onBlur 先看 pickingParent', /onBlur=\{\(\) => \{ if \(!commitOnNameBlur\(pickingParent\.current\)\) return; void rename\(\); \}\}/.test(managerNow));
 ck('#2138 接线:编辑行 chip 在 pointerdown 置位', /onChipPressIn/.test(managerNow) && /pickingParent\.current = true/.test(managerNow));
 ck('#2138 接线:点 chip 用点到的那一个值提交', /rename\(parentPatchForPick\(id\)\.parentId\)/.test(managerNow));
