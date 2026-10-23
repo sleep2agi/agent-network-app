@@ -40,6 +40,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const tagCatalog = useTaskBoard(s => s.tagCatalog);
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
+  const [showEmptyProjects, setShowEmptyProjects] = useState(false);
   // #760:右键项目 / 标签行 → 菜单(TaskSideItemMenu);「改名」把那一行变成输入框:回车存、Esc / 失焦取消。
   const [editing, setEditing] = useState<{ kind: 'project' | 'tag'; key: string; draft: string; error: string; busy: boolean } | null>(null);
   useEffect(() => {
@@ -107,7 +108,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     setTaskFilter({ ...filter, project: id });
     onNavigate?.();
   };
-  const projectRow = (id: string, label: string, lead: ReactNode, count: number, menu = false) => {
+  const projectRow = (id: string, label: string, lead: ReactNode, count: number, menu = false, depth = 0) => {
     const on = section !== 'dispatch' && (filter.project || '') === id;
     return (
       <Fragment key={`p:${id || 'all'}`}><Pressable
@@ -117,7 +118,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         accessibilityLabel={tr('tasks.copy.86', { v0: label })}
         {...a11yState({ selected: on })}
         onPress={() => pickProject(id)}
-        style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
+        // depth:Hub 一旦返回 projects.parent_id,子项目就往里缩一格(现在恒为 0,行为不变)。
+        style={state => [styles.item, depth > 0 && { paddingLeft: (styles.item as any).paddingHorizontal + depth * 14 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
       >
         <View style={styles.icon}>{lead}</View>
         {labelOrInput('project', id, <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>)}
@@ -207,7 +209,24 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header" />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
-            {activeProjects(projects).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false))}
+            {activeProjects(projects).filter(p => (pCounts.get(p.id) ?? 0) > 0).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false))}
+            {/* admin 0.2.288 截图:一堆 0 计数的项目把真正有任务的项目挤下去。默认收起空项目,按需展开。 */}
+            {(() => {
+              const empty = activeProjects(projects).filter(p => (pCounts.get(p.id) ?? 0) === 0);
+              if (!empty.length) return null;
+              return (
+                <>
+                  <Pressable accessibilityRole="button" {...a11yState({ expanded: showEmptyProjects })} onPress={() => setShowEmptyProjects(v => !v)}
+                    style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+                    testID="task-side-empty-projects">
+                    <View style={styles.icon}>{icon(showEmptyProjects ? 'chevron-down' : 'chevron-forward')}</View>
+                    <Text style={[styles.itemText, { color: colors.textMuted }]} numberOfLines={1}>{tr('tasks.copy.242')}</Text>
+                    <Text style={[styles.count, { color: colors.textMuted }]}>{empty.length}</Text>
+                  </Pressable>
+                  {showEmptyProjects ? empty.map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false)) : null}
+                </>
+              );
+            })()}
             {(pCounts.get(NO_PROJECT) ?? 0) > 0 && activeProjects(projects).length ? projectRow(NO_PROJECT, tr('tasks.copy.31'), icon('remove-circle-outline'), pCounts.get(NO_PROJECT) ?? 0) : null}
             <Pressable accessibilityRole="button" onPress={() => setManagingProjects(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-projects">
               <View style={styles.icon}>{icon('settings-outline')}</View>
@@ -274,7 +293,8 @@ const makeSidebarStyles = () => StyleSheet.create({
   itemText: { flex: 1, fontSize: 13 },
   // 改名框:去掉内边距 / 行高差,文字左缘、基线与原来的标签文字重合(drive 量 ±1)。
   rename: { minWidth: 0, height: 26, paddingHorizontal: 0, paddingVertical: 0, borderWidth: 0, borderBottomWidth: 1 },
-  count: { fontSize: typeScale.caption },
+  // 数字用等宽字形 + 固定右对齐列:原来每行数字宽度不同,扫一眼对不齐(admin 2026-10-23「不可读」)。
+  count: { fontSize: typeScale.caption, fontVariant: ['tabular-nums'], minWidth: 26, textAlign: 'right' },
   section: { fontSize: typeScale.caption, paddingHorizontal: spacing.sm + 2, paddingTop: spacing.lg, paddingBottom: spacing.xs },
   // 组头:标签 / 项目同一个高度与内边距;第一组上边距更小(紧贴「视图」标题下)。
   sectionHead: { minHeight: 28, paddingTop: spacing.md, paddingBottom: spacing.xs, paddingHorizontal: spacing.sm + 2, flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
