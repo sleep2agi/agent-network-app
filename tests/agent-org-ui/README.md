@@ -6,7 +6,9 @@ production source changes, credentials, proxy, or external service is required.
 ## Run
 
 ```sh
-/Users/vansin/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node tests/agent-org-ui/verify.mjs
+/Users/vansin/.nvm/versions/node/v24.19.0/bin/node tests/agent-org-ui/verify.mjs
+/Users/vansin/.nvm/versions/node/v24.19.0/bin/node tests/agent-org-ui/departments.mjs
+/Users/vansin/.nvm/versions/node/v24.19.0/bin/node tests/agent-org-ui/bulk.mjs
 ```
 
 Override `PLAYWRIGHT_MODULE` if necessary. Uses installed Google Chrome when
@@ -17,7 +19,7 @@ The verifier exits nonzero when any assertion fails, including known defects.
 Preview:
 
 ```sh
-/Users/vansin/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node tests/agent-org-ui/server.mjs
+/Users/vansin/.nvm/versions/node/v24.19.0/bin/node tests/agent-org-ui/server.mjs
 ```
 
 Open `http://127.0.0.1:9339/`, then Settings > Agent organization. Direct full-App
@@ -43,27 +45,42 @@ Append `&theme=dark` for dark mode. Narrow the viewport to 390px for mobile.
 - CSP, fetch guard, WebSocket stub, and Playwright routing prevent external
   traffic. Server binds loopback only. All data is disposable process memory.
 
-## Validation: 2026-10-22
+## Validation: 2026-10-23
 
-**128 / 128 checks passed** against the final compiled dist.
-Four cases: desktop 1440x1100 light/dark and mobile 390x844 light/dark.
-28 screenshots captured (seven per case). No uncaught App errors or attempted
-external browser requests. No unexpected mutations.
+**394 / 394 checks passed** against the existing exported dist, without building,
+installing dependencies, modifying production/chat source, or running git.
 
-Covered initial unassigned/populated selection, empty department, visual
+| Suite | Checks | Screenshots | Cases |
+| --- | --- | --- | --- |
+| `verify.mjs` | 130/130 | 28 | Desktop/mobile light/dark |
+| `departments.mjs` | 94/94 | 24 | Desktop/mobile light/dark |
+| `bulk.mjs` | 170/170 | 42 | Desktop/mobile light/dark plus 1280px light/dark at 1.5x |
+
+Desktop is 1440x1100; mobile is 390x844. High-scale cases are 1280x900 using
+the App's existing `osFontScale=1.5&uiScaleSim=legacy` simulation, not browser
+zoom or an OS accessibility setting. The test checks the effective input font
+size and preserves simulation parameters through actual Settings navigation.
+All three reports identify the same loaded entry:
+`index-7c3854339ed91d3f992af95509b32097.js`, SHA-256
+`beec869a6d9b785ef2f17ec52cc02da01b623e1e0746544f0d2a0741a16bfd34`.
+No uncaught App errors, attempted external browser requests, unexpected mutation
+endpoints, or tested application defects were found.
+
+Covered initial unassigned-first selection, populated departments, empty department, visual
 highlight, member alias/ID/owner search, no results, mobile child navigation and
 back, collapsed adjustment, bounded/scrolling searchable pickers, Escape close,
 incomplete apply, no writes while picking, exactly one successful PUT on apply,
 persisted data after reload, ancestor counts, denied-save rollback, and rollback
 preserving a previous successful in-memory override.
 
-### Regression Evidence
+### Intentional Semantic Updates
 
-The initial export passed 126/128 checks and exposed missing web selected-state
-semantics on department buttons. Production now emits explicit `aria-selected`;
-both desktop-theme regression assertions pass. Organization selectors reuse
-`DialogFrame` and its keyboard-avoidance/safe-area implementation. Typecheck,
-Expo production export, and the full 432-file regression suite also pass.
+Legacy assertions now expect the intentional first60 rendering cap, with the
+remaining count visible and ID search reaching agent328. Owner search still
+matches200 but renders60 plus a140-remaining message. Reload selects unassigned
+first when any remain; saved populated departments are verified by explicit
+navigation. Web department `aria-selected` assertions remain in place.
+Typecheck, builds, and source/unit suites were not run in this task.
 
 Representative screenshots:
 
@@ -83,13 +100,13 @@ mobile keyboard testing.
 ## Department Editor Regression
 
 ```sh
-/Users/vansin/.cache/codex-runtimes/codex-primary-runtime/dependencies/node/bin/node tests/agent-org-ui/departments.mjs
+/Users/vansin/.nvm/versions/node/v24.19.0/bin/node tests/agent-org-ui/departments.mjs
 ```
 
 Runs full App Settings navigation in desktop/mobile light/dark against the existing
 export, without building. Latest result: **94/94 checks, 24 screenshots** in
-`artifacts/departments/`. The original `verify.mjs` remains unchanged and passes
-**128/128 checks, 28 screenshots** with the extended server.
+`artifacts/departments/`. The updated `verify.mjs` passes
+**130/130 checks, 28 screenshots** with the extended server.
 
 Covers blank-name validation, root/child POST responses shaped as `{ department }`,
 rename and reparent PATCH payloads, exclusion of self/descendants, parent search,
@@ -108,3 +125,43 @@ unauthorized writes. Tests do not fabricate a root-permission response field.
 
 Each run records bundle hashes, request bodies/statuses, errors and screenshot
 paths in its report. Screenshots are evidence, not pixel-baseline comparisons.
+
+## Bulk And Toolbar Regression
+
+`bulk.mjs` checks the current entry for `agent-org-bulk-confirm` before UI
+navigation. A missing marker fails immediately; it does not poll for a new export.
+The unchanged329-agent fixture is used, not333 or500 agents.
+
+- Header context/summary plus new-department button, sidebar32percent/max240,
+  initially closed information disclosure, and count outside the compact bulk button.
+- Explicit confirmation before any PUT, including one matching agent; closing
+  either picker or confirmation and Escape confirmation all produce zero writes.
+- Exact matching nodeIDs only, one successful assignment, six successes/two
+  injected failures, persisted counts, failed agents retained, and no false success.
+- Search changes after confirmation opens do not alter the confirmed snapshot.
+  The test dispatches a real input event through the native input value setter
+  behind the modal; this is a controlled race exercise, not a claim that users
+  can interact through the modal. No App handler/state is replaced.
+- A100-match batch writes exactly100 distinct matching IDs despite the60-row cap.
+- Query and department changes reset member scrolling; revoked permission returns
+  403 without mutation, and restricted department controls remain hidden.
+
+Representative screenshots in `artifacts/bulk/`:
+
+- `desktop-light-toolbar-unassigned329.png`
+- `desktop-dark-toolbar-unassigned329.png`
+- `mobile-light-toolbar-unassigned329.png`
+- `mobile-dark-toolbar-unassigned329.png`
+- `desktop-light-scale150-toolbar-unassigned329.png`
+- `desktop-dark-scale150-toolbar-unassigned329.png`
+- `mobile-dark-confirmation-snapshot.png`
+- `desktop-light-partial-failure.png`
+
+Toolbar screenshots scroll the outer Settings content back to the top after
+disclosure interactions. Representative desktop/mobile/high-scale toolbar and
+mobile confirmation screenshots were reviewed manually. Deep labels truncate
+with ellipses at1.5x; compact actions remain readable and dialogs stay bounded.
+This is the complete exported App in Chrome with mocked Tauri IPC and a loopback
+HTTP fixture. Native Tauri windows, iOS/Android devices, OS text scaling, native
+keyboards and production Hub authorization are untested. The403 tests validate
+client handling of fixture responses, not production server permission enforcement.

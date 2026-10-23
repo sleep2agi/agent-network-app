@@ -6,7 +6,10 @@
     if (command === 'plugin:window|get_all_windows' || command === 'plugin:webview|get_all_webviews') return [];
     if (command === 'plugin:webview|create_webview_window') {
       const target = new URL(args.options.url, location.origin);
-      target.searchParams.set('theme', new URLSearchParams(location.search).get('theme') || 'light');
+      for (const key of ['theme', 'safeAreaSim', 'osFontScale', 'uiScaleSim']) {
+        const value = new URLSearchParams(location.search).get(key);
+        if (value !== null) target.searchParams.set(key, value);
+      }
       location.assign(target.href);
       return null;
     }
