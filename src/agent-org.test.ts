@@ -277,5 +277,18 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   }
 }
 
+// #1894 —— 未归属几百个时，靠人手一个个点不现实。这里锁住「批量归入」的接线：
+// 按钮只在未归属详情出现、只列真实部门、归入时走的是既有 PUT /nodes/:id/department。
+{
+  const screen = readFileSync(new URL('./AgentOrgScreen.tsx', import.meta.url), 'utf8');
+  ck('bulk assign only shows on the unassigned detail', screen.includes("p.focus === null && filtered.length > 0 && p.onBulkAssign"));
+  ck('bulk assign respects the current search filter', /t\('agentOrg\.bulkAssign', \{ count: filtered\.length \}\)/.test(screen));
+  ck('bulk picker lists real departments only', /options=\{flattenTree\(orgTree\(p\.data\)\)\.map\(row => \(\{ id: row\.dept\.id/.test(screen));
+  ck('bulk assign reuses the per-node department PUT', /moveAgentDepartment\(p\.cfg, p\.networkId, nodeId, departmentId\)/.test(screen));
+  ck('bulk assign is bounded to 4 in flight', /\[0, 1, 2, 3\]\.map\(\(\) => worker\(\)\)/.test(screen));
+  ck('bulk assign reports how many moved and failed', /t\('agentOrg\.bulkDone', \{ ok, fail \}\)/.test(screen));
+
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
+
+}

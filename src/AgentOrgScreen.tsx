@@ -108,7 +108,26 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
           ) : null}
           {showDetail ? (
             <View style={!p.phone ? { flex: 1, minWidth: 0 } : undefined} testID="agent-org-detail">
-              <DepartmentDetail key={focus ?? 'unassigned'} data={data} placed={placed} focus={focus ?? null} phone={p.phone} onFocus={setFocus} onBack={() => setFocus(undefined)} />
+              <DepartmentDetail key={focus ?? 'unassigned'} data={data} placed={placed} focus={focus ?? null} phone={p.phone} onFocus={setFocus} onBack={() => setFocus(undefined)}
+                bulkBusy={saving}
+                onBulkAssign={async departmentId => {
+                  const targets = placed.filter(a => a.departmentId === null).map(a => a.nodeId);
+                  if (!targets.length) { setAdjustNote(t('agentOrg.bulkNone')); return; }
+                  setSaving(true);
+                  let ok = 0, fail = 0;
+                  // 限并发 4：332 个逐个串行要几分钟，全并发又会把 Hub 打满。
+                  const queue = [...targets];
+                  const worker = async () => {
+                    for (let nodeId = queue.shift(); nodeId; nodeId = queue.shift()) {
+                      const result = await moveAgentDepartment(p.cfg, p.networkId, nodeId, departmentId);
+                      if (result.ok) { ok += 1; setMoves(prev => [...prev.filter(m => m.nodeId !== nodeId), { nodeId: nodeId!, departmentId }]); }
+                      else fail += 1;
+                    }
+                  };
+                  await Promise.all([0, 1, 2, 3].map(() => worker()));
+                  setSaving(false);
+                  setAdjustNote(t('agentOrg.bulkDone', { ok, fail }));
+                }} />
             </View>
           ) : null}
         </View>
@@ -272,9 +291,10 @@ function DepartmentRow(p: { testID: string; label: string; depth?: number; selec
   </Pressable>;
 }
 
-function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void }) {
+function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; onBulkAssign?: (departmentId: string) => void; bulkBusy?: boolean }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
+  const [bulkOpen, setBulkOpen] = useState(false);
   const dept = p.focus ? p.data.departments.find(d => d.id === p.focus) : undefined;
   const title = p.focus === null ? t('agentOrg.unowned') : (dept?.name ?? t('agentOrg.unowned'));
   const agents = agentsDirectlyIn(p.placed, p.focus);
@@ -296,6 +316,17 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
         </View>
         <Text style={styles.count}>{t('agentOrg.agentsCount', { count: agents.length })}</Text>
       </View>
+      {/* #1894：未归属几百个时，一个个点不现实。这里一次把「当前未归属」全部归入一个部门。
+          仍尊重顶部搜索框：只归入过滤后仍在列表里的那些，避免误伤。 */}
+      {p.focus === null && filtered.length > 0 && p.onBulkAssign && p.data.departments.length > 0 ? (
+        <>
+          <SettingsButton label={t('agentOrg.bulkAssign', { count: filtered.length })} disabled={!!p.bulkBusy} testID="agent-org-bulk-assign" onPress={() => setBulkOpen(true)} />
+          {bulkOpen ? <StructureSelector title={t('agentOrg.bulkPickDept')} onClose={() => setBulkOpen(false)}
+            options={flattenTree(orgTree(p.data)).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-bulk-dept-${row.dept.id}` }))}
+            selected={undefined}
+            onPick={id => { setBulkOpen(false); if (id) p.onBulkAssign!(id); }} /> : null}
+        </>
+      ) : null}
       <View style={styles.search}>
         <Ionicons name="search-outline" size={17} color={colors.textMuted} />
         <TextInput testID="agent-org-member-search" value={query} onChangeText={setQuery} placeholder={t('agentOrg.searchAgents')} accessibilityLabel={t('agentOrg.searchAgents')} placeholderTextColor={colors.textMuted} style={styles.searchInput} />

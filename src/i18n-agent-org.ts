@@ -24,6 +24,11 @@ export const agentOrgTranslations = {
   'agentOrg.demoApply': ['保存到 Hub', 'Save to Hub'],
   'agentOrg.saving': ['正在保存…', 'Saving…'],
   'agentOrg.saved': ['已保存到 Hub。', 'Saved to the Hub.'],
+  // #1894 批量归入：332 个未归属只靠人手点不现实，给一个「一次归入全部（受当前搜索过滤）」的入口。
+  'agentOrg.bulkAssign': ['把未归属的 {count} 个 Agent 归入…', 'Move {count} unassigned Agents into…'],
+  'agentOrg.bulkPickDept': ['归入哪个部门', 'Which department'],
+  'agentOrg.bulkDone': ['已归入 {ok} 个，失败 {fail} 个。', 'Moved {ok}; {fail} failed.'],
+  'agentOrg.bulkNone': ['没有可归入的未归属 Agent。', 'No unassigned Agents to move.'],
   'agentOrg.saveFailed': ['保存失败，请重试', 'Save failed. Please retry.'],
   'agentOrg.saveForbidden': ['只有管理员或部门负责人能调整', 'Only an admin or department head can change this'],
   'agentOrg.saveNoDepartment': ['目标部门不存在或不属于这个网络', 'The target department does not exist in this network'],
