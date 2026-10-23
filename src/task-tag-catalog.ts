@@ -15,7 +15,11 @@ export const TAG_OPS_CAPABILITY = 'tag_ops';
 export const TAG_COLORS = PROJECT_COLORS;
 export const MAX_MERGE_SOURCES = 50;
 
+export interface TagNode { name: string; parent_id: string | null; depth: number; registered: boolean; count: number }
+
 export interface TagCatalog {
+  /** Name-keyed tag_tree catalogue, including explicitly registered empty tags. */
+  nodes?: TagNode[];
   tags: string[];
   /** 每个标签用在几张卡上(调用者看得见的,含归档)。旧 Hub 没有 → 空。 */
   counts: Record<string, number>;
@@ -65,9 +69,20 @@ export function catalogFromHub(data: unknown): TagCatalog | null {
     fromEntities = tagParentsFromEntities(entities);
     for (const e of entities) if (typeof e.depth === 'number' && e.depth >= 0) depths[e.name] = e.depth;
   }
-  const mergedParents = fromEntities ?? (parents as Record<string, string> | undefined);
+  const nodes = Array.isArray(d.nodes) ? d.nodes.filter((v): v is TagNode => {
+    if (!v || typeof v !== 'object') return false;
+    const n = v as TagNode;
+    return typeof n.name === 'string' && tagName(n.name) === n.name
+      && (n.parent_id === null || (typeof n.parent_id === 'string' && tagName(n.parent_id) === n.parent_id))
+      && Number.isInteger(n.depth) && n.depth >= 1 && n.depth <= 4
+      && typeof n.registered === 'boolean' && typeof n.count === 'number' && Number.isFinite(n.count) && n.count >= 0;
+  }) : undefined;
+  const mergedParents = nodes ? Object.fromEntries(nodes.map(n => [n.name, n.parent_id])) : fromEntities ?? parents;
+  // Hub roots are depth 1; presentation indentation is zero-based.
+  if (nodes) for (const n of nodes) { depths[n.name] = n.depth - 1; counts[n.name] = n.count; }
   return {
-    tags, counts, colors, ops, canManage: d.can_manage === true,
+    tags: [...new Set([...tags, ...(nodes?.map(n => n.name) ?? [])])], counts, colors, ops, canManage: d.can_manage === true,
+    ...(nodes ? { nodes } : {}),
     ...(mergedParents ? { parents: mergedParents } : {}),
     ...(Object.keys(depths).length ? { depths } : {}),
   };
@@ -168,7 +183,7 @@ export function applyTagOpToCatalog(cat: TagCatalog, op: TagOp): TagCatalog {
   }
   for (const tag of sources) delete colors[tag];
   const tags = [...new Set([...cat.tags.filter(t => !sources.includes(t)), ...(op.op === 'delete' ? [] : [op.to])])].sort();
-  return { ...cat, tags, counts, colors };
+  return { ...cat, tags, counts, colors, ...(cat.nodes ? { nodes: cat.nodes.filter(n => !sources.includes(n.name)) } : {}) };
 }
 
 /**
@@ -191,8 +206,8 @@ export function tagSuggestions(all: readonly string[], counts: Readonly<Record<s
 }
 
 /** 侧栏按显示的任务数降序;同数沿用名称顺序,保留已选的零任务标签以便取消筛选。 */
-export function sidebarTagNames(counts: ReadonlyMap<string, number>, selected = ''): string[] {
-  return [...new Set([...counts.keys(), ...(selected ? [selected] : [])])]
+export function sidebarTagNames(counts: ReadonlyMap<string, number>, selected = '', registered: readonly string[] = []): string[] {
+  return [...new Set([...counts.keys(), ...registered, ...(selected ? [selected] : [])])]
     .sort((a, b) => (counts.get(b) ?? 0) - (counts.get(a) ?? 0) || a.localeCompare(b));
 }
 

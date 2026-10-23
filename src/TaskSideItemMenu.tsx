@@ -13,11 +13,12 @@ import { elevated } from './elevation';
 import { uiScale } from './ui-scale';
 import { anchorRowMenu, rowMenuHeight, rowMenuMetrics } from './agent-row-menu';
 import { useModalSafePadding } from './safe-area-runtime';
-import { setManagingProjects, setManagingTags, setSideMenu, useTaskBoard } from './task-board-store';
+import { setCreatingTag, setManagingProjects, setManagingTags, setSideMenu, useTaskBoard } from './task-board-store';
+import { tagCreateSupported } from './task-tag-create';
 import { canManageTags, TAG_COLORS } from './task-tag-catalog';
 import { canEditProject, runSideAction, sideItemActions, type SideAction } from './task-side-menu';
 
-const ICON: Record<SideAction, string> = { rename: 'create-outline', color: 'color-palette-outline', archive: 'archive-outline', delete: 'trash-outline' };
+const ICON: Record<SideAction, string> = { createChild: 'add-outline', rename: 'create-outline', color: 'color-palette-outline', archive: 'archive-outline', delete: 'trash-outline' };
 
 export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: (kind: 'project' | 'tag', key: string) => void }) {
   useTranslation();
@@ -25,6 +26,7 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
   const ops = useTaskBoard(s => s.managerOps);
   const projects = useTaskBoard(s => s.projects);
   const catalog = useTaskBoard(s => s.tagCatalog);
+  const capabilities = useTaskBoard(s => s.capabilities);
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const win = useWindowDimensions();
   const safe = useModalSafePadding('fullScreen');
@@ -33,7 +35,8 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
   const [busy, setBusy] = useState(false);
   if (!target) return null;
   const project = target.kind === 'project' ? projects?.find(p => p.id === target.key) : undefined;
-  const actions = sideItemActions(target.kind, target.kind === 'project' ? canEditProject(project) : manageTags, ops);
+  const canCreate = !!ops?.createTag && tagCreateSupported(catalog, target.key, capabilities);
+  const actions = sideItemActions(target.kind, target.kind === 'project' ? canEditProject(project) : manageTags, ops).filter(a => a !== 'createChild' || canCreate);
   const close = () => { setView('menu'); setError(''); setSideMenu(null); };
   if (!actions.length || !ops) return null;
   const count = catalog?.counts[target.key] ?? 0;
@@ -46,7 +49,9 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
     if (failed) setError(target.kind === 'tag' ? tr(failed) : failed); else close();
   };
   const act = (a: SideAction) => {
-    if (a === 'rename') {
+    if (a === 'createChild') {
+      if (target.kind === 'tag' && canCreate) { close(); setCreatingTag(target.key); }
+    } else if (a === 'rename') {
       close();
       if (!target.touch && onInlineRename) onInlineRename(target.kind, target.key);
       else if (target.kind === 'project') setManagingProjects(true, target.key);
@@ -57,14 +62,15 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
   };
   const label = (a: SideAction) => (a === 'archive' ? tr('tasks.copy.209') : tr(`tags.${a}`));
   const m = rowMenuMetrics(target.touch, uiScale().densityFactor, uiScale().denseFontMultiplier);
+  const disabledChildHeight = Math.max(m.itemHeight, Math.ceil(m.fontSize * 3));
   const width = view === 'menu' ? m.width : Math.max(m.width, 240);
   const pos = anchorRowMenu({ x: target.x, y: target.y, menuWidth: width, menuHeight: rowMenuHeight(m, view === 'menu' ? actions.length : 3), viewportWidth: win.width, viewportHeight: win.height,
     insets: target.touch ? { top: safe.paddingTop, bottom: safe.paddingBottom, left: safe.paddingLeft, right: safe.paddingRight } : undefined });
-  const row = (key: string, text: string, onPress: () => void, icon?: string, danger = false) => (
-    <Pressable key={key} testID={`side-menu-${key}`} accessibilityRole="menuitem" accessibilityLabel={text} disabled={busy} onPress={onPress}
-      style={state => ({ minHeight: m.itemHeight, paddingHorizontal: m.padX, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.rowHover : 'transparent' })}>
+  const row = (key: string, text: string, onPress: () => void, icon?: string, danger = false, disabled = false) => (
+    <Pressable key={key} testID={`side-menu-${key}`} accessibilityRole="menuitem" accessibilityLabel={text} accessibilityState={{ disabled: busy || disabled }} disabled={busy || disabled} onPress={onPress}
+      style={state => ({ minHeight: disabled ? disabledChildHeight : m.itemHeight, paddingHorizontal: m.padX, flexDirection: 'row', alignItems: 'center', gap: 10, backgroundColor: (state as { hovered?: boolean }).hovered || state.pressed ? colors.rowHover : 'transparent' })}>
       {icon ? <Ionicons name={icon as never} size={15} color={danger ? colors.failed : colors.textSecondary} /> : null}
-      <Text style={{ flex: 1, color: danger ? colors.failed : colors.text, fontSize: m.fontSize }} numberOfLines={2}>{text}</Text>
+      <Text style={{ flex: 1, color: disabled ? colors.textMuted : danger ? colors.failed : colors.text, fontSize: m.fontSize }} numberOfLines={2}>{text}</Text>
     </Pressable>
   );
   return (

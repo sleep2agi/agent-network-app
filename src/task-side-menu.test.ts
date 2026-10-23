@@ -25,7 +25,7 @@ const projects: RequirementProject[] = [
 
 // ── 有哪些项 / 权限 ──
 ck('project menu: rename, color, archive', eq(sideItemActions('project', true, fake()), ['rename', 'color', 'archive']));
-ck('tag menu: rename, color, delete', eq(sideItemActions('tag', true, fake()), ['rename', 'color', 'delete']));
+ck('tag menu: create child, rename, color, delete (create availability checked separately)', eq(sideItemActions('tag', true, fake()), ['createChild', 'rename', 'color', 'delete']));
 ck('no permission → no rename (no menu at all)', eq(sideItemActions('project', false, fake()), []) && eq(sideItemActions('tag', false, fake()), []));
 ck('board not mounted (no ops) → no menu', eq(sideItemActions('project', true, null), []));
 ck('viewer_can.edit=false project cannot be edited', !canEditProject(projects[2]) && canEditProject(projects[0]) && !canEditProject(undefined));
@@ -74,7 +74,7 @@ ck('tag rows carry data-side-item only when tags are manageable', side.includes(
 ck('menu rename on desktop → sidebar inline input', /if \(!target\.touch && onInlineRename\) onInlineRename\(target\.kind, target\.key\)/.test(menu) && side.includes('<TaskSideItemMenu onInlineRename='));
 ck('menu rename on phone → the existing rename page (manager with focus)', /setManagingProjects\(true, target\.key\)/.test(menu) && /setManagingTags\(true, target\.key\)/.test(menu) && (board.match(/focus=\{managerFocus\}/g) ?? []).length === 2);
 ck('inline input: Enter saves via commitSideRename, Esc / blur cancel', /onSubmitEditing=\{\(\) => \{ void saveRename\(\); \}\}/.test(side) && /renameKey\(e\.nativeEvent\.key\) === 'cancel'\) setEditing\(null\)/.test(side) && /onBlur=\{\(\) => \{ if \(!saving\.current\) setEditing\(null\); \}\}/.test(side) && side.includes('commitSideRename(editing.kind'));
-ck('dialogs and menu share the same handlers', board.includes('onUpdate={updateProjectOp}') && board.includes('onOp={tagOp}') && board.includes('managerOpsRef.current = { updateProject: updateProjectOp, tagOp }'));
+ck('dialogs and menu share the same handlers', board.includes('onUpdate={updateProjectOp}') && board.includes('onOp={tagOp}') && board.includes('managerOpsRef.current = { updateProject: updateProjectOp, tagOp, createTag: createTagOp }'));
 ck('phone long-press opens the same menu (touch)', /setSideMenu\(\{ kind: 'project', key: p\.id,[^}]*touch: true \}\)/.test(board) && /onLongPress=\{!pointerUi\(\) \? \(tag && manage \? e => \{[^}]*setSideMenu\(\{ kind: 'tag', key: tag,[^}]*touch: true \}\)/.test(tags) && board.includes('onLongPress={touch ? onLongPress : undefined}') && board.includes('{!desktop ? <TaskSideItemMenu /> : null}'));
 ck('menu items come from sideItemActions (permission gate)', /const actions = sideItemActions\(/.test(menu) && /if \(!actions\.length \|\| !ops\) return null;/.test(menu));
 

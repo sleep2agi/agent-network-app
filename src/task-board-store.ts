@@ -13,6 +13,7 @@ export type TaskSection = 'list' | 'board' | 'gantt' | 'calendar' | 'dashboard' 
 export interface ManagerOps {
   updateProject: (id: string, patch: { name?: string; color?: string; archived?: boolean }) => Promise<string | null>;
   tagOp: (op: TagOp) => Promise<string | null>;
+  createTag?: (name: string, parent: string | null) => Promise<string | null>;
 }
 export interface SideMenuTarget { kind: 'project' | 'tag'; key: string; x: number; y: number; touch: boolean }
 
@@ -35,6 +36,7 @@ export interface TaskBoardState {
   managingProjects: boolean;
   /** 管理标签的对话框 / 底部面板开着没有(左栏、手机标签筛选共用)。 */
   managingTags: boolean;
+  creatingTag?: { parent: string | null } | null;
   /** GET /api/requirements/tags 的结果(用量、颜色、能不能管);null = 还没读到或读失败。 */
   tagCatalog: TagCatalog | null;
   /** 「管理项目 / 管理标签」用的那两个写 Hub 的处理函数(看板登记);左栏右键菜单走同一条路(#760)。 */
@@ -91,6 +93,7 @@ export const setTaskSection = (section: TaskSection) => { if (state.section !== 
 export const setManagingProjects = (on: boolean, focus: string | null = null) => { if (state.managingProjects !== on || state.managerFocus !== focus) { state = { ...state, managingProjects: on, managerFocus: focus }; emit(); } };
 export const setManagingTags = (on: boolean, focus: string | null = null) => { if (state.managingTags !== on || state.managerFocus !== focus) { state = { ...state, managingTags: on, managerFocus: focus }; emit(); } };
 export const setSideMenu = (sideMenu: SideMenuTarget | null) => { if (state.sideMenu !== sideMenu) { state = { ...state, sideMenu }; emit(); } };
+export const setCreatingTag = (parent: string | null) => { state = { ...state, managingTags: false, sideMenu: null, creatingTag: { parent } }; emit(); };
 /** 刚存上的标签记进目录(补全马上能选到;用量等下次读目录再对齐)。 */
 export const noteTagsUsed = (tags: readonly string[]) => {
   const cat = state.tagCatalog;

@@ -7,12 +7,12 @@ import { checkProjectName, nextProjectColor } from './task-board-model';
 import { tagName } from './task-tag-catalog';
 import type { ManagerOps } from './task-board-store';
 
-export type SideAction = 'rename' | 'color' | 'archive' | 'delete';
+export type SideAction = 'rename' | 'color' | 'archive' | 'delete' | 'createChild';
 
 /** 菜单里有哪几项。没有写 Hub 的路(看板没挂)或没权限(项目 viewer_can.edit=false、标签 can_manage=false)→ 空,菜单不开。 */
 export function sideItemActions(kind: 'project' | 'tag', can: boolean, ops: ManagerOps | null): SideAction[] {
   if (!can || !ops) return [];
-  return kind === 'project' ? ['rename', 'color', 'archive'] : ['rename', 'color', 'delete'];
+  return kind === 'project' ? ['rename', 'color', 'archive'] : ['createChild', 'rename', 'color', 'delete'];
 }
 
 /** 项目:canEdit === false 就是 Hub 的 viewer_can.edit=false(对话框列出来的也是这份)。 */

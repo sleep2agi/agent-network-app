@@ -17,6 +17,8 @@ import { colors, radius, spacing, themeMode, type as typeScale, weight } from '.
 import { liftedShadow, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
 import { MAX_MERGE_SOURCES, TAG_COLORS, tagName, type TagCatalog, type TagOp } from './task-tag-catalog';
+import { setCreatingTag, useTaskBoard } from './task-board-store';
+import { tagCreateSupported } from './task-tag-create';
 
 type Page =
   | { kind: 'list' }
@@ -38,6 +40,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
   focus?: string | null;
 }) {
   useTranslation();
+  const capabilities = useTaskBoard(s => s.capabilities);
   const s = useTaskStyles();
   const f = fieldStyles();
   const styles = makeStyles();
@@ -108,6 +111,11 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
     </View>
   );
   const errorLine = error ? <Text style={s.err} accessibilityRole="alert" testID="tag-manager-error">{tr(error)}</Text> : null;
+  const createButton = tagCreateSupported(catalog, null, capabilities) ? <View style={{ gap: spacing.xs }}>
+    <Pressable accessibilityRole="button" disabled={busy} onPress={() => { close(); setCreatingTag(null); }} style={styles.textBtn} testID="tag-manager-create">
+      <Text style={s.link}>{tr('tags.create')}</Text>
+    </Pressable>
+  </View> : null;
 
   // ── 桌面:一张表 ──
   const desktopRow = (tag: string) => {
@@ -131,6 +139,9 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
             </Pressable>
           )}
           <Text style={[s.muted, styles.usage]} testID={`tag-usage-${tag}`}>{tr('tags.usage', { n: count(tag) })}</Text>
+          {tagCreateSupported(catalog, tag, capabilities) ? <Pressable accessibilityRole="button" accessibilityLabel={`${tr('tags.createChild')}: ${tag}`} disabled={busy} onPress={() => { close(); setCreatingTag(tag); }} style={styles.hit} testID={`tag-create-child-${tag}`}>
+            <Ionicons name="add-outline" size={16} color={colors.accent} />
+          </Pressable> : null}
           <Pressable accessibilityRole="button" accessibilityLabel={tr('tags.deleteTitle', { tag })} onPress={() => setPage(confirming ? { kind: 'list' } : { kind: 'delete', tag })} style={styles.hit} testID={`tag-delete-${tag}`}>
             <Ionicons name="trash-outline" size={15} color={colors.textMuted} />
           </Pressable>
@@ -206,6 +217,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
     if (page.kind === 'actions') {
       const tag = page.tag;
       return actionSheet([
+        ...(tagCreateSupported(catalog, tag, capabilities) ? [{ key: 'createChild', label: tr('tags.createChild'), onPress: () => { close(); setCreatingTag(tag); } }] : []),
         { key: 'rename', label: tr('tags.rename'), onPress: () => { setDraft(tag); setPage({ kind: 'rename', tag }); } },
         { key: 'color', label: tr('tags.color'), onPress: () => setPage({ kind: 'color', tag }) },
         { key: 'delete', label: tr('tags.delete'), danger: true, onPress: () => setPage({ kind: 'delete', tag }) },
@@ -263,6 +275,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
         <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={[styles.group, { backgroundColor: colors.groupedRow }]} testID="tag-manager-list">
           {tags.length ? tags.map((tag, i) => sheetRow(tag, i === tags.length - 1)) : <Text style={[s.muted, { padding: spacing.lg }]}>{tr('tags.none')}</Text>}
         </ScrollView>
+        {createButton}
         {selecting ? (
           <Pressable accessibilityRole="button" disabled={pickedLive.length < 2} onPress={() => { setMergeName(''); setPage({ kind: 'merge' }); }} style={[s.primary, { justifyContent: 'center', minHeight: 44 }, pickedLive.length < 2 && { opacity: 0.5 }]} testID="tag-merge-open">
             <Text style={s.primaryText}>{pickedLive.length >= 2 ? `${tr('tags.merge')}（${pickedLive.length}）` : tr('tags.mergeHint')}</Text>
@@ -294,6 +307,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
                   {tags.length ? tags.map(desktopRow) : <Text style={s.muted}>{tr('tags.none')}</Text>}
                 </ScrollView>
                 {tags.length ? desktopMergeBar : null}
+                {createButton}
                 {errorLine}
               </>
             )}

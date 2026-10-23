@@ -55,6 +55,8 @@ import TaskSwipeRow from './TaskSwipeRow';
 import { quickMenuAccess, swipeActions, UNDO_MS, type QuickUndo, type SwipeAction } from './task-quick-status';
 import TaskProjectManager from './TaskProjectManager';
 import TaskTagManager from './TaskTagManager';
+import TaskTagCreateDialog from './TaskTagCreateDialog';
+import { catalogWithCreatedTag, createTag } from './task-tag-create';
 import { applyTagOp, applyTagOpToCatalog, canManageTags, fetchTagCatalog, TagOpError, runTagOp, type TagOp } from './task-tag-catalog';
 import TaskSideItemMenu from './TaskSideItemMenu';
 import { canEditProject } from './task-side-menu';
@@ -110,15 +112,17 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const projects = useTaskBoard(st => (st.scope === scope ? st.projects : null));
   const managingProjects = useTaskBoard(st => st.managingProjects);
   const managingTags = useTaskBoard(st => st.managingTags);
+  const creatingTag = useTaskBoard(st => st.scope === scope ? st.creatingTag : null);
   const managerFocus = useTaskBoard(st => st.managerFocus);
   const managerOpsRef = useRef<ManagerOps | null>(null);
   useEffect(() => {
     if (single) return;
-    patchTaskBoard(scope, { managerOps: { updateProject: (id, patch) => managerOpsRef.current!.updateProject(id, patch), tagOp: op => managerOpsRef.current!.tagOp(op) } });
+    patchTaskBoard(scope, { managerOps: { updateProject: (id, patch) => managerOpsRef.current!.updateProject(id, patch), tagOp: op => managerOpsRef.current!.tagOp(op), createTag: (name, parent) => managerOpsRef.current!.createTag!(name, parent) } });
     return () => patchTaskBoard(scope, { managerOps: null, sideMenu: null });
   }, [scope, !!single]);
   const tagsCapable = useTaskBoard(st => st.scope === scope && st.capabilities.includes('tags'));
   const tagCatalog = useTaskBoard(st => (st.scope === scope ? st.tagCatalog : null));
+  const tagCapabilities = useTaskBoard(st => st.capabilities);
   const tagOpsAllowed = useTaskBoard(st => st.scope === scope && canManageTags(st.capabilities, st.tagCatalog));
   const dueDatetime = useTaskBoard(st => st.scope === scope && st.capabilities.includes('due_datetime'));
   const subCaps = useTaskBoard(st => st.scope === scope && st.capabilities.includes('sub_requirements'));
@@ -1458,22 +1462,45 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const tagOp = async (op: TagOp): Promise<string | null> => {
     try {
       await runTagOp(cfg, op);
+      // The Hub owns hierarchy rewrites for rename/merge/delete.
+      const refreshedCatalog = await fetchTagCatalog(cfg).catch(() => null);
+      if (taskBoardState().scope !== scope) return null;
       // Hub 已经整网改好了:本地卡片和目录按同一条规则先改,下一轮轮询再对齐。
       mutations.current++;
       updateTaskItems(scope, list => list.map(it => { const next = it.tags ? applyTagOp(it.tags, op) : null; return next ? { ...it, tags: next } : it; }));
       const st = taskBoardState();
-      if (st.tagCatalog) patchTaskBoard(scope, { tagCatalog: applyTagOpToCatalog(st.tagCatalog, op) });
+      if (st.tagCatalog) patchTaskBoard(scope, { tagCatalog: refreshedCatalog ?? applyTagOpToCatalog(st.tagCatalog, op) });
       // 正在筛的标签被改名 / 合并 / 删掉:筛选跟过去(删了就回到全部)。
       const cur = st.filter.tag;
       if (cur && op.op !== 'color' && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
-      void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
       return null;
     } catch (e) {
       if (e instanceof TagOpError && e.status === 404) void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
       return e instanceof TagOpError ? e.key : 'tags.opFailed';
     }
   };
-  managerOpsRef.current = { updateProject: updateProjectOp, tagOp };
+  const createTagOp = async (name: string, parent: string | null): Promise<string | null> => {
+    const st = taskBoardState();
+    if (st.scope !== scope || !canManageTags(st.capabilities, st.tagCatalog)) return 'tags.noPermission';
+    if (!st.tagCatalog) return 'tags.createUnsupported';
+    try {
+      const receipt = await createTag(cfg, st.tagCatalog, name, parent, st.capabilities);
+      const current = taskBoardState();
+      if (current.scope !== scope) return 'tags.createUnconfirmed';
+      mutations.current++;
+      // Publish catalogue + selection together: the selected empty child and its parent
+      // are discoverable immediately without exposing every unused catalogue tag.
+      patchTaskBoard(scope, { tagCatalog: catalogWithCreatedTag(current.tagCatalog ?? st.tagCatalog, receipt),
+        filter: { ...current.filter, tag: receipt.tag.name, untagged: false, tagDescendants: undefined } });
+      void fetchTagCatalog(cfg).then(cat => {
+        // A lagging read must not erase a confirmed empty child or its parent.
+        if (cat?.nodes?.some(n => n.name === receipt.tag.name && n.parent_id === receipt.tag.parent_id && n.registered)
+          && (receipt.tag.parent_id === null || cat.nodes.some(n => n.name === receipt.tag.parent_id))) patchTaskBoard(scope, { tagCatalog: cat });
+      }).catch(() => {});
+      return null;
+    } catch (e) { return e instanceof TagOpError ? e.key : 'tags.createUnconfirmed'; }
+  };
+  managerOpsRef.current = { updateProject: updateProjectOp, tagOp, createTag: createTagOp };
 
   if (single) {
     return (
@@ -1536,6 +1563,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           onClose={() => setManagingTags(false)}
         />
       ) : null}
+      {creatingTag && tagCatalog ? <TaskTagCreateDialog catalog={tagCatalog} capabilities={tagCapabilities} initialParent={creatingTag.parent}
+        onCreate={createTagOp} onClose={() => patchTaskBoard(scope, { creatingTag: null })} /> : null}
       {pointer && section !== 'dispatch' && (sel.ids.length || bulk) ? (
         <BulkBar
           count={sel.ids.length}
