@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ""
+      submit_for_review:
+        description: After writing the copy, create the App Store version submission (irreversible; owner-authorized 2026-10-23)
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -46,6 +51,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run }}
           DEMO_HUB_URL: ${{ inputs.demo_hub_url }}
           DEMO_ACCOUNT: ${{ inputs.demo_account }}
+          SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
           BUNDLE_ID: top.vansin.agentnetwork
         shell: bash
         run: |
@@ -164,6 +170,15 @@ jobs:
             asc_write POST "appStoreReviewDetails" "$RUNNER_TEMP/detail.json" > /dev/null
           fi
           echo "reviewer notes updated"
+
+          if [ "$SUBMIT_FOR_REVIEW" = 'true' ]; then
+            echo "submitting version $version_id for App Store review"
+            jq -n --arg vid "$version_id" \
+              '{data:{type:"appStoreVersionSubmissions",relationships:{appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/submission.json"
+            asc_write POST "appStoreVersionSubmissions" "$RUNNER_TEMP/submission.json" | jq '{id: .data.id, submitted: .data.attributes.submitted}'
+          else
+            echo "submission skipped (submit_for_review=false)"
+          fi
 
           echo 'App Store version summary:'
           asc_get "appStoreVersions/$version_id" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, linkedBuild: (.data.relationships.build.data.id // null)}'
