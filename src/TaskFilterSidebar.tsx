@@ -16,8 +16,9 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
-import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
+import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, tagFilterAfterPick, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
+import { aggregateCounts, includeTagAncestors, projectRows, tagDepth, tagRows, tagWithDescendants } from './task-tree';
 import { commitSideRename, renameKey } from './task-side-menu';
 import TaskSideItemMenu from './TaskSideItemMenu';
 import { canManageTags, localTagCounts, sidebarTagNames } from './task-tag-catalog';
@@ -41,6 +42,23 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const [showEmptyProjects, setShowEmptyProjects] = useState(false);
+  // #2102:树的折叠状态(只在 Hub 真的回了 parent_id 时才可能出现折叠箭头)。
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
+  // #2122 F4:目录(标签父子)变了之后,旧的 tagDescendants 可能已经指向不存在的子孙,
+  // 甚至在没有层级的 Hub 上让「精确匹配」变成「匹配一堆旧标签」。这里跟着目录重算。
+  const tagParentsKey = JSON.stringify(tagCatalog?.parents ?? null);
+  useEffect(() => {
+    const parents = tagCatalog?.parents ?? null;
+    const current = taskBoardState().filter;
+    if (!current.tag) return;
+    const want = parents ? tagWithDescendants(current.tag, parents).filter(t => t !== current.tag) : [];
+    const had = current.tagDescendants?.[current.tag] ?? [];
+    const same = want.length === had.length && want.every(t => had.includes(t));
+    if (same) return;
+    // #2127 F4:只保留「当前选择」这一项 —— 旧图里的其它键全部丢弃,
+    // 否则 P→Q 换目录后再点回独立根 P 会命中旧的后代。
+    setTaskFilter({ ...current, tagDescendants: want.length ? { [current.tag]: want } : undefined });
+  }, [tagParentsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // #760:右键项目 / 标签行 → 菜单(TaskSideItemMenu);「改名」把那一行变成输入框:回车存、Esc / 失焦取消。
   const [editing, setEditing] = useState<{ kind: 'project' | 'tag'; key: string; draft: string; error: string; busy: boolean } | null>(null);
   useEffect(() => {
@@ -131,12 +149,14 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
   // 标签:数字按当前列表算(同项目);筛着的标签即使这页没有卡也留在列表里(好取消)。
   const tagCounts = localTagCounts(items);
-  const tagNames = sidebarTagNames(tagCounts, filter.tag);
+  const visibleTagNames = sidebarTagNames(tagCounts, filter.tag);
+  const knownTags = new Set<string>([...visibleTagNames, ...(tagCatalog?.tags ?? [])]);
+  const tagNames = includeTagAncestors(visibleTagNames, tagCatalog?.parents ?? null, knownTags);
   const tagDot = (tag: string) => {
     const c = tagCatalog?.colors[tag];
     return <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c ?? 'transparent', borderWidth: c ? 0 : 1.5, borderColor: colors.textMuted }} />;
   };
-  const tagRow = (tag: string, label: string, lead: ReactNode, count: number | null) => {
+  const tagRow = (tag: string, label: string, lead: ReactNode, count: number | null, depth = 0) => {
     const on = section !== 'dispatch' && (filter.tag || '') === tag;
     return (
       <Fragment key={`tag:${tag || 'all'}`}><Pressable
@@ -145,8 +165,13 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         accessibilityRole="tab"
         accessibilityLabel={label}
         {...a11yState({ selected: on })}
-        onPress={() => { setTaskSection(section === 'dispatch' ? 'board' : section); setTaskFilter({ ...filter, tag, untagged: false }); onNavigate?.(); }}
-        style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
+        onPress={() => {
+          setTaskSection(section === 'dispatch' ? 'board' : section);
+          // #2127 F4:每次点击都**覆盖**,不合并旧项;与顶部标签筛选共用 tagFilterAfterPick。
+          setTaskFilter(tagFilterAfterPick(filter, tag, tagCatalog?.parents ?? null));
+          onNavigate?.();
+        }}
+        style={state => [styles.item, depth > 0 && { paddingLeft: (styles.item as any).paddingHorizontal + depth * 14 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
       >
         <View style={styles.icon}>{lead}</View>
         {labelOrInput('tag', tag, <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>)}
@@ -195,7 +220,10 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         {!tagsCollapsed ? (
           <>
             {tagRow('', tr('tags.all'), icon('pricetags-outline', !filter.tag), null)}
-            {tagNames.map(tag => tagRow(tag, tag, tagDot(tag), tagCounts.get(tag) ?? 0))}
+            {tagRows(tagNames, tagCatalog?.parents ?? null).map(r => tagRow(
+              r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
+              tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
+            ))}
             {manageTags ? (
               <Pressable accessibilityRole="button" onPress={() => setManagingTags(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-tags">
                 <View style={styles.icon}>{icon('settings-outline')}</View>
@@ -209,21 +237,41 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header" />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
-            {activeProjects(projects).filter(p => (pCounts.get(p.id) ?? 0) > 0).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false))}
-            {/* admin 0.2.288 截图:一堆 0 计数的项目把真正有任务的项目挤下去。默认收起空项目,按需展开。 */}
+            {/* #2102:Hub 给了 parent_id 就渲染树(缩进/折叠/祖先计数);没有就完全是旧的平铺。
+                #2106 P1:计数来自完整树 —— 折叠只改可见性,不改父项目的数字;
+                主树与空项目区共用同一批「可见行」,所以父节点不会两处各画一次,
+                折叠起来的子树也不会被空项目区重新当成根补回来。 */}
             {(() => {
-              const empty = activeProjects(projects).filter(p => (pCounts.get(p.id) ?? 0) === 0);
-              if (!empty.length) return null;
+              const active = activeProjects(projects);
+              const totals = aggregateCounts(projectRows(active), n => pCounts.get(n.id) ?? 0);
+              const visible = projectRows(active, collapsedProjects);
+              const withTasks = visible.filter(r => (totals.get(r.node.id) ?? 0) > 0);
+              const emptyRows = visible.filter(r => (totals.get(r.node.id) ?? 0) === 0);
+              const drawRow = (r: (typeof visible)[number]) => (
+                r.hasChildren
+                  ? <View key={`prow:${r.node.id}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Pressable accessibilityRole="button" {...a11yState({ expanded: !collapsedProjects.has(r.node.id) })} testID={`task-side-project-toggle-${r.node.id}`}
+                        onPress={() => setCollapsedProjects(prev => { const next = new Set(prev); if (next.has(r.node.id)) next.delete(r.node.id); else next.add(r.node.id); return next; })}
+                        style={{ width: 16, alignItems: 'center' }}>
+                        <Ionicons name={collapsedProjects.has(r.node.id) ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
+                      </Pressable>
+                      <View style={{ flex: 1 }}>{projectRow(r.node.id, r.node.name, dot(r.node.color), totals.get(r.node.id) ?? 0, r.node.canEdit !== false, r.depth)}</View>
+                    </View>
+                  : projectRow(r.node.id, r.node.name, dot(r.node.color), totals.get(r.node.id) ?? 0, r.node.canEdit !== false, r.depth)
+              );
               return (
                 <>
-                  <Pressable accessibilityRole="button" {...a11yState({ expanded: showEmptyProjects })} onPress={() => setShowEmptyProjects(v => !v)}
-                    style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
-                    testID="task-side-empty-projects">
-                    <View style={styles.icon}>{icon(showEmptyProjects ? 'chevron-down' : 'chevron-forward')}</View>
-                    <Text style={[styles.itemText, { color: colors.textMuted }]} numberOfLines={1}>{tr('tasks.copy.242')}</Text>
-                    <Text style={[styles.count, { color: colors.textMuted }]}>{empty.length}</Text>
-                  </Pressable>
-                  {showEmptyProjects ? empty.map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false)) : null}
+                  {withTasks.map(drawRow)}
+                  {emptyRows.length ? (
+                    <Pressable accessibilityRole="button" {...a11yState({ expanded: showEmptyProjects })} onPress={() => setShowEmptyProjects(v => !v)}
+                      style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+                      testID="task-side-empty-projects">
+                      <View style={styles.icon}>{icon(showEmptyProjects ? 'chevron-down' : 'chevron-forward')}</View>
+                      <Text style={[styles.itemText, { color: colors.textMuted }]} numberOfLines={1}>{tr('tasks.copy.242')}</Text>
+                      <Text style={[styles.count, { color: colors.textMuted }]}>{emptyRows.length}</Text>
+                    </Pressable>
+                  ) : null}
+                  {showEmptyProjects ? emptyRows.map(drawRow) : null}
                 </>
               );
             })()}

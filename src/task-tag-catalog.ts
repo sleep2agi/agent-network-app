@@ -7,6 +7,7 @@ import type { HubConfig } from './api';
 import { appFetch } from './app-fetch';
 import { withDeadline } from './deadline';
 import { normalizeTags } from './requirement-tags';
+import { includeTagAncestors, tagParentsFromEntities, type TagParents } from './task-tree';
 import { PROJECT_COLORS } from './task-board-model';
 
 export const TAG_OPS_CAPABILITY = 'tag_ops';
@@ -23,6 +24,10 @@ export interface TagCatalog {
   canManage: boolean;
   /** Hub 有 tags/ops(回了 can_manage 字段)。 */
   ops: boolean;
+  /** 子标签 → 父标签(#2098);undefined = 这个 Hub 还没有标签层级。 */
+  parents?: Record<string, string | null>;
+  /** #2112:Hub 回 tag_entities 时带上的每个标签深度(名字 → depth)。 */
+  depths?: Record<string, number>;
 }
 
 export type TagOp =
@@ -43,7 +48,44 @@ export function catalogFromHub(data: unknown): TagCatalog | null {
   const colors: Record<string, string> = {};
   if (d.colors && typeof d.colors === 'object') for (const [k, v] of Object.entries(d.colors as Record<string, unknown>)) if (typeof v === 'string' && COLOR.test(v)) colors[k] = v.toLowerCase();
   const ops = typeof d.can_manage === 'boolean';
-  return { tags, counts, colors, ops, canManage: d.can_manage === true };
+  // #2098:Hub 若回 parents(子 → 父),就带上;没有这个字段 = 旧行为(纯字符串标签)。
+  let parents: Record<string, string | null> | undefined;
+  if (d.parents && typeof d.parents === 'object' && !Array.isArray(d.parents)) {
+    parents = {};
+    for (const [k, v] of Object.entries(d.parents as Record<string, unknown>)) {
+      if (typeof v === 'string' && v) parents[k] = v;
+    }
+  }
+  // #2112:Hub 回 tag_entities([{id,name,parent_id,path,depth,scope}])。优先由它构造父子与深度,
+  // 旧的 parents map 继续兼容(有些 Hub / 本地快照只有它)。
+  const depths: Record<string, number> = {};
+  let fromEntities: Record<string, string> | undefined;
+  if (Array.isArray(d.tag_entities)) {
+    const entities = d.tag_entities.filter((e): e is { name: string } => !!e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string') as { id?: string; name: string; parent_id?: string | null; depth?: number }[];
+    fromEntities = tagParentsFromEntities(entities);
+    for (const e of entities) if (typeof e.depth === 'number' && e.depth >= 0) depths[e.name] = e.depth;
+  }
+  const mergedParents = fromEntities ?? (parents as Record<string, string> | undefined);
+  return {
+    tags, counts, colors, ops, canManage: d.can_manage === true,
+    ...(mergedParents ? { parents: mergedParents } : {}),
+    ...(Object.keys(depths).length ? { depths } : {}),
+  };
+}
+
+/**
+ * #2139:手机顶部快筛的标签项 —— 卡片上出现的标签 + 它们在**授权可见目录内**的祖先。
+ * 这样「父标签零直属卡、子卡若干」时父标签也能选,选中后按后代命中子卡(与侧栏同一套判定)。
+ * 目录外的父不合成入口(known 闭包);旧 Hub(parents 为空)原样返回 → 顺序/平铺/精确匹配都不变。
+ */
+export function tagFilterEntries(
+  items: readonly { tags?: readonly string[] }[],
+  catalogTags: readonly string[] | null | undefined,
+  parents: TagParents | null | undefined,
+): string[] {
+  const onCards = [...new Set(items.flatMap(item => item.tags ?? []))];
+  const known = new Set<string>([...onCards, ...(catalogTags ?? [])]);
+  return includeTagAncestors(onCards, parents, known);
 }
 
 /** 能不能在界面上给「管理标签」:列表的 capabilities 带 tag_ops,且 Hub 说这个人能管。 */

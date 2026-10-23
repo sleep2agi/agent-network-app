@@ -1445,7 +1445,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   );
 
   // 「管理项目 / 管理标签」写 Hub 的那两个处理函数;左栏右键菜单(#760)经 store 走同一对(registerManagerOps)。
-  const updateProjectOp = async (id: string, patch: { name?: string; color?: string; archived?: boolean }): Promise<string | null> => {
+  const updateProjectOp = async (id: string, patch: { name?: string; color?: string; archived?: boolean; parentId?: string | null }): Promise<string | null> => {
     try {
       const updated = await updateProject(cfg, id, patch);
       const st = taskBoardState();
@@ -1512,9 +1512,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           sheet={!pointer && narrow}
           projects={projects}
           counts={new Map(Array.from(items.reduce((m, it) => (it.projectId ? m.set(it.projectId, (m.get(it.projectId) ?? 0) + 1) : m), new Map<string, number>())))}
-          onCreate={async (name, color) => {
+          onCreate={async (name, color, parentId) => {
             try {
-              const created = await createProject(cfg, { name, color });
+              const created = await createProject(cfg, { name, color, ...(parentId ? { parentId } : {}) });
               patchTaskBoard(scope, { projects: [...(projects ?? []), created] });
               return null;
             } catch (e) { return e instanceof Error ? e.message : tr('tasks.copy.59'); }

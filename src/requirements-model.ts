@@ -15,7 +15,7 @@ export interface ChecklistItem { id: string; text: string; done: boolean }
 
 /** 项目(军团项目 / TMAI …)。按网络隔离;归档的不再能选,但旧卡片的引用保留。 */
 /** canEdit === false:「仅相关任务」的成员对这个项目只有查看授权(hub 只对 scoped 调用者给 viewer_can),不能把任务建进 / 挪进去。省略 = 能。 */
-export interface RequirementProject { id: string; name: string; color: string; sort: number; archived: boolean; canEdit?: boolean }
+export interface RequirementProject { id: string; name: string; color: string; sort: number; archived: boolean; canEdit?: boolean; /** 父项目(#2098);undefined = 这个 Hub 还没有层级。 */ parentId?: string | null }
 
 export interface Requirement {
   /** Manual GitHub associations; undefined means the Hub did not expose the field. */

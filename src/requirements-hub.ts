@@ -537,6 +537,8 @@ export function projectFromHub(value: unknown): RequirementProject | null {
     archived: v.archived === true,
     // 同卡片的 viewer_can:只认显式的 edit === false(task-access.readOnlyFromHub 同一判据)。
     ...(readOnlyFromHub(v) ? { canEdit: false } : {}),
+    // #2098:新 Hub 会带 parent_id;旧 Hub 没有这个字段 → 保持 undefined = 平铺。
+    ...('parent_id' in v ? { parentId: typeof v.parent_id === 'string' && v.parent_id ? v.parent_id : null } : {}),
   };
 }
 
@@ -570,15 +572,20 @@ export async function listProjects(cfg: HubConfig): Promise<RequirementProject[]
   return data.projects.map(projectFromHub).filter((p: RequirementProject | null): p is RequirementProject => !!p);
 }
 
-export async function createProject(cfg: HubConfig, input: { name: string; color?: string }): Promise<RequirementProject> {
-  const { status, data } = await projectCall(cfg, '/api/requirements/projects', { method: 'POST', body: JSON.stringify({ ...input, network_id: cfg.networkId }) });
+export async function createProject(cfg: HubConfig, input: { name: string; color?: string; parentId?: string | null }): Promise<RequirementProject> {
+  // #2122 F6:Hub 的字段叫 parent_id;客户端内部用 parentId。这里显式翻译,别把驼峰发上去。
+  const { parentId, ...rest } = input;
+  const body = { ...rest, network_id: cfg.networkId, ...(parentId ? { parent_id: parentId } : {}) };
+  const { status, data } = await projectCall(cfg, '/api/requirements/projects', { method: 'POST', body: JSON.stringify(body) });
   const row = projectFromHub(data?.project);
   if (status !== 201 || !row) throw projectError(status, data?.error);
   return row;
 }
 
-export async function updateProject(cfg: HubConfig, id: string, patch: { name?: string; color?: string; sort?: number; archived?: boolean }): Promise<RequirementProject> {
-  const { status, data } = await projectCall(cfg, `/api/requirements/projects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+export async function updateProject(cfg: HubConfig, id: string, patch: { name?: string; color?: string; sort?: number; archived?: boolean; parentId?: string | null }): Promise<RequirementProject> {
+  const { parentId, ...rest } = patch;
+  const body = { ...rest, ...(parentId !== undefined ? { parent_id: parentId } : {}) };
+  const { status, data } = await projectCall(cfg, `/api/requirements/projects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) });
   const row = projectFromHub(data?.project);
   if (status !== 200 || !row) throw projectError(status, data?.error);
   return row;
