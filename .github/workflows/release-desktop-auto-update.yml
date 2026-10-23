@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.289:
+            - 新增：Ubuntu 24.04（amd64）桌面安装包随本版发布，Linux 用户不用再等下一版。
+
             What's new in 0.2.288:
             - 修复：Agent 列表里搜索只命中「已登记节点」时，不再出现「计数非零但看不到行」——查询非空会强制展开该分区，计数也会显示「+ K 已登记」。
             - 修复：搜索状态下点击「已登记节点」标题不再静默改动你保存的折叠偏好（此时标题不可点）。
