@@ -6,10 +6,15 @@ import { colors, radius, spacing } from './theme';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-session-control';
-import { canBackgroundSession, runSessionControl, type SessionControlState, type SessionControlTarget } from './node-session-control';
+import { pointerUi } from './pointer-ui';
+import { canBackgroundSession, runSessionControl, sessionControlLine, type SessionControlState, type SessionControlTarget } from './node-session-control';
 
 // Parents key by Hub/token/network/node/session. Nothing from an old page can
 // authorise an action after navigation or account changes.
+//
+// 手机上的形态(2026-10-23 Vincent「这也太丑了」):一整块卡片占掉小半个屏、里面还有一条
+// 永远禁用的按钮和两段解释文字,而且它的白底盖在消息上。现在只有**一行**:标题 · 状态 ·
+// 两个小按钮;解释只有在真的出错/不支持时才出现一行。键盘提示(Ctrl+B)只在有指针的设备上给。
 export default function NodeSessionControl({ cfg, target }: { cfg: HubConfig; target: SessionControlTarget }) {
   useTranslation();
   const [state, setState] = useState<SessionControlState | null>(null);
@@ -42,29 +47,31 @@ export default function NodeSessionControl({ cfg, target }: { cfg: HubConfig; ta
     if (!unknown) setNotice(result.outcome ? t(result.outcome === 'already_idle' ? 'sessionControl.alreadyIdle' : 'sessionControl.processed') : '');
   };
   const enabled = !busy && !unknown && canBackgroundSession(state, readAt, now);
-  const button = (label: string, action: () => void, disabled: boolean, id: string) => (
+  const action = (label: string, run_: () => void, disabled: boolean, id: string) => (
     <Pressable testID={id} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled}
-      onPress={action} style={({ pressed }) => ({ minHeight: 44, justifyContent: 'center', paddingHorizontal: spacing.md,
-        borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.4 : pressed ? 0.7 : 1 })}>
-      <Text style={{ color: disabled ? colors.textMuted : colors.accent, fontSize: 13 }}>{label}</Text>
+      onPress={run_} hitSlop={6} style={({ pressed }) => ({ minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing.sm,
+        borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, opacity: disabled ? 0.45 : pressed ? 0.6 : 1 })}>
+      <Text style={{ color: disabled ? colors.textMuted : colors.accent, fontSize: 12 }}>{label}</Text>
     </Pressable>
   );
+  // 一句解释足够：出错 / 不支持 / 状态过期（按钮为什么会灰）才占第二行。
+  const stale = !!state && now - readAt >= 30_000;
+  const line = sessionControlLine({
+    notice, unknown, unsupported: !!state && !state.supported, stale,
+    labels: { unknown: t('sessionControl.error.unknown'), unsupported: t('sessionControl.error.unsupported'), stale: t('sessionControl.stale') },
+  });
   return (
-    <View testID="node-session-control" style={{ padding: spacing.md, gap: spacing.sm, backgroundColor: colors.card, borderRadius: radius.surface }}>
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm }}>
-        <Text style={{ color: colors.text, fontWeight: '600', fontSize: 13 }}>{t('sessionControl.title')}</Text>
-        {state ? <Text testID="session-control-status" style={{ color: state.active ? colors.accent : colors.textMuted, fontSize: 13 }}>{t(state.active ? 'sessionControl.running' : 'sessionControl.idle')}</Text> : null}
+    <View testID="node-session-control" style={{ flexDirection: 'column', gap: 4, paddingHorizontal: spacing.lg, paddingVertical: 6,
+      backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+        <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, flexShrink: 1 }}>{t('sessionControl.title')}</Text>
+        {state ? <Text testID="session-control-status" style={{ color: state.active ? colors.accent : colors.textMuted, fontSize: 12 }}>{t(state.active ? 'sessionControl.running' : 'sessionControl.idle')}</Text> : null}
         {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+        <View style={{ flex: 1 }} />
+        {action(t(readAt ? 'sessionControl.refresh' : 'sessionControl.read'), () => void run(false), !!busy, 'session-control-refresh')}
+        {action(pointerUi() ? t('sessionControl.background') : t('sessionControl.backgroundTouch'), () => void run(true), !enabled, 'session-control-background')}
       </View>
-      {busy ? <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{t(busy === 'background' ? 'sessionControl.requesting' : 'sessionControl.loading')}</Text> : null}
-      {notice ? <Text testID="session-control-notice" accessibilityLiveRegion="polite" style={{ color: unknown ? colors.blocked : colors.textSecondary, fontSize: 12, lineHeight: 18 }}>{notice}</Text> : null}
-      {state && !state.supported ? <Text testID="session-control-unsupported" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{t('sessionControl.error.unsupported')}</Text> : null}
-      {!busy && state && now - readAt >= 30_000 ? <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('sessionControl.stale')}</Text> : null}
-      <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-        {button(t(readAt ? 'sessionControl.refresh' : 'sessionControl.read'), () => void run(false), !!busy, 'session-control-refresh')}
-        {button(t('sessionControl.background'), () => void run(true), !enabled, 'session-control-background')}
-      </View>
-      <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{t(state ? 'sessionControl.hint' : 'sessionControl.initial')}</Text>
+      {line ? <Text testID="session-control-notice" accessibilityLiveRegion="polite" style={{ color: unknown ? colors.blocked : colors.textMuted, fontSize: 11, lineHeight: 15 }}>{line}</Text> : null}
     </View>
   );
 }
