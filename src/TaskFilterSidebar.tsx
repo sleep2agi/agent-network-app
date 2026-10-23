@@ -18,7 +18,7 @@ import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
-import { aggregateCounts, projectRows, tagDepth, tagRows, tagWithDescendants } from './task-tree';
+import { aggregateCounts, includeTagAncestors, projectRows, tagDepth, tagRows, tagWithDescendants } from './task-tree';
 import { commitSideRename, renameKey } from './task-side-menu';
 import TaskSideItemMenu from './TaskSideItemMenu';
 import { canManageTags, localTagCounts, sidebarTagNames } from './task-tag-catalog';
@@ -44,6 +44,22 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const [showEmptyProjects, setShowEmptyProjects] = useState(false);
   // #2102:树的折叠状态(只在 Hub 真的回了 parent_id 时才可能出现折叠箭头)。
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
+  // #2122 F4:目录(标签父子)变了之后,旧的 tagDescendants 可能已经指向不存在的子孙,
+  // 甚至在没有层级的 Hub 上让「精确匹配」变成「匹配一堆旧标签」。这里跟着目录重算。
+  const tagParentsKey = JSON.stringify(tagCatalog?.parents ?? null);
+  useEffect(() => {
+    const parents = tagCatalog?.parents ?? null;
+    const current = taskBoardState().filter;
+    if (!current.tag) return;
+    const want = parents ? tagWithDescendants(current.tag, parents).filter(t => t !== current.tag) : [];
+    const had = current.tagDescendants?.[current.tag] ?? [];
+    const same = want.length === had.length && want.every(t => had.includes(t));
+    if (same) return;
+    setTaskFilter({
+      ...current,
+      tagDescendants: want.length ? { ...(current.tagDescendants ?? {}), [current.tag]: want } : undefined,
+    });
+  }, [tagParentsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // #760:右键项目 / 标签行 → 菜单(TaskSideItemMenu);「改名」把那一行变成输入框:回车存、Esc / 失焦取消。
   const [editing, setEditing] = useState<{ kind: 'project' | 'tag'; key: string; draft: string; error: string; busy: boolean } | null>(null);
   useEffect(() => {
@@ -134,7 +150,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
   // 标签:数字按当前列表算(同项目);筛着的标签即使这页没有卡也留在列表里(好取消)。
   const tagCounts = localTagCounts(items);
-  const tagNames = sidebarTagNames(tagCounts, filter.tag);
+  const tagNames = includeTagAncestors(sidebarTagNames(tagCounts, filter.tag), tagCatalog?.parents ?? null);
   const tagDot = (tag: string) => {
     const c = tagCatalog?.colors[tag];
     return <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c ?? 'transparent', borderWidth: c ? 0 : 1.5, borderColor: colors.textMuted }} />;

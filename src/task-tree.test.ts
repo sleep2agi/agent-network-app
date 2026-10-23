@@ -1,6 +1,6 @@
 // #2098 / #2102:项目树与标签层级的纯判定。
 // 关键约束:**没有 parent 数据时必须与旧的平铺完全一致**(顺序、深度、计数都不变)。
-import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagRows, tagWithDescendants } from './task-tree';
+import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, includeTagAncestors, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagRows, tagWithDescendants } from './task-tree';
 import { applyFilter } from './task-board-model';
 
 let p = 0, t = 0;
@@ -121,6 +121,49 @@ ck('反例4:按父标签筛选命中后代卡(2/3)', hit.length === 2);
 const exact = applyFilter(items, { owners: [], priorities: [], tag: '发布' } as never);
 ck('反例4:无层级数据时仍是精确匹配(1/3)', exact.length === 1);
 ck('标签深度:有 depth 用 depth,没有就按父链算', tagDepth('发布/桌面', { '发布/桌面': 3 }, entParents) === 3 && tagDepth('发布/安卓', null, entParents) === 1);
+
+
+// ── #2122 F2–F6 反例(先红后绿)─────────────────────────────────────────
+// F2:归档的父项目不进入候选,但「自己 + 后代」的禁选仍要在完整图上算。
+const withArchived = [
+  P('root', null), P('mid', 'root'), P('leaf', 'mid'), P('free', null),
+];
+const archivedSet = new Set(['root']);
+const candF2 = parentProjectOptions(withArchived, 'root', n => !archivedSet.has(n.id));
+ck('F2 父项目归档后不进候选', !candF2.some(n => n.id === 'root'));
+const candF2b = parentProjectOptions(withArchived, 'mid', n => !archivedSet.has(n.id));
+ck('F2 禁选在完整图上算:归档父不在,但后代仍被排除', !candF2b.some(n => n.id === 'mid' || n.id === 'leaf') && candF2b.some(n => n.id === 'free'));
+
+// F3:只有子标签有卡时,父标签入口仍要在侧栏出现。
+const onlyChildCounts = new Map([['发布/桌面', 2]]);
+const listedF3 = includeTagAncestors(['发布/桌面'], { '发布/桌面': '发布' });
+ck('F3 父标签自身 0 张也出现在侧栏且排在子前', listedF3.join(',') === '发布,发布/桌面');
+
+// F5:显式实体只认 parent_id;名字里的 "/" 不能自己造父子。
+const nameSlash = tagParentsFromEntities([{ id: 'a', name: '发布/桌面', parent_id: null } as never]);
+ck('F5 名字带斜杠但 parent_id 为空 → 不发明父子', nameSlash === undefined);
+const explicit = tagParentsFromEntities([
+  { id: 'p', name: '发布', parent_id: null },
+  { id: 'c', name: '桌面端', parent_id: 'p' },
+] as never)!;
+ck('F5 有 parent_id 时按 id 映射父名', explicit['桌面端'] === '发布');
+const viaPath = tagParentsFromEntities([
+  { id: 'p', name: '发布', parent_id: null, path: '发布' },
+  { id: 'c', name: '桌面端', parent_id: null, path: '发布/桌面端' },
+] as never)!;
+ck('F5 Hub 显式 path 可作父子依据', viaPath['桌面端'] === '发布');
+
+// F4:无层级时必须精确匹配(旧 tagDescendants 不能残留生效)。
+const itemsF4 = [{ tags: ['发布/桌面'] }, { tags: ['发布/安卓'] }] as never[];
+const stale = applyFilter(itemsF4, { owners: [], priorities: [], tag: '发布', tagDescendants: { '发布': ['发布/桌面', '发布/安卓'] } } as never);
+ck('F4 有层级后代时命中子孙(2/2)', stale.length === 2);
+const cleared = applyFilter(itemsF4, { owners: [], priorities: [], tag: '发布', tagDescendants: undefined } as never);
+ck('F4 层级消失后回到精确匹配(0/2)', cleared.length === 0);
+
+// F6:Hub 合同是 parent_id(驼峰只存在于客户端)。
+const hubSrc = readFileSync(new URL('./requirements-hub.ts', import.meta.url), 'utf8');
+ck('F6 项目创建/更新把 parentId 翻成 parent_id', /parent_id: parentId/.test(hubSrc));
+ck('F6 不再把驼峰 parentId 直接发出去', /const \{ parentId, \.\.\.rest \} = input;/.test(hubSrc) && /const \{ parentId, \.\.\.rest \} = patch;/.test(hubSrc));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

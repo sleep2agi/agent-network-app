@@ -191,10 +191,16 @@ export function descendantIds(nodes: readonly Parented[], id: string): string[] 
  * 选父项目的候选:未归档、且编辑时排除自己与自己的后代(服务端仍做最终拒绝)。
  * 没有层级数据时返回空数组 —— 调用方据此完全不渲染控件。
  */
-export function parentProjectOptions<T extends Parented>(nodes: readonly T[], editingId?: string | null): T[] {
+export function parentProjectOptions<T extends Parented>(
+  nodes: readonly T[],
+  editingId?: string | null,
+  available: (node: T) => boolean = () => true,
+): T[] {
   if (!hubExposesProjectParent(nodes)) return [];
+  // #2122 F2:禁选集在**完整图**上算(自己 + 全部后代),之后才过滤候选(归档等),
+  // 否则「父项目已被归档、子孙还有」时会把环放进候选。
   const banned = editingId ? new Set([editingId, ...descendantIds(nodes, editingId)]) : new Set<string>();
-  return nodes.filter(n => !banned.has(n.id));
+  return nodes.filter(n => !banned.has(n.id) && available(n));
 }
 
 
@@ -207,7 +213,13 @@ export type TagEntity = { id?: string; name: string; parent_id?: string | null; 
  * 优先用 parent_id 映射回名字;没有 id 对不上时退回 path(「父/子」形态)取最后一段之前。
  * 返回 undefined 表示这批数据里没有任何父子关系 → 调用方保持旧的平铺行为。
  */
-export function tagParentsFromEntities(entities: readonly TagEntity[] | null | undefined): Record<string, string> | undefined {
+export type TagEntityWithPath = TagEntity & { path?: string | null };
+
+/**
+ * #2122 F5:只认**显式**父子 —— parent_id(映射回名字)或 Hub 明确给的 path。
+ * 绝不从 name 里的 "/" 自己发明父子(标签名里出现斜杠是合法的)。
+ */
+export function tagParentsFromEntities(entities: readonly TagEntityWithPath[] | null | undefined): Record<string, string> | undefined {
   if (!entities?.length) return undefined;
   const byId = new Map<string, string>();
   for (const e of entities) if (e.id) byId.set(e.id, e.name);
@@ -215,8 +227,14 @@ export function tagParentsFromEntities(entities: readonly TagEntity[] | null | u
   for (const e of entities) {
     const parentById = e.parent_id ? byId.get(e.parent_id) : undefined;
     if (parentById && parentById !== e.name) { out[e.name] = parentById; continue; }
-    const slash = typeof e.name === 'string' ? e.name.lastIndexOf('/') : -1;
-    if (slash > 0) out[e.name.slice(slash + 1)] = e.name.slice(0, slash);
+    // path 是 Hub 显式给的层级路径(如 "发布/桌面");用它取父段,而不是拆 name。
+    const path = typeof e.path === 'string' ? e.path : '';
+    const cut = path.lastIndexOf('/');
+    if (cut > 0) {
+      const parentPath = path.slice(0, cut);
+      const parentName = byId.size ? [...byId.values()].find(n => n === parentPath || n.endsWith('/' + parentPath)) : undefined;
+      if (parentName && parentName !== e.name) out[e.name] = parentName;
+    }
   }
   return Object.keys(out).length ? out : undefined;
 }
@@ -225,4 +243,22 @@ export function tagParentsFromEntities(entities: readonly TagEntity[] | null | u
 export function tagDepth(name: string, depthByName: Record<string, number> | null | undefined, parents: TagParents | null | undefined): number {
   if (depthByName && typeof depthByName[name] === 'number') return Math.max(0, Math.min(6, depthByName[name]));
   return Math.min(6, tagAncestors(name, parents).length);
+}
+
+
+/**
+ * #2122 F3:侧栏要能看到**父标签入口**,哪怕父标签自身 0 张卡(只有子孙在用)。
+ * 把可见标签的所有祖先补进列表;顺序按给定顺序,祖先放在其后代之前。
+ */
+export function includeTagAncestors(names: readonly string[], parents: TagParents | null | undefined): string[] {
+  if (!parents) return [...names];
+  const out: string[] = [];
+  const push = (n: string) => { if (n && !out.includes(n)) out.push(n); };
+  const walk = (n: string, guard: Set<string>) => {
+    for (const a of tagAncestors(n, parents)) if (!guard.has(a)) { guard.add(a); }
+    const chain = tagAncestors(n, parents).reverse();
+    for (const a of chain) push(a);
+  };
+  for (const n of names) { const g = new Set<string>(); walk(n, g); push(n); }
+  return out;
 }

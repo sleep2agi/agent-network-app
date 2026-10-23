@@ -573,14 +573,19 @@ export async function listProjects(cfg: HubConfig): Promise<RequirementProject[]
 }
 
 export async function createProject(cfg: HubConfig, input: { name: string; color?: string; parentId?: string | null }): Promise<RequirementProject> {
-  const { status, data } = await projectCall(cfg, '/api/requirements/projects', { method: 'POST', body: JSON.stringify({ ...input, network_id: cfg.networkId }) });
+  // #2122 F6:Hub 的字段叫 parent_id;客户端内部用 parentId。这里显式翻译,别把驼峰发上去。
+  const { parentId, ...rest } = input;
+  const body = { ...rest, network_id: cfg.networkId, ...(parentId ? { parent_id: parentId } : {}) };
+  const { status, data } = await projectCall(cfg, '/api/requirements/projects', { method: 'POST', body: JSON.stringify(body) });
   const row = projectFromHub(data?.project);
   if (status !== 201 || !row) throw projectError(status, data?.error);
   return row;
 }
 
 export async function updateProject(cfg: HubConfig, id: string, patch: { name?: string; color?: string; sort?: number; archived?: boolean; parentId?: string | null }): Promise<RequirementProject> {
-  const { status, data } = await projectCall(cfg, `/api/requirements/projects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(patch) });
+  const { parentId, ...rest } = patch;
+  const body = { ...rest, ...(parentId !== undefined ? { parent_id: parentId } : {}) };
+  const { status, data } = await projectCall(cfg, `/api/requirements/projects/${encodeURIComponent(id)}`, { method: 'PATCH', body: JSON.stringify(body) });
   const row = projectFromHub(data?.project);
   if (status !== 200 || !row) throw projectError(status, data?.error);
   return row;
