@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.293:",
+  "- 修复：手机聊天顶部「OpenCode 原会话」那块卡片又高又压住消息，还写着 Ctrl+B。现在收成一行：标题 · 状态 · 阅读/转后台两个小按钮，解释只在出错时出现，手机上不再出现键盘提示。",
+  "",
   "What's new in 0.2.292:",
   "- Ubuntu 24.04（amd64）安装包重新随本版发布，Linux 用户从 0.289 以后的版本都能继续升级。",
   "",
@@ -1276,6 +1279,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.292": "2026-10-23T12:39:38Z",
   "0.2.291": "2026-10-23T10:47:28Z",
   "0.2.289": "2026-10-23T04:19:12Z",
   "0.2.288": "2026-10-23T00:56:02Z",
