@@ -73,7 +73,7 @@ ck('sidebar: input map not mutated', eq([...sidebarCounts.keys()], ['权限', '�
 ck('sidebar: refreshed counts reorder automatically', eq(sidebarTagNames(localTagCounts([{ tags: ['b'] }, { tags: ['a', 'b'] }])), ['b', 'a']));
 const sidebarSource = readFileSync(new URL('./TaskFilterSidebar.tsx', import.meta.url), 'utf8');
 // #2102:标签行改成先过 tagRows(有 parents 才分层),数字仍取自同一份 tagCounts。
-ck('sidebar wiring: sort and badges share counts', sidebarSource.includes('const visibleTagNames = sidebarTagNames(tagCounts, filter.tag);')
+ck('sidebar wiring: sort and badges share counts', sidebarSource.includes('const visibleTagNames = sidebarTagNames(tagCounts, filter.tag, tagCatalog?.nodes?.filter(n => n.registered).map(n => n.name));')
   && sidebarSource.includes('includeTagAncestors(visibleTagNames, tagCatalog?.parents ?? null, knownTags)')
   && /tagRows\(tagNames, tagCatalog\?\.parents \?\? null\)\.map\(r => tagRow\(/.test(sidebarSource)
   && /tagCounts\.get\(r\.node\.name\) \?\? 0/.test(sidebarSource));

@@ -149,7 +149,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
   // 标签:数字按当前列表算(同项目);筛着的标签即使这页没有卡也留在列表里(好取消)。
   const tagCounts = localTagCounts(items);
-  const visibleTagNames = sidebarTagNames(tagCounts, filter.tag);
+  const visibleTagNames = sidebarTagNames(tagCounts, filter.tag, tagCatalog?.nodes?.filter(n => n.registered).map(n => n.name));
   const knownTags = new Set<string>([...visibleTagNames, ...(tagCatalog?.tags ?? [])]);
   const tagNames = includeTagAncestors(visibleTagNames, tagCatalog?.parents ?? null, knownTags);
   const tagDot = (tag: string) => {
