@@ -13,6 +13,13 @@ on:
         description: Exact 40-character main commit to build
         required: true
         type: string
+  # 版本号 PR 合入时自动出 APK：`release-desktop-auto-update` 的 attach-android-apk 只等
+  # 「这个 commit 的 android-build」，没人触发就等于没有 APK。
+  # 0.2.292 就是这么缺的（草稿只有 10 个资产），只能事后手工补派 + 重跑 attach。
+  push:
+    branches: [main]
+    paths:
+      - package.json
 
 permissions:
   contents: read
