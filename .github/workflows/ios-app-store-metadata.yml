@@ -153,8 +153,13 @@ jobs:
             notes="$notes"$'\n\n'"Demo for review: ${DEMO_HUB_URL:-<not provided>} / ${DEMO_ACCOUNT:-<not provided>}"
           fi
 
-          detail=$(asc_get "appStoreVersions/$version_id/appStoreReviewDetail" 2>/dev/null || true)
-          detail_id=$(jq -r '.data.id // empty' <<<"${detail:-{}}" 2>/dev/null)
+          # A version that never had review notes answers 404 here; that is not a
+          # failure, it means we must create the detail instead of patching it.
+          detail='{}'
+          if detail_raw=$(asc_get "appStoreVersions/$version_id/appStoreReviewDetail" 2>/dev/null); then
+            [ -n "$detail_raw" ] && detail="$detail_raw"
+          fi
+          detail_id=$(jq -r '.data.id // empty' <<<"$detail" 2>/dev/null || true)
           echo "--- review detail: ${detail_id:-none}"
           if [ "$DRY_RUN" = 'true' ]; then
             echo "    dry-run: would set notes to:"; printf '%s\n' "$notes" | sed 's/^/      /'
