@@ -13,7 +13,7 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 import type { RequirementProject } from './requirements-model';
-import { activeProjects, checkProjectName, commitOnNameBlur, nextProjectColor, parentPatchForPick, projectRenamePatch, PROJECT_COLORS } from './task-board-model';
+import { activeProjects, checkProjectName, nameBlurOutcome, nextProjectColor, parentPatchForPick, projectRenamePatch, PROJECT_COLORS } from './task-board-model';
 import { hubExposesProjectParent, parentProjectOptions } from './task-tree';
 import { liftedShadow, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
@@ -89,29 +89,29 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
         <View style={[styles.swatch, { backgroundColor: p.color, opacity: p.archived ? 0.4 : 1 }]} />
       </Pressable>
       {editing?.id === p.id ? (
-        <TextInput autoFocus value={editing.name} onChangeText={v => setEditing({ id: p.id, name: v })} onSubmitEditing={() => { void rename(); }} onBlur={() => { if (!commitOnNameBlur(pickingParent.current)) return; void rename(); }} maxLength={40} style={[f.input, { flex: 1, minHeight: 34, paddingVertical: 4 }]} testID={`project-name-input-${p.id}`} accessibilityLabel={tr('tasks.copy.205')} />
+        <TextInput autoFocus value={editing.name} onChangeText={v => setEditing({ id: p.id, name: v })} onSubmitEditing={() => { void rename(); }} onBlur={() => { const d = nameBlurOutcome(pickingParent.current); pickingParent.current = d.picking; if (!d.commit) return; void rename(); }} maxLength={40} style={[f.input, { flex: 1, minHeight: 34, paddingVertical: 4 }]} testID={`project-name-input-${p.id}`} accessibilityLabel={tr('tasks.copy.205')} />
       ) : (
         <Pressable style={{ flex: 1 }} disabled={p.archived} onPress={() => { setEditing({ id: p.id, name: p.name }); setEditParentId(p.parentId ?? null); }} accessibilityRole="button" accessibilityLabel={tr('tasks.copy.206', { v0: p.name })} testID={`project-name-${p.id}`}>
           <Text style={{ color: p.archived ? colors.textMuted : colors.text, fontSize: typeScale.body }} numberOfLines={1}>{p.name}</Text>
         </Pressable>
       )}
-      {editing?.id === p.id && supportsParent ? parentChips(editParentId, editParents, id => { pickingParent.current = false; setEditParentId(id); void rename(parentPatchForPick(id).parentId); }, `project-parent-${p.id}`, () => { pickingParent.current = true; }) : <Text style={s.muted}>{counts.get(p.id) ?? 0} {tr('tasks.copy.207')}</Text>}
+      {editing?.id === p.id && supportsParent ? parentChips(editParentId, editParents, id => { pickingParent.current = false; setEditParentId(id); void rename(parentPatchForPick(id).parentId); }, `project-parent-${p.id}`, () => { pickingParent.current = true; }, () => { pickingParent.current = false; }) : <Text style={s.muted}>{counts.get(p.id) ?? 0} {tr('tasks.copy.207')}</Text>}
       <Pressable accessibilityRole="button" onPress={() => { void run(() => onUpdate(p.id, { archived: !p.archived })); }} style={styles.action} testID={`project-${p.archived ? 'restore' : 'archive'}-${p.id}`}>
         <Text style={s.link}>{p.archived ? tr('tasks.copy.208') : tr('tasks.copy.209')}</Text>
       </Pressable>
     </View>
   );
   // 父项目 chips:只列未归档候选;编辑时已排除自己与后代(服务端仍拒绝环/超深)。
-  const parentChips = (value: string | null, options: RequirementProject[], onPick: (id: string | null) => void, testID: string, onChipPressIn?: () => void) => (
+  const parentChips = (value: string | null, options: RequirementProject[], onPick: (id: string | null) => void, testID: string, onChipPressIn?: () => void, onChipPressOut?: () => void) => (
     <View style={{ gap: 4 }} testID={testID}>
       <Text style={[s.muted, { fontSize: typeScale.caption }]}>{tr('tasks.copy.244')}</Text>
       <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: spacing.xs, alignItems: 'center' }}>
-        <Pressable accessibilityRole="button" {...a11yStateLocal(value === null)} {...(onChipPressIn ? { onPressIn: onChipPressIn } : {})} onPress={() => onPick(null)} testID={`${testID}-none`}
+        <Pressable accessibilityRole="button" {...a11yStateLocal(value === null)} {...(onChipPressIn ? { onPressIn: onChipPressIn } : {})} {...(onChipPressOut ? { onPressOut: onChipPressOut } : {})} onPress={() => onPick(null)} testID={`${testID}-none`}
           style={[styles.chip, value === null && { borderColor: colors.accent }]}>
           <Text style={{ color: value === null ? colors.accent : colors.textSecondary, fontSize: 12 }}>{tr('tasks.copy.243')}</Text>
         </Pressable>
         {options.map(p => (
-          <Pressable key={p.id} accessibilityRole="button" {...a11yStateLocal(value === p.id)} {...(onChipPressIn ? { onPressIn: onChipPressIn } : {})} onPress={() => onPick(p.id)} testID={`${testID}-${p.id}`}
+          <Pressable key={p.id} accessibilityRole="button" {...a11yStateLocal(value === p.id)} {...(onChipPressIn ? { onPressIn: onChipPressIn } : {})} {...(onChipPressOut ? { onPressOut: onChipPressOut } : {})} onPress={() => onPick(p.id)} testID={`${testID}-${p.id}`}
             style={[styles.chip, value === p.id && { borderColor: colors.accent }]}>
             <View style={[styles.chipDot, { backgroundColor: p.color }]} />
             <Text style={{ color: value === p.id ? colors.accent : colors.textSecondary, fontSize: 12 }} numberOfLines={1}>{p.name}</Text>

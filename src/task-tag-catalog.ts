@@ -7,7 +7,7 @@ import type { HubConfig } from './api';
 import { appFetch } from './app-fetch';
 import { withDeadline } from './deadline';
 import { normalizeTags } from './requirement-tags';
-import { tagParentsFromEntities } from './task-tree';
+import { includeTagAncestors, tagParentsFromEntities, type TagParents } from './task-tree';
 import { PROJECT_COLORS } from './task-board-model';
 
 export const TAG_OPS_CAPABILITY = 'tag_ops';
@@ -71,6 +71,21 @@ export function catalogFromHub(data: unknown): TagCatalog | null {
     ...(mergedParents ? { parents: mergedParents } : {}),
     ...(Object.keys(depths).length ? { depths } : {}),
   };
+}
+
+/**
+ * #2139:手机顶部快筛的标签项 —— 卡片上出现的标签 + 它们在**授权可见目录内**的祖先。
+ * 这样「父标签零直属卡、子卡若干」时父标签也能选,选中后按后代命中子卡(与侧栏同一套判定)。
+ * 目录外的父不合成入口(known 闭包);旧 Hub(parents 为空)原样返回 → 顺序/平铺/精确匹配都不变。
+ */
+export function tagFilterEntries(
+  items: readonly { tags?: readonly string[] }[],
+  catalogTags: readonly string[] | null | undefined,
+  parents: TagParents | null | undefined,
+): string[] {
+  const onCards = [...new Set(items.flatMap(item => item.tags ?? []))];
+  const known = new Set<string>([...onCards, ...(catalogTags ?? [])]);
+  return includeTagAncestors(onCards, parents, known);
 }
 
 /** 能不能在界面上给「管理标签」:列表的 capabilities 带 tag_ops,且 Hub 说这个人能管。 */

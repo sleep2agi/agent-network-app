@@ -14,15 +14,17 @@ import type { HubConfig } from './api';
 import { appFetch } from './app-fetch';
 import { noteTagsUsed, setManagingTags, setSideMenu, setTaskFilter, useTaskBoard } from './task-board-store';
 import { pointerUi } from './pointer-ui';
-import { canManageTags, catalogFromHub, localTagCounts, tagSuggestions } from './task-tag-catalog';
+import { canManageTags, catalogFromHub, localTagCounts, tagFilterEntries, tagSuggestions } from './task-tag-catalog';
 
 export function TaskTagFilter() {
   useTranslation();
   const [open, setOpen] = useState(false);
   const items = useTaskBoard(s => s.items), filter = useTaskBoard(s => s.filter);
-  const tags = [...new Set(items.flatMap(item => item.tags ?? []))];
   const colorsOf = useTaskBoard(s => s.tagCatalog?.colors);
   const tagParents = useTaskBoard(s => s.tagCatalog?.parents ?? null);
+  const catalogTags = useTaskBoard(s => s.tagCatalog?.tags ?? null);
+  // #2139:卡片上的标签 + 授权可见的祖先(父标签零直属卡也能选,选中后命中原后代)。
+  const tags = tagFilterEntries(items, catalogTags, tagParents);
   const manage = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   return <View style={{ maxWidth: 260 }}>
     <Pressable testID="task-tags-filter" accessibilityRole="button" onPress={() => setOpen(!open)} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}><Text numberOfLines={1} style={{ color: filter.tag || filter.untagged ? colors.accent : colors.textMuted }}>{filter.untagged ? t('tagStats.untagged') : filter.tag || t('tags.title')}</Text></Pressable>

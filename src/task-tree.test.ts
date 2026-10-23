@@ -1,7 +1,8 @@
 // #2098 / #2102:项目树与标签层级的纯判定。
 // 关键约束:**没有 parent 数据时必须与旧的平铺完全一致**(顺序、深度、计数都不变)。
 import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, includeTagAncestors, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagRows, tagWithDescendants } from './task-tree';
-import { applyFilter, commitOnNameBlur, parentPatchForPick, projectRenamePatch, tagFilterAfterPick } from './task-board-model';
+import { applyFilter, commitOnNameBlur, nameBlurOutcome, parentPatchForPick, projectRenamePatch, tagFilterAfterPick } from './task-board-model';
+import { tagFilterEntries } from './task-tag-catalog';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra = '') => { t++; if (ok) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` — ${extra}` : ''}`); };
@@ -277,11 +278,72 @@ const editCandidates = parentProjectOptions([P('A', null), P('B', null), { ...P(
 ck('#2138 归档项目不出现在父项目候选里', !editCandidates.some(n => n.id === 'Z') && editCandidates.some(n => n.id === 'B'));
 ck('#2138 编辑行的候选 = parentProjectOptions(projects, editing.id, !archived)', /editing \? parentProjectOptions\(projects, editing\.id, p => !p\.archived\) : \[\]/.test(managerNow) || /parentProjectOptions\(projects, editing\.id, p => !p\.archived\)/.test(managerNow));
 
-ck('#2138 接线:名称框 onBlur 先看 pickingParent', /onBlur=\{\(\) => \{ if \(!commitOnNameBlur\(pickingParent\.current\)\) return; void rename\(\); \}\}/.test(managerNow));
+ck('#2138 接线:名称框 onBlur 走 nameBlurOutcome 并写回 pickingParent', /onBlur=\{\(\) => \{ const d = nameBlurOutcome\(pickingParent\.current\); pickingParent\.current = d\.picking; if \(!d\.commit\) return; void rename\(\); \}\}/.test(managerNow));
 ck('#2138 接线:编辑行 chip 在 pointerdown 置位', /onChipPressIn/.test(managerNow) && /pickingParent\.current = true/.test(managerNow));
 ck('#2138 接线:点 chip 用点到的那一个值提交', /rename\(parentPatchForPick\(id\)\.parentId\)/.test(managerNow));
 ck('#2138 接线:旧 Hub 不渲染父项目控件', /supportsParent \? parentChips\(editParentId/.test(managerNow) || /editing\?\.id === p\.id && supportsParent \? parentChips/.test(managerNow));
 ck('#2138 接线:新建表单 chip 不传 onPressIn(不受影响)', /parentChips\(parentId, createParents, setParentId, 'project-new-parent'\)/.test(managerNow));
+
+// ── #2139(1):手机顶部快筛要能选「零直属卡的父标签」──────────────────────
+const itemsT = [{ tags: ['发布/桌面'] }, { tags: ['发布/桌面'] }, { tags: ['TMWork'] }] as never[];
+const cardTags = ['发布/桌面', 'TMWork'];
+ck('#2139 反例:只取卡片标签时父标签不在候选里(选不到)', !cardTags.includes('发布'));
+const entries = tagFilterEntries(itemsT, ['发布', '发布/桌面', 'TMWork'], { '发布/桌面': '发布' });
+ck('#2139 父标签零直属卡也进候选,且排在子标签前面', entries.includes('发布') && entries.indexOf('发布') < entries.indexOf('发布/桌面'));
+const pickedParent = applyFilter(itemsT, tagFilterAfterPick({ owners: [], priorities: [] } as never, '发布', { '发布/桌面': '发布' }));
+ck('#2139 选父标签命中两张子卡', pickedParent.length === 2);
+ck('#2139 不相干的标签仍在候选里(顺序不乱)', entries.join(',') === '发布,发布/桌面,TMWork');
+const ghost = tagFilterEntries([{ tags: ['x'] }] as never, ['x'], { x: '外部父' });
+ck('#2139 目录外的父不合成入口', !ghost.includes('外部父') && ghost.includes('x'));
+const flatEntries = tagFilterEntries([{ tags: ['b'] }, { tags: ['a'] }, { tags: ['b'] }] as never, null, null);
+ck('#2139 旧 Hub:平铺顺序不变、无新增项', JSON.stringify(flatEntries) === '["b","a"]');
+ck('#2139 旧 Hub:按标签仍是精确匹配', tagFilterAfterPick({ owners: [], priorities: [] } as never, 'a', null).tagDescendants === undefined);
+const quickSrc = readFileSync(new URL('./TaskTags.tsx', import.meta.url), 'utf8');
+ck('#2139 接线:TaskTagFilter 用 tagFilterEntries(items, catalogTags, tagParents)', /const tags = tagFilterEntries\(items, catalogTags, tagParents\);/.test(quickSrc));
+ck('#2139 接线:不再只从 items 现拼标签', !/const tags = \[\.\.\.new Set\(items\.flatMap/.test(quickSrc));
+
+// ── #2139(2):pickingParent 的真实复位(取消按压不能把 blur 永久停掉)────
+const replay = (draft: string, steps: readonly ('in' | 'out' | 'blur' | 'pressB')[]) => {
+  const current = { name: 'A', parentId: null };
+  let picking = false, editing = true, parentState: string | null = null;
+  const updates: { name?: string; parentId?: string | null }[] = [];
+  const rename = (picked?: string | null) => {
+    if (!editing) return;
+    const patch = projectRenamePatch(current, draft, picked !== undefined ? picked : parentState, true);
+    if (patch) updates.push(patch);
+    editing = false;
+  };
+  for (const step of steps) {
+    if (step === 'in') picking = true;                                  // chip onPressIn
+    else if (step === 'out') picking = false;                           // chip onPressOut(取消也算)
+    else if (step === 'blur') {                                         // 名称框 onBlur
+      const d = nameBlurOutcome(picking); picking = d.picking;          // 组件写回 ref
+      if (d.commit) rename();
+    } else if (step === 'pressB') { parentState = 'B'; picking = false; rename('B'); }
+  }
+  return { updates, picking, editing };
+};
+const normalPick = replay('A', ['in', 'blur', 'pressB']);
+ck('#2139 正常点击:blur 不提交,press 只发 { parentId: "B" }', JSON.stringify(normalPick.updates) === '[{"parentId":"B"}]' && normalPick.picking === false);
+const cancelled = replay('A2', ['in', 'blur', 'out', 'blur']);
+ck('#2139 取消按压后:标志已复位,下一次普通 blur 正常保存', JSON.stringify(cancelled.updates) === '[{"name":"A2"}]' && cancelled.picking === false && cancelled.editing === false);
+const cancelNoOut = replay('A2', ['in', 'blur', 'blur']);
+ck('#2139 只靠 blur 消费标志也能复位(onPressOut 缺失时)', cancelNoOut.picking === false);
+const outThenBlur = replay('A2', ['in', 'out', 'blur']);
+ck('#2139 pressIn → 取消(out) → blur 仍保存改名', JSON.stringify(outThenBlur.updates) === '[{"name":"A2"}]');
+const stuck = (() => { // 反例:blur 不复位标志(旧缺陷)
+  const current = { name: 'A', parentId: null };
+  let picking = true, editing = true;
+  const updates: unknown[] = [];
+  const blur = (draft: string) => { if (picking) return; const patch = projectRenamePatch(current, draft, null, true); if (patch) updates.push(patch); editing = false; };
+  blur('A'); blur('A2');
+  return { updates, editing };
+})();
+ck('#2139 反例:标志不复位时连续 blur 全被跳过(改名丢失)', stuck.updates.length === 0 && stuck.editing === true);
+ck('#2139 接线:blur 写回 ref + chip 在 pointerdown/out 置位复位',
+  /pickingParent\.current = d\.picking/.test(managerNow) && /pickingParent\.current = true/.test(managerNow) && /pickingParent\.current = false/.test(managerNow)
+  && /onChipPressOut/.test(managerNow));
+
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

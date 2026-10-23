@@ -222,6 +222,14 @@ export function tagFilterAfterPick(current: BoardFilter, tag: string, parents: T
  */
 export const commitOnNameBlur = (pickingParent: boolean): boolean => !pickingParent;
 
+/**
+ * #2139:名称框失焦的判定。正在点父项目时跳过提交 —— 但**必须把这个标志消耗掉**:
+ * pointer 被取消(按下又移开、滚动)时不会有 press,若不消耗标志,之后每次 blur 都不提交,
+ * 改名就静默丢了。返回新的 picking 值,调用方写回即可。
+ */
+export const nameBlurOutcome = (pickingParent: boolean): { commit: boolean; picking: boolean } =>
+  ({ commit: commitOnNameBlur(pickingParent), picking: false });
+
 /** #2127:点父项目 chip 时发出去的补丁 —— 用**点到的那一个**值,不依赖还没刷新的 state。 */
 export const parentPatchForPick = (picked: string | null): { parentId: string | null } => ({ parentId: picked });
 
