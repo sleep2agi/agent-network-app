@@ -1,7 +1,7 @@
 // #2098 / #2102:项目树与标签层级的纯判定。
 // 关键约束:**没有 parent 数据时必须与旧的平铺完全一致**(顺序、深度、计数都不变)。
 import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, includeTagAncestors, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagRows, tagWithDescendants } from './task-tree';
-import { applyFilter } from './task-board-model';
+import { applyFilter, tagFilterAfterPick } from './task-board-model';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra = '') => { t++; if (ok) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` — ${extra}` : ''}`); };
@@ -59,7 +59,7 @@ ck('侧栏:主树与空项目区共用同一批可见行(父不重复)', /const 
   && /\{withTasks\.map\(drawRow\)\}/.test(side));
 ck('侧栏用 tagRows + tagCatalog.parents 渲染标签层级', /tagRows\(tagNames, tagCatalog\?\.parents \?\? null\)/.test(side));
 // #2106 反例 4 / P2:筛选带后代集合;标签按 depth 真缩进。
-ck('侧栏:点击标签时把后代集合写进筛选', /tagWithDescendants\(tag, tagCatalog\?\.parents \?\? null\)/.test(side) && /tagDescendants: desc\.length > 1/.test(side));
+ck('侧栏:点击标签时把后代集合写进筛选', /tagFilterAfterPick\(filter, tag, tagCatalog\?\.parents \?\? null\)/.test(side));
 ck('侧栏:标签行按 depth 缩进', /tagDepth\(r\.node\.name, tagCatalog\?\.depths \?\? null/.test(side) && /depth > 0 && \{ paddingLeft:/.test(side));
 ck('折叠只在有子节点时出现', /r\.hasChildren\s*\?\s*<View/.test(side));
 
@@ -190,8 +190,41 @@ ck('F4 旧 map 残留时会误命中(反例成立:2 张)', applyFilter(itemsF4b,
 const overwritten = { owners: [], priorities: [], tag: 'P', tagDescendants: undefined } as never;
 ck('F4 覆盖/删除后只命中独立根 P', applyFilter(itemsF4b, overwritten).length === 1
   && applyFilter([{ tags: ['c'] }] as never, overwritten).length === 0);
-ck('F4 侧栏覆盖写入而不是合并旧键', /tagDescendants: desc\.length > 1 \? \{ \[tag\]: desc\.filter/.test(side)
+ck('F4 侧栏覆盖写入而不是合并旧键', /tagFilterAfterPick\(filter, tag, tagCatalog\?\.parents \?\? null\)/.test(side)
   && /tagDescendants: want\.length \? \{ \[current\.tag\]: want \} : undefined/.test(side));
+
+// ── #2127 F4(第二个入口):顶部标签筛选 TaskTagFilter ────────────────────
+// 下面调的就是两个入口 onPress 里那一句 `tagFilterAfterPick(当前筛选, tag, parents)`:
+// 给定「当前筛选」+ 点哪个标签 + 当前目录,函数返回**进去渲染的那份新筛选**。
+const itemsF4c = [{ tags: ['c'] }, { tags: ['d'] }, { tags: ['P'] }] as never[];
+const tagOf = (r: unknown) => (r as { tags: string[] }).tags[0];
+// 反例 1:旧 map 是 {P:['c'],Q:['d']},当前目录里 P 是独立根 —— 从该入口点 P 不得命中 c。
+const fromQ = { owners: [], priorities: [], tag: 'Q', tagDescendants: { P: ['c'], Q: ['d'] } } as never;
+ck('F4 前置:旧 map 下当前选中 Q 只命中 d(反例基座成立)', applyFilter(itemsF4c, fromQ).length === 1 && tagOf(applyFilter(itemsF4c, fromQ)[0]) === 'd');
+const nextP = tagFilterAfterPick(fromQ, 'P', null);
+const pickedP = applyFilter(itemsF4c, nextP);
+ck('F4 从 TaskTagFilter 点 P(无层级):只命中独立根 P,不命中 c', pickedP.length === 1 && tagOf(pickedP[0]) === 'P');
+ck('F4 从 TaskTagFilter 点 P:旧 {P:["c"]} 被显式清掉(键写 undefined,不靠省略)',
+  nextP.tagDescendants === undefined && Object.prototype.hasOwnProperty.call(nextP, 'tagDescendants'));
+ck('F4 从 TaskTagFilter 点 P:另一个旧键 Q 也不残留', !('Q' in (nextP.tagDescendants ?? {})) && Object.keys(nextP.tagDescendants ?? {}).length === 0);
+// 反例 2:当前目录 P→c —— 从该入口点 P 必须命中 c。
+const liveParents = { c: 'P' };
+const nextP2 = tagFilterAfterPick(fromQ, 'P', liveParents);
+const pickedP2 = applyFilter(itemsF4c, nextP2);
+ck('F4 当前 P→c,从 TaskTagFilter 点 P 命中 P 与 c(2 张)', pickedP2.length === 2
+  && pickedP2.map(tagOf).sort().join(',') === 'P,c');
+ck('F4 当前 P→c:后代 map 覆盖成只有 P→["c"]', JSON.stringify(nextP2.tagDescendants) === '{"P":["c"]}');
+// 「全部」:必须显式覆盖(键写 undefined),否则旧图继续生效。
+const nextAll = tagFilterAfterPick(fromQ, '', { c: 'P' });
+ck('F4 点「全部」清掉后代 map', nextAll.tag === '' && nextAll.tagDescendants === undefined
+  && Object.prototype.hasOwnProperty.call(nextAll, 'tagDescendants'));
+ck('F4 点「全部」后三张都回来', applyFilter(itemsF4c, nextAll).length === 3);
+// 接线:两个入口都调这同一个函数,且「只换 tag」的老写法已不存在。
+const tagFilterSrc = readFileSync(new URL('./TaskTags.tsx', import.meta.url), 'utf8');
+ck('F4 TaskTagFilter 的 onPress 调 tagFilterAfterPick', /setTaskFilter\(tagFilterAfterPick\(filter, tag, tagParents\)\)/.test(tagFilterSrc));
+ck('F4 TaskTagFilter 不再只替换 tag(旧写法已消失)', !/setTaskFilter\(\{ \.\.\.filter, tag, untagged: false \}\)/.test(tagFilterSrc));
+ck('F4 两个入口共用同一个函数', /tagFilterAfterPick\(filter, tag, tagCatalog\?\.parents \?\? null\)/.test(side)
+  && /tagFilterAfterPick\(filter, tag, tagParents\)/.test(tagFilterSrc));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

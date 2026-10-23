@@ -141,6 +141,16 @@ export function tagWithDescendants(tag: string, parents: TagParents | null | und
   return out;
 }
 
+/**
+ * 点一个标签之后的筛选改写(#2127 F4):左栏和顶部标签筛选**共用这一条路**。
+ * 每次都**显式覆盖** tagDescendants —— 有后代就写当前这一项;没有后代(含「全部」/旧 Hub 无层级)
+ * 就写成 undefined 把旧图清掉。否则先点 Q 再点独立根 P,会拿旧的后代集合继续匹配。
+ */
+export function tagPickPatch(tag: string, parents: TagParents | null | undefined): { tag: string; untagged: false; tagDescendants: Record<string, string[]> | undefined } {
+  const rest = tag ? tagWithDescendants(tag, parents).filter(t => t !== tag) : [];
+  return { tag, untagged: false, tagDescendants: rest.length ? { [tag]: rest } : undefined };
+}
+
 /** 父标签的祖先链(给「选中子标签时提示它在哪个父下」用)。无 parents → 空。 */
 export function tagAncestors(tag: string, parents: TagParents | null | undefined): string[] {
   if (!parents) return [];

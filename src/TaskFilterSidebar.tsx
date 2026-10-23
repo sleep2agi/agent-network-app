@@ -16,7 +16,7 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
-import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
+import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, tagFilterAfterPick, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
 import { aggregateCounts, includeTagAncestors, projectRows, tagDepth, tagRows, tagWithDescendants } from './task-tree';
 import { commitSideRename, renameKey } from './task-side-menu';
@@ -166,13 +166,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         accessibilityLabel={label}
         {...a11yState({ selected: on })}
         onPress={() => {
-          const desc = tag ? tagWithDescendants(tag, tagCatalog?.parents ?? null) : [];
           setTaskSection(section === 'dispatch' ? 'board' : section);
-          setTaskFilter({
-            ...filter, tag, untagged: false,
-            // #2127 F4:每次点击都**覆盖**,不合并旧项。
-            tagDescendants: desc.length > 1 ? { [tag]: desc.filter(t => t !== tag) } : undefined,
-          });
+          // #2127 F4:每次点击都**覆盖**,不合并旧项;与顶部标签筛选共用 tagFilterAfterPick。
+          setTaskFilter(tagFilterAfterPick(filter, tag, tagCatalog?.parents ?? null));
           onNavigate?.();
         }}
         style={state => [styles.item, depth > 0 && { paddingLeft: (styles.item as any).paddingHorizontal + depth * 14 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}

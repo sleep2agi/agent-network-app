@@ -21,6 +21,7 @@ import {
   type Requirement,
 } from './requirements-model';
 import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { tagPickPatch, type TagParents } from './task-tree';
 
 // ── 筛选 ──────────────────────────────────────────────────────────────────
 
@@ -204,6 +205,15 @@ export const applyFilter = (items: readonly Requirement[], f: BoardFilter, at: D
   const when = f.overdue && at.now === undefined ? { ...at, now: Date.now() } : at;
   return items.filter(item => matchesFilter(item, f, when));
 };
+
+/**
+ * 点一个标签之后的**完整**筛选(#2127 F4):左栏与顶部标签筛选两个入口都调这一个函数。
+ * 关键在「显式覆盖」:tagDescendants 每次都由当前目录重算 —— 有后代写当前这一项,
+ * 没有(含「全部」/旧 Hub 无层级)写成 undefined 把旧图清掉,绝不合并旧键。
+ */
+export function tagFilterAfterPick(current: BoardFilter, tag: string, parents: TagParents | null | undefined): BoardFilter {
+  return { ...current, ...tagPickPatch(tag, parents) };
+}
 
 /** 多选筛选里点一项:有就去掉,没有就加上。 */
 export function toggleIn<T>(list: readonly T[], value: T): T[] {

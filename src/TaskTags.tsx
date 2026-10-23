@@ -9,7 +9,7 @@ import './i18n-task-tags';
 import './i18n-tag-status';
 import { normalizeTags } from './requirement-tags';
 import type { Requirement } from './requirements-model';
-import type { EditPatch } from './task-board-model';
+import { tagFilterAfterPick, type EditPatch } from './task-board-model';
 import type { HubConfig } from './api';
 import { appFetch } from './app-fetch';
 import { noteTagsUsed, setManagingTags, setSideMenu, setTaskFilter, useTaskBoard } from './task-board-store';
@@ -22,10 +22,11 @@ export function TaskTagFilter() {
   const items = useTaskBoard(s => s.items), filter = useTaskBoard(s => s.filter);
   const tags = [...new Set(items.flatMap(item => item.tags ?? []))];
   const colorsOf = useTaskBoard(s => s.tagCatalog?.colors);
+  const tagParents = useTaskBoard(s => s.tagCatalog?.parents ?? null);
   const manage = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   return <View style={{ maxWidth: 260 }}>
     <Pressable testID="task-tags-filter" accessibilityRole="button" onPress={() => setOpen(!open)} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}><Text numberOfLines={1} style={{ color: filter.tag || filter.untagged ? colors.accent : colors.textMuted }}>{filter.untagged ? t('tagStats.untagged') : filter.tag || t('tags.title')}</Text></Pressable>
-    {open ? <ScrollView horizontal style={{ maxHeight: 52 }} contentContainerStyle={{ gap: 6 }}>{['', ...tags].map(tag => <Pressable key={tag} testID={`task-tags-pick-${tag || 'all'}`} accessibilityRole="button" onPress={() => { setTaskFilter({ ...filter, tag, untagged: false }); setOpen(false); }} onLongPress={!pointerUi() ? (tag && manage ? e => { setOpen(false); setSideMenu({ kind: 'tag', key: tag, x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, touch: true }); } : undefined) : undefined} style={{ minHeight: 44, paddingHorizontal: 10, justifyContent: 'center', backgroundColor: colors.subtleFill, borderRadius: radius.control }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>{tag && colorsOf?.[tag] ? <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colorsOf[tag] }} /> : null}<Text style={{ color: colors.text }}>{tag || t('tags.all')}</Text></View></Pressable>)}
+    {open ? <ScrollView horizontal style={{ maxHeight: 52 }} contentContainerStyle={{ gap: 6 }}>{['', ...tags].map(tag => <Pressable key={tag} testID={`task-tags-pick-${tag || 'all'}`} accessibilityRole="button" onPress={() => { setTaskFilter(tagFilterAfterPick(filter, tag, tagParents)); setOpen(false); }} onLongPress={!pointerUi() ? (tag && manage ? e => { setOpen(false); setSideMenu({ kind: 'tag', key: tag, x: e.nativeEvent.pageX, y: e.nativeEvent.pageY, touch: true }); } : undefined) : undefined} style={{ minHeight: 44, paddingHorizontal: 10, justifyContent: 'center', backgroundColor: colors.subtleFill, borderRadius: radius.control }}><View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>{tag && colorsOf?.[tag] ? <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colorsOf[tag] }} /> : null}<Text style={{ color: colors.text }}>{tag || t('tags.all')}</Text></View></Pressable>)}
       {/* 手机没有左栏:「管理标签」放在标签筛选的最后(同「管理项目」在项目筛选里)。 */}
       {manage ? <Pressable testID="task-tags-manage" accessibilityRole="button" onPress={() => { setOpen(false); setManagingTags(true); }} style={{ minHeight: 44, paddingHorizontal: 10, justifyContent: 'center' }}><Text style={{ color: colors.accent }}>{t('tags.manage')}</Text></Pressable> : null}
     </ScrollView> : null}
