@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ""
+      phased_release:
+        description: Also create a 7-day phased release for this version (App Store rollout in steps, can be paused or cancelled while live)
+        required: false
+        type: boolean
+        default: false
       submit_for_review:
         description: After writing the copy, create the App Store version submission (irreversible; owner-authorized 2026-10-23)
         required: false
@@ -52,6 +57,7 @@ jobs:
           DEMO_HUB_URL: ${{ inputs.demo_hub_url }}
           DEMO_ACCOUNT: ${{ inputs.demo_account }}
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+          PHASED_RELEASE: ${{ inputs.phased_release }}
           BUNDLE_ID: top.vansin.agentnetwork
         shell: bash
         run: |
@@ -183,6 +189,25 @@ jobs:
             asc_write POST "appStoreVersionSubmissions" "$RUNNER_TEMP/submission.json" | jq '{id: .data.id, submitted: .data.attributes.submitted}'
           else
             echo "submission skipped (submit_for_review=false)"
+          fi
+
+
+          # 灰度:7 天分批放量。Apple 只在版本发布后按天数推进,期间可以暂停/取消 ——
+          # 这是唯一能在「用户已经能更新」之后还踩刹车的官方机制,所以发版前把它配好。
+          # 幂等:已有 phased release 就只报告状态,不重复创建。
+          if [ "$PHASED_RELEASE" = 'true' ] && [ "$DRY_RUN" != 'true' ]; then
+            existing=$(asc_get "appStoreVersions/$version_id/appStoreVersionPhasedRelease" 2>/dev/null \
+              | jq -r '.data.id // empty' || true)
+            if [ -n "$existing" ]; then
+              echo "phased release already exists ($existing)"
+              asc_get "appStoreVersionPhasedRelease/$existing" | jq '{state: .data.attributes.phasedReleaseState, day: .data.attributes.currentDayNumber, start: .data.attributes.startDate}'
+            else
+              jq -n --arg vid "$version_id" \
+                '{data:{type:"appStoreVersionPhasedReleases",attributes:{phasedReleaseState:"INACTIVE"},relationships:{appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/phased.json"
+              asc_write POST "appStoreVersionPhasedReleases" "$RUNNER_TEMP/phased.json" | jq '{id: .data.id, state: .data.attributes.phasedReleaseState}'
+            fi
+          elif [ "$PHASED_RELEASE" = 'true' ]; then
+            echo "phased release skipped (dry_run=true)"
           fi
 
           echo 'App Store version summary:'
