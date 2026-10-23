@@ -525,7 +525,13 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
-            What's new in 0.2.290:
+            What's new in 0.2.291:
+            - 改进：Agent 对话、私聊和群聊统一文件卡片，清晰显示文件名、扩展名、类型、大小和传输状态；卡片状态与动作都按当前语言显示。 / Improved: unified file cards in Agent chats, DMs and group chats show the filename, extension, type, size and transfer state; card status and actions follow the current language.
+            - 改进：文件卡片区分等待上传、上传中、等待发送、下载中和失败状态；发送失败可重试整条消息并保留已上传附件，下载失败可点击重试。 / Improved: file cards distinguish queued uploads, uploading, waiting to send, downloading and failures; retry a failed message with already-uploaded attachments preserved, or click to retry a failed download.
+            - 改进：桌面文件支持选择位置保存、另存为及在文件夹中显示；网页版通过身份验证后交给浏览器下载，凭据不放入下载链接。 / Improved: desktop files offer a save-location picker, Save As and Show in folder; web downloads authenticate before handing the file to the browser, without credentials in download links.
+            - 改进：组织架构页面更紧凑，未归属批量归入前明确显示影响数量并要求确认，失败逐条报告。 / Improved: the organization page is more compact; bulk assignment shows how many agents it will move, asks for confirmation, and reports per-item failures.
+            - 修复：图文混合附件保留图片预览与文件卡片，零字节文件正确显示为 0 B；语言切换后已发出的提示不再停留在旧语言。 / Fixed: mixed image and file attachments keep image previews and file cards, zero-byte files show 0 B, and hints already sent no longer stay in the previous language.
+            - 0.2.290 的内容（项目父子层级、标签父子筛选、新建/编辑项目选父项目）保持在本版。
             - 项目可以像文件夹一样有父项目：左侧自动缩进、可折叠，父项目的数字含子项目；Hub 没有父项目字段时完全保持原来的平铺。
             - 标签也有父子：按父标签筛选会同时命中子标签（左侧栏和手机顶部快筛都支持），父标签自己没有卡也能选。
             - 新建或编辑项目时可以直接选父项目；归档的项目不会出现在候选里。

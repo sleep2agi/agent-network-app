@@ -42,7 +42,8 @@ check(m.clampIndex(-3, 4) === 0 && m.clampIndex(10, 4) === 3 && m.clampIndex(1.7
   check(!!n && n.fileId === 'f1' && !n.uri && n.save === true, 'native authed image: resolve by fileId, offer 下载原图');
   const t = m.viewerImageFor(authed, tauri);
   check(!!t && t.authUri === authed.uri && !t.fileId && t.save === true, 'desktop authed image: resolve by authed url, offer 下载原图');
-  check(m.viewerImageFor(authed, browser) === null, 'plain browser cannot preview authed images (no bearer on <img>)');
+  const b = m.viewerImageFor(authed, browser);
+  check(!!b && b.authUri === authed.uri && b.mime === 'image/png' && !b.uri && !b.fileId && b.save === true, 'plain browser resolves authenticated images via blob fetch, not a bare <img> URL');
   const l = m.viewerImageFor(local, native);
   check(!!l && l.uri === 'file:///y.png' && !l.save, 'local echo: direct uri, nothing to download');
   check(m.viewerImageFor({ ...local, isImage: false }, native) === null, 'non-images are not in the gallery');

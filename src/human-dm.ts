@@ -138,7 +138,7 @@ export function dmSendBody(input: { networkId: string; toUserId: string; message
     network_id: input.networkId,
     to_user_id: input.toUserId,
     message: input.message,
-    ...(input.attachments?.length ? { attachments: input.attachments.map(a => ({ type: 'file', file_id: a.file_id, ...(a.name ? { name: a.name } : {}), ...(a.mime ? { mime: a.mime } : {}), ...(a.size ? { size: a.size } : {}) })) } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments.map(a => ({ type: 'file', file_id: a.file_id, ...(a.name ? { name: a.name } : {}), ...(a.mime ? { mime: a.mime } : {}), ...(typeof a.size === 'number' ? { size: a.size } : {}) })) } : {}),
     client_request_id: input.clientRequestId,
   };
 }

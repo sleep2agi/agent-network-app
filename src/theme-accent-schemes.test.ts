@@ -67,7 +67,9 @@ const wired: Record<string, string[]> = {
   'UiScaleSettings.tsx': ['bubbleMe: { alignSelf: \'flex-end\', backgroundColor: colors.bubbleMine }', 'color: colors.onBubbleMine'],
   'MarkdownMessage.tsx': ['colors.onBubbleMine', 'colors.linkOnBubbleMine', 'useMineBubble()'],
   // 气泡里直接画在蓝底上的附件行 / 下载链接 / 上传状态(原 accent 字,蓝配蓝看不见):走 bubble-ink.ts。
-  'AttachmentFileDesktop.tsx': ["useBubbleInk('link')"],
+  // File cards have their own neutral surface, not the outgoing blue bubble.
+  'AttachmentFileDesktop.tsx': ["useBubbleInk('link')", '<AttachmentFileCard'],
+  'AttachmentFileCard.tsx': ['backgroundColor: colors.card', 'color: colors.text', 'color: colors.textMuted'],
   'AuthedThumb.tsx': ["useBubbleInk('link')"],
   'AuthedWebThumb.tsx': ["useBubbleInk('link')"],
 };

@@ -15,6 +15,8 @@ import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
+import AttachmentFileCard from './AttachmentFileCard';
+import { localFileStatus } from './attachment-file-model';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import { sendFailureReason, type SendFailureReason } from './send-failure-reason';
@@ -1584,7 +1586,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       <Pressable key={a.key} onPress={() => openViewer(gallery, a.key, a.uri)}>
         <Image source={{ uri: a.uri }} style={styles.thumb} resizeMode="contain" />
       </Pressable>
-    ) : a.isImage && a.needsAuth && Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ ? (
+    ) : a.isImage && a.needsAuth && Platform.OS === 'web' ? (
       <AuthedWebThumb
         key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
         uri={a.uri!}
@@ -1628,6 +1630,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         fileId={a.key}
         name={a.name}
         mime={a.mime}
+        size={a.size}
         serverUrl={cfg.serverUrl}
         token={cfg.token}
       />
@@ -1639,7 +1642,15 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         name={a.name}
         token={cfg.token}
         size={a.size}
+        mime={a.mime}
       />
+    ) : a.needsAuth && a.uri && Platform.OS === 'web' ? (
+      <AttachmentFileDesktop
+        key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
+        uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} size={a.size}
+      />
+    ) : !a.isImage ? (
+      <AttachmentFileCard key={a.key} name={a.name} mime={a.mime} size={a.size} status="uploaded" />
     ) : (
       <Text key={a.key} style={[styles.attachmentLine, bubbleInk(mine, 'link')]}>
         📎 {a.name}
@@ -1648,7 +1659,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   // 多图(≥2 张能画缩略图的图)= 微信式 3 列方格;单图/文件/视频仍走 renderAttachment,不改原样子。
   const gridRenderable = (a: AttachmentView) =>
-    a.isImage && !!a.uri && (!a.needsAuth || Platform.OS !== 'web' || !!(globalThis as any).__TAURI_INTERNALS__);
+    a.isImage && !!a.uri;
   const renderGridCell = (a: AttachmentView, item: ChatItem | undefined, gallery: ViewerImage[]) => {
     const state = a.localIndex !== undefined ? item?._uploads?.[a.localIndex] : undefined;
     const failed = state?.status === 'failed';
@@ -1690,8 +1701,20 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     const gridViews = views.filter(gridRenderable);
     // 预览里左右滑 = 这条消息的全部图片(方格 + 单图同一套)。
     const gallery = galleryOf(views);
+    const localFile = (a: AttachmentView) => {
+      if (a.isImage || a.localIndex === undefined || !item) return null;
+      // A restored Hub copy is already uploaded; settled echoes can download it.
+      if (a.needsAuth && !item._pending && !item._failed) return renderAttachment(a, gallery, mine);
+      const upload = item._uploads?.[a.localIndex];
+      return <AttachmentFileCard key={a.key} name={a.name} mime={a.mime} size={a.size}
+        status={localFileStatus(upload, item._pending, item._failed, a.needsAuth)}
+        detail={upload?.error ?? (item._failed ? t('chat.retryWholeMessage') : undefined)}
+        onPress={item._failed ? () => retry(item) : undefined} testID="chat-local-file-card" />;
+    };
     if (gridViews.length < 2) {
       return views.map(a => {
+        const file = localFile(a);
+        if (file) return file;
         const state = a.localIndex !== undefined ? item?._uploads?.[a.localIndex] : undefined;
         if (!state || state.status === 'done') return renderAttachment(a, gallery, mine);
         return (
@@ -1710,7 +1733,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         <View style={styles.imageGrid} testID="chat-image-grid">
           {gridViews.map(a => renderGridCell(a, item, gallery))}
         </View>
-        {rest.map(a => renderAttachment(a, gallery, mine))}
+        {rest.map(a => localFile(a) ?? renderAttachment(a, gallery, mine))}
       </>
     );
   };

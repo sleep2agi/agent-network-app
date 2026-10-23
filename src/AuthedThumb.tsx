@@ -9,11 +9,14 @@ import {
 } from './attach-download';
 import * as Sharing from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import AttachmentFileCard from './AttachmentFileCard';
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { useBubbleInk } from './bubble-ink';
+import { useTranslation } from './i18n-react';
+import './i18n-chat';
 
 // Server-side attachment thumbnails were black boxes on device (Vincent
 // tg 756): the hub serves /api/files with nosniff + octet-stream +
@@ -53,6 +56,7 @@ export function AttachmentFile({
   serverUrl,
   token,
   label,
+  size,
 }: {
   fileId: string;
   name: string;
@@ -60,13 +64,17 @@ export function AttachmentFile({
   serverUrl: string;
   token: string;
   label?: string;
+  size?: number;
 }) {
+  const { t } = useTranslation();
   const ink = useBubbleInk('link');
   const [busy, setBusy] = useState(false);
+  const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
 
   const open = async () => {
-    if (busy) return;
+    if (busyRef.current) return;
+    busyRef.current = true;
     setBusy(true);
     setError(null);
     try {
@@ -79,9 +87,12 @@ export function AttachmentFile({
     } catch (e) {
       setError(describeAttachmentError(e));
     } finally {
+      busyRef.current = false;
       setBusy(false);
     }
   };
+
+  if (!label) return <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} detail={error ?? t('chat.file.nativeHint')} onPress={() => { void open(); }} />;
 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? name} onPress={open} hitSlop={6}>

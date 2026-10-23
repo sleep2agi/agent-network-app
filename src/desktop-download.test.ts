@@ -7,15 +7,15 @@ let ck = 0; const check = (c: boolean, m: string) => { assert.ok(c, m); ck++; };
 check(bytesToBase64(new Uint8Array([104, 105])) === 'aGk=', 'base64 of "hi"');
 const big = new Uint8Array(100_000).map((_, i) => i % 251);
 check(bytesToBase64(big) === Buffer.from(big).toString('base64'), 'chunked base64 equals Buffer for 100k bytes');
-// 带凭据取字节:头里带 Bearer;非 2xx / 空体报错
+// 带凭据取字节:头里带 Bearer;非 2xx 报错,通用文件允许空体。
 {
   const calls: any[] = [];
   const bytes = await downloadAuthedBytes(async (u, init) => { calls.push([u, init]); return new Response(new Uint8Array([1, 2, 3])); }, 'http://h/api/files/x', 'tok');
   check(bytes.length === 3 && calls[0][1].headers.Authorization === 'Bearer tok', 'fetches with bearer and returns bytes');
   let err = ''; try { await downloadAuthedBytes(async () => new Response('nope', { status: 401 }), 'u', 't'); } catch (e) { err = (e as Error).message; }
   check(err === 'HTTP 401', 'non-2xx throws with status');
-  err = ''; try { await downloadAuthedBytes(async () => new Response(new Uint8Array(0)), 'u', 't'); } catch (e) { err = (e as Error).message; }
-  check(err === '空文件', 'empty body throws');
+  const empty = await downloadAuthedBytes(async () => new Response(new Uint8Array(0), { status: 200 }), 'u', 't');
+  check(empty.length === 0, 'HTTP 200 empty generic file is a valid zero-byte download');
 }
 check(displayDownloadPath('/Users/v/Downloads/a.pdf') === '…/Downloads/a.pdf' && displayDownloadPath('C:\\Users\\v\\Downloads\\a.pdf') === '…/Downloads/a.pdf', 'short display path');
 // 接线契约
@@ -37,7 +37,9 @@ rememberSaveDir('/Users/v/Desktop/a.pdf');
 check(values.get(LAST_SAVE_DIR_KEY) === '/Users/v/Desktop' && loadLastSaveDir() === '/Users/v/Desktop', 'desktop: last dir remembered');
 delete (globalThis as any).__TAURI_INTERNALS__;
 const fileDesk = readFileSync(new URL('./AttachmentFileDesktop.tsx', import.meta.url), 'utf8');
-check(fileDesk.includes('chooseSavePath(name)') && fileDesk.includes("if (target === null) return;") && fileDesk.includes('altKey'), 'file download: dialog by default, alt-click direct, cancel aborts');
+check(fileDesk.includes('chooseSavePath(name)') && fileDesk.includes('if (target === null) { setState(previous); return; }') && fileDesk.includes('altKey'), 'file download: dialog by default, alt-click direct, cancel restores previous state and aborts');
+check(fileDesk.indexOf('busy.current = true') < fileDesk.indexOf('await chooseSavePath(name)') && fileDesk.includes('if (busy.current) return;') && fileDesk.includes('busy.current = false;'), 'synchronous busy lock covers dialog, fetch, save, cancellation and failure');
+check(fileDesk.includes('attachment-file-save-as') && fileDesk.includes('attachment-file-reveal') && fileDesk.includes('saveBrowserDownload(bytes, name, mime)'), 'saved desktop exposes reveal and Save As; browser downloads actual authenticated bytes');
 check(thumb.includes('chooseSavePath(name)') && thumb.includes('saveToDownloads(name, bytes, target ?? null)'), '下载原图 uses the same dialog path');
 check(lib.includes('target_path: Option<String>') && lib.includes('.plugin(tauri_plugin_dialog::init())') && cap.permissions.includes('dialog:allow-save'), 'Rust accepts target_path; dialog plugin registered with allow-save');
 console.log(`desktop download: ${ck} checks passed`);

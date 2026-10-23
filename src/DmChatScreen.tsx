@@ -17,6 +17,8 @@ import GroupAvatar from './GroupAvatar';
 import AuthedThumb, { AttachmentFile } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
+import AttachmentFileCard from './AttachmentFileCard';
+import { localFileStatus } from './attachment-file-model';
 import ImageViewer from './ImageViewer';
 import { ackUserMessages, type HubConfig } from './api';
 import { ATTACH_ENABLED, pickCameraPhoto, pickDocument, pickFiles, pickImages, prepareForUpload, uploadImage, type PickedImage } from './attach';
@@ -414,15 +416,15 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
         </Pressable>
       );
     }
-    if (tauriWeb) return <AuthedWebThumb key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} compact={compact} onPress={objectUrl => openViewer(gallery, a.key, objectUrl)} />;
-    if (Platform.OS !== 'web') return <AuthedThumb key={scope} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} compact={compact} onPress={localUri => openViewer(gallery, a.key, localUri)} />;
-    return <AttachmentLine key={a.key} name={a.name} />;
+    if (Platform.OS === 'web') return <AuthedWebThumb key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} compact={compact} onPress={objectUrl => openViewer(gallery, a.key, objectUrl)} />;
+    return <AuthedThumb key={scope} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} compact={compact} onPress={localUri => openViewer(gallery, a.key, localUri)} />;
   };
   const renderFile = (a: DmAttachmentView) => {
     const scope = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
-    if (a.needsAuth && tauriWeb) return <AttachmentFileDesktop key={scope} uri={a.uri} name={a.name} token={cfg.token} size={a.size} />;
-    if (a.needsAuth && Platform.OS !== 'web') return <AttachmentFile key={scope} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} />;
-    return <AttachmentLine key={a.key} name={a.name} />;
+    if (a.needsAuth && tauriWeb) return <AttachmentFileDesktop key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} size={a.size} />;
+    if (a.needsAuth && Platform.OS !== 'web') return <AttachmentFile key={scope} fileId={a.key} name={a.name} mime={a.mime} size={a.size} serverUrl={cfg.serverUrl} token={cfg.token} />;
+    if (a.needsAuth && Platform.OS === 'web') return <AttachmentFileDesktop key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} size={a.size} />;
+    return <AttachmentFileCard key={a.key} name={a.name} mime={a.mime} size={a.size} status="uploaded" />;
   };
   const renderAttachments = (m: LocalDm) => {
     const views = viewsOf(m);
@@ -448,7 +450,12 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
         {images.length > 1
           ? <View style={[styles.grid, { width: gridWidth(images.length) }]}>{images.map(a => cell(a))}</View>
           : images.map(a => (m._files ? cell(a, false) : renderImage(a, gallery, false)))}
-        {files.map(renderFile)}
+        {files.map(a => m._files ? (
+          <AttachmentFileCard key={a.key} name={a.name} mime={a.mime} size={a.size}
+            status={localFileStatus(uploadsFor(a), m.pending, m.failed)}
+            detail={uploadsFor(a)?.error ?? (m.failed ? t('chat.retryWholeMessage') : undefined)}
+            onPress={m.failed ? () => retry(m) : undefined} testID="dm-local-file-card" />
+        ) : renderFile(a))}
       </View>
     );
   };

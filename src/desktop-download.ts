@@ -18,11 +18,26 @@ export async function downloadAuthedBytes(fetcher: AuthedFetch, url: string, tok
   const response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const bytes = new Uint8Array(await response.arrayBuffer());
-  if (!bytes.length) throw new Error('空文件');
   return bytes;
 }
 
 export const isTauriDesktop = (): boolean => !!(globalThis as any).__TAURI_INTERNALS__;
+
+/** User-initiated browser download; object URLs contain bytes, never credentials. */
+export function saveBrowserDownload(bytes: Uint8Array, name: string, mime?: string): void {
+  const url = URL.createObjectURL(new Blob([new Uint8Array(bytes)], { type: mime || 'application/octet-stream' }));
+  const anchor = document.createElement('a');
+  try {
+    anchor.href = url;
+    anchor.download = name;
+    anchor.style.display = 'none';
+    document.body.appendChild(anchor);
+    anchor.click();
+  } finally {
+    anchor.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 60_000);
+  }
+}
 
 /** 写进系统「下载」目录(或 targetPath),返回落盘路径。只在 Tauri 桌面端可用。 */
 export async function saveToDownloads(name: string, bytes: Uint8Array, targetPath?: string | null): Promise<string> {
