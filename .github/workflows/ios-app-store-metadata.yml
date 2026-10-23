@@ -1,0 +1,169 @@
+name: ios App Store metadata
+
+# Owner (2026-10-23): the App Store listing must say plainly that this is the
+# ANet 军团 client used on a local network — it talks to a Hub the user runs on
+# their own LAN, not to a public cloud service.
+#
+# Read-only by default: `dry_run=true` prints the current description and review
+# notes plus exactly what would change. Nothing is written unless dry_run=false.
+on:
+  workflow_dispatch:
+    inputs:
+      version:
+        description: App Store version string to edit (e.g. 1.0)
+        required: true
+        default: "1.0"
+      dry_run:
+        description: Print current text and the planned change; write nothing
+        required: true
+        type: boolean
+        default: true
+      demo_hub_url:
+        description: Optional demo Hub URL reachable without a LAN, for the reviewer notes
+        required: false
+        type: string
+        default: ""
+      demo_account:
+        description: Optional demo account (user / password) for the reviewer notes
+        required: false
+        type: string
+        default: ""
+
+permissions:
+  contents: read
+
+jobs:
+  metadata:
+    runs-on: ubuntu-latest
+    environment: macos-signing
+    steps:
+      - name: Update listing copy and reviewer notes without exposing credentials
+        env:
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+          VERSION: ${{ inputs.version }}
+          DRY_RUN: ${{ inputs.dry_run }}
+          DEMO_HUB_URL: ${{ inputs.demo_hub_url }}
+          DEMO_ACCOUNT: ${{ inputs.demo_account }}
+          BUNDLE_ID: top.vansin.agentnetwork
+        shell: bash
+        run: |
+          set -euo pipefail
+          jwt_file="$RUNNER_TEMP/app-store-connect.jwt"
+          node <<'NODE' > "$jwt_file"
+          const crypto = require('node:crypto');
+          const b64url = (value) => Buffer.from(value).toString('base64url');
+          const now = Math.floor(Date.now() / 1000);
+          const header = b64url(JSON.stringify({ alg: 'ES256', kid: process.env.APPLE_API_KEY, typ: 'JWT' }));
+          const payload = b64url(JSON.stringify({
+            iss: process.env.APPLE_API_ISSUER,
+            iat: now - 5,
+            exp: now + 900,
+            aud: 'appstoreconnect-v1',
+          }));
+          const unsigned = `${header}.${payload}`;
+          const key = Buffer.from(process.env.APPLE_API_KEY_BASE64, 'base64').toString('utf8');
+          const signature = crypto.sign('sha256', Buffer.from(unsigned), {
+            key,
+            dsaEncoding: 'ieee-p1363',
+          }).toString('base64url');
+          process.stdout.write(`${unsigned}.${signature}`);
+          NODE
+          chmod 600 "$jwt_file"
+          jwt=$(<"$jwt_file")
+
+          asc_fail() {
+            local method="$1" endpoint="$2" code="$3" body="$4"
+            echo "::error::App Store Connect $method /v1/$endpoint returned HTTP $code" >&2
+            jq -r '.errors[]? | "  apple error: status=\(.status // "") code=\(.code // "") title=\(.title // "") detail=\(.detail // "")"' "$body" >&2 2>/dev/null \
+              || echo '  (response body was not JSON)' >&2
+            rm -f "$body"
+            return 1
+          }
+          asc_get() {
+            local endpoint="$1"; shift
+            local body="$RUNNER_TEMP/asc-response.json" code
+            code=$(curl --silent --show-error --get --output "$body" --write-out '%{http_code}' \
+              -H "Authorization: Bearer $jwt" -H 'Accept: application/json' \
+              "https://api.appstoreconnect.apple.com/v1/$endpoint" "$@" || true)
+            case "$code" in
+              2??) cat "$body"; rm -f "$body" ;;
+              *) asc_fail GET "$endpoint" "${code:-000}" "$body" ;;
+            esac
+          }
+          asc_write() {
+            local method="$1" endpoint="$2" body_file="$3" out="$RUNNER_TEMP/asc-write.json" code
+            code=$(curl --silent --show-error --output "$out" --write-out '%{http_code}' \
+              -X "$method" -H "Authorization: Bearer $jwt" \
+              -H 'Content-Type: application/json' -H 'Accept: application/json' \
+              --data "@$body_file" "https://api.appstoreconnect.apple.com/v1/$endpoint" || true)
+            case "$code" in
+              2??) cat "$out"; rm -f "$out" ;;
+              *) asc_fail "$method" "$endpoint" "${code:-000}" "$out" ;;
+            esac
+          }
+
+          app_id=$(asc_get apps --data-urlencode "filter[bundleId]=$BUNDLE_ID" | jq -r '.data[0].id // empty')
+          [ -n "$app_id" ] || { echo "::error::no app for $BUNDLE_ID"; exit 1; }
+          echo "app $app_id ($BUNDLE_ID)"
+
+          versions=$(asc_get "apps/$app_id/appStoreVersions" --data-urlencode 'filter[platform]=IOS' --data-urlencode 'limit=200')
+          version_id=$(jq -r --arg v "$VERSION" '.data[] | select(.attributes.versionString == $v) | .id' <<<"$versions" | head -1)
+          [ -n "$version_id" ] || { echo "::error::version $VERSION not found"; exit 1; }
+          vstate=$(jq -r --arg id "$version_id" '.data[] | select(.id == $id) | .attributes.appStoreState' <<<"$versions")
+          echo "version $VERSION id=$version_id state=$vstate"
+
+          lan_zh='局域网说明：本 App 是局域网中的 ANet 军团客户端，只连接你自己在局域网内运行的 ANet Hub；不提供服务端账号体系，也不会把你的数据发往公网云服务。'
+          lan_en='Local network: this app is the ANet Legion client for a local network. It connects only to the ANet Hub you run on your own LAN. There is no hosted cloud service and your data is not sent to ours.'
+
+          locs=$(asc_get "appStoreVersions/$version_id/appStoreVersionLocalizations" --data-urlencode 'limit=50')
+          jq -r '.data[] | "\(.id)\t\(.attributes.locale)"' <<<"$locs" | while IFS=$'\t' read -r loc_id locale; do
+            desc=$(jq -r --arg id "$loc_id" '.data[] | select(.id == $id) | .attributes.description // ""' <<<"$locs")
+            case "$locale" in
+              zh*) add="$lan_zh" ;;
+              *) add="$lan_en" ;;
+            esac
+            echo "--- $locale ($loc_id) current description: ${#desc} chars"
+            if [[ "$desc" == *"ANet 军团客户端"* || "$desc" == *"ANet Legion client"* ]]; then
+              echo "    already states the local-network scope; no change"
+              continue
+            fi
+            new_desc="$desc"$'\n\n'"$add"
+            if [ "$DRY_RUN" = 'true' ]; then
+              echo "    dry-run: would append: $add"
+              continue
+            fi
+            jq -n --arg id "$loc_id" --arg d "$new_desc" \
+              '{data:{type:"appStoreVersionLocalizations",id:$id,attributes:{description:$d}}}' > "$RUNNER_TEMP/loc.json"
+            asc_write PATCH "appStoreVersionLocalizations/$loc_id" "$RUNNER_TEMP/loc.json" > /dev/null
+            echo "    updated description"
+          done
+
+          notes_zh="ANet 军团运行在局域网中：App 启动后需要填写你自己部署的 Hub 地址（例如 http://<局域网IP>:8787 或 https://hub.local）并登录，之后才能看到 Agent 列表与会话。"
+          notes_en='ANet Legion runs on a local network. After launch the app asks for the Hub address you run yourself (e.g. http://<lan-ip>:8787 or https://hub.local) and a login; only then does it show agents and chats.'
+          notes="$notes_zh"$'\n\n'"$notes_en"
+          if [ -n "$DEMO_HUB_URL" ] || [ -n "$DEMO_ACCOUNT" ]; then
+            notes="$notes"$'\n\n'"Demo for review: ${DEMO_HUB_URL:-<not provided>} / ${DEMO_ACCOUNT:-<not provided>}"
+          fi
+
+          detail=$(asc_get "appStoreVersions/$version_id/appStoreReviewDetail" 2>/dev/null || true)
+          detail_id=$(jq -r '.data.id // empty' <<<"${detail:-{}}" 2>/dev/null)
+          echo "--- review detail: ${detail_id:-none}"
+          if [ "$DRY_RUN" = 'true' ]; then
+            echo "    dry-run: would set notes to:"; printf '%s\n' "$notes" | sed 's/^/      /'
+            exit 0
+          fi
+          if [ -n "$detail_id" ]; then
+            jq -n --arg id "$detail_id" --arg n "$notes" \
+              '{data:{type:"appStoreReviewDetails",id:$id,attributes:{notes:$n}}}' > "$RUNNER_TEMP/detail.json"
+            asc_write PATCH "appStoreReviewDetails/$detail_id" "$RUNNER_TEMP/detail.json" > /dev/null
+          else
+            jq -n --arg vid "$version_id" --arg n "$notes" \
+              '{data:{type:"appStoreReviewDetails",attributes:{notes:$n},relationships:{appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/detail.json"
+            asc_write POST "appStoreReviewDetails" "$RUNNER_TEMP/detail.json" > /dev/null
+          fi
+          echo "reviewer notes updated"
+
+          echo 'App Store version summary:'
+          asc_get "appStoreVersions/$version_id" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, linkedBuild: (.data.relationships.build.data.id // null)}'
