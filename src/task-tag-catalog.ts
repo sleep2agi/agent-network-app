@@ -23,6 +23,8 @@ export interface TagCatalog {
   canManage: boolean;
   /** Hub 有 tags/ops(回了 can_manage 字段)。 */
   ops: boolean;
+  /** 子标签 → 父标签(#2098);undefined = 这个 Hub 还没有标签层级。 */
+  parents?: Record<string, string | null>;
 }
 
 export type TagOp =
@@ -43,7 +45,15 @@ export function catalogFromHub(data: unknown): TagCatalog | null {
   const colors: Record<string, string> = {};
   if (d.colors && typeof d.colors === 'object') for (const [k, v] of Object.entries(d.colors as Record<string, unknown>)) if (typeof v === 'string' && COLOR.test(v)) colors[k] = v.toLowerCase();
   const ops = typeof d.can_manage === 'boolean';
-  return { tags, counts, colors, ops, canManage: d.can_manage === true };
+  // #2098:Hub 若回 parents(子 → 父),就带上;没有这个字段 = 旧行为(纯字符串标签)。
+  let parents: Record<string, string | null> | undefined;
+  if (d.parents && typeof d.parents === 'object' && !Array.isArray(d.parents)) {
+    parents = {};
+    for (const [k, v] of Object.entries(d.parents as Record<string, unknown>)) {
+      if (typeof v === 'string' && v) parents[k] = v;
+    }
+  }
+  return { tags, counts, colors, ops, canManage: d.can_manage === true, ...(parents ? { parents } : {}) };
 }
 
 /** 能不能在界面上给「管理标签」:列表的 capabilities 带 tag_ops,且 Hub 说这个人能管。 */

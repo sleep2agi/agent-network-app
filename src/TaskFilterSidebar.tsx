@@ -18,6 +18,7 @@ import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
+import { aggregateCounts, projectRows, tagRows } from './task-tree';
 import { commitSideRename, renameKey } from './task-side-menu';
 import TaskSideItemMenu from './TaskSideItemMenu';
 import { canManageTags, localTagCounts, sidebarTagNames } from './task-tag-catalog';
@@ -41,6 +42,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const [showEmptyProjects, setShowEmptyProjects] = useState(false);
+  // #2102:树的折叠状态(只在 Hub 真的回了 parent_id 时才可能出现折叠箭头)。
+  const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
   // #760:右键项目 / 标签行 → 菜单(TaskSideItemMenu);「改名」把那一行变成输入框:回车存、Esc / 失焦取消。
   const [editing, setEditing] = useState<{ kind: 'project' | 'tag'; key: string; draft: string; error: string; busy: boolean } | null>(null);
   useEffect(() => {
@@ -195,7 +198,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         {!tagsCollapsed ? (
           <>
             {tagRow('', tr('tags.all'), icon('pricetags-outline', !filter.tag), null)}
-            {tagNames.map(tag => tagRow(tag, tag, tagDot(tag), tagCounts.get(tag) ?? 0))}
+            {tagRows(tagNames, tagCatalog?.parents ?? null).map(r => tagRow(r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0))}
             {manageTags ? (
               <Pressable accessibilityRole="button" onPress={() => setManagingTags(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-tags">
                 <View style={styles.icon}>{icon('settings-outline')}</View>
@@ -209,7 +212,23 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header" />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
-            {activeProjects(projects).filter(p => (pCounts.get(p.id) ?? 0) > 0).map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false))}
+            {/* #2102:Hub 给了 parent_id 就渲染树(缩进/折叠/祖先计数);没有就完全是旧的平铺。 */}
+            {(() => {
+              const rows = projectRows(activeProjects(projects), collapsedProjects);
+              const totals = aggregateCounts(rows, p => pCounts.get(p.id) ?? 0);
+              return rows.filter(r => (totals.get(r.node.id) ?? 0) > 0).map(r => (
+                r.hasChildren
+                  ? <View key={`prow:${r.node.id}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                      <Pressable accessibilityRole="button" {...a11yState({ expanded: !collapsedProjects.has(r.node.id) })} testID={`task-side-project-toggle-${r.node.id}`}
+                        onPress={() => setCollapsedProjects(prev => { const next = new Set(prev); if (next.has(r.node.id)) next.delete(r.node.id); else next.add(r.node.id); return next; })}
+                        style={{ width: 16, alignItems: 'center' }}>
+                        <Ionicons name={collapsedProjects.has(r.node.id) ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
+                      </Pressable>
+                      <View style={{ flex: 1 }}>{projectRow(r.node.id, r.node.name, dot(r.node.color), totals.get(r.node.id) ?? 0, r.node.canEdit !== false, r.depth)}</View>
+                    </View>
+                  : projectRow(r.node.id, r.node.name, dot(r.node.color), totals.get(r.node.id) ?? 0, r.node.canEdit !== false, r.depth)
+              ));
+            })()}
             {/* admin 0.2.288 截图:一堆 0 计数的项目把真正有任务的项目挤下去。默认收起空项目,按需展开。 */}
             {(() => {
               const empty = activeProjects(projects).filter(p => (pCounts.get(p.id) ?? 0) === 0);

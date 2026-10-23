@@ -537,6 +537,8 @@ export function projectFromHub(value: unknown): RequirementProject | null {
     archived: v.archived === true,
     // 同卡片的 viewer_can:只认显式的 edit === false(task-access.readOnlyFromHub 同一判据)。
     ...(readOnlyFromHub(v) ? { canEdit: false } : {}),
+    // #2098:新 Hub 会带 parent_id;旧 Hub 没有这个字段 → 保持 undefined = 平铺。
+    ...('parent_id' in v ? { parentId: typeof v.parent_id === 'string' && v.parent_id ? v.parent_id : null } : {}),
   };
 }
 
