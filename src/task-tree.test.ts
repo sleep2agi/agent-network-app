@@ -1,6 +1,7 @@
 // #2098 / #2102:项目树与标签层级的纯判定。
 // 关键约束:**没有 parent 数据时必须与旧的平铺完全一致**(顺序、深度、计数都不变)。
-import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, parentProjectOptions, projectRows, tagAncestors, tagRows, tagWithDescendants } from './task-tree';
+import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagRows, tagWithDescendants } from './task-tree';
+import { applyFilter } from './task-board-model';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra = '') => { t++; if (ok) { p++; console.log(`PASS: ${name}`); } else console.log(`FAIL: ${name}${extra ? ` — ${extra}` : ''}`); };
@@ -51,9 +52,15 @@ ck('子标签的祖先链', tagAncestors('发布-桌面', parents).join(',') ===
 // ── 侧栏接线(source contract)───────────────────────────────────────────
 import { readFileSync } from 'node:fs';
 const side = readFileSync(new URL('./TaskFilterSidebar.tsx', import.meta.url), 'utf8');
-ck('侧栏用 projectRows 渲染项目树', /projectRows\(activeProjects\(projects\)/.test(side));
-ck('侧栏用 aggregateCounts 聚合祖先计数', /aggregateCounts\(rows, p => pCounts\.get\(p\.id\) \?\? 0\)/.test(side));
+// #2106 反例 2 / 3:计数必须从完整树算;可见行单独算;主树与空项目区共用 totals。
+ck('侧栏:父计数来自完整树(折叠不影响数字)', /aggregateCounts\(projectRows\(active\), n => pCounts\.get\(n\.id\) \?\? 0\)/.test(side));
+ck('侧栏:可见行单独按折叠算', /const visible = projectRows\(active, collapsedProjects\);/.test(side));
+ck('侧栏:主树与空项目区共用同一批可见行(父不重复)', /const emptyRows = visible\.filter\(r => \(totals\.get\(r\.node\.id\) \?\? 0\) === 0\);/.test(side)
+  && /\{withTasks\.map\(drawRow\)\}/.test(side));
 ck('侧栏用 tagRows + tagCatalog.parents 渲染标签层级', /tagRows\(tagNames, tagCatalog\?\.parents \?\? null\)/.test(side));
+// #2106 反例 4 / P2:筛选带后代集合;标签按 depth 真缩进。
+ck('侧栏:点击标签时把后代集合写进筛选', /tagWithDescendants\(tag, tagCatalog\?\.parents \?\? null\)/.test(side) && /tagDescendants: desc\.length > 1/.test(side));
+ck('侧栏:标签行按 depth 缩进', /tagDepth\(r\.node\.name, tagCatalog\?\.depths \?\? null/.test(side) && /depth > 0 && \{ paddingLeft:/.test(side));
 ck('折叠只在有子节点时出现', /r\.hasChildren\s*\?\s*<View/.test(side));
 
 
@@ -77,6 +84,43 @@ ck('管理页:Hub 没字段时整块父项目控件不渲染', /const supportsPa
 ck('管理页:新建把 parentId 传给 onCreate', /onCreate\(c\.name, color, parentId\)/.test(manager));
 ck('管理页:编辑用 parentProjectOptions(active, editing.id) 排除自身与后代', /parentProjectOptions\(active, editing\.id\)/.test(manager));
 ck('管理页:编辑保存时只在父项目变化时发 parentId', /if \(parentChanged\) patch\.parentId = nextParent \?\? null;/.test(manager));
+
+
+// ── #2106 反例(行为级)─────────────────────────────────────────────────
+// 反例 1:折叠父项目后,父的计数仍应含被折叠的子树(用完整树算)。
+const full = projectRows(tree);
+const fullTotals = aggregateCounts(full, n => ({ 'TMAI': 0, 'TMAI-客户端': 3, 'TMAI-Hub': 2, 'ANet': 0, 'ANet-子': 1 } as Record<string, number>)[n.id] ?? 0);
+ck('反例1:父自身 0、子有 3+2 → 父显示 5(不会被当成空项目)', fullTotals.get('TMAI') === 5 && fullTotals.get('ANet') === 1);
+const foldedRows = projectRows(tree, new Set(['TMAI']));
+ck('反例1:折叠后父仍在可见行里、子不可见', foldedRows.some(r => r.node.id === 'TMAI') && !foldedRows.some(r => r.node.id === 'TMAI-客户端'));
+
+// 反例 2/3:可见行里去重 —— 父和子不会同时落进「有任务」和「空」两桶。
+const withTasks = foldedRows.filter(r => (fullTotals.get(r.node.id) ?? 0) > 0).map(r => r.node.id);
+const emptyRows = foldedRows.filter(r => (fullTotals.get(r.node.id) ?? 0) === 0).map(r => r.node.id);
+ck('反例2:两桶不相交且并集=可见行', withTasks.every(id => !emptyRows.includes(id))
+  && withTasks.length + emptyRows.length === foldedRows.length);
+ck('反例3:折叠子树不会被当成根补进空桶', !emptyRows.includes('TMAI-客户端') && !emptyRows.includes('TMAI-Hub'));
+
+// 反例 4:tag_entities 构造父子,筛选用后代集合。
+const entities = [
+  { id: 't1', name: '发布', parent_id: null, depth: 0 },
+  { id: 't2', name: '发布/桌面', parent_id: 't1', depth: 1 },
+  { id: 't3', name: '发布/安卓', parent_id: 't1', depth: 1 },
+];
+const entParents = tagParentsFromEntities(entities)!;
+ck('tag_entities → 父子映射(按 id 回名字)', entParents['发布/桌面'] === '发布' && entParents['发布/安卓'] === '发布');
+ck('tag_entities 无层级时返回 undefined', tagParentsFromEntities([{ id: 'a', name: 'x', parent_id: null }]) === undefined);
+const desc = tagWithDescendants('发布', entParents);
+const items = [
+  { tags: ['发布'], priority: 'normal', column: 'pool', owners: [], participants: [] },
+  { tags: ['发布/安卓'], priority: 'normal', column: 'pool', owners: [], participants: [] },
+  { tags: ['其它'], priority: 'normal', column: 'pool', owners: [], participants: [] },
+] as never[];
+const hit = applyFilter(items, { owners: [], priorities: [], tag: '发布', tagDescendants: { '发布': desc.filter(d => d !== '发布') } } as never);
+ck('反例4:按父标签筛选命中后代卡(2/3)', hit.length === 2);
+const exact = applyFilter(items, { owners: [], priorities: [], tag: '发布' } as never);
+ck('反例4:无层级数据时仍是精确匹配(1/3)', exact.length === 1);
+ck('标签深度:有 depth 用 depth,没有就按父链算', tagDepth('发布/桌面', { '发布/桌面': 3 }, entParents) === 3 && tagDepth('发布/安卓', null, entParents) === 1);
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);

@@ -7,6 +7,7 @@ import type { HubConfig } from './api';
 import { appFetch } from './app-fetch';
 import { withDeadline } from './deadline';
 import { normalizeTags } from './requirement-tags';
+import { tagParentsFromEntities } from './task-tree';
 import { PROJECT_COLORS } from './task-board-model';
 
 export const TAG_OPS_CAPABILITY = 'tag_ops';
@@ -25,6 +26,8 @@ export interface TagCatalog {
   ops: boolean;
   /** 子标签 → 父标签(#2098);undefined = 这个 Hub 还没有标签层级。 */
   parents?: Record<string, string | null>;
+  /** #2112:Hub 回 tag_entities 时带上的每个标签深度(名字 → depth)。 */
+  depths?: Record<string, number>;
 }
 
 export type TagOp =
@@ -53,7 +56,21 @@ export function catalogFromHub(data: unknown): TagCatalog | null {
       if (typeof v === 'string' && v) parents[k] = v;
     }
   }
-  return { tags, counts, colors, ops, canManage: d.can_manage === true, ...(parents ? { parents } : {}) };
+  // #2112:Hub 回 tag_entities([{id,name,parent_id,path,depth,scope}])。优先由它构造父子与深度,
+  // 旧的 parents map 继续兼容(有些 Hub / 本地快照只有它)。
+  const depths: Record<string, number> = {};
+  let fromEntities: Record<string, string> | undefined;
+  if (Array.isArray(d.tag_entities)) {
+    const entities = d.tag_entities.filter((e): e is { name: string } => !!e && typeof e === 'object' && typeof (e as { name?: unknown }).name === 'string') as { id?: string; name: string; parent_id?: string | null; depth?: number }[];
+    fromEntities = tagParentsFromEntities(entities);
+    for (const e of entities) if (typeof e.depth === 'number' && e.depth >= 0) depths[e.name] = e.depth;
+  }
+  const mergedParents = fromEntities ?? (parents as Record<string, string> | undefined);
+  return {
+    tags, counts, colors, ops, canManage: d.can_manage === true,
+    ...(mergedParents ? { parents: mergedParents } : {}),
+    ...(Object.keys(depths).length ? { depths } : {}),
+  };
 }
 
 /** 能不能在界面上给「管理标签」:列表的 capabilities 带 tag_ops,且 Hub 说这个人能管。 */

@@ -196,3 +196,33 @@ export function parentProjectOptions<T extends Parented>(nodes: readonly T[], ed
   const banned = editingId ? new Set([editingId, ...descendantIds(nodes, editingId)]) : new Set<string>();
   return nodes.filter(n => !banned.has(n.id));
 }
+
+
+// ── Hub 的 tag_entities(#2112):[{id,name,parent_id,path,depth,scope}] ──────
+
+export type TagEntity = { id?: string; name: string; parent_id?: string | null; depth?: number; scope?: string | null };
+
+/**
+ * 把 tag_entities 折成「子标签名 → 父标签名」。
+ * 优先用 parent_id 映射回名字;没有 id 对不上时退回 path(「父/子」形态)取最后一段之前。
+ * 返回 undefined 表示这批数据里没有任何父子关系 → 调用方保持旧的平铺行为。
+ */
+export function tagParentsFromEntities(entities: readonly TagEntity[] | null | undefined): Record<string, string> | undefined {
+  if (!entities?.length) return undefined;
+  const byId = new Map<string, string>();
+  for (const e of entities) if (e.id) byId.set(e.id, e.name);
+  const out: Record<string, string> = {};
+  for (const e of entities) {
+    const parentById = e.parent_id ? byId.get(e.parent_id) : undefined;
+    if (parentById && parentById !== e.name) { out[e.name] = parentById; continue; }
+    const slash = typeof e.name === 'string' ? e.name.lastIndexOf('/') : -1;
+    if (slash > 0) out[e.name.slice(slash + 1)] = e.name.slice(0, slash);
+  }
+  return Object.keys(out).length ? out : undefined;
+}
+
+/** 标签的展示缩进:有 entities 的 depth 用 depth,否则按 parents 链算。 */
+export function tagDepth(name: string, depthByName: Record<string, number> | null | undefined, parents: TagParents | null | undefined): number {
+  if (depthByName && typeof depthByName[name] === 'number') return Math.max(0, Math.min(6, depthByName[name]));
+  return Math.min(6, tagAncestors(name, parents).length);
+}

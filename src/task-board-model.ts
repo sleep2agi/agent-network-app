@@ -67,6 +67,11 @@ export interface BoardFilter {
    * true = 连废弃的一起显示;状态筛选里显式选了「废弃」也算。
    */
   showAbandoned?: boolean;
+  /**
+   * 选中标签时,「这个标签的子孙」也要算命中(#2102/#2113)。
+   * 由 tag_entities 的父子关系算出;Hub 没有层级数据时不存在,行为与旧的精确匹配一致。
+   */
+  tagDescendants?: Record<string, string[]>;
 }
 
 export const NO_PROJECT = '__none__';
@@ -88,7 +93,10 @@ export const toggleHideDone = (statuses: readonly ReqColumn[] | undefined): ReqC
 
 export function matchesFilter(item: Requirement, f: BoardFilter, at: DueAt = {}): boolean {
   if (f.overdue && !isOverdue(item, at)) return false;
-  if (f.tag && !item.tags?.includes(f.tag)) return false;
+  if (f.tag) {
+    const wanted = new Set([f.tag, ...(f.tagDescendants?.[f.tag] ?? [])]);
+    if (!item.tags?.some(t => wanted.has(t))) return false;
+  }
   if (f.untagged && item.tags?.some(t => !!t)) return false;
   if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.participant && !item.participants?.some(r => personKey(r) === f.participant)) return false;

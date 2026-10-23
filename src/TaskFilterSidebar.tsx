@@ -18,7 +18,7 @@ import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, type SidebarScope } from './task-board-model';
 import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
-import { aggregateCounts, projectRows, tagRows } from './task-tree';
+import { aggregateCounts, projectRows, tagDepth, tagRows, tagWithDescendants } from './task-tree';
 import { commitSideRename, renameKey } from './task-side-menu';
 import TaskSideItemMenu from './TaskSideItemMenu';
 import { canManageTags, localTagCounts, sidebarTagNames } from './task-tag-catalog';
@@ -139,7 +139,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     const c = tagCatalog?.colors[tag];
     return <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c ?? 'transparent', borderWidth: c ? 0 : 1.5, borderColor: colors.textMuted }} />;
   };
-  const tagRow = (tag: string, label: string, lead: ReactNode, count: number | null) => {
+  const tagRow = (tag: string, label: string, lead: ReactNode, count: number | null, depth = 0) => {
     const on = section !== 'dispatch' && (filter.tag || '') === tag;
     return (
       <Fragment key={`tag:${tag || 'all'}`}><Pressable
@@ -148,8 +148,16 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         accessibilityRole="tab"
         accessibilityLabel={label}
         {...a11yState({ selected: on })}
-        onPress={() => { setTaskSection(section === 'dispatch' ? 'board' : section); setTaskFilter({ ...filter, tag, untagged: false }); onNavigate?.(); }}
-        style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
+        onPress={() => {
+          const desc = tag ? tagWithDescendants(tag, tagCatalog?.parents ?? null) : [];
+          setTaskSection(section === 'dispatch' ? 'board' : section);
+          setTaskFilter({
+            ...filter, tag, untagged: false,
+            tagDescendants: desc.length > 1 ? { ...(filter.tagDescendants ?? {}), [tag]: desc.filter(t => t !== tag) } : filter.tagDescendants,
+          });
+          onNavigate?.();
+        }}
+        style={state => [styles.item, depth > 0 && { paddingLeft: (styles.item as any).paddingHorizontal + depth * 14 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
       >
         <View style={styles.icon}>{lead}</View>
         {labelOrInput('tag', tag, <Text style={[styles.itemText, { color: on ? colors.text : colors.textSecondary }, on && { fontWeight: weight.strong }]} numberOfLines={1}>{label}</Text>)}
@@ -198,7 +206,10 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         {!tagsCollapsed ? (
           <>
             {tagRow('', tr('tags.all'), icon('pricetags-outline', !filter.tag), null)}
-            {tagRows(tagNames, tagCatalog?.parents ?? null).map(r => tagRow(r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0))}
+            {tagRows(tagNames, tagCatalog?.parents ?? null).map(r => tagRow(
+              r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
+              tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
+            ))}
             {manageTags ? (
               <Pressable accessibilityRole="button" onPress={() => setManagingTags(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-tags">
                 <View style={styles.icon}>{icon('settings-outline')}</View>
@@ -212,11 +223,17 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
             <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header" />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
-            {/* #2102:Hub 给了 parent_id 就渲染树(缩进/折叠/祖先计数);没有就完全是旧的平铺。 */}
+            {/* #2102:Hub 给了 parent_id 就渲染树(缩进/折叠/祖先计数);没有就完全是旧的平铺。
+                #2106 P1:计数来自完整树 —— 折叠只改可见性,不改父项目的数字;
+                主树与空项目区共用同一批「可见行」,所以父节点不会两处各画一次,
+                折叠起来的子树也不会被空项目区重新当成根补回来。 */}
             {(() => {
-              const rows = projectRows(activeProjects(projects), collapsedProjects);
-              const totals = aggregateCounts(rows, p => pCounts.get(p.id) ?? 0);
-              return rows.filter(r => (totals.get(r.node.id) ?? 0) > 0).map(r => (
+              const active = activeProjects(projects);
+              const totals = aggregateCounts(projectRows(active), n => pCounts.get(n.id) ?? 0);
+              const visible = projectRows(active, collapsedProjects);
+              const withTasks = visible.filter(r => (totals.get(r.node.id) ?? 0) > 0);
+              const emptyRows = visible.filter(r => (totals.get(r.node.id) ?? 0) === 0);
+              const drawRow = (r: (typeof visible)[number]) => (
                 r.hasChildren
                   ? <View key={`prow:${r.node.id}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
                       <Pressable accessibilityRole="button" {...a11yState({ expanded: !collapsedProjects.has(r.node.id) })} testID={`task-side-project-toggle-${r.node.id}`}
@@ -227,22 +244,20 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
                       <View style={{ flex: 1 }}>{projectRow(r.node.id, r.node.name, dot(r.node.color), totals.get(r.node.id) ?? 0, r.node.canEdit !== false, r.depth)}</View>
                     </View>
                   : projectRow(r.node.id, r.node.name, dot(r.node.color), totals.get(r.node.id) ?? 0, r.node.canEdit !== false, r.depth)
-              ));
-            })()}
-            {/* admin 0.2.288 截图:一堆 0 计数的项目把真正有任务的项目挤下去。默认收起空项目,按需展开。 */}
-            {(() => {
-              const empty = activeProjects(projects).filter(p => (pCounts.get(p.id) ?? 0) === 0);
-              if (!empty.length) return null;
+              );
               return (
                 <>
-                  <Pressable accessibilityRole="button" {...a11yState({ expanded: showEmptyProjects })} onPress={() => setShowEmptyProjects(v => !v)}
-                    style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
-                    testID="task-side-empty-projects">
-                    <View style={styles.icon}>{icon(showEmptyProjects ? 'chevron-down' : 'chevron-forward')}</View>
-                    <Text style={[styles.itemText, { color: colors.textMuted }]} numberOfLines={1}>{tr('tasks.copy.242')}</Text>
-                    <Text style={[styles.count, { color: colors.textMuted }]}>{empty.length}</Text>
-                  </Pressable>
-                  {showEmptyProjects ? empty.map(p => projectRow(p.id, p.name, dot(p.color), pCounts.get(p.id) ?? 0, p.canEdit !== false)) : null}
+                  {withTasks.map(drawRow)}
+                  {emptyRows.length ? (
+                    <Pressable accessibilityRole="button" {...a11yState({ expanded: showEmptyProjects })} onPress={() => setShowEmptyProjects(v => !v)}
+                      style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+                      testID="task-side-empty-projects">
+                      <View style={styles.icon}>{icon(showEmptyProjects ? 'chevron-down' : 'chevron-forward')}</View>
+                      <Text style={[styles.itemText, { color: colors.textMuted }]} numberOfLines={1}>{tr('tasks.copy.242')}</Text>
+                      <Text style={[styles.count, { color: colors.textMuted }]}>{emptyRows.length}</Text>
+                    </Pressable>
+                  ) : null}
+                  {showEmptyProjects ? emptyRows.map(drawRow) : null}
                 </>
               );
             })()}
