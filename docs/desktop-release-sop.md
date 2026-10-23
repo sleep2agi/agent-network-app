@@ -452,6 +452,37 @@ Never, under any circumstance:
 Nothing in this document requires touching a production service. If a step
 seems to, stop: that is a sign the wrong path is being followed.
 
+### Gotchas that cost a release (2026-10-23)
+
+Each of these produced a draft or a run that looked fine and was not:
+
+- **A short SHA in `commit:` fails the whole run.** `prepare-release` checks out
+  `ref: ${{ inputs.commit }}`; `2fdbc85c` yields
+  `A branch or tag with the name '2fdbc85c' could not be found`. Always pass the
+  full 40-character SHA.
+- **No APK, silently.** `attach-android-apk` waits for an `android-build` of the
+  *same commit* and, when there is none, prints a warning and exits 0 — 0.2.292
+  published a draft with ten assets. `android-build.yml` now triggers on the
+  version-bump push itself (`paths: [package.json]`), and its checkout falls back
+  to `github.sha` so a push run has a commit at all. If a draft still arrives
+  without `Agent.Network_<version>_android-universal.apk`, re-run just that job:
+  `gh run rerun <release-run> --job <attach-job-id>`.
+- **A missing Linux installer is invisible** in the draft audit unless you check
+  the manifest's platform list: `include_linux=false` produces five entries and
+  no `.deb`. 0.2.291 shipped that way and Linux had no update at all until 0.2.292.
+- **`macos-signing` approval is per job, not per run.** The macOS leg (and the
+  Ubuntu leg's packaging job) sit in `waiting` until someone approves the
+  environment; a run that seems hung for ten minutes is usually one click away.
+- **The static fallback does not move by itself.** `/desktop/update/fallback.json`
+  is a checked-in file served by the site; after every publish it has to be
+  rebuilt from that release's `latest.json` (7 entries when a `.deb` exists) or
+  clients that fall back get an older version — 0.2.289's fallback still said
+  0.2.288 and had no Linux entries at all.
+- **iOS distribution can time out after a successful upload.** The build is fine;
+  `Waiting for TestFlight build <N>: not visible` means Apple had not finished
+  processing. Re-run `ios-testflight-status.yml` with that build number once it
+  is visible; internal groups get it, and external ones need `enable_public_testing`.
+
 ## 9. Release notes are user-facing
 
 `releaseBody` in the workflow becomes the GitHub release body **and** the
