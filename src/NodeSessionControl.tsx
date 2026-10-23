@@ -7,7 +7,7 @@ import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-session-control';
 import { pointerUi } from './pointer-ui';
-import { canBackgroundSession, runSessionControl, type SessionControlState, type SessionControlTarget } from './node-session-control';
+import { canBackgroundSession, runSessionControl, sessionControlLine, type SessionControlState, type SessionControlTarget } from './node-session-control';
 
 // Parents key by Hub/token/network/node/session. Nothing from an old page can
 // authorise an action after navigation or account changes.
@@ -54,14 +54,12 @@ export default function NodeSessionControl({ cfg, target }: { cfg: HubConfig; ta
       <Text style={{ color: disabled ? colors.textMuted : colors.accent, fontSize: 12 }}>{label}</Text>
     </Pressable>
   );
-  // 一句解释足够：出错/不支持才占第二行。读出来之后不再复述怎么用。
-  const line = notice
-    ? notice
-    : unknown
-      ? t('sessionControl.error.unknown')
-      : state && !state.supported
-        ? t('sessionControl.error.unsupported')
-        : '';
+  // 一句解释足够：出错 / 不支持 / 状态过期（按钮为什么会灰）才占第二行。
+  const stale = !!state && now - readAt >= 30_000;
+  const line = sessionControlLine({
+    notice, unknown, unsupported: !!state && !state.supported, stale,
+    labels: { unknown: t('sessionControl.error.unknown'), unsupported: t('sessionControl.error.unsupported'), stale: t('sessionControl.stale') },
+  });
   return (
     <View testID="node-session-control" style={{ flexDirection: 'column', gap: 4, paddingHorizontal: spacing.lg, paddingVertical: 6,
       backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>

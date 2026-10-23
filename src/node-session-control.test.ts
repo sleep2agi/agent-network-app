@@ -1,4 +1,4 @@
-import { canBackgroundSession, errorDetailLabel, readSessionControlState, runSessionControl, sessionControlTarget } from './node-session-control';
+import { canBackgroundSession, errorDetailLabel, readSessionControlState, runSessionControl, sessionControlLine, sessionControlTarget } from './node-session-control';
 import { sessionControlTranslations } from './i18n-session-control';
 // @ts-expect-error -- bun test runner only
 import { readFileSync } from 'node:fs';
@@ -79,5 +79,12 @@ try {
     ck(`${file} scopes and keys the component`, source.includes('sessionControlTarget(cfg,') && source.includes('key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])}'));
   }
 } finally { globalThis.fetch = original; }
+// #0.294:卡片收成一行后,禁用的「转到后台」必须给理由(否则只剩一个灰按钮)。
+const labels = { unknown: 'U', unsupported: 'S', stale: 'T' };
+ck('no state → no line', sessionControlLine({ notice: '', unknown: false, unsupported: false, stale: false, labels }) === '');
+ck('stale state explains the disabled button', sessionControlLine({ notice: '', unknown: false, unsupported: false, stale: true, labels }) === 'T');
+ck('unsupported wins over stale', sessionControlLine({ notice: '', unknown: false, unsupported: true, stale: true, labels }) === 'S');
+ck('a notice (error) wins over everything', sessionControlLine({ notice: 'E', unknown: true, unsupported: true, stale: true, labels }) === 'E');
+
 console.log(`${pass}/${total} passed`);
 if (pass !== total) throw new Error(`${total - pass} session-control checks failed`);
