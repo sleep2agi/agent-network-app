@@ -1,9 +1,19 @@
-import { canBackgroundSession, readSessionControlState, runSessionControl, sessionControlTarget } from './node-session-control';
+import { canBackgroundSession, errorDetailLabel, readSessionControlState, runSessionControl, sessionControlTarget } from './node-session-control';
 import { sessionControlTranslations } from './i18n-session-control';
 // @ts-expect-error -- bun test runner only
 import { readFileSync } from 'node:fs';
 let pass = 0, total = 0;
 function ck(name: string, condition: boolean) { total++; if (condition) { pass++; console.log('✅', name); } else console.log('❌', name); }
+// 失败原因要能落到一句短标签上（HTTP 404 / 超时 / 网络错误 / 响应不是预期格式），
+// 但不含 URL、token、响应正文 —— 用户看到「为什么读不出来」，我们也能立刻分辨
+// 「Hub 还没上线这个接口」与「网络抖动」。
+ck('http status becomes a short label', errorDetailLabel('http', 404) === 'HTTP 404');
+ck('missing status still labelled', errorDetailLabel('http', undefined) === 'HTTP ?');
+ck('timeout labelled', errorDetailLabel('timeout') === '超时');
+ck('network labelled', errorDetailLabel('network') === '网络错误');
+ck('non-json body labelled', errorDetailLabel('body') === '响应不是预期格式');
+
+
 const cfg = { serverUrl: 'https://fixture.invalid/', token: 'fixture-user-token', networkId: 'net_fixture' };
 const target = { node_id: 'n_target', network_id: 'net_fixture', session_id: 'ses_Target2014' };
 const state = { session_id: target.session_id, binding_id: 'generation-2014', supported: true, active: true, can_request_background: true, observed_at: Date.now() };

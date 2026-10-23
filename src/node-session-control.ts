@@ -10,7 +10,18 @@ export interface SessionControlState {
 }
 export interface SessionControlReceipt { outcome: 'request_processed' | 'already_idle'; state: SessionControlState }
 export type SessionControlResult = { ok: true; state: SessionControlState; outcome?: SessionControlReceipt['outcome'] }
-  | { ok: false; error: 'unavailable' | 'unsupported' | 'access' | 'changed' | 'unknown' | 'expired' };
+  | { ok: false; error: 'unavailable' | 'unsupported' | 'access' | 'changed' | 'unknown' | 'expired'; detail?: string };
+
+/**
+ * 把失败原因压成一个**不含敏感值**的短标签，给用户文案加在括号里。
+ * 只看状态码/失败类别：不打印 URL、token、响应正文。
+ */
+export function errorDetailLabel(kind: 'http' | 'network' | 'timeout' | 'body', status?: number | null): string {
+  if (kind === 'http') return Number.isFinite(status) ? `HTTP ${status}` : 'HTTP ?';
+  if (kind === 'timeout') return '超时';
+  if (kind === 'body') return '响应不是预期格式';
+  return '网络错误';
+}
 const ROOT = '/api/node-session-control';
 const record = (v: unknown): v is Record<string, unknown> => !!v && typeof v === 'object' && !Array.isArray(v);
 export function sessionControlTarget(cfg: HubConfig, session: Session | null, alias: string): SessionControlTarget | null {
@@ -31,14 +42,16 @@ export function readSessionControlState(v: unknown): SessionControlState | null 
 export function canBackgroundSession(state: SessionControlState | null, readAt: number, now: number): boolean {
   return !!state?.can_request_background && readAt > 0 && now >= readAt && now - readAt < 30_000;
 }
-function errorCode(error: unknown, mutation: boolean): SessionControlResult {
-  if (typeof error !== 'string') return { ok: false, error: mutation ? 'unknown' : 'unavailable' };
-  if (/outcome_unknown|unknown/.test(error)) return { ok: false, error: 'unknown' };
-  if (/denied|forbidden|auth|permission|role/.test(error)) return { ok: false, error: 'access' };
-  if (/changed|binding|generation|mismatch/.test(error)) return { ok: false, error: 'changed' };
-  if (/unsupported|bridge_unavailable|not_registered/.test(error)) return { ok: false, error: 'unsupported' };
-  if (/expired/.test(error)) return { ok: false, error: mutation ? 'unknown' : 'expired' };
-  return { ok: false, error: mutation ? 'unknown' : 'unavailable' };
+function errorCode(error: unknown, mutation: boolean, detail?: string): SessionControlResult {
+  const withDetail = (r: SessionControlResult) => (detail ? { ...r, detail } : r);
+  if (typeof error !== 'string') return withDetail({ ok: false, error: mutation ? 'unknown' : 'unavailable' });
+  const pick = (error: 'unknown'|'access'|'changed'|'unsupported'|'expired'|'unavailable') => withDetail({ ok: false, error } as SessionControlResult);
+  if (/outcome_unknown|unknown/.test(error)) return pick('unknown');
+  if (/denied|forbidden|auth|permission|role/.test(error)) return pick('access');
+  if (/changed|binding|generation|mismatch/.test(error)) return pick('changed');
+  if (/unsupported|bridge_unavailable|not_registered/.test(error)) return pick('unsupported');
+  if (/expired/.test(error)) return mutation ? pick('unknown') : pick('expired');
+  return mutation ? pick('unknown') : pick('unavailable');
 }
 
 /** Exactly one enqueue. Polling only reads the receipt; it never resubmits. */
@@ -50,7 +63,7 @@ export async function runSessionControl(cfg: HubConfig, target: SessionControlTa
       || (target.session_id && expected.session_id !== target.session_id)))) return { ok: false, error: 'changed' };
   const deadline = Date.now() + (options.waitMs ?? 20_000);
   const cancelled = () => options.cancelled?.() || Date.now() >= deadline;
-  const request = async (path: string, body?: unknown) => {
+  const request = async (path: string, body?: unknown, detailTag?: string) => {
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), Math.max(1, Math.min(5_000, deadline - Date.now())));
     try {
@@ -60,19 +73,30 @@ export async function runSessionControl(cfg: HubConfig, target: SessionControlTa
           headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
           ...(body === undefined ? {} : { body: JSON.stringify(body) }),
         });
-        if (response.status === 401 || response.status === 403) return { ok: false, error: body === undefined && mutation ? 'unknown' : 'access_denied' };
-        if (response.status === 404 || response.status === 405) return { ok: false, error: body === undefined ? (mutation ? 'unknown' : 'unavailable') : 'unsupported' };
-        const data: unknown = await response.json();
-        if (!response.ok) return { ok: false, error: record(data) && typeof data.error === 'string' ? data.error : 'unavailable' };
+        // 路由缺失（Hub 还没上线 /api/node-session-control）与「请求不存在」要分开：
+        // 前者是 unsupported（升级 Hub 就好），后者只在轮询里出现。
+        if (response.status === 404 || response.status === 405) {
+          return { ok: false, error: body === undefined ? (mutation ? 'unknown' : 'unavailable') : 'unsupported',
+            detail: [detailTag, errorDetailLabel('http', response.status)].filter(Boolean).join(' ') };
+        }
+        if (response.status === 401 || response.status === 403) {
+          return { ok: false, error: body === undefined && mutation ? 'unknown' : 'access_denied',
+            detail: [detailTag, errorDetailLabel('http', response.status)].filter(Boolean).join(' ') };
+        }
+        let data: unknown;
+        try { data = await response.json(); } catch { return { ok: false, error: mutation ? 'unknown' : 'unavailable', detail: [detailTag, errorDetailLabel('body')].filter(Boolean).join(' ') }; }
+        if (!response.ok) return { ok: false, error: record(data) && typeof data.error === 'string' ? data.error : 'unavailable',
+          detail: [detailTag, errorDetailLabel('http', response.status)].filter(Boolean).join(' ') };
         return data;
-      })(), Math.max(1, Math.min(5_000, deadline - Date.now())), () => ({ ok: false, error: mutation ? 'unknown' : 'unavailable' }));
+      })(), Math.max(1, Math.min(5_000, deadline - Date.now())), () => ({ ok: false, error: mutation ? 'unknown' : 'unavailable',
+        detail: [detailTag, errorDetailLabel('timeout')].filter(Boolean).join(' ') }));
     } finally { clearTimeout(timer); }
   };
   try {
     if (cancelled()) return errorCode('expired', mutation);
     const queued = await request(ROOT, { network_id: target.network_id, node_id: target.node_id,
-      operation: mutation ? 'background' : 'state', ...(expected ? { expected: { session_id: expected.session_id, binding_id: expected.binding_id } } : {}) });
-    if (!record(queued) || queued.ok !== true) return errorCode(record(queued) ? queued.error : null, mutation);
+      operation: mutation ? 'background' : 'state', ...(expected ? { expected: { session_id: expected.session_id, binding_id: expected.binding_id } } : {}) }, 'enqueue');
+    if (!record(queued) || queued.ok !== true) return errorCode(record(queued) ? queued.error : null, mutation, record(queued) && typeof queued.detail === 'string' ? queued.detail : undefined);
     if (typeof queued.request_id !== 'string' || !/^(?:bg|sc)_[0-9]{13}_[A-Za-z0-9_-]{8,64}$/.test(queued.request_id)) return errorCode(null, mutation);
     const id = queued.request_id;
     while (!cancelled()) {
@@ -92,5 +116,5 @@ export async function runSessionControl(cfg: HubConfig, target: SessionControlTa
       await new Promise(resolve => setTimeout(resolve, 500));
     }
   } catch { /* Transport details can contain secrets; never render them. */ }
-  return { ok: false, error: mutation ? 'unknown' : 'unavailable' };
+  return { ok: false, error: mutation ? 'unknown' : 'unavailable', detail: errorDetailLabel('network') };
 }

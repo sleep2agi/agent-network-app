@@ -33,7 +33,9 @@ export default function NodeSessionControl({ cfg, target }: { cfg: HubConfig; ta
     if (!result.ok) {
       setState(null); setReadAt(0);
       if (result.error === 'unknown') setUnknown(true);
-      if (!unknown) setNotice(t(`sessionControl.error.${result.error}`));
+      // 把「为什么读不出来」用短标签带出来（HTTP 404 / 超时 / 网络错误 / 响应不是预期格式），
+      // 不含 URL、token 或响应正文 —— 这样用户/我们能立刻分辨「Hub 没上线接口」与「网络抖动」。
+      if (!unknown) setNotice(result.detail ? `${t(`sessionControl.error.${result.error}`)}（${result.detail}）` : t(`sessionControl.error.${result.error}`));
       return;
     }
     setState(result.state); setReadAt(Date.now()); setNow(Date.now());
