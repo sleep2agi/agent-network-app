@@ -6,6 +6,8 @@ export const sessionControlTranslations = {
   'sessionControl.loading': ['正在读取原会话…', 'Reading the original session…'],
   'sessionControl.requesting': ['正在请求转到后台…', 'Requesting background observation…'],
   'sessionControl.background': ['转到后台（Ctrl+B）', 'Move to background (Ctrl+B)'],
+  // 手机上没有 Ctrl+B：同一个动作不带键盘提示（Vincent 2026-10-23 截图：手机上写着 Ctrl+B 很丑）。
+  'sessionControl.backgroundTouch': ['转到后台', 'Move to background'],
   'sessionControl.running': ['前台运行中', 'Running in foreground'],
   'sessionControl.idle': ['前台空闲', 'Foreground idle'],
   'sessionControl.initial': ['读取原会话的前台运行状态；不会发送聊天消息。', 'Read the original session’s foreground status without sending a chat message.'],
