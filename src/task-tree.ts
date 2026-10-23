@@ -250,15 +250,20 @@ export function tagDepth(name: string, depthByName: Record<string, number> | nul
  * #2122 F3:侧栏要能看到**父标签入口**,哪怕父标签自身 0 张卡(只有子孙在用)。
  * 把可见标签的所有祖先补进列表;顺序按给定顺序,祖先放在其后代之前。
  */
-export function includeTagAncestors(names: readonly string[], parents: TagParents | null | undefined): string[] {
+export function includeTagAncestors(
+  names: readonly string[],
+  parents: TagParents | null | undefined,
+  known: ReadonlySet<string> | null | undefined,
+): string[] {
   if (!parents) return [...names];
   const out: string[] = [];
   const push = (n: string) => { if (n && !out.includes(n)) out.push(n); };
-  const walk = (n: string, guard: Set<string>) => {
-    for (const a of tagAncestors(n, parents)) if (!guard.has(a)) { guard.add(a); }
-    const chain = tagAncestors(n, parents).reverse();
+  for (const n of names) {
+    // #2127 F3:只在**已授权/可见的目录闭包**里补祖先。
+    // fallback parents 可能指向一个当前目录里根本没有的父标签 —— 那不能合成出一个入口。
+    const chain = tagAncestors(n, parents).filter(a => !known || known.has(a)).reverse();
     for (const a of chain) push(a);
-  };
-  for (const n of names) { const g = new Set<string>(); walk(n, g); push(n); }
+    push(n);
+  }
   return out;
 }

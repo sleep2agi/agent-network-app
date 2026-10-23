@@ -55,10 +55,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
     const had = current.tagDescendants?.[current.tag] ?? [];
     const same = want.length === had.length && want.every(t => had.includes(t));
     if (same) return;
-    setTaskFilter({
-      ...current,
-      tagDescendants: want.length ? { ...(current.tagDescendants ?? {}), [current.tag]: want } : undefined,
-    });
+    // #2127 F4:只保留「当前选择」这一项 —— 旧图里的其它键全部丢弃,
+    // 否则 P→Q 换目录后再点回独立根 P 会命中旧的后代。
+    setTaskFilter({ ...current, tagDescendants: want.length ? { [current.tag]: want } : undefined });
   }, [tagParentsKey]); // eslint-disable-line react-hooks/exhaustive-deps
   // #760:右键项目 / 标签行 → 菜单(TaskSideItemMenu);「改名」把那一行变成输入框:回车存、Esc / 失焦取消。
   const [editing, setEditing] = useState<{ kind: 'project' | 'tag'; key: string; draft: string; error: string; busy: boolean } | null>(null);
@@ -150,7 +149,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const dot = (color: string) => <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: color }} />;
   // 标签:数字按当前列表算(同项目);筛着的标签即使这页没有卡也留在列表里(好取消)。
   const tagCounts = localTagCounts(items);
-  const tagNames = includeTagAncestors(sidebarTagNames(tagCounts, filter.tag), tagCatalog?.parents ?? null);
+  const visibleTagNames = sidebarTagNames(tagCounts, filter.tag);
+  const knownTags = new Set<string>([...visibleTagNames, ...(tagCatalog?.tags ?? [])]);
+  const tagNames = includeTagAncestors(visibleTagNames, tagCatalog?.parents ?? null, knownTags);
   const tagDot = (tag: string) => {
     const c = tagCatalog?.colors[tag];
     return <View style={{ width: 10, height: 10, borderRadius: radius.pill, backgroundColor: c ?? 'transparent', borderWidth: c ? 0 : 1.5, borderColor: colors.textMuted }} />;
@@ -169,7 +170,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
           setTaskSection(section === 'dispatch' ? 'board' : section);
           setTaskFilter({
             ...filter, tag, untagged: false,
-            tagDescendants: desc.length > 1 ? { ...(filter.tagDescendants ?? {}), [tag]: desc.filter(t => t !== tag) } : filter.tagDescendants,
+            // #2127 F4:每次点击都**覆盖**,不合并旧项。
+            tagDescendants: desc.length > 1 ? { [tag]: desc.filter(t => t !== tag) } : undefined,
           });
           onNavigate?.();
         }}

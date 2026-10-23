@@ -52,8 +52,9 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
   const archived = projects.filter(p => p.archived);
   // 只有新 Hub(payload 里出现过 parent_id)才显示父项目控件;旧 Hub 完全隐藏。
   const supportsParent = hubExposesProjectParent(projects);
-  const createParents = supportsParent ? parentProjectOptions(active) : [];
-  const editParents = supportsParent && editing ? parentProjectOptions(active, editing.id) : [];
+  // #2127 F2:候选从**完整图**算(父项目被归档也不影响「自己+后代」的禁选),再用 available 过滤归档。
+  const createParents = supportsParent ? parentProjectOptions(projects, undefined, p => !p.archived) : [];
+  const editParents = supportsParent && editing ? parentProjectOptions(projects, editing.id, p => !p.archived) : [];
   const parentLabel = (id: string | null) => (id ? projects.find(p => p.id === id)?.name ?? id : tr('tasks.copy.243'));
   const run = async (fn: () => Promise<string | null>) => {
     if (busy) return false;

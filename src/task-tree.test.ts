@@ -82,7 +82,7 @@ const manager = readFileSync(new URL('./TaskProjectManager.tsx', import.meta.url
 ck('管理页:Hub 没字段时整块父项目控件不渲染', /const supportsParent = hubExposesProjectParent\(projects\);/.test(manager)
   && /supportsParent \? parentChips\(parentId, createParents/.test(manager));
 ck('管理页:新建把 parentId 传给 onCreate', /onCreate\(c\.name, color, parentId\)/.test(manager));
-ck('管理页:编辑用 parentProjectOptions(active, editing.id) 排除自身与后代', /parentProjectOptions\(active, editing\.id\)/.test(manager));
+ck('管理页:编辑用完整图 + available 排除自身与后代', /parentProjectOptions\(projects, editing\.id/.test(manager));
 ck('管理页:编辑保存时只在父项目变化时发 parentId', /if \(parentChanged\) patch\.parentId = nextParent \?\? null;/.test(manager));
 
 
@@ -136,7 +136,7 @@ ck('F2 禁选在完整图上算:归档父不在,但后代仍被排除', !candF2b
 
 // F3:只有子标签有卡时,父标签入口仍要在侧栏出现。
 const onlyChildCounts = new Map([['发布/桌面', 2]]);
-const listedF3 = includeTagAncestors(['发布/桌面'], { '发布/桌面': '发布' });
+const listedF3 = includeTagAncestors(['发布/桌面'], { '发布/桌面': '发布' }, new Set(['发布/桌面', '发布']));
 ck('F3 父标签自身 0 张也出现在侧栏且排在子前', listedF3.join(',') === '发布,发布/桌面');
 
 // F5:显式实体只认 parent_id;名字里的 "/" 不能自己造父子。
@@ -164,6 +164,34 @@ ck('F4 层级消失后回到精确匹配(0/2)', cleared.length === 0);
 const hubSrc = readFileSync(new URL('./requirements-hub.ts', import.meta.url), 'utf8');
 ck('F6 项目创建/更新把 parentId 翻成 parent_id', /parent_id: parentId/.test(hubSrc));
 ck('F6 不再把驼峰 parentId 直接发出去', /const \{ parentId, \.\.\.rest \} = input;/.test(hubSrc) && /const \{ parentId, \.\.\.rest \} = patch;/.test(hubSrc));
+
+
+// ── #2127 三条反例(先红后绿)─────────────────────────────────────────
+// F2:A→B(归档)→C(在用);编辑 A 时 C 仍必须禁选(禁选在完整图算,归档只过滤候选)。
+const chain = [P('A', null), P('B', 'A'), P('C', 'B'), P('D', null)];
+const archivedB = new Set(['B']);
+const cand = parentProjectOptions(chain, 'A', n => !archivedB.has(n.id));
+ck('F2 A→B(归档)→C:编辑 A 时 C 仍禁选', !cand.some(n => n.id === 'C'));
+ck('F2 归档的 B 不进候选,D 可当父', !cand.some(n => n.id === 'B') && cand.some(n => n.id === 'D'));
+ck('F2 页面表达式用完整图 + available 谓词', /parentProjectOptions\(projects, editing\.id, p => !p\.archived\)/.test(manager)
+  && /parentProjectOptions\(projects, undefined, p => !p\.archived\)/.test(manager));
+
+// F3:fallback parents 指向目录外的父 → 不合成入口;授权内的父 0 卡仍保留入口。
+const fallbackParents = { '发布/桌面': '发布', '外部子': '外部父' };
+const known = new Set(['发布/桌面', '发布']);
+const listed = includeTagAncestors(['发布/桌面', '外部子'], fallbackParents, known);
+ck('F3 授权内父标签(0 卡)保留入口', listed.includes('发布'));
+ck('F3 目录外的父不合成入口', !listed.includes('外部父'));
+
+// F4:旧图 P→c / Q→d,换到 Q→d 后再点独立根 P:不得命中 c。
+const itemsF4b = [{ tags: ['c'] }, { tags: ['d'] }, { tags: ['P'] }] as never[];
+const afterSwitch = { owners: [], priorities: [], tag: 'P', tagDescendants: { P: ['d'] } } as never;
+ck('F4 旧 map 残留时会误命中(反例成立:2 张)', applyFilter(itemsF4b, afterSwitch).length === 2);
+const overwritten = { owners: [], priorities: [], tag: 'P', tagDescendants: undefined } as never;
+ck('F4 覆盖/删除后只命中独立根 P', applyFilter(itemsF4b, overwritten).length === 1
+  && applyFilter([{ tags: ['c'] }] as never, overwritten).length === 0);
+ck('F4 侧栏覆盖写入而不是合并旧键', /tagDescendants: desc\.length > 1 \? \{ \[tag\]: desc\.filter/.test(side)
+  && /tagDescendants: want\.length \? \{ \[current\.tag\]: want \} : undefined/.test(side));
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
