@@ -60,6 +60,10 @@ const channel = flag('--channel', process.env.PW_CHANNEL || '');
 //    不加这个 flag 会以 `No usable sandbox!` 直接崩，而那和页面本身无关。
 const launch = { args: ['--no-sandbox', '--disable-dev-shm-usage'] };
 if (channel) launch.channel = channel;
+// 本机可能只装了旧版浏览器二进制(playwright 升级后版本号对不上),或想把截图固定到
+// 某个已知能跑的 chromium。给了路径就用它,不给就走 playwright 自己找。
+const executablePath = process.env.PW_CHROMIUM_EXECUTABLE || '';
+if (executablePath) launch.executablePath = executablePath;
 const browser = await chromium.launch(launch);
 const page = await browser.newPage({ viewport: { width: vw, height: vh } });
 
