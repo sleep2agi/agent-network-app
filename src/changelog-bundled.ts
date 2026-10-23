@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.290:",
+  "- 项目可以像文件夹一样有父项目：左侧自动缩进、可折叠，父项目的数字含子项目；Hub 没有父项目字段时完全保持原来的平铺。",
+  "- 标签也有父子：按父标签筛选会同时命中子标签（左侧栏和手机顶部快筛都支持），父标签自己没有卡也能选。",
+  "- 新建或编辑项目时可以直接选父项目；归档的项目不会出现在候选里。",
+  "- 修复：编辑项目时点父项目，输入框失焦不会再把这次点击吞掉。",
+  "",
   "What's new in 0.2.289:",
   "- 新增：Ubuntu 24.04（amd64）桌面安装包随本版发布，Linux 用户不用再等下一版。",
   "",
