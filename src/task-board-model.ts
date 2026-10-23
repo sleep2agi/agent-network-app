@@ -21,6 +21,7 @@ import {
   type Requirement,
 } from './requirements-model';
 import { personKey, type RequirementPerson, type RequirementPersonRef } from './requirement-people';
+import { tagPickPatch, type TagParents } from './task-tree';
 
 // ── 筛选 ──────────────────────────────────────────────────────────────────
 
@@ -67,6 +68,11 @@ export interface BoardFilter {
    * true = 连废弃的一起显示;状态筛选里显式选了「废弃」也算。
    */
   showAbandoned?: boolean;
+  /**
+   * 选中标签时,「这个标签的子孙」也要算命中(#2102/#2113)。
+   * 由 tag_entities 的父子关系算出;Hub 没有层级数据时不存在,行为与旧的精确匹配一致。
+   */
+  tagDescendants?: Record<string, string[]>;
 }
 
 export const NO_PROJECT = '__none__';
@@ -88,7 +94,10 @@ export const toggleHideDone = (statuses: readonly ReqColumn[] | undefined): ReqC
 
 export function matchesFilter(item: Requirement, f: BoardFilter, at: DueAt = {}): boolean {
   if (f.overdue && !isOverdue(item, at)) return false;
-  if (f.tag && !item.tags?.includes(f.tag)) return false;
+  if (f.tag) {
+    const wanted = new Set([f.tag, ...(f.tagDescendants?.[f.tag] ?? [])]);
+    if (!item.tags?.some(t => wanted.has(t))) return false;
+  }
   if (f.untagged && item.tags?.some(t => !!t)) return false;
   if (f.owners.length && !roleKeysOf(item).some(k => f.owners.includes(k))) return false;
   if (f.participant && !item.participants?.some(r => personKey(r) === f.participant)) return false;
@@ -196,6 +205,52 @@ export const applyFilter = (items: readonly Requirement[], f: BoardFilter, at: D
   const when = f.overdue && at.now === undefined ? { ...at, now: Date.now() } : at;
   return items.filter(item => matchesFilter(item, f, when));
 };
+
+/**
+ * 点一个标签之后的**完整**筛选(#2127 F4):左栏与顶部标签筛选两个入口都调这一个函数。
+ * 关键在「显式覆盖」:tagDescendants 每次都由当前目录重算 —— 有后代写当前这一项,
+ * 没有(含「全部」/旧 Hub 无层级)写成 undefined 把旧图清掉,绝不合并旧键。
+ */
+export function tagFilterAfterPick(current: BoardFilter, tag: string, parents: TagParents | null | undefined): BoardFilter {
+  return { ...current, ...tagPickPatch(tag, parents) };
+}
+
+/**
+ * #2127(parent_forms):项目改名时,名称输入框失焦要不要**立刻**提交?
+ * 编辑行里的父项目 chip 会随编辑结束一起卸载 —— 浏览器顺序是 pointerdown(chip) → blur(input) → press(chip),
+ * 所以「正在点父项目」时 blur 不能提交,否则 chip 的点击被吞掉(父项目根本没换成)。
+ */
+export const commitOnNameBlur = (pickingParent: boolean): boolean => !pickingParent;
+
+/**
+ * #2139:名称框失焦的判定。正在点父项目时跳过提交 —— 但**必须把这个标志消耗掉**:
+ * pointer 被取消(按下又移开、滚动)时不会有 press,若不消耗标志,之后每次 blur 都不提交,
+ * 改名就静默丢了。返回新的 picking 值,调用方写回即可。
+ */
+export const nameBlurOutcome = (pickingParent: boolean): { commit: boolean; picking: boolean } =>
+  ({ commit: commitOnNameBlur(pickingParent), picking: false });
+
+/** #2127:点父项目 chip 时发出去的补丁 —— 用**点到的那一个**值,不依赖还没刷新的 state。 */
+export const parentPatchForPick = (picked: string | null): { parentId: string | null } => ({ parentId: picked });
+
+/**
+ * #2138:项目改名要发出去的补丁 —— 纯函数,组件与事件顺序测试共用同一份判定。
+ * 返回 null = 什么都没变(不 PATCH,只关掉编辑态)。supportsParent=false(旧 Hub)永不发 parentId。
+ */
+export function projectRenamePatch(
+  current: { name: string; parentId?: string | null } | undefined,
+  draft: string,
+  pickedParent: string | null,
+  supportsParent: boolean,
+): { name?: string; parentId?: string | null } | null {
+  const nextParent = supportsParent ? (pickedParent ?? null) : undefined;
+  const parentChanged = supportsParent && (current?.parentId ?? null) !== (nextParent ?? null);
+  if (current && draft === current.name && !parentChanged) return null;
+  const patch: { name?: string; parentId?: string | null } = {};
+  if (!current || draft !== current.name) patch.name = draft;
+  if (parentChanged) patch.parentId = nextParent ?? null;
+  return Object.keys(patch).length ? patch : null;
+}
 
 /** 多选筛选里点一项:有就去掉,没有就加上。 */
 export function toggleIn<T>(list: readonly T[], value: T): T[] {

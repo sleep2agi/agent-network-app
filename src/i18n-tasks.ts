@@ -245,6 +245,8 @@ export const taskCopy = [
  ['极低','Lowest'],
  ['废弃','Abandoned'],
  ['显示空项目','Show empty projects'],
+ ['无父项目','No parent'],
+ ['父项目','Parent project'],
 ] as const;
 export const taskTranslations = Object.fromEntries(taskCopy.map((pair,i)=>[`tasks.copy.${i}`, pair]));
 registerTranslations(taskTranslations);

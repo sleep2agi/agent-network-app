@@ -69,7 +69,7 @@ const menu = read('./TaskSideItemMenu.tsx');
 const board = read('./RequirementBoard.tsx');
 const tags = read('./TaskTags.tsx');
 ck('right-click: capture-phase contextmenu on [data-side-item] opens the menu', /addEventListener\('contextmenu', onContext, true\)/.test(side) && /closest\?\.\('\[data-side-item\]'\)[\s\S]{0,200}setSideMenu\(\{ kind:[^}]*touch: false \}\)/.test(side));
-ck('project rows carry data-side-item only when editable', side.includes('dataSet: { sideItem: `p:${id}` }') && side.includes("p.canEdit !== false))"));
+ck('project rows carry data-side-item only when editable', side.includes('dataSet: { sideItem: `p:${id}` }') && /r\.node\.canEdit !== false\b/.test(side));
 ck('tag rows carry data-side-item only when tags are manageable', side.includes('tag && manageTags ? { dataSet: { sideItem: `t:${tag}` } }'));
 ck('menu rename on desktop → sidebar inline input', /if \(!target\.touch && onInlineRename\) onInlineRename\(target\.kind, target\.key\)/.test(menu) && side.includes('<TaskSideItemMenu onInlineRename='));
 ck('menu rename on phone → the existing rename page (manager with focus)', /setManagingProjects\(true, target\.key\)/.test(menu) && /setManagingTags\(true, target\.key\)/.test(menu) && (board.match(/focus=\{managerFocus\}/g) ?? []).length === 2);

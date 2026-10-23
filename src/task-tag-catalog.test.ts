@@ -72,8 +72,12 @@ ck('sidebar: empty list keeps selected tag', eq(sidebarTagNames(new Map(), 'sele
 ck('sidebar: input map not mutated', eq([...sidebarCounts.keys()], ['权限', '桌面端', 'ANet', '组织架构权限']));
 ck('sidebar: refreshed counts reorder automatically', eq(sidebarTagNames(localTagCounts([{ tags: ['b'] }, { tags: ['a', 'b'] }])), ['b', 'a']));
 const sidebarSource = readFileSync(new URL('./TaskFilterSidebar.tsx', import.meta.url), 'utf8');
-ck('sidebar wiring: sort and badges share counts', sidebarSource.includes('const tagNames = sidebarTagNames(tagCounts, filter.tag);') && sidebarSource.includes('tagNames.map(tag => tagRow(tag, tag, tagDot(tag), tagCounts.get(tag) ?? 0))'));
-ck('sidebar wiring: all-tags row remains before sorted tags', sidebarSource.indexOf("{tagRow('', tr('tags.all')") >= 0 && sidebarSource.indexOf("{tagRow('', tr('tags.all')") < sidebarSource.indexOf('{tagNames.map('));
+// #2102:标签行改成先过 tagRows(有 parents 才分层),数字仍取自同一份 tagCounts。
+ck('sidebar wiring: sort and badges share counts', sidebarSource.includes('const visibleTagNames = sidebarTagNames(tagCounts, filter.tag);')
+  && sidebarSource.includes('includeTagAncestors(visibleTagNames, tagCatalog?.parents ?? null, knownTags)')
+  && /tagRows\(tagNames, tagCatalog\?\.parents \?\? null\)\.map\(r => tagRow\(/.test(sidebarSource)
+  && /tagCounts\.get\(r\.node\.name\) \?\? 0/.test(sidebarSource));
+ck('sidebar wiring: all-tags row remains before sorted tags', sidebarSource.indexOf("{tagRow('', tr('tags.all')") >= 0 && sidebarSource.indexOf("{tagRow('', tr('tags.all')") < sidebarSource.indexOf('{tagRows(tagNames'));
 
 // ── 新建带标签:有就发,没有就不带字段(旧 Hub 请求形状不变) ──
 const cfg = { serverUrl: 'http://h', token: 't', networkId: 'n' } as never;
