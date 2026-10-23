@@ -30,7 +30,7 @@ const wait = (page, f) => page.waitForFunction(f, null, { timeout: 12000 });
 // Independent acceptance dictionary, not imported from production translations.
 const copy = {
   zh: { queued: '等待上传', uploading: '上传中', uploaded: '已上传', waitingSend: '等待发送', sendFailed: '发送失败 · 点击重试整条消息', ready: '点击下载', downloading: '下载中', saved: '已保存', error: '下载失败 · 点击重试', saveHint: '选择位置保存 · Alt 点击直接存到下载', browserHint: '安全下载到浏览器', handedOff: '已交给浏览器下载 · 点击可再次下载', reveal: '在文件夹中显示', saveAs: '另存为' },
-  en: { queued: 'Waiting to upload', uploading: 'Uploading', uploaded: 'Uploaded', waitingSend: 'Waiting to send', sendFailed: 'Send failed · Retry the whole message', ready: 'Click to download', downloading: 'Downloading', saved: 'Saved', error: 'Download failed · Click to retry', saveHint: 'Choose a save location · Alt-click to save to Downloads', browserHint: 'Download securely in your browser', handedOff: 'Handed to your browser · Click to download again', reveal: 'Show in folder', saveAs: 'Save as' },
+  en: { queued: 'Waiting to upload', uploading: 'Uploading', uploaded: 'Uploaded', waitingSend: 'Waiting to send', sendFailed: 'Failed to send · tap to retry the message', ready: 'Tap to download', downloading: 'Downloading', saved: 'Saved', error: 'Download failed · tap to retry', saveHint: 'Choose a save location · Alt-click to save to Downloads', browserHint: 'Download securely in your browser', handedOff: 'Handed to your browser · Click to download again', reveal: 'Show in folder', saveAs: 'Save as' },
 };
 async function statusCopy(page, status, language, tag) {
   const nodes = page.locator(tid(`attachment-file-status-${status}`));

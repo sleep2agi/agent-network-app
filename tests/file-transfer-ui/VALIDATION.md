@@ -2,7 +2,7 @@
 
 ## Result
 
-The current installed Chrome/Playwright bilingual run against the existing compiled full App completed with **365/366 assertions passed, 1 failed**, reproduced in two consecutive runs. The original **156 functional assertions remain passing**, with explicit Chinese preference; 210 additional assertions cover bilingual copy and the added English flows. The current run produced **49 distinct screenshots**, **0 uncaught page errors**, and **0 blocked external requests**. Export bundle bytes were verified unchanged. No build, typecheck, or unit-test suite was run in this tests-only follow-up.
+The final installed Chrome/Playwright bilingual run against the compiled full App completed with **366/366 assertions passed**. The original **156 functional assertions remain passing**, with explicit Chinese preference; 210 additional assertions cover bilingual copy and English flows. The run produced **49 distinct screenshots**, **0 uncaught page errors**, and **0 blocked external requests**. Export bundle bytes were verified unchanged. Typecheck, focused translation tests, and the full 444-file suite passed during this follow-up.
 
 The earlier acceptance run passed 156/156 after the three production fixes listed below; its reported typecheck/export/444-test-file results are historical, not checks repeated here. See `artifacts/report.json` for current exact bundle SHA-256 and individual results.
 
@@ -10,7 +10,7 @@ The earlier acceptance run passed 156/156 after the three production fixes liste
 
 The former hardcoded-Chinese file-card statuses are no longer an issue: all nine status dictionary values pass in both languages, including real queued/uploading/waiting-send/uploaded/send-failure and download/error/saved flows. Save hints, reveal, Save As, and fresh browser hints/handoff confirmations pass in their initial language. `anet.language.v1` must contain `zh` or `en`, not `zh-CN`; the original fixture's invalid preference fell back to system English despite asserting old Chinese hardcodes.
 
-**Remaining bug: browser handoff confirmation retains the download-time language.** Start in English, navigate into Fixture-Agent, download Acceptance.pdf, then switch to Chinese without remounting. The status updates to Chinese but the footer remains `Handed to your browser · Click to download again` instead of the Chinese dictionary value. `src/AttachmentFileDesktop.tsx:36` stores the translated string in `state.message`, and line 54 reuses it after language changes. Evidence: `artifacts/browser-handoff-runtime-zh.png`; exact failing check: `runtime browser handoff: zh translated confirmation`. The failing assertion is retained and the runner exits 1. No source fix was made in this tests-only scope.
+**Fixed regression: browser handoff confirmation retained the download-time language.** The initial bilingual run passed 365/366 and exposed translated text stored in component state. State now stores `messageKey`, and rendering translates it for the active language. The original runtime handoff assertion passes in both directions without remounting. The acceptance dictionary also follows the reviewed English `Tap to download` wording after integrating the collaborator's translation keys.
 
 Runtime switching uses the app's installed cross-tab storage-event listener, not a reload or internal module hook. Received cards retain DOM identity. The Settings language-picker UI and reveal-error localization are not exercised.
 
