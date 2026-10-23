@@ -28,6 +28,7 @@ export const chatTranslations = {
   'chat.cancel': ['取消', 'Cancel'],
   'chat.historyFailed': ['拉取更早的历史失败', 'Could not load older messages'],
   'chat.retry': ['重试', 'Retry'],
+  'chat.retryWholeMessage': ['点击重试整条消息', 'Tap to retry the whole message'],
   'chat.searchOlder': ['已加载的消息里没有,正在往更早的历史里找…', 'No match in loaded messages. Searching older history…'],
   'chat.notFound': ['没有找到', 'No results'],
   'chat.scrollUp': ['向上滚动', 'scroll up'],

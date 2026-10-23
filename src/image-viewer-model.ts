@@ -48,14 +48,12 @@ export function openGallery(images: ViewerImage[], tappedKey: string, resolvedUr
 /** The subset of ChatScreen's AttachmentView the preview cares about. */
 export type ViewableAttachment = { key: string; name: string; isImage: boolean; uri?: string; needsAuth?: boolean; mime?: string };
 
-/** Which attachments the preview can page through, and how each one is resolved.
- *  Mirrors the thumbnail branches in ChatScreen.renderAttachment: plain web (no
- *  Tauri) cannot send the bearer header from an <img>, so authed images are not
- *  previewable there. */
+/** Web thumbnails and the gallery resolve authenticated images to blob URLs;
+ *  native resolves file IDs into its authenticated local cache. */
 export function viewerImageFor(a: ViewableAttachment, env: { os: string; tauri: boolean }): ViewerImage | null {
   if (!a.isImage || !a.uri) return null;
   if (!a.needsAuth) return { key: a.key, name: a.name, uri: a.uri };
-  if (env.os === 'web') return env.tauri ? { key: a.key, name: a.name, authUri: a.uri, mime: a.mime, save: true } : null;
+  if (env.os === 'web') return { key: a.key, name: a.name, authUri: a.uri, mime: a.mime, save: true };
   return { key: a.key, name: a.name, fileId: a.key, mime: a.mime, save: true };
 }
 

@@ -160,7 +160,7 @@ export function readTarget(messages: readonly Pick<GroupMessage, 'seq'>[], lastM
 export function groupSendBody(input: { message: string; attachments?: readonly { file_id: string; name?: string; mime?: string; size?: number }[]; clientRequestId: string }) {
   return {
     message: input.message,
-    ...(input.attachments?.length ? { attachments: input.attachments.map(a => ({ type: 'file', file_id: a.file_id, ...(a.name ? { name: a.name } : {}), ...(a.mime ? { mime: a.mime } : {}), ...(a.size ? { size: a.size } : {}) })) } : {}),
+    ...(input.attachments?.length ? { attachments: input.attachments.map(a => ({ type: 'file', file_id: a.file_id, ...(a.name ? { name: a.name } : {}), ...(a.mime ? { mime: a.mime } : {}), ...(typeof a.size === 'number' ? { size: a.size } : {}) })) } : {}),
     client_request_id: input.clientRequestId,
   };
 }

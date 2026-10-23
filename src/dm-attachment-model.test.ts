@@ -62,10 +62,10 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('uploads go through the shared queue with the network id', src.includes('runUploadQueue(') && /uploadImage\(cfg, prepared, \{ networkId, purpose: 'dm' \}\)/.test(src));
   ck('send is blocked on oversize / too many (sendBlocker)', src.includes('sendBlocker('));
   ck('tapping an image opens the viewer', src.includes('<ImageViewer') && !src.includes('onPress={() => {}}'));
-  // 桌面上 AuthedThumb / AttachmentFile(expo-file-system)下载不了 —— 必须先分出 Tauri 分支
-  const tauriIdx = src.indexOf('if (tauriWeb) return <AuthedWebThumb');
-  const nativeIdx = src.indexOf("if (Platform.OS !== 'web') return <AuthedThumb");
-  ck('desktop images use AuthedWebThumb before the native AuthedThumb branch', tauriIdx > 0 && nativeIdx > tauriIdx);
+  // All web runtimes need authenticated blobs, not the native file-system cache.
+  const webIdx = src.indexOf("if (Platform.OS === 'web') return <AuthedWebThumb");
+  const nativeIdx = src.indexOf('return <AuthedThumb');
+  ck('browser and desktop images use AuthedWebThumb before the native AuthedThumb branch', webIdx > 0 && nativeIdx > webIdx);
   ck('desktop files use AttachmentFileDesktop', src.includes('<AttachmentFileDesktop'));
   ck('failed sends can be retried with the same client id', src.includes('retry(item)') && src.includes('deliver(m.message_id'));
 }

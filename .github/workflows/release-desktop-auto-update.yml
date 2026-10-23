@@ -525,6 +525,12 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.290:
+            - 改进：Agent 对话、私聊和群聊统一文件卡片，清晰显示文件名、扩展名、类型、大小和传输状态。 / Improved: unified file cards in Agent chats, DMs and group chats show the filename, extension, type, size and transfer state.
+            - 改进：文件卡片区分等待上传、上传中、等待发送、下载中和失败状态；发送失败可重试整条消息，并保留已上传附件，下载失败可点击重试。 / Improved: file cards distinguish queued uploads, uploading, waiting to send, downloading and failures; retry a failed message with already-uploaded attachments preserved, or click to retry a failed download.
+            - 改进：桌面文件支持选择位置保存、另存为及在文件夹中显示；网页版通过身份验证后交给浏览器下载，凭据不放入下载链接。 / Improved: desktop files offer a save-location picker, Save As and Show in folder; web downloads authenticate before handing the file to the browser, without credentials in download links.
+            - 修复：桌面和网页版的图文混合附件保留图片预览与文件卡片，零字节文件正确显示为 0 B。 / Fixed: mixed image and file attachments retain image previews and file cards on desktop and web, and zero-byte files correctly show 0 B.
+
             What's new in 0.2.289:
             - 新增：Ubuntu 24.04（amd64）桌面安装包随本版发布，Linux 用户不用再等下一版。
 

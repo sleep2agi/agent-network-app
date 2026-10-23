@@ -1,55 +1,61 @@
-import { useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { useRef, useState } from 'react';
+import { Pressable, View } from 'react-native';
 import { Text } from './ui-text';
+import AttachmentFileCard from './AttachmentFileCard';
 import { appFetch } from './app-fetch';
-import { chooseSavePath, displayDownloadPath, downloadAuthedBytes, revealInFolder, saveToDownloads } from './desktop-download';
-import { colors, onThemeChange, spacing } from './theme';
+import { chooseSavePath, displayDownloadPath, downloadAuthedBytes, isTauriDesktop, revealInFolder, saveBrowserDownload, saveToDownloads } from './desktop-download';
+import { colors } from './theme';
 import { useBubbleInk } from './bubble-ink';
 
-// 桌面端非图片附件:点一下 → 带凭据下载 → 存到「下载」→ 显示路径 + 「在文件夹中显示」。
-export default function AttachmentFileDesktop({ uri, name, token, size }: { uri: string; name: string; token: string; size?: number }) {
+// Also handles plain web: credentials stay in the fetch header, never in an anchor.
+export default function AttachmentFileDesktop({ uri, name, token, size, mime }: { uri: string; name: string; token: string; size?: number; mime?: string }) {
   const linkInk = useBubbleInk('link');
-  const textInk = useBubbleInk();
-  const [state, setState] = useState<{ kind: 'idle' } | { kind: 'busy' } | { kind: 'saved'; path: string } | { kind: 'error'; message: string }>({ kind: 'idle' });
-  // 点 → 系统「另存为」选目录/文件名(记住上次目录);按住 ⌥/Alt 点 → 直接存到「下载」不弹框。
+  const busy = useRef(false);
+  const [state, setState] = useState<{ kind: 'ready' | 'downloading' | 'saved' | 'error'; path?: string; message?: string }>({ kind: 'ready' });
   const download = async (direct: boolean) => {
-    if (state.kind === 'busy') return;
-    let target: string | null | undefined;
-    if (!direct) {
-      target = await chooseSavePath(name).catch(() => undefined);
-      if (target === null) return; // 用户取消
-    }
-    setState({ kind: 'busy' });
+    if (busy.current) return;
+    busy.current = true;
+    const previous = state;
+    setState({ kind: 'downloading' });
     try {
+      let target: string | null | undefined;
+      if (isTauriDesktop() && !direct) {
+        target = await chooseSavePath(name);
+        if (target === null) { setState(previous); return; }
+      }
       const bytes = await downloadAuthedBytes(appFetch, uri, token);
-      const path = await saveToDownloads(name, bytes, target ?? null);
-      setState({ kind: 'saved', path });
+      if (isTauriDesktop()) {
+        const path = await saveToDownloads(name, bytes, target ?? null);
+        setState({ kind: 'saved', path });
+      } else {
+        saveBrowserDownload(bytes, name, mime);
+        // The browser does not report whether the user actually saved the file.
+        setState({ kind: 'ready', message: '已交给浏览器下载 · 点击可再次下载' });
+      }
     } catch (error) {
       setState({ kind: 'error', message: error instanceof Error ? error.message : String(error) });
+    } finally {
+      busy.current = false;
     }
   };
-  const sizeText = size ? ` · ${size >= 1048576 ? `${(size / 1048576).toFixed(1)} MB` : `${Math.max(1, Math.round(size / 1024))} KB`}` : '';
+  const reveal = async () => {
+    if (!state.path || busy.current) return;
+    busy.current = true;
+    try { await revealInFolder(state.path); }
+    catch (error) { setState({ ...state, message: `无法显示文件: ${error instanceof Error ? error.message : String(error)}` }); }
+    finally { busy.current = false; }
+  };
   return (
-    <View style={styles.wrap} testID={`attachment-file-desktop-${name}`}>
-      <Pressable accessibilityRole="button" accessibilityLabel={`下载 ${name}`} hitSlop={6} onPress={(e: any) => { void download(!!(e?.nativeEvent?.altKey ?? e?.altKey)); }}>
-        <Text style={[styles.line, state.kind === 'error' && { color: colors.failed }, linkInk]}>
-          {state.kind === 'busy' ? '⏳' : state.kind === 'saved' ? '✓' : '📎'} {name}{sizeText}
-          {state.kind === 'idle' ? '  ·  点击选位置保存(⌥ 点直接存到下载)' : state.kind === 'busy' ? '  ·  下载中…' : state.kind === 'error' ? `  ·  失败:${state.message},点击重试` : ''}
-        </Text>
-      </Pressable>
+    <View style={{ maxWidth: '100%' }} testID={`attachment-file-desktop-${name}`}>
+      <AttachmentFileCard name={name} mime={mime} size={size} status={state.kind}
+        detail={state.message ?? (state.path ? displayDownloadPath(state.path) : isTauriDesktop() ? '选择位置保存 · Alt 点击直接存到下载' : '安全下载到浏览器')}
+        onPress={state.kind === 'saved' ? () => { void reveal(); } : (e: any) => { void download(!!(e?.nativeEvent?.altKey ?? e?.altKey)); }} />
       {state.kind === 'saved' ? (
-        <Pressable accessibilityRole="button" hitSlop={6} onPress={() => { void revealInFolder(state.path).catch(() => undefined); }}>
-          <Text style={[styles.saved, textInk]}>已保存到 {displayDownloadPath(state.path)}  ·  在文件夹中显示</Text>
-        </Pressable>
+        <View style={{ flexDirection: 'row', gap: 16, paddingVertical: 8 }}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`在文件夹中显示 ${name}`} testID="attachment-file-reveal" onPress={() => { void reveal(); }}><Text style={[{ color: colors.accent, fontSize: 12 }, linkInk]}>在文件夹中显示</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`另存为 ${name}`} testID="attachment-file-save-as" onPress={() => { void download(false); }}><Text style={[{ color: colors.accent, fontSize: 12 }, linkInk]}>另存为</Text></Pressable>
+        </View>
       ) : null}
     </View>
   );
 }
-
-const makeStyles = () => StyleSheet.create({
-  wrap: { marginTop: spacing.xs },
-  line: { color: colors.accent, fontSize: 13, lineHeight: 19 },
-  saved: { color: colors.textMuted, fontSize: 12, lineHeight: 17 },
-});
-let styles = makeStyles();
-onThemeChange(() => { styles = makeStyles(); });
