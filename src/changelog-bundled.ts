@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.292:",
+  "- Ubuntu 24.04（amd64）安装包重新随本版发布，Linux 用户从 0.289 以后的版本都能继续升级。",
+  "",
   "What's new in 0.2.291:",
   "- 改进：Agent 对话、私聊和群聊统一文件卡片，清晰显示文件名、扩展名、类型、大小和传输状态；卡片状态与动作都按当前语言显示。 / Improved: unified file cards in Agent chats, DMs and group chats show the filename, extension, type, size and transfer state; card status and actions follow the current language.",
   "- 改进：文件卡片区分等待上传、上传中、等待发送、下载中和失败状态；发送失败可重试整条消息并保留已上传附件，下载失败可点击重试。 / Improved: file cards distinguish queued uploads, uploading, waiting to send, downloading and failures; retry a failed message with already-uploaded attachments preserved, or click to retry a failed download.",
@@ -1273,6 +1276,10 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.291": "2026-10-23T10:47:28Z",
+  "0.2.289": "2026-10-23T04:19:12Z",
+  "0.2.288": "2026-10-23T00:56:02Z",
+  "0.2.287": "2026-10-22T22:20:51Z",
   "0.2.286": "2026-10-22T14:32:20Z",
   "0.2.285": "2026-10-22T08:40:41Z",
   "0.2.284": "2026-10-21T23:44:00Z",
