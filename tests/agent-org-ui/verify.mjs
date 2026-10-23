@@ -55,12 +55,12 @@ try {
       test('adjustment initially collapsed', await el('pick-agent').count() === 0 && await el('demo-apply').count() === 0);
       if (c.phone) { test('initial mobile tree only', await el('detail').count() === 0); await el('dept-unassigned').click(); }
       else { const s = await selected('unassigned'); test('initial desktop unassigned visually selected', s.weight === '600', s); }
-      test('unassigned member rows populated', await el('agent-original-000').count() === 1 && await el('agent-original-328').count() === 1);
+      test('unassigned first60 cap with remaining count', await el('agent-original-000').count() === 1 && await el('agent-original-059').count() === 1 && await el('agent-original-060').count() === 0 && (await el('more').innerText()).includes('269'));
       await shot('workspace');
       await el('member-search').fill('original-328');
       test('member ID search', await page.locator('[data-testid^="agent-org-agent-"]:not([data-testid$="-label"])').count() === 1);
       await el('member-search').fill('Fixture Owner 200');
-      test('member owner search', await page.locator('[data-testid^="agent-org-agent-"]:not([data-testid$="-label"])').count() === 200);
+      test('member owner search respects first60 cap', await page.locator('[data-testid^="agent-org-agent-"]:not([data-testid$="-label"])').count() === 60 && (await el('more').innerText()).includes('140'));
       await el('member-search').fill('no-match-xyz'); await el('no-results').waitFor(); test('member no-results', true);
       await el('member-search').fill('');
       await dept('tmai'); await el('no-agents').waitFor();
@@ -92,8 +92,9 @@ try {
       test('explicit apply exactly one successful PUT', s.writes.length === 1 && s.writes[0].status === 200 && s.writes[0].body.department_id === 'station-a' && s.agents[0].department_id === 'station-a', s.writes);
       if (!c.phone) test('successful move subtree counts', await count('unassigned', 328) && await count('station-a', 1) && await count('stations', 1) && await count('tmai', 1));
       await navigate();
-      if (c.phone) await el('dept-station-a').click();
-      test('reload selects populated department rather than empty root', await el('agent-original-000').count() === 1 && (c.phone || (await selected('station-a')).weight === '600'));
+      if (!c.phone) test('reload keeps unassigned-first desktop focus', (await selected('unassigned')).weight === '600');
+      await el('dept-station-a').click();
+      test('reload retains saved department member', await el('agent-original-000').count() === 1 && (c.phone || (await selected('station-a')).weight === '600'));
       await shot('populated');
       await el('adjust-toggle').click();
       await pick('agent', 'original-000', 'original-000'); await pick('department', 'station-b', 'station-b');
@@ -117,8 +118,8 @@ try {
       await fetch(`${url}__fixture/reset?populated=1`, { method: 'POST' });
       await navigate();
       test('populated seed aggregate counts', await count('tmai', 3) && await count('tmwork', 3) && await count('stations', 3) && await count('station-a', 3) && await count('unassigned', 326));
-      if (c.phone) await el('dept-station-a').click();
-      test('populated seed direct members / automatic desktop focus', await el('agent-original-000').count() === 1 && await el('agent-original-002').count() === 1 && await el('agent-original-003').count() === 0 && (c.phone || (await selected('station-a')).weight === '600'));
+      await el('dept-station-a').click();
+      test('populated seed direct members / explicit department focus', await el('agent-original-000').count() === 1 && await el('agent-original-002').count() === 1 && await el('agent-original-003').count() === 0 && (c.phone || (await selected('station-a')).weight === '600'));
       await shot('populated-seed');
       await el('adjust-toggle').click(); await el('pick-agent').click(); await el('selector').waitFor();
       await page.keyboard.press('Escape'); await el('selector').waitFor({ state: 'hidden' });

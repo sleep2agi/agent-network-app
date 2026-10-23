@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { FlatList, Pressable, ScrollView, StyleSheet, View, type PressableStateCallbackType } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, spacing, type as typeScale, radius } from './theme';
@@ -12,6 +12,7 @@ import { agentCount, agentsDirectlyIn, orgTree, placeAgents, type AgentOrgData, 
 import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
 import { createDepartment, updateDepartment, OrgRequestError } from './org-api';
 import { SettingsButton, SettingsChoiceRow, SettingsGroup, SettingsRow } from './settings-kit';
+import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
 
@@ -21,7 +22,7 @@ export default function AgentOrgScreen(p: Props) {
   const [, refreshTheme] = useState(0);
   useEffect(() => onThemeChange(() => refreshTheme(n => n + 1)), []);
   return (
-    <View testID="agent-org-page">
+    <View testID="agent-org-page" style={styles.page}>
       {p.networkId
         ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} />
         : <NoNetwork />}
@@ -46,6 +47,8 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
   const [saving, setSaving] = useState(false);
   const [deptEditor, setDeptEditor] = useState<{ dept?: Department; parent: string | null; mode: 'create' | 'rename' | 'reparent' } | null>(null);
   const [deptNote, setDeptNote] = useState('');
+  const [infoOpen, setInfoOpen] = useState(false);
+  const bulkPending = useRef(false);
 
   useEffect(() => {
     let live = true;
@@ -74,14 +77,6 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
 
   return (
     <View>
-      {data ? <View style={styles.actions} testID="agent-org-department-actions">
-        <SettingsButton label={t('agentOrg.newDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-new-department" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: null }); }} />
-        {focus && data.departments.find(d => d.id === focus)?.viewer_can?.create_child !== false ? <SettingsButton label={t('agentOrg.newChild')} disabled={!data.departmentsApi || saving} testID="agent-org-new-child" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: focus }); }} /> : null}
-        {focus && data.departments.find(d => d.id === focus)?.viewer_can?.manage !== false ? <>
-          <SettingsButton label={t('agentOrg.renameDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-rename-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'rename', dept, parent: dept.parent_id }); } }} />
-          <SettingsButton label={t('agentOrg.reparentDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-reparent-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'reparent', dept, parent: dept.parent_id }); } }} />
-        </> : null}
-      </View> : null}
       {deptNote ? <Text accessibilityLiveRegion="polite" testID="agent-org-department-result" style={[styles.note, { padding: spacing.md }]}>{deptNote}</Text> : null}
       {phase.kind === 'loading' ? (
         <SettingsGroup testID="agent-org-loading"><SettingsRow label={t('agentOrg.loading')} /></SettingsGroup>
@@ -94,25 +89,38 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
       {phase.kind === 'ready' && data === null ? (
         <SettingsGroup testID="agent-org-empty-hub"><SettingsRow label={t('agentOrg.oldHub')} /></SettingsGroup>
       ) : null}
-      {data ? (
-        <View testID="agent-org-summary" style={styles.summary}>
-          <Text style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
-        </View>
-      ) : null}
       {data && (showTree || showDetail) ? (
-        <View testID="agent-org-tree" style={[styles.workspace, !p.phone && { flexDirection: 'row', minHeight: 440 }]}>
+        <View testID="agent-org-tree" style={styles.workspace}>
+          <View style={styles.toolbar} testID="agent-org-department-actions">
+            <View style={styles.toolbarContext}>
+              <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>
+              <Text testID="agent-org-summary" style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
+            </View>
+            <OrgAction label={t('agentOrg.newDepartmentAction')} icon="add" disabled={!data.departmentsApi || saving} testID="agent-org-new-department" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: null }); }} />
+          </View>
+          <View style={!p.phone ? styles.columns : undefined}>
           {showTree ? (
-            <View style={!p.phone ? { width: 300, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg } : undefined}>
+            <View testID="agent-org-navigation" style={!p.phone ? styles.navigation : undefined}>
               <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} />
             </View>
           ) : null}
           {showDetail ? (
             <View style={!p.phone ? { flex: 1, minWidth: 0 } : undefined} testID="agent-org-detail">
               <DepartmentDetail key={focus ?? 'unassigned'} data={data} placed={placed} focus={focus ?? null} phone={p.phone} onFocus={setFocus} onBack={() => setFocus(undefined)}
+                actions={<>
+                  {focus && data.departments.find(d => d.id === focus)?.viewer_can?.create_child !== false ? <OrgAction label={t('agentOrg.newChild')} disabled={!data.departmentsApi || saving} testID="agent-org-new-child" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: focus }); }} /> : null}
+                  {focus && data.departments.find(d => d.id === focus)?.viewer_can?.manage !== false ? <>
+                    <OrgAction label={t('agentOrg.renameDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-rename-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'rename', dept, parent: dept.parent_id }); } }} />
+                    <OrgAction label={t('agentOrg.reparentDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-reparent-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'reparent', dept, parent: dept.parent_id }); } }} />
+                  </> : null}
+                </>}
                 bulkBusy={saving}
-                onBulkAssign={async departmentId => {
-                  const targets = placed.filter(a => a.departmentId === null).map(a => a.nodeId);
+                onBulkAssign={async (departmentId, nodeIds) => {
+                  if (bulkPending.current) return;
+                  const selected = new Set(nodeIds);
+                  const targets = placed.filter(a => a.departmentId === null && selected.has(a.nodeId)).map(a => a.nodeId);
                   if (!targets.length) { setAdjustNote(t('agentOrg.bulkNone')); return; }
+                  bulkPending.current = true;
                   setSaving(true);
                   let ok = 0, fail = 0;
                   // 限并发 4：332 个逐个串行要几分钟，全并发又会把 Hub 打满。
@@ -125,19 +133,25 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
                     }
                   };
                   await Promise.all([0, 1, 2, 3].map(() => worker()));
+                  bulkPending.current = false;
                   setSaving(false);
                   setAdjustNote(t('agentOrg.bulkDone', { ok, fail }));
                 }} />
             </View>
           ) : null}
+          </View>
         </View>
       ) : null}
       {data ? <View testID="agent-org-info" style={styles.info}>
-        <Ionicons name="information-circle-outline" size={18} color={colors.textMuted} />
-        <View style={{ flex: 1, gap: spacing.xs }}>
+        <Pressable testID="agent-org-info-toggle" accessibilityRole="button" accessibilityState={{ expanded: infoOpen }} onPress={() => setInfoOpen(v => !v)} style={styles.infoToggle}>
+          <Ionicons name="information-circle-outline" size={18} color={colors.textMuted} />
+          <Text style={[styles.note, { flex: 1 }]}>{t('agentOrg.infoSummary')}</Text>
+          <Ionicons name={infoOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        </Pressable>
+        {infoOpen ? <View style={{ gap: spacing.xs, paddingBottom: spacing.sm }}>
           {data.agentDepartmentSupported ? <Text testID="agent-org-independent-note" style={styles.note}>{t('agentOrg.independent')}</Text> : null}
           <Text style={styles.note}>{!data.directory ? t('agentOrg.directoryMissing') : !data.departmentsApi ? t('agentOrg.noTree') : t('agentOrg.readOnly')}</Text>
-        </View>
+        </View> : null}
       </View> : null}
       {phase.kind === 'ready' ? (
         <DemoAdjust
@@ -186,6 +200,14 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
       }} /> : null}
     </View>
   );
+}
+
+function OrgAction(p: { label: string; testID: string; onPress: () => void; disabled?: boolean; icon?: 'add' }) {
+  return <Pressable testID={p.testID} accessibilityRole="button" accessibilityLabel={p.label} accessibilityState={{ disabled: !!p.disabled }} disabled={p.disabled} onPress={p.onPress}
+    style={({ pressed }) => [styles.compactAction, p.disabled && { opacity: 0.45 }, pressed && { opacity: 0.8 }]}>
+    {p.icon ? <Ionicons name={p.icon} size={17} color={colors.accent} /> : null}
+    <Text style={styles.actionLabel}>{p.label}</Text>
+  </Pressable>;
 }
 
 function DepartmentEditor(p: { cfg: HubConfig; networkId: string; data: AgentOrgData; editor: { dept?: Department; parent: string | null; mode: 'create' | 'rename' | 'reparent' }; onClose: () => void; onSaved: (dept: Department) => Promise<void> }) {
@@ -291,10 +313,16 @@ function DepartmentRow(p: { testID: string; label: string; depth?: number; selec
   </Pressable>;
 }
 
-function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; onBulkAssign?: (departmentId: string) => void; bulkBusy?: boolean }) {
+function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; actions: ReactNode; onBulkAssign?: (departmentId: string, nodeIds: string[]) => void; bulkBusy?: boolean }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
+  const [bulkSelection, setBulkSelection] = useState<{ departmentId: string; nodeIds: string[] } | null>(null);
+  const memberScroll = useRef<ScrollView>(null);
+  useEffect(() => { memberScroll.current?.scrollTo({ y: 0, animated: false }); }, [p.focus, query]);
+  useEffect(() => {
+    if (bulkSelection) return listenEscapeClose(() => setBulkSelection(null));
+  }, [bulkSelection]);
   const dept = p.focus ? p.data.departments.find(d => d.id === p.focus) : undefined;
   const title = p.focus === null ? t('agentOrg.unowned') : (dept?.name ?? t('agentOrg.unowned'));
   const agents = agentsDirectlyIn(p.placed, p.focus);
@@ -310,27 +338,37 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
     <View testID="agent-org-detail-card" style={styles.detail}>
       {p.phone ? <SettingsRow label={t('agentOrg.back')} onPress={p.onBack} testID="agent-org-back" /> : null}
       <View style={styles.detailHeading}>
-        <View style={{ flex: 1, minWidth: 0 }}>
-          <Text numberOfLines={2} style={styles.title}>{title}</Text>
-          <Text style={styles.note}>{t('agentOrg.directMembers')}</Text>
+        <View style={styles.memberTitle}>
+          <Text numberOfLines={2} style={[styles.title, { flexShrink: 1 }]}>{title}</Text>
+          <Text testID="agent-org-member-count" style={styles.count}>{t('agentOrg.agentsCount', { count: agents.length })}</Text>
         </View>
-        <Text style={styles.count}>{t('agentOrg.agentsCount', { count: agents.length })}</Text>
+        {p.actions}
+        {p.focus === null && filtered.length > 0 && p.onBulkAssign && p.data.departments.length > 0 ? (
+          <View style={styles.bulkAction}>
+            <Text testID="agent-org-bulk-count" style={styles.note}>{t('agentOrg.bulkScope', { count: filtered.length })}</Text>
+            <OrgAction label={t('agentOrg.bulkAssign', { count: filtered.length })} disabled={!!p.bulkBusy} testID="agent-org-bulk-assign" onPress={() => setBulkOpen(true)} />
+          </View>
+        ) : null}
       </View>
-      {/* #1894：未归属几百个时，一个个点不现实。这里一次把「当前未归属」全部归入一个部门。
-          仍尊重顶部搜索框：只归入过滤后仍在列表里的那些，避免误伤。 */}
-      {p.focus === null && filtered.length > 0 && p.onBulkAssign && p.data.departments.length > 0 ? (
-        <>
-          <SettingsButton label={t('agentOrg.bulkAssign', { count: filtered.length })} disabled={!!p.bulkBusy} testID="agent-org-bulk-assign" onPress={() => setBulkOpen(true)} />
-          {bulkOpen ? <StructureSelector title={t('agentOrg.bulkPickDept')} onClose={() => setBulkOpen(false)}
+      <Text style={styles.note}>{t('agentOrg.directMembers')}</Text>
+      {bulkOpen ? <StructureSelector title={t('agentOrg.bulkPickDept')} onClose={() => setBulkOpen(false)}
             options={flattenTree(orgTree(p.data)).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-bulk-dept-${row.dept.id}` }))}
             selected={undefined}
-            onPick={id => { setBulkOpen(false); if (id) p.onBulkAssign!(id); }} /> : null}
-        </>
-      ) : null}
+            onPick={id => { setBulkOpen(false); if (id) setBulkSelection({ departmentId: id, nodeIds: filtered.map(agent => agent.nodeId) }); }} /> : null}
+      {bulkSelection ? <DialogFrame title={t('agentOrg.bulkConfirmTitle')} closeLabel={t('agentOrg.close')} onClose={() => setBulkSelection(null)} testID="agent-org-bulk-confirm"
+        footer={<SettingsButton label={t('agentOrg.bulkConfirmAction')} disabled={!!p.bulkBusy} testID="agent-org-bulk-confirm-apply" onPress={() => {
+          if (p.bulkBusy) return;
+          const selection = bulkSelection;
+          setBulkSelection(null);
+          p.onBulkAssign?.(selection.departmentId, selection.nodeIds);
+        }} />}>
+        <Text style={styles.note}>{t('agentOrg.bulkConfirm', { count: bulkSelection.nodeIds.length, department: p.data.departments.find(d => d.id === bulkSelection.departmentId)?.name ?? '' })}</Text>
+      </DialogFrame> : null}
       <View style={styles.search}>
         <Ionicons name="search-outline" size={17} color={colors.textMuted} />
         <TextInput testID="agent-org-member-search" value={query} onChangeText={setQuery} placeholder={t('agentOrg.searchAgents')} accessibilityLabel={t('agentOrg.searchAgents')} placeholderTextColor={colors.textMuted} style={styles.searchInput} />
       </View>
+      <ScrollView ref={memberScroll} testID="agent-org-member-list" style={styles.memberList} contentContainerStyle={{ paddingBottom: spacing.sm }} keyboardShouldPersistTaps="handled">
       {children.map(child => (
         <SettingsRow
           key={child.id}
@@ -340,7 +378,6 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
           onPress={() => p.onFocus(child.id)}
         />
       ))}
-      <ScrollView style={{ maxHeight: 480 }} keyboardShouldPersistTaps="handled">
         {filtered.length ? shown.map(agent => <AgentLine key={agent.nodeId} agent={agent} />) : <View testID={agents.length ? 'agent-org-no-results' : 'agent-org-no-agents'} style={styles.empty}>
           <Ionicons name={agents.length ? 'search-outline' : 'people-outline'} size={30} color={colors.textMuted} />
           <Text style={styles.note}>{t(agents.length ? 'agentOrg.noResults' : 'agentOrg.noAgents')}</Text>
@@ -401,8 +438,8 @@ function DemoAdjust(p: {
         </View>
       ) : null}
       {p.placed.length ? <SettingsButton label={p.saving ? t('agentOrg.saving') : t('agentOrg.demoApply')} onPress={p.onApply} disabled={p.saving} testID="agent-org-demo-apply" /> : null}
-      {p.note ? <Text accessibilityLiveRegion="polite" testID="agent-org-demo-result" style={styles.note}>{p.note}</Text> : null}
       </View> : null}
+      {p.note ? <Text accessibilityLiveRegion="polite" testID="agent-org-demo-result" style={[styles.note, { paddingHorizontal: spacing.md, paddingBottom: spacing.md }]}>{p.note}</Text> : null}
       {selector ? <StructureSelector key={selector} title={t(selector === 'agent' ? 'agentOrg.demoPickAgent' : 'agentOrg.demoPickDept')} onClose={() => setSelector(null)}
         options={selector === 'agent' ? p.placed.map(agent => ({ id: agent.nodeId, label: agent.alias, subtitle: agent.ownerName ?? t('agentOrg.noOwner'), testID: `agent-org-demo-agent-${agent.nodeId}` }))
           : [{ id: null, label: t('agentOrg.unowned'), testID: 'agent-org-demo-dept-unassigned' }, ...flattenTree(orgTree({ departments })).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-demo-dept-${row.dept.id}` }))]}
@@ -430,20 +467,29 @@ function StructureSelector(p: { title: string; options: { id: string | null; lab
 }
 
 const makeStyles = () => StyleSheet.create({
-  actions: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm, padding: spacing.md },
+  page: { width: '100%', maxWidth: 700, alignSelf: 'center' },
+  toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
+  toolbarContext: { flexGrow: 1, flexShrink: 1, minWidth: 160, gap: spacing.xs },
+  compactAction: { ...buttonStyle('secondary'), height: 'auto', minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, flexShrink: 1 },
+  actionLabel: { ...buttonTextStyle('secondary'), fontSize: typeScale.small, flexShrink: 1 },
   workspace: { marginHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' },
+  columns: { flexDirection: 'row', minHeight: 440 },
+  navigation: { width: '32%', maxWidth: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
   sectionLabel: { color: colors.textMuted, fontSize: typeScale.small, fontWeight: '600', padding: spacing.sm, marginBottom: spacing.xs },
   departmentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingRight: spacing.sm, marginBottom: 2, borderRadius: radius.item },
   count: { color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'], backgroundColor: colors.subtleFill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.item },
-  detail: { padding: spacing.lg, gap: spacing.md },
-  detailHeading: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  detail: { padding: spacing.md, gap: spacing.sm, minWidth: 0 },
+  detailHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
+  memberTitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', flexGrow: 1, flexShrink: 1, gap: spacing.sm, maxWidth: '100%' },
+  bulkAction: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, maxWidth: '100%' },
+  memberList: { maxHeight: 400, flexGrow: 0, minHeight: 0 },
   title: { color: colors.text, fontSize: typeScale.heading, fontWeight: '600' },
   note: { color: colors.textMuted, fontSize: typeScale.small, lineHeight: 20 },
-  summary: { marginHorizontal: spacing.md, marginBottom: spacing.sm },
-  info: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.sm, marginHorizontal: spacing.md, marginTop: spacing.md, padding: spacing.md, backgroundColor: colors.subtleFill, borderRadius: radius.control },
+  info: { marginHorizontal: spacing.md, marginTop: spacing.sm, paddingHorizontal: spacing.sm },
+  infoToggle: { flexDirection: 'row', alignItems: 'center', minHeight: 44, gap: spacing.sm },
   search: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md },
   searchInput: { flex: 1, minWidth: 0, minHeight: 42, color: colors.text, fontSize: typeScale.small, paddingVertical: spacing.sm },
-  agentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingVertical: spacing.md, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
+  agentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   empty: { minHeight: 220, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   adjust: { margin: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, backgroundColor: colors.card, overflow: 'hidden' },
   adjustToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 52, paddingHorizontal: spacing.md },
