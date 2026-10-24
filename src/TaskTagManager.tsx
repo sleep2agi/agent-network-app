@@ -333,7 +333,8 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
             <Text style={{ color: tags.length ? colors.accent : colors.textMuted, fontSize: typeScale.body }}>{selecting ? tr('tags.cancel') : tr('tags.select')}</Text>
           </Pressable>
         </View>
-        <TextInput value={listQuery} onChangeText={setListQuery} placeholder={tr('tags.searchTag')} placeholderTextColor={colors.textMuted} style={[f.input, { minHeight: 40 }]} testID="tag-manager-search" accessibilityLabel={tr('tags.searchTag')} />
+        {/* 搜索会隐藏部分行:已勾选但被搜掉的标签若还留着,合并时会把看不见的标签一起并掉。改词就清空勾选。 */}
+        <TextInput value={listQuery} onChangeText={q => { setListQuery(q); setPicked([]); }} placeholder={tr('tags.searchTag')} placeholderTextColor={colors.textMuted} style={[f.input, { minHeight: 40 }]} testID="tag-manager-search" accessibilityLabel={tr('tags.searchTag')} />
         <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={[styles.group, { backgroundColor: colors.groupedRow }]} testID="tag-manager-list">
           {tags.length ? tags.map((tag, i) => sheetRow(tag, i === tags.length - 1)) : <Text style={[s.muted, { padding: spacing.lg }]}>{tr('tags.none')}</Text>}
         </ScrollView>
@@ -365,7 +366,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
                     <Ionicons name="close" size={18} color={colors.textSecondary} />
                   </Pressable>
                 </View>
-                <TextInput value={listQuery} onChangeText={setListQuery} placeholder={tr('tags.searchTag')} placeholderTextColor={colors.textMuted} style={[f.input, { minHeight: 40 }]} testID="tag-manager-search" accessibilityLabel={tr('tags.searchTag')} />
+                <TextInput value={listQuery} onChangeText={q => { setListQuery(q); setPicked([]); }} placeholder={tr('tags.searchTag')} placeholderTextColor={colors.textMuted} style={[f.input, { minHeight: 40 }]} testID="tag-manager-search" accessibilityLabel={tr('tags.searchTag')} />
                 <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ gap: 2 }} testID="tag-manager-list">
                   {tags.length ? tags.map(desktopRow) : <Text style={s.muted}>{tr('tags.none')}</Text>}
                 </ScrollView>

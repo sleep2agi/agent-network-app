@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.303:",
+  "- 修复：管理标签里用搜索框过滤后，之前勾选但已被搜索隐藏的标签会被自动取消勾选，避免「合并」时把看不见的标签一起并掉。",
+  "",
   "What's new in 0.2.302:",
   "- 内部改进：发版看门狗在「刚发布 60 分钟内」不再因为镜像 / 站点兜底还没跟上就报警，只有真正的不一致才红；这条规则自带自检。",
   "",
