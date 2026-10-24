@@ -194,7 +194,7 @@ jobs:
             echo "    dry-run: would set notes to:"; printf '%s\n' "$notes" | sed 's/^/      /'
             # 只读跑也要把版本摘要打出来 —— releaseType 是提审前的判断依据,以前 dry-run 看不到。
             echo 'App Store version summary:'
-            asc_get "appStoreVersions/$version_id" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null)}'
+            asc_get "appStoreVersions/$version_id?include=build" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null), linkedBuildNumber: (([.included[]? | select(.type == "builds") | .attributes.version] | first) // null)}'
             exit 0
           fi
           if [ -n "$detail_id" ]; then
@@ -239,4 +239,4 @@ jobs:
           echo 'App Store version summary:'
           # releaseType 决定「审核通过后会不会立刻上线」:AFTER_APPROVAL = 自动,MANUAL = owner 手动放行。
           # 这跟 phased release(7 天分批)是两件事,所以两个都打印出来,提审前一眼能看到。
-          asc_get "appStoreVersions/$version_id" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null)}'
+          asc_get "appStoreVersions/$version_id?include=build" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null), linkedBuildNumber: (([.included[]? | select(.type == "builds") | .attributes.version] | first) // null)}'
