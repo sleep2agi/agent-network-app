@@ -17,6 +17,7 @@ import { colors, radius, spacing, themeMode, type as typeScale, weight } from '.
 import { liftedShadow, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
 import { MAX_MERGE_SOURCES, TAG_COLORS, tagName, type TagCatalog, type TagOp } from './task-tag-catalog';
+import { tagRows } from './task-tree';
 import { setCreatingTag, useTaskBoard } from './task-board-store';
 import { tagCreateSupported } from './task-tag-create';
 
@@ -59,7 +60,11 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
     if (sheet) setPage({ kind: 'rename', tag: focus }); else setEditing(focus);
   }, [open, focus, sheet]);
   if (!open) return null;
-  const tags = [...catalog.tags].sort((a, b) => (catalog.counts[b] ?? 0) - (catalog.counts[a] ?? 0) || a.localeCompare(b));
+  // 用量降序,再按父子把后代紧跟在父后面(admin 2026-10-24「要能操作那个标签树」:管理页要看得见层级)。
+  const sorted = [...catalog.tags].sort((a, b) => (catalog.counts[b] ?? 0) - (catalog.counts[a] ?? 0) || a.localeCompare(b));
+  const rows = tagRows(sorted, catalog.parents ?? null);
+  const tags = rows.map(r => r.node.name);
+  const depthOf = (tag: string) => rows.find(r => r.node.name === tag)?.depth ?? 0;
   const count = (tag: string) => catalog.counts[tag] ?? 0;
   const colorOf = (tag: string) => catalog.colors[tag];
   const pickedLive = picked.filter(tag => catalog.tags.includes(tag));
@@ -124,7 +129,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
     const coloring = page.kind === 'color' && page.tag === tag;
     return (
       <View key={tag} testID={`tag-row-${tag}`} style={{ gap: spacing.xs }}>
-        <View style={styles.row}>
+        <View style={[styles.row, { paddingLeft: depthOf(tag) * 14 }]}>
           <Pressable accessibilityRole="checkbox" accessibilityState={{ checked: on }} accessibilityLabel={tr('tags.pick', { tag })} onPress={() => toggle(tag)} style={styles.hit} testID={`tag-pick-${tag}`}>
             <Ionicons name={on ? 'checkbox' : 'square-outline'} size={16} color={on ? colors.accent : colors.textMuted} />
           </Pressable>

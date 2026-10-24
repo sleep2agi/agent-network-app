@@ -7,6 +7,7 @@ export const BUNDLED_RELEASE_BODY: string = [
   "",
   "What's new in 0.2.297:",
   "- 修复：折叠屏 / 平板上的标签筛选，把「管理标签」钉在横向标签条外面 —— 标签一多，它原来被挤到最右端，看起来就像没有这个功能（项目筛选里的「管理项目」一直是能看到的）。",
+  "- 改进：「管理标签」列表按父子层级缩进显示（父标签下面紧跟它的子标签），一眼能看出标签树；改色 / 改名 / 合并 / 删除 / 新建子标签 / 每个标签的任务用量都在同一页。",
   "",
   "What's new in 0.2.296:",
   "- 折叠屏/平板（安卓展开态）左侧导航改成和桌面端一样：只留图标、宽度 64、不再挤一行文字标签，内容区多出 46 dp；长按图标显示名字。 / On Android foldables and tablets the left rail now matches the desktop: icons only, 64 dp wide, no label under each icon; long-press an icon to see its name.",
