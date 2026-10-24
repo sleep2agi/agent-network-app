@@ -39,6 +39,8 @@ globalThis.fetch = (async (input: RequestInfo | URL, init?: RequestInit) => {
   const url = String(input), method = init?.method || 'GET';
   calls.push({ url, method, body: init?.body ? JSON.parse(String(init.body)) : null, authorization: new Headers(init?.headers).get('authorization') });
   if (mode === 'http404') return new Response(null, { status: 404 });
+  // 旧 Hub 的真实形态：未知 /api 路径落到帮助页，HTTP 200 + text/plain
+  if (mode === 'oldhub') return new Response('CommHub MCP Server v0.9.0-preview.144 (Streamable HTTP + SSE Push)\n', { status: 200, headers: { 'content-type': 'text/plain; charset=utf-8' } });
   if (mode === 'denied') return new Response(null, { status: 403 });
   if (mode === 'lost') throw Error('private token/endpoint detail');
   if (mode === 'binding409') return Response.json({ ok: false, error: 'session_control_changed' }, { status: 409 });
@@ -58,10 +60,14 @@ try {
   ck('204 semantics rendered only as processed', result.ok && result.outcome === 'request_processed');
   ck('one mutation enqueue and receipt GET', calls.filter(c => c.method === 'POST').length === 1 && calls.filter(c => c.method === 'GET').length === 1);
   ck('mutation carries expected binding, no commands', calls[0].body.expected.binding_id === state.binding_id && !('keys' in calls[0].body) && !('command' in calls[0].body));
-  for (const scenario of ['http404', 'denied', 'binding409', 'lost', 'unknown', 'receipt-gone', 'foreign-receipt', 'changed', 'bad-outcome', 'idle']) {
+  mode = 'oldhub'; calls.length = 0;
+  result = await runSessionControl(cfg, target);
+  ck('old Hub help page is unsupported, not a transient read failure', !result.ok && result.error === 'unsupported');
+  ck('old Hub read never enqueues', calls.length === 1 && calls[0].method === 'POST');
+  for (const scenario of ['http404', 'oldhub', 'denied', 'binding409', 'lost', 'unknown', 'receipt-gone', 'foreign-receipt', 'changed', 'bad-outcome', 'idle']) {
     mode = scenario; calls.length = 0;
     result = await runSessionControl(cfg, target, scenario === 'changed' ? undefined : state);
-    const expected = ({ http404: 'unsupported', denied: 'access', binding409: 'changed', lost: 'unknown', unknown: 'unknown', 'receipt-gone': 'unknown', 'foreign-receipt': 'unknown', changed: 'changed', 'bad-outcome': 'unknown' } as Record<string, string>)[scenario];
+    const expected = ({ http404: 'unsupported', oldhub: 'unsupported', denied: 'access', binding409: 'changed', lost: 'unknown', unknown: 'unknown', 'receipt-gone': 'unknown', 'foreign-receipt': 'unknown', changed: 'changed', 'bad-outcome': 'unknown' } as Record<string, string>)[scenario];
     ck(`${scenario} truthful outcome`, scenario === 'idle' ? result.ok && result.outcome === 'already_idle' : !result.ok && result.error === expected);
     ck(`${scenario} never re-enqueues`, calls.filter(c => c.method === 'POST').length === 1);
   }

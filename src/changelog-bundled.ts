@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.304:",
+  "- 修复：连到旧版 Hub 时，聊天顶部「原会话」不再显示「请稍后刷新状态」（重试永远不会成功），改为明确说明这个 Hub 不支持该功能。",
+  "",
   "What's new in 0.2.303:",
   "- 修复：管理标签里用搜索框过滤后，之前勾选但已被搜索隐藏的标签会被自动取消勾选，避免「合并」时把看不见的标签一起并掉。",
   "",
