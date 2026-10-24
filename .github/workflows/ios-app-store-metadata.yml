@@ -180,8 +180,17 @@ jobs:
               fi
               jq -n --arg id "$loc_id" --arg t "$text" \
                 '{data:{type:"appStoreVersionLocalizations",id:$id,attributes:{whatsNew:$t}}}' > "$RUNNER_TEMP/whatsnew.json"
-              asc_write PATCH "appStoreVersionLocalizations/$loc_id" "$RUNNER_TEMP/whatsnew.json" > /dev/null
-              echo "--- $locale whatsNew updated"
+              # 首次上架(还没有已发布版本)时 Apple 不允许写 whatsNew:
+              # 409 STATE_ERROR "Attribute 'whatsNew' cannot be edited at this time"。
+              # 那不是配置错误,只是这个版本没有「更新说明」这一栏;记一行 WARN 继续。
+              if out=$(asc_write PATCH "appStoreVersionLocalizations/$loc_id" "$RUNNER_TEMP/whatsnew.json" 2>&1); then
+                echo "--- $locale whatsNew updated"
+              elif grep -q "whatsNew' cannot be edited" <<<"$out"; then
+                echo "::warning::$locale whatsNew is not editable for this version (first release) — skipped"
+              else
+                printf '%s\n' "$out" >&2
+                exit 1
+              fi
             done
           fi
 
