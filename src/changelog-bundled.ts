@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.299:",
+  "- 新增：管理标签里可以「改父级」——把任意标签挂到另一个标签下面，或升为顶级（列表里会先按当前父级打勾）。Hub 还没开放这个操作时会明确提示「这个 Hub 还不支持改父级」，不会静默失败。",
+  "",
   "What's new in 0.2.298:",
   "- 改进：管理标签里，子标签名字下面多一行灰色的父级路径（例如「知识库 / 发布」），配合层级缩进，一眼看出每个标签挂在树的哪个位置。",
   "",
@@ -1295,6 +1298,7 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.298": "2026-10-24T11:39:43Z",
   "0.2.297": "2026-10-24T10:16:47Z",
   "0.2.296": "2026-10-24T08:01:58Z",
   "0.2.295": "2026-10-23T20:44:48Z",

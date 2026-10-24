@@ -1472,7 +1472,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       if (st.tagCatalog) patchTaskBoard(scope, { tagCatalog: refreshedCatalog ?? applyTagOpToCatalog(st.tagCatalog, op) });
       // 正在筛的标签被改名 / 合并 / 删掉:筛选跟过去(删了就回到全部)。
       const cur = st.filter.tag;
-      if (cur && op.op !== 'color' && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
+      const movesName = op.op === 'rename' || op.op === 'merge' || op.op === 'delete';
+      if (cur && movesName && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
       return null;
     } catch (e) {
       if (e instanceof TagOpError && e.status === 404) void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});

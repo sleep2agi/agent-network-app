@@ -17,7 +17,7 @@ import { colors, radius, spacing, themeMode, type as typeScale, weight } from '.
 import { liftedShadow, useTaskStyles } from './TaskBoardParts';
 import { fieldStyles } from './TaskCreateDialog';
 import { MAX_MERGE_SOURCES, TAG_COLORS, tagName, type TagCatalog, type TagOp } from './task-tag-catalog';
-import { tagRows } from './task-tree';
+import { tagRows, tagWithDescendants } from './task-tree';
 import { setCreatingTag, useTaskBoard } from './task-board-store';
 import { tagCreateSupported } from './task-tag-create';
 
@@ -26,6 +26,7 @@ type Page =
   | { kind: 'actions'; tag: string }
   | { kind: 'rename'; tag: string }
   | { kind: 'color'; tag: string }
+  | { kind: 'parent'; tag: string }
   | { kind: 'delete'; tag: string }
   | { kind: 'merge' };
 
@@ -97,6 +98,10 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
     if (to === tag) { setEditing(null); back(); return; }
     if (await run({ op: 'rename', from: tag, to })) { setEditing(null); setPicked(p => p.filter(x => x !== tag)); back(); }
   };
+  const moveUnder = async (tag: string, parent: string | null) => {
+    if (busy) return;
+    if (await run({ op: 'reparent', tag, parent })) back();
+  };
   const merge = async () => {
     const to = tagName(mergeName || pickedLive[0] || '');
     if (!to || pickedLive.length < 2) { setError('tags.invalidName'); return; }
@@ -157,6 +162,9 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
           {tagCreateSupported(catalog, tag, capabilities) ? <Pressable accessibilityRole="button" accessibilityLabel={`${tr('tags.createChild')}: ${tag}`} disabled={busy} onPress={() => { close(); setCreatingTag(tag); }} style={styles.hit} testID={`tag-create-child-${tag}`}>
             <Ionicons name="add-outline" size={16} color={colors.accent} />
           </Pressable> : null}
+          <Pressable accessibilityRole="button" accessibilityLabel={`${tr('tags.reparent')}: ${tag}`} disabled={busy} onPress={() => setPage({ kind: 'parent', tag })} style={styles.hit} testID={`tag-reparent-${tag}`}>
+            <Ionicons name="git-branch-outline" size={16} color={colors.accent} />
+          </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={tr('tags.deleteTitle', { tag })} onPress={() => setPage(confirming ? { kind: 'list' } : { kind: 'delete', tag })} style={styles.hit} testID={`tag-delete-${tag}`}>
             <Ionicons name="trash-outline" size={15} color={colors.textMuted} />
           </Pressable>
@@ -235,6 +243,8 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
         ...(tagCreateSupported(catalog, tag, capabilities) ? [{ key: 'createChild', label: tr('tags.createChild'), onPress: () => { close(); setCreatingTag(tag); } }] : []),
         { key: 'rename', label: tr('tags.rename'), onPress: () => { setDraft(tag); setPage({ kind: 'rename', tag }); } },
         { key: 'color', label: tr('tags.color'), onPress: () => setPage({ kind: 'color', tag }) },
+        // 改父级:Hub 还没开放这个 op(#2204)时会返回 invalid_tag_op,下面的 errorLine 会说明。
+        { key: 'parent', label: tr('tags.reparent'), onPress: () => setPage({ kind: 'parent', tag }) },
         { key: 'delete', label: tr('tags.delete'), danger: true, onPress: () => setPage({ kind: 'delete', tag }) },
       ], `${tag} · ${tr('tags.usage', { n: count(tag) })}`);
     }
@@ -255,6 +265,35 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
           <Text style={s.muted}>{tr('tags.renameHint')}</Text>
         </View>
       ), () => { void rename(tag, draft); });
+    }
+    if (page.kind === 'parent') {
+      const tag = page.tag;
+      // 候选 = 除了自己与自己的后代(挂上去就成环)以外的全部标签;外加「升为顶级」。
+      const banned = new Set(tagWithDescendants(tag, catalog.parents ?? null));
+      const current = (catalog.parents ?? {})[tag] ?? null;
+      const candidates = tags.filter(x => !banned.has(x));
+      return (
+        <View style={{ gap: spacing.sm, flexShrink: 1 }}>
+          <View style={styles.sheetHead}>
+            <Pressable accessibilityRole="button" onPress={back} style={styles.textBtn} testID="tag-parent-cancel"><Text style={{ color: colors.text, fontSize: typeScale.body }}>{tr('tags.cancel')}</Text></Pressable>
+            <Text style={[styles.sheetTitle, { color: colors.text }]} numberOfLines={1}>{tr('tags.reparentTitle', { tag })}</Text>
+            <View style={{ width: 56 }} />
+          </View>
+          <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={[styles.group, { backgroundColor: colors.groupedRow }]} testID="tag-parent-list">
+            {[{ key: '', label: tr('tags.parentTop'), on: current === null, id: 'top' } as const,
+              ...candidates.map(c => ({ key: c, label: c, on: current === c, id: c }))].map(opt => (
+              <Pressable key={opt.id} accessibilityRole="button" accessibilityState={{ selected: opt.on }} disabled={busy}
+                onPress={() => { void moveUnder(tag, opt.key || null); }}
+                style={state => [styles.sheetRow, { backgroundColor: state.pressed ? colors.groupedRowPressed : colors.groupedRow }]}
+                testID={`tag-parent-pick-${opt.id}`}>
+                <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }} numberOfLines={1}>{opt.label}</Text>
+                {opt.on ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+              </Pressable>
+            ))}
+          </ScrollView>
+          {errorLine}
+        </View>
+      );
     }
     if (page.kind === 'color') {
       const tag = page.tag;

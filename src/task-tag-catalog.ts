@@ -38,7 +38,9 @@ export type TagOp =
   | { op: 'rename'; from: string; to: string }
   | { op: 'merge'; from: string[]; to: string }
   | { op: 'delete'; tag: string }
-  | { op: 'color'; tag: string; color: string | null };
+  | { op: 'color'; tag: string; color: string | null }
+  // 改父级(Hub #2204 上线后才可用;parent=null 升为顶级)。Hub 不支持时返回 invalid_tag_op。
+  | { op: 'reparent'; tag: string; parent: string | null };
 
 const COLOR = /^#[0-9a-fA-F]{6}$/;
 
@@ -123,6 +125,8 @@ export function tagOpErrorKey(status: number, error?: string): string {
   if (error === 'invalid_tag') return 'tags.invalidName';
   if (error === 'invalid_tag_color') return 'tags.invalidColor';
   if (error === 'same_tag') return 'tags.sameTag';
+  if (error === 'invalid_tag_op') return 'tags.opUnsupported';
+  if (error === 'tag_cycle' || error === 'tag_too_deep') return 'tags.parentInvalid';
   if (error === 'tag_not_found' || status === 404) return 'tags.notFound';
   if (status === 403) return 'tags.noPermission';
   return 'tags.opFailed';
@@ -154,7 +158,8 @@ export function tagName(value: string): string | null {
 
 /** 与 Hub 同一个改写规则:位置保留、去重;没变 = null。成功后先在本地改,下一轮轮询对齐。 */
 export function applyTagOp(tags: readonly string[], op: TagOp): string[] | null {
-  if (op.op === 'color') return null;
+  // 改色 / 改父级都不动卡片上的标签串。
+  if (op.op === 'color' || op.op === 'reparent') return null;
   const sources = op.op === 'rename' ? [op.from] : op.op === 'merge' ? op.from : [op.tag];
   const to = op.op === 'delete' ? null : op.to;
   if (!tags.some(tag => sources.includes(tag))) return null;
@@ -168,6 +173,11 @@ export function applyTagOp(tags: readonly string[], op: TagOp): string[] | null 
 
 /** 操作成功后目录的样子(用量按卡重算前的近似:来源的用量并进目标,上限是 affected)。 */
 export function applyTagOpToCatalog(cat: TagCatalog, op: TagOp): TagCatalog {
+  if (op.op === 'reparent') {
+    const parents = { ...(cat.parents ?? {}) };
+    if (op.parent) parents[op.tag] = op.parent; else delete parents[op.tag];
+    return { ...cat, parents };
+  }
   const colors = { ...cat.colors };
   if (op.op === 'color') {
     if (op.color) colors[op.tag] = op.color.toLowerCase(); else delete colors[op.tag];
