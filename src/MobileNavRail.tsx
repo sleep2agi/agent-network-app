@@ -155,8 +155,12 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
         {main.map(item)}
       </ScrollView>
       {settings ? item(settings) : null}
-      {/* 连接状态:版本号左边的小圆点(没有版本号的矮屏只画圆点,贴在底部留白里);悬停/点按看全文。 */}
-      {showBrand
+      {/* 连接状态:版本号左边的小圆点(没有版本号的矮屏只画圆点,贴在底部留白里);悬停/点按看全文。
+          iconsOnly 只画圆点:64 dp 放不下「v0.2.296」整行(ipad/展开态上整行会溢出 rail,
+          tests/test-connectivity-indicator 的 inCorner 断言就是这么红的),版本号在 设置 → 关于。 */}
+      {iconsOnly
+        ? <ConnectivityIndicator placement="rail" style={s.railDot} />
+        : showBrand
         ? <ConnectivityIndicator placement="rail" label={`v${APP_VERSION}`} labelStyle={s.versionText} style={s.version} />
         : <ConnectivityIndicator placement="rail" style={s.dotOnly} />}
     </View>
@@ -205,6 +209,8 @@ const makeStyles = () => StyleSheet.create({
   },
   badgeText: { color: '#fff', fontSize: 10, fontWeight: '600', lineHeight: 12 },
   version: { marginTop: 4 },
+  // iconsOnly:圆点自己在 rail 底部居中(没有版本号文字可依),仍是点按看全文。
+  railDot: { alignSelf: 'center', marginTop: 4, marginBottom: 12 },
   versionText: { color: colors.textMuted, fontSize: 10, textAlign: 'center' },
   // 矮屏(不画品牌和版本号):圆点放进 rail 底部留白,绝对定位,不改 rail 的排布。
   dotOnly: { position: 'absolute', bottom: 0 },
