@@ -3,8 +3,9 @@
 import { readFileSync } from 'node:fs';
 import { chooseAppLayout } from './wide-layout';
 import {
-  MOBILE_RAIL_ITEM, MOBILE_RAIL_WIDTH, PHONE_IN_PAGE_LEAF_SCREENS, PHONE_LEAF_SCREENS, RAIL_BRAND_MIN_HEIGHT,
-  contentWidthBesideRail, navActiveKey, navChromeFor, phoneInPageLeaf, railShowsBrand, railUnreadTotal, screenForNavPress,
+  ICON_RAIL_MIN_WIDTH, MOBILE_RAIL_ITEM, MOBILE_RAIL_WIDTH, PHONE_IN_PAGE_LEAF_SCREENS, PHONE_LEAF_SCREENS, RAIL_BRAND_MIN_HEIGHT,
+  contentWidthBesideRail, iconRailWidth, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, railIconsOnly, railShowsBrand,
+  railUnreadTotal, screenForNavPress,
 } from './nav-chrome';
 
 let p = 0, t = 0;
@@ -130,6 +131,19 @@ ck('rail badge on Agent uses the same unread counts as the list/tray', rail.incl
 // #429: 任务 carries the task-activity badge (task-unread-store.ts), not the chat unread count.
 ck('rail badge on 任务 is the task-activity count', rail.includes('useTaskUnreadCount()') && rail.includes("tab.key === 'tasks' ? railBadgeText(taskUnread) : null"));
 ck('rail badge updates live from the unread store', rail.includes('subscribeUnread(() => setSnap(getUnreadSnapshot()))'));
+// ── iconsOnly rail (wide window = desktop's 64 dp icon rail): Vincent 2026-10-24 折叠屏 Hub 设置 ──
+ck('rail drops labels only on a wide window (>= 900 dp): Vincent 折叠屏 ≈980 dp yes, 手机横屏 844 dp no',
+  !railIconsOnly(844) && !railIconsOnly(ICON_RAIL_MIN_WIDTH - 1) && railIconsOnly(ICON_RAIL_MIN_WIDTH) && railIconsOnly(983));
+ck('iconsOnly rail is the desktop 64 dp box, floored at the Material touch minimum',
+  iconRailWidth(1) === 64 && iconRailWidth(0.85) === 54 && iconRailWidth(1.15) === 74 && iconRailWidth(Number.NaN) === 64);
+ck('iconsOnly rail is narrower than the labelled rail at every density',
+  iconRailWidth(0.85) < mobileRailWidth(0.85) && iconRailWidth(1) < mobileRailWidth(1) && iconRailWidth(1.15) < mobileRailWidth(1.15));
+ck('rail keeps the desktop brand mark + version in iconsOnly (no label to make room for)',
+  rail.includes('{iconsOnly ? null : <Text dense style={[s.label, selected && s.labelActive]}') && rail.includes('<BrandMark size={58}'));
+ck('rail iconsOnly width overrides the labelled rail width by the same left inset',
+  rail.includes('iconsOnly && { width: railWidth + insetLeft }'));
+ck('rail shows the destination name on a long press when the label is hidden (touch has no hover)',
+  rail.includes('onLongPress={iconsOnly ? () => showRailName(t(tab.label)) : undefined}') && rail.includes("Platform.OS !== 'android'"));
 ck('rail pads the left + bottom insets and grows by the left one', rail.includes('width: mobileRailWidth(uiScale().densityFactor) + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom'));
 ck('rail uses the desktop rail palette', rail.includes('backgroundColor: colors.railBg') && rail.includes('backgroundColor: colors.railActiveBg'));
 ck('rail uses the theme brand mark (not the plated app icon)', rail.includes('<BrandMark size={58}') && !rail.includes('assets/icon.png') && !rail.includes('android-icon-foreground.png'));

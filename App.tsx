@@ -42,6 +42,7 @@ import HubScopeFixtureScreen, { readHubScopeFixture } from './src/HubScopeFixtur
 import DaemonOverviewFixtureScreen, { readDaemonOverviewFixture } from './src/DaemonOverviewFixtureScreen';
 import CloneNodeFixtureScreen, { readCloneNodeFixture } from './src/CloneNodeFixtureScreen';
 import ChatSessionStripFixtureScreen, { readChatSessionStripFixture } from './src/ChatSessionStripFixtureScreen';
+import NavRailFixtureScreen, { readNavRailFixture } from './src/NavRailFixtureScreen';
 import { hubSectionForScreen, screenForHubSection, type HubSection } from './src/hub-scope-demo';
 import HostSupervisorPickerScreen from './src/HostSupervisorPickerScreen';
 import CreateNodeWizardScreen from './src/CreateNodeWizardScreen';
@@ -117,7 +118,7 @@ import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
 import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcuts-model';
 import { isMacKeyboard, requestAgentSearchFocus, shortcutBindings, shortcutCaptureActive } from './src/shortcuts-store';
-import { contentWidthBesideRail, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, phoneSettingsBackTarget, railShowsBrand, screenForNavPress } from './src/nav-chrome';
+import { contentWidthBesideRail, iconRailWidth, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, phoneSettingsBackTarget, railIconsOnly, railShowsBrand, screenForNavPress } from './src/nav-chrome';
 import { elevated, buttonStyle, buttonTextStyle } from './src/elevation';
 
 // #653 弱密码横幅在手机上出现的页面(各 tab 的首页)。
@@ -304,6 +305,16 @@ export default function App() {
     return (
       <SafeAreaProvider>
         <ChatSessionStripFixtureScreen />
+      </SafeAreaProvider>
+    );
+  }
+
+  const navRailFixture = readNavRailFixture();
+  if (navRailFixture) {
+    if (themeMode() !== 'light') setThemeMode('light');
+    return (
+      <SafeAreaProvider>
+        <NavRailFixtureScreen icons={navRailFixture.icons} />
       </SafeAreaProvider>
     );
   }
@@ -515,8 +526,12 @@ function AppRoot() {
   const navChrome = navChromeFor(layout, screen.name, inPageLeaf);
   const navActive = navActiveKey(screen.name);
   const railShown = navChrome === 'rail';
+  // Vincent 2026-10-24 (Xiaomi foldable, Hub 设置):「跟那个桌面端它不太一样」— on a wide window the rail
+  // drops its labels and takes the desktop's 64 dp box (src/nav-chrome.ts railIconsOnly).
+  const iconsOnlyRail = railShown && railIconsOnly(width);
+  const railWidth = iconsOnlyRail ? iconRailWidth(uiScale().densityFactor) : mobileRailWidth(uiScale().densityFactor);
   // Width to the right of the rail; the two panes split this, not the whole window.
-  const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right, mobileRailWidth(uiScale().densityFactor)) : width;
+  const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right, railWidth) : width;
   // 0.2.106: fixed 320 dp by default, dragged by the user (TwoPaneDivider), remembered per
   // device. listPaneWidth is the saved preference; twoPaneListWidth clamps it to 260–420 and
   // to what the current area leaves for the chat.
@@ -971,6 +986,7 @@ function AppRoot() {
                 insetLeft={insets.left}
                 insetBottom={tabBarInset}
                 showBrand={railShowsBrand(height)}
+                iconsOnly={iconsOnlyRail}
               />
             ) : null}
             <View style={[styles.navContent, railShown ? { paddingRight: insets.right } : { paddingLeft: insets.left, paddingRight: insets.right }, { paddingBottom: contentBottomInset }]}>
