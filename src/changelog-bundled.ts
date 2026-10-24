@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.300:",
+  "- 改进：「改父级」的可选父标签列表加了搜索框 —— 标签上百个时不用再一条条翻。",
+  "",
   "What's new in 0.2.299:",
   "- 新增：管理标签里可以「改父级」——把任意标签挂到另一个标签下面，或升为顶级（列表里会先按当前父级打勾）。Hub 还没开放这个操作时会明确提示「这个 Hub 还不支持改父级」，不会静默失败。",
   "",

@@ -52,6 +52,8 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
   const [selecting, setSelecting] = useState(false);
   const [draft, setDraft] = useState('');
   const [mergeName, setMergeName] = useState('');
+  // 标签多的网络里，父级候选可能上百条：给个搜索框（新建子标签那页也有同样的搜索）。
+  const [parentQuery, setParentQuery] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -162,7 +164,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
           {tagCreateSupported(catalog, tag, capabilities) ? <Pressable accessibilityRole="button" accessibilityLabel={`${tr('tags.createChild')}: ${tag}`} disabled={busy} onPress={() => { close(); setCreatingTag(tag); }} style={styles.hit} testID={`tag-create-child-${tag}`}>
             <Ionicons name="add-outline" size={16} color={colors.accent} />
           </Pressable> : null}
-          <Pressable accessibilityRole="button" accessibilityLabel={`${tr('tags.reparent')}: ${tag}`} disabled={busy} onPress={() => setPage({ kind: 'parent', tag })} style={styles.hit} testID={`tag-reparent-${tag}`}>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${tr('tags.reparent')}: ${tag}`} disabled={busy} onPress={() => { setParentQuery(''); setPage({ kind: 'parent', tag }); }} style={styles.hit} testID={`tag-reparent-${tag}`}>
             <Ionicons name="git-branch-outline" size={16} color={colors.accent} />
           </Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={tr('tags.deleteTitle', { tag })} onPress={() => setPage(confirming ? { kind: 'list' } : { kind: 'delete', tag })} style={styles.hit} testID={`tag-delete-${tag}`}>
@@ -244,7 +246,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
         { key: 'rename', label: tr('tags.rename'), onPress: () => { setDraft(tag); setPage({ kind: 'rename', tag }); } },
         { key: 'color', label: tr('tags.color'), onPress: () => setPage({ kind: 'color', tag }) },
         // 改父级:Hub 还没开放这个 op(#2204)时会返回 invalid_tag_op,下面的 errorLine 会说明。
-        { key: 'parent', label: tr('tags.reparent'), onPress: () => setPage({ kind: 'parent', tag }) },
+        { key: 'parent', label: tr('tags.reparent'), onPress: () => { setParentQuery(''); setPage({ kind: 'parent', tag }); } },
         { key: 'delete', label: tr('tags.delete'), danger: true, onPress: () => setPage({ kind: 'delete', tag }) },
       ], `${tag} · ${tr('tags.usage', { n: count(tag) })}`);
     }
@@ -271,7 +273,8 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
       // 候选 = 除了自己与自己的后代(挂上去就成环)以外的全部标签;外加「升为顶级」。
       const banned = new Set(tagWithDescendants(tag, catalog.parents ?? null));
       const current = (catalog.parents ?? {})[tag] ?? null;
-      const candidates = tags.filter(x => !banned.has(x));
+      const q = parentQuery.trim().toLocaleLowerCase();
+      const candidates = tags.filter(x => !banned.has(x) && (!q || x.toLocaleLowerCase().includes(q)));
       return (
         <View style={{ gap: spacing.sm, flexShrink: 1 }}>
           <View style={styles.sheetHead}>
@@ -279,6 +282,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
             <Text style={[styles.sheetTitle, { color: colors.text }]} numberOfLines={1}>{tr('tags.reparentTitle', { tag })}</Text>
             <View style={{ width: 56 }} />
           </View>
+          <TextInput value={parentQuery} onChangeText={setParentQuery} placeholder={tr('tags.searchParent')} placeholderTextColor={colors.textMuted} style={[f.input, { minHeight: 40 }]} testID="tag-parent-search" accessibilityLabel={tr('tags.searchParent')} />
           <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={[styles.group, { backgroundColor: colors.groupedRow }]} testID="tag-parent-list">
             {[{ key: '', label: tr('tags.parentTop'), on: current === null, id: 'top' } as const,
               ...candidates.map(c => ({ key: c, label: c, on: current === c, id: c }))].map(opt => (
