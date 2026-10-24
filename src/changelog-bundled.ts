@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.298:",
+  "- 改进：管理标签里，子标签名字下面多一行灰色的父级路径（例如「知识库 / 发布」），配合层级缩进，一眼看出每个标签挂在树的哪个位置。",
+  "",
   "What's new in 0.2.297:",
   "- 修复：折叠屏 / 平板上的标签筛选，把「管理标签」钉在横向标签条外面 —— 标签一多，它原来被挤到最右端，看起来就像没有这个功能（项目筛选里的「管理项目」一直是能看到的）。",
   "- 改进：「管理标签」列表按父子层级缩进显示（父标签下面紧跟它的子标签），一眼能看出标签树；改色 / 改名 / 合并 / 删除 / 新建子标签 / 每个标签的任务用量都在同一页。",
@@ -1292,6 +1295,9 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.297": "2026-10-24T10:16:47Z",
+  "0.2.296": "2026-10-24T08:01:58Z",
+  "0.2.295": "2026-10-23T20:44:48Z",
   "0.2.294": "2026-10-23T17:01:01Z",
   "0.2.293": "2026-10-23T14:05:04Z",
   "0.2.292": "2026-10-23T12:39:38Z",

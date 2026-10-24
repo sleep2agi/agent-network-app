@@ -65,6 +65,15 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
   const rows = tagRows(sorted, catalog.parents ?? null);
   const tags = rows.map(r => r.node.name);
   const depthOf = (tag: string) => rows.find(r => r.node.name === tag)?.depth ?? 0;
+  // 子标签的名字旁边带一行灰色父路径,管理页里一眼看出它挂在哪(admin: 要能操作标签树)。
+  const pathOf = (tag: string): string | null => {
+    const parents = catalog.parents ?? null;
+    if (!parents) return null;
+    const chain: string[] = [];
+    let cur = parents[tag] ?? null;
+    for (let i = 0; cur && i < 8; i++) { chain.unshift(cur); cur = parents[cur] ?? null; }
+    return chain.length ? chain.join(' / ') : null;
+  };
   const count = (tag: string) => catalog.counts[tag] ?? 0;
   const colorOf = (tag: string) => catalog.colors[tag];
   const pickedLive = picked.filter(tag => catalog.tags.includes(tag));
@@ -141,6 +150,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
           ) : (
             <Pressable style={{ flex: 1, minWidth: 0 }} onPress={() => { setEditing(tag); setDraft(tag); setError(''); }} accessibilityRole="button" accessibilityLabel={tr('tags.renameTitle', { tag })} testID={`tag-name-${tag}`}>
               <Text style={{ color: colors.text, fontSize: typeScale.body }} numberOfLines={1}>{tag}</Text>
+              {pathOf(tag) ? <Text style={[s.muted, { fontSize: 11 }]} numberOfLines={1} testID={`tag-path-${tag}`}>{pathOf(tag)}</Text> : null}
             </Pressable>
           )}
           <Text style={[s.muted, styles.usage]} testID={`tag-usage-${tag}`}>{tr('tags.usage', { n: count(tag) })}</Text>
