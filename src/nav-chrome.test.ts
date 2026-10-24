@@ -143,7 +143,7 @@ ck('rail keeps the desktop brand mark + version in iconsOnly (no label to make r
 ck('rail iconsOnly width overrides the labelled rail width by the same left inset',
   rail.includes('iconsOnly && { width: railWidth + insetLeft }'));
 ck('rail shows the destination name on a long press when the label is hidden (touch has no hover)',
-  rail.includes('onLongPress={iconsOnly ? () => showRailName(t(tab.label)) : undefined}') && rail.includes("Platform.OS !== 'android'"));
+  rail.includes("onLongPress={Platform.OS !== 'web' ? (iconsOnly ? () => showRailName(t(tab.label)) : undefined) : undefined}") && rail.includes("Platform.OS !== 'android'"));
 ck('rail pads the left + bottom insets and grows by the left one', rail.includes('width: mobileRailWidth(uiScale().densityFactor) + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom'));
 ck('rail uses the desktop rail palette', rail.includes('backgroundColor: colors.railBg') && rail.includes('backgroundColor: colors.railActiveBg'));
 ck('rail uses the theme brand mark (not the plated app icon)', rail.includes('<BrandMark size={58}') && !rail.includes('assets/icon.png') && !rail.includes('android-icon-foreground.png'));

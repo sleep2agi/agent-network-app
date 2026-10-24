@@ -113,7 +113,9 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
         aria-selected={selected}
         onPress={() => onSelect(tab.key)}
         // iconsOnly has no label under the icon; the desktop shows the name on hover, touch on a long press.
-        onLongPress={iconsOnly ? () => showRailName(t(tab.label)) : undefined}
+        // The platform predicate comes first: a mouse press held down is text selection, not a gesture
+        // (src/phone-only-registry.ts), so only real touch platforms bind it.
+        onLongPress={Platform.OS !== 'web' ? (iconsOnly ? () => showRailName(t(tab.label)) : undefined) : undefined}
         android_ripple={{ color: colors.railHover, borderless: true, radius: 30 }}
         style={({ pressed }) => [s.item, iconsOnly && s.itemIconsOnly, align && { height: align.itemHeight }, pressed && !selected && s.itemPressed]}
       >
