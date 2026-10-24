@@ -72,7 +72,9 @@ const checks: Array<[string, boolean]> = [
   ),
 ];
 
-console.log(`releaseBody = ${releaseBody}`);
+// 不再整份打印:0.2.296 加了一条中英双语的说明后,这一行超过 CI 的日志单行上限,
+// 整个文件在 runner 上静默失败(本地看不出来)。只打印长度和它覆盖到的版本号。
+console.log(`releaseBody: ${releaseBody.length} chars, versions: ${(releaseBody.match(/What's new in (\d+\.\d+\.\d+)/g) ?? []).length}`);
 for (const [name, ok] of checks) {
   if (!ok) {
     throw new Error(

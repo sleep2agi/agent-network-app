@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.296:",
+  "- 折叠屏/平板（安卓展开态）左侧导航改成和桌面端一样：只留图标、宽度 64、不再挤一行文字标签，内容区多出 46 dp；长按图标显示名字。 / On Android foldables and tablets the left rail now matches the desktop: icons only, 64 dp wide, no label under each icon; long-press an icon to see its name.",
+  "",
   "What's new in 0.2.295:",
   "- 手机聊天顶部「原会话」那一条再收一档：只留「原会话 · 读取 · 转后台」三个短标签，一行放得下，不再挤掉标题、也不压住消息。",
   "",
