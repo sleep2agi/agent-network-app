@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.305:",
+  "- 修复头像相关的六个问题：图片下载遵循 3xx 跳转、选择器与裁剪在窄屏正确排版、外部链接在桌面端用系统浏览器打开、部门选择器对部门负责人只列出可创建子部门的范围。",
+  "",
   "What's new in 0.2.304:",
   "- 修复：连到旧版 Hub 时，聊天顶部「原会话」不再显示「请稍后刷新状态」（重试永远不会成功），改为明确说明这个 Hub 不支持该功能。",
   "",
@@ -1313,6 +1316,12 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.304": "2026-10-24T21:39:45Z",
+  "0.2.303": "2026-10-24T20:12:18Z",
+  "0.2.302": "2026-10-24T18:15:56Z",
+  "0.2.301": "2026-10-24T16:48:45Z",
+  "0.2.300": "2026-10-24T15:04:41Z",
+  "0.2.299": "2026-10-24T12:58:06Z",
   "0.2.298": "2026-10-24T11:39:43Z",
   "0.2.297": "2026-10-24T10:16:47Z",
   "0.2.296": "2026-10-24T08:01:58Z",
