@@ -28,6 +28,11 @@ on:
         required: false
         type: string
         default: ""
+      whats_new:
+        description: "这一版的「新功能」(=whatsNew, 用户更新页看到的);空 = 不改"
+        required: false
+        type: string
+        default: ""
       release_type:
         description: "MANUAL = 审核通过后等你手动放行;AFTER_APPROVAL = 审核一过就自动上线。空 = 不改"
         required: false
@@ -64,6 +69,7 @@ jobs:
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
           PHASED_RELEASE: ${{ inputs.phased_release }}
           RELEASE_TYPE: ${{ inputs.release_type }}
+          WHATS_NEW: ${{ inputs.whats_new }}
           BUNDLE_ID: top.vansin.agentnetwork
         shell: bash
         run: |
@@ -157,6 +163,27 @@ jobs:
             asc_write PATCH "appStoreVersionLocalizations/$loc_id" "$RUNNER_TEMP/loc.json" > /dev/null
             echo "    updated description"
           done
+
+          # 「新功能」(whatsNew)：App Store 更新页给老用户看的一段。首次上架可以留空,
+          # 但只要有值就必须两种语言都有,否则某一语言的更新页会是空白。
+          if [ -n "$WHATS_NEW" ]; then
+            new_zh=$'首个上架版本：局域网里的 ANet 军团客户端。\n- 项目可以像文件夹一样有父项目：左侧缩进、可折叠，父项目数字含子项目。\n- 标签也有父子：按父标签筛选会同时命中子标签（左侧栏与手机快筛都支持）。\n- 新建/编辑项目可直接选父项目；归档项目不出现在候选里。\n- 修复：编辑项目时点父项目，输入框失焦不会再把这次点击吞掉。'
+            new_en=$'First App Store release: the ANet Legion client for your own local network.\n- Projects can have a parent project: indented on the left, collapsible, and a parent counts its children.\n- Tags have parents too: filtering by a parent tag also matches its children (sidebar and the phone quick filter).\n- Pick a parent project when creating or editing; archived projects are not offered.\n- Fix: pressing a parent chip while renaming no longer loses the click to the input blur.'
+            jq -r '.data[] | "\(.id)\t\(.attributes.locale)"' <<<"$locs" | while IFS=$'\t' read -r loc_id locale; do
+              case "$locale" in
+                zh*) text="$new_zh" ;;
+                *) text="$new_en" ;;
+              esac
+              if [ "$DRY_RUN" = 'true' ]; then
+                echo "--- $locale would set whatsNew: $(printf '%s' "$text" | head -1)…"
+                continue
+              fi
+              jq -n --arg id "$loc_id" --arg t "$text" \
+                '{data:{type:"appStoreVersionLocalizations",id:$id,attributes:{whatsNew:$t}}}' > "$RUNNER_TEMP/whatsnew.json"
+              asc_write PATCH "appStoreVersionLocalizations/$loc_id" "$RUNNER_TEMP/whatsnew.json" > /dev/null
+              echo "--- $locale whatsNew updated"
+            done
+          fi
 
           notes_zh="ANet 军团运行在局域网中：App 启动后需要填写你自己部署的 Hub 地址（例如 http://<局域网IP>:8787 或 https://hub.local）并登录，之后才能看到 Agent 列表与会话。"
           notes_en='ANet Legion runs on a local network. After launch the app asks for the Hub address you run yourself (e.g. http://<lan-ip>:8787 or https://hub.local) and a login; only then does it show agents and chats.'
