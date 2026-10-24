@@ -96,7 +96,10 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
               <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>
               <Text testID="agent-org-summary" style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
             </View>
-            <OrgAction label={t('agentOrg.newDepartmentAction')} icon="add" disabled={!data.departmentsApi || saving} testID="agent-org-new-department" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: null }); }} />
+            {/* admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:部门结构不在这里改。
+                这棵树是 Hub 的网络级部门(人和 Agent 共用),增删改统一收在「用户管理 → 成员与部门」;
+                这一页只负责 Agent 归属。 */}
+            <Text testID="agent-org-departments-elsewhere" style={styles.note}>{t('agentOrg.departmentsElsewhere')}</Text>
           </View>
           <View style={!p.phone ? styles.columns : undefined}>
           {showTree ? (
@@ -107,13 +110,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
           {showDetail ? (
             <View style={!p.phone ? { flex: 1, minWidth: 0 } : undefined} testID="agent-org-detail">
               <DepartmentDetail key={focus ?? 'unassigned'} data={data} placed={placed} focus={focus ?? null} phone={p.phone} onFocus={setFocus} onBack={() => setFocus(undefined)}
-                actions={<>
-                  {focus && data.departments.find(d => d.id === focus)?.viewer_can?.create_child !== false ? <OrgAction label={t('agentOrg.newChild')} disabled={!data.departmentsApi || saving} testID="agent-org-new-child" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: focus }); }} /> : null}
-                  {focus && data.departments.find(d => d.id === focus)?.viewer_can?.manage !== false ? <>
-                    <OrgAction label={t('agentOrg.renameDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-rename-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'rename', dept, parent: dept.parent_id }); } }} />
-                    <OrgAction label={t('agentOrg.reparentDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-reparent-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'reparent', dept, parent: dept.parent_id }); } }} />
-                  </> : null}
-                </>}
+                actions={null}
                 bulkBusy={saving}
                 onBulkAssign={async (departmentId, nodeIds) => {
                   if (bulkPending.current) return;

@@ -241,11 +241,15 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   const phone = code(read('./SettingsPhonePages.tsx'));
   const forbidden = ['setMemberDepartment', 'deleteDepartment', 'appFetch', 'fetchOrg', 'listRequirementPeople', "method: 'POST'", "method: 'PUT'", "method: 'PATCH'", "method: 'DELETE'", 'AgentTeamsEntry'];
   ck('department edits reuse shared APIs, never move people or delete', forbidden.every(s => !screen.includes(s)) && screen.includes('await createDepartment(') && screen.includes('await updateDepartment('));
-  ck('root, child, rename and reparent actions are exposed', ['agent-org-new-department', 'agent-org-new-child', 'agent-org-rename-department', 'agent-org-reparent-department'].every(id => screen.includes(`testID="${id}"`)));
+  // admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:这一页不再改部门结构,
+  // 只调 Agent 归属;增删改统一在「用户管理 → 成员与部门」。
+  ck('department create/rename/reparent actions are gone from the agent page', ['agent-org-new-department', 'agent-org-new-child', 'agent-org-rename-department', 'agent-org-reparent-department'].every(id => !screen.includes(`testID="${id}"`)));
+  ck('the page points at 用户管理 → 成员与部门 instead', screen.includes('testID="agent-org-departments-elsewhere"') && /agentOrg\.departmentsElsewhere/.test(screen));
   ck('editor uses bounded keyboard-safe frame with pinned save and shared-tree warning', screen.includes('testID="agent-org-department-editor"') && screen.includes('footer={<SettingsButton') && screen.includes('testID="agent-org-shared-tree-note"'));
   ck('editor validates Unicode name length and excludes entire subtree', screen.includes('[...name.trim()].length <= 40') && screen.includes('subtreeIds(tree, p.editor.dept.id)') && screen.includes('filter(row => !excluded.has(row.dept.id))'));
   ck('patches preserve leader and sort by omission', screen.includes("? { name: name.trim() } : { parent_id: parent }") && !screen.includes('leader_user_id:') && !screen.includes('sort:'));
-  ck('Hub viewer_can restrictions are respected', screen.includes('viewer_can?.manage !== false') && screen.includes('viewer_can?.create_child !== false'));
+  // 这一页不再做部门写操作,所以也不需要 viewer_can 门;门与写入口一起挪到了「成员与部门」。
+  ck('the agent page no longer mutates departments (no viewer_can gates left here)', !screen.includes('viewer_can?.manage') && !screen.includes('viewer_can?.create_child'));
   ck('confirmed saves refresh real data and focus returned department', screen.includes('await loadAgentOrg(p.cfg, p.networkId)') && screen.includes('setFocus(department.id)') && screen.includes('result.id !== p.editor.dept.id') && screen.includes('setSaved(result)'));
   ck('refresh retry does not repeat a confirmed mutation', screen.includes('let confirmed = saved') && screen.includes('if (!confirmed)') && screen.includes('await p.onSaved(confirmed)'));
   ck('department errors and shared warning have both languages', ['sharedTree', 'departmentForbidden', 'departmentUnsupported', 'departmentConflict', 'departmentHierarchyInvalid', 'departmentRefreshFailed'].every(key => (agentOrgTranslations as Record<string, readonly string[]>)[`agentOrg.${key}`]?.length === 2));
