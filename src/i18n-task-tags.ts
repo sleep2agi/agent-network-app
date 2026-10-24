@@ -11,6 +11,7 @@ registerTranslations({
   'tags.all': ['全部标签', 'All tags'],
   'tags.saving': ['正在保存…', 'Saving…'],
   'tags.manage': ['管理标签', 'Manage tags'],
+  'tags.searchTag': ['搜索标签', 'Search tags'],
   'tags.reparent': ['改父级', 'Change parent'],
   'tags.reparentTitle': ['把「{tag}」挂到', 'Move "{tag}" under'],
   'tags.parentTop': ['升为顶级标签（无父级）', 'Make it a top-level tag'],
