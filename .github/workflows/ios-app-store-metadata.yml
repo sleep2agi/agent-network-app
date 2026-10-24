@@ -211,4 +211,6 @@ jobs:
           fi
 
           echo 'App Store version summary:'
-          asc_get "appStoreVersions/$version_id" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, linkedBuild: (.data.relationships.build.data.id // null)}'
+          # releaseType 决定「审核通过后会不会立刻上线」:AFTER_APPROVAL = 自动,MANUAL = owner 手动放行。
+          # 这跟 phased release(7 天分批)是两件事,所以两个都打印出来,提审前一眼能看到。
+          asc_get "appStoreVersions/$version_id" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null)}'
