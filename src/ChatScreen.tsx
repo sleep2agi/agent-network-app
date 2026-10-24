@@ -347,13 +347,15 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     group: item.group === "command" ? t("chat.slash.commands") : t("chat.slash.skills"),
     label: item.label,
     description: item.description,
+    avatar: alias,
     insert: item.insert,
-  })) : [], [draft, slashSkills]);
+  })) : [], [draft, slashSkills, alias]);
   const mentionRows = useMemo(() => mentionMenuOpen(draft) ? mentionCandidates(draft, mentionAgents).map(item => ({
     id: `agent:${item.alias}`,
     group: t("chat.mention.agents"),
     label: `@${item.alias}`,
     description: item.online ? t("chat.mention.online") : t("chat.mention.offline"),
+    avatar: item.alias,
     insert: item.insert,
   })) : [], [draft, mentionAgents]);
   const suggestRows = slashRows.length || slashMenuOpen(draft) ? slashRows : mentionRows;
