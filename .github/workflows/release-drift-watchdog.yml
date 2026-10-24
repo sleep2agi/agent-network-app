@@ -23,6 +23,8 @@ jobs:
       - uses: actions/setup-node@v4
         with:
           node-version: 20
+      - name: Self-test the release-window grace rule
+        run: node scripts/release-drift-check.mjs --self-test
       - name: Compare the published release with the mirror and the site
         env:
           GITHUB_TOKEN: ${{ github.token }}
