@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.305:
+            - 调整：「Agent 组织架构」页不再新建/改名/调整部门层级 —— 那棵树与人员是同一棵，改它会影响人员组织架构。部门结构统一在「用户管理 → 成员与部门」维护；这一页只管 Agent 属于哪个部门（批量归入照旧）。
+
             What's new in 0.2.304:
             - 修复：连到旧版 Hub 时，聊天顶部「原会话」不再显示「请稍后刷新状态」（重试永远不会成功），改为明确说明这个 Hub 不支持该功能。
 

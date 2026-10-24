@@ -55,6 +55,7 @@ export const agentOrgTranslations = {
   'agentOrg.renameDepartment': ['重命名部门', 'Rename department'],
   'agentOrg.reparentDepartment': ['调整上级部门', 'Change parent department'],
   'agentOrg.sharedTree': ['这里编辑的是与人类成员共用的部门树，不是独立的 Agent 部门树。新建、改名和调整层级也会影响人员组织架构；Agent 归属仍需单独保存。权限由 Hub 校验。', 'This is the department tree shared with human members, not a separate Agent tree. Creating, renaming or reparenting departments also changes the people organization. Agent placement is saved separately. The Hub enforces permissions.'],
+  'agentOrg.departmentsElsewhere': ['部门结构在 用户管理 → 成员与部门 里维护（与人员共用同一棵树）；这一页只调整 Agent 属于哪个部门。', 'Department structure is maintained in Users → Members & departments (the same tree people use); this page only sets which department an agent belongs to.'],
   'agentOrg.departmentName': ['部门名称', 'Department name'],
   'agentOrg.departmentNameInvalid': ['请输入 1–40 个字的部门名称', 'Enter a department name of 1–40 characters'],
   'agentOrg.parentDepartment': ['上级部门', 'Parent department'],
