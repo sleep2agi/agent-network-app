@@ -314,7 +314,7 @@ export default function App() {
     if (themeMode() !== 'light') setThemeMode('light');
     return (
       <SafeAreaProvider>
-        <NavRailFixtureScreen icons={navRailFixture.icons} />
+        <NavRailFixtureScreen icons={navRailFixture.icons} hub={navRailFixture.hub} />
       </SafeAreaProvider>
     );
   }
