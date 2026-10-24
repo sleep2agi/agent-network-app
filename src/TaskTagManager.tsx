@@ -54,6 +54,8 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
   const [mergeName, setMergeName] = useState('');
   // 标签多的网络里，父级候选可能上百条：给个搜索框（新建子标签那页也有同样的搜索）。
   const [parentQuery, setParentQuery] = useState('');
+  // 管理列表本身也要能搜:admin 的网络里有几百个标签(2026-10-24 截图「当前匹配 336 个」)。
+  const [listQuery, setListQuery] = useState('');
   const [editing, setEditing] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
@@ -66,7 +68,8 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
   // 用量降序,再按父子把后代紧跟在父后面(admin 2026-10-24「要能操作那个标签树」:管理页要看得见层级)。
   const sorted = [...catalog.tags].sort((a, b) => (catalog.counts[b] ?? 0) - (catalog.counts[a] ?? 0) || a.localeCompare(b));
   const rows = tagRows(sorted, catalog.parents ?? null);
-  const tags = rows.map(r => r.node.name);
+  const listQ = listQuery.trim().toLocaleLowerCase();
+  const tags = rows.map(r => r.node.name).filter(x => !listQ || x.toLocaleLowerCase().includes(listQ));
   const depthOf = (tag: string) => rows.find(r => r.node.name === tag)?.depth ?? 0;
   // 子标签的名字旁边带一行灰色父路径,管理页里一眼看出它挂在哪(admin: 要能操作标签树)。
   const pathOf = (tag: string): string | null => {
@@ -330,6 +333,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
             <Text style={{ color: tags.length ? colors.accent : colors.textMuted, fontSize: typeScale.body }}>{selecting ? tr('tags.cancel') : tr('tags.select')}</Text>
           </Pressable>
         </View>
+        <TextInput value={listQuery} onChangeText={setListQuery} placeholder={tr('tags.searchTag')} placeholderTextColor={colors.textMuted} style={[f.input, { minHeight: 40 }]} testID="tag-manager-search" accessibilityLabel={tr('tags.searchTag')} />
         <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={[styles.group, { backgroundColor: colors.groupedRow }]} testID="tag-manager-list">
           {tags.length ? tags.map((tag, i) => sheetRow(tag, i === tags.length - 1)) : <Text style={[s.muted, { padding: spacing.lg }]}>{tr('tags.none')}</Text>}
         </ScrollView>
@@ -361,6 +365,7 @@ export default function TaskTagManager({ open, sheet, catalog, onOp, onClose, fo
                     <Ionicons name="close" size={18} color={colors.textSecondary} />
                   </Pressable>
                 </View>
+                <TextInput value={listQuery} onChangeText={setListQuery} placeholder={tr('tags.searchTag')} placeholderTextColor={colors.textMuted} style={[f.input, { minHeight: 40 }]} testID="tag-manager-search" accessibilityLabel={tr('tags.searchTag')} />
                 <ScrollView style={{ flexGrow: 0, flexShrink: 1 }} contentContainerStyle={{ gap: 2 }} testID="tag-manager-list">
                   {tags.length ? tags.map(desktopRow) : <Text style={s.muted}>{tr('tags.none')}</Text>}
                 </ScrollView>
