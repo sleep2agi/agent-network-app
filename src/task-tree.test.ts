@@ -301,6 +301,12 @@ ck('#2139 旧 Hub:按标签仍是精确匹配', tagFilterAfterPick({ owners: [],
 const quickSrc = readFileSync(new URL('./TaskTags.tsx', import.meta.url), 'utf8');
 ck('#2139 接线:TaskTagFilter 用 tagFilterEntries(items, catalogTags, tagParents)', /const tags = tagFilterEntries\(items, catalogTags, tagParents\);/.test(quickSrc));
 ck('#2139 接线:不再只从 items 现拼标签', !/const tags = \[\.\.\.new Set\(items\.flatMap/.test(quickSrc));
+// admin 2026-10-24(折叠屏):标签可以有几十个,「管理标签」原来挂在横向标签条的最后一个,
+// 要横滑很久才看得到 —— 折叠屏上看起来就像「没有管理标签这个功能」。它必须钉在滚动区外面。
+const manageAt = quickSrc.indexOf('testID="task-tags-manage"');
+const scrollEnd = quickSrc.indexOf('</ScrollView>');
+ck('标签筛选:「管理标签」在横向滚动条之外(不会被几十个标签挤到最右端)', manageAt > scrollEnd && scrollEnd > 0);
+ck('标签筛选:「管理标签」仍在打开标签条时才出现(match 展开状态)', /\{open \? \(/.test(quickSrc));
 
 // ── #2139(2):pickingParent 的真实复位(取消按压不能把 blur 永久停掉)────
 const replay = (draft: string, steps: readonly ('in' | 'out' | 'blur' | 'pressB')[]) => {
