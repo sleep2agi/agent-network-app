@@ -75,6 +75,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'AppSelect.tsx': { count: 2, kinds: ['menu', 'sheet'], note: '设置的下拉选择(无输入框):桌面浮层 pos.maxHeight ≤ 320 + ScrollView flexGrow:0;手机动作面板 70%,选项 ScrollView 可收缩,「取消」是它后面的兄弟' },
   'ChangelogScreen.tsx': { count: 1, kinds: ['fullscreen'], note: '手机复制预览整屏页:预览 ScrollView flex:1,复制 / 分享按钮条是它后面的兄弟;桌面预览走 DialogFrame' },
   'XiaomiGuideModal.tsx': { count: 1, kinds: ['dialog'], note: '卡片 90%,正文 flexGrow:0 直接子节点,按钮在外' },
+  'PortalReportPanel.tsx': { count: 1, kinds: ['dialog'], keyboard: 'followup: 弹窗里有 PAT 输入框,暂用固定居中卡片 + ScrollView(maxHeight 120) 展示状态;手机上键盘可能盖住底部 OK', input: true, note: '门户上报面板:居中卡片,状态文本 ScrollView 可收缩,OK 在外' },
 };
 
 // —— 取集:src 下每个含 <Modal 的组件文件都登记了,个数对得上 ——
