@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.311:
+            - 修复：折叠屏 / 平板上「标签」筛选改成下拉面板 —— 点开可以搜索并按名字选标签，不用再在横向标签条里一直滑；「管理标签」固定在面板底部。
+
             What's new in 0.2.310:
             - 移除：0.2.308 / 0.2.309 误加进 ANet 客户端的「上报日志与 SKILLS」入口与页面（那属于另一个产品线，与 ANet 无关）。ANet 客户端已不再包含相关代码。
 
