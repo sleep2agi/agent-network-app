@@ -274,6 +274,16 @@ jobs:
             # (403 FORBIDDEN_ERROR: the resource 'appStoreVersionSubmissions' does not allow 'CREATE')。
             # 现在走 reviewSubmissions 三步:建提交 → 加 item(这一版) → submitted=true。
             echo "submitting version $version_id for App Store review (reviewSubmissions flow)"
+            # Apple 每个 app+platform 只允许一个「进行中的提交」。失败重试会在后台留下 READY_FOR_REVIEW
+            # 的旧提交(2026-10-25 连续两次 409 就是这个后果),所以先看一遍并清掉未提交的旧提交。
+            asc_get "reviewSubmissions" --data-urlencode "filter[app]=$app_id" \
+              --data-urlencode 'filter[platform]=IOS' --data-urlencode 'limit=50' > "$RUNNER_TEMP/subs.json"
+            jq -r '.data[] | "\(.id) \(.attributes.state)"' "$RUNNER_TEMP/subs.json" | sed 's/^/    existing submission: /'
+            for old_id in $(jq -r '.data[] | select(.attributes.state == "READY_FOR_REVIEW" or .attributes.state == "UNRESOLVED_ISSUES") | .id' "$RUNNER_TEMP/subs.json"); do
+              echo "    removing stale submission $old_id"
+              : > "$RUNNER_TEMP/empty.json"
+              asc_write DELETE "reviewSubmissions/$old_id" "$RUNNER_TEMP/empty.json" > /dev/null || true
+            done
             jq -n --arg app "$app_id" \
               '{data:{type:"reviewSubmissions",attributes:{platform:"IOS"},relationships:{app:{data:{type:"apps",id:$app}}}}}' > "$RUNNER_TEMP/review.json"
             review_id=$(asc_write POST "reviewSubmissions" "$RUNNER_TEMP/review.json" | jq -r '.data.id // empty')
