@@ -39,6 +39,13 @@ on:
 permissions:
   contents: read
 
+# 每发一版 modelscope-mirror 都会 dispatch 一次 iOS 构建；macOS runner 长期紧张时，旧版本会在队列里
+# 越堆越多(2026-10-25 04:00Z 实测:5 个 waiting,最老的从 18:18Z 就在等)。同一时间只留最新的一次:
+# 新构建进来就取消还没开始的旧构建 —— 旧版本已发布,那一次的 iOS 包没有任何用处。
+concurrency:
+  group: ios-build
+  cancel-in-progress: true
+
 jobs:
   ios-ipa:
     # 2026-10-21(发版速度分析):有一例 ios-build 跑了 **61.7 小时**后被 cancelled,
