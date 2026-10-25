@@ -282,9 +282,19 @@ jobs:
             # Apple **不允许** DELETE reviewSubmissions(实测 403 'does not allow DELETE'),
             # 所以旧提交只能在 App Store Connect 网页里清。这里只报告,并在提交必然失败前给出可操作的结论。
             stale=$(jq -r '[.data[] | select(.attributes.state == "READY_FOR_REVIEW" or .attributes.state == "UNRESOLVED_ISSUES") | .id] | length' "$RUNNER_TEMP/subs.json")
-            if [ "${stale:-0}" -gt 0 ]; then
-              echo "::warning::this app already has $stale open submission(s); Apple allows one per app+platform and they cannot be deleted via the API. Clear them in App Store Connect (My Apps → the version → Submission) before submitting from CI."
+            # 已经有 READY_FOR_REVIEW 的提交时,别再新建(新建后 item 加不进去:409 ENTITY_STATE_INVALID)。
+            # Apple 禁 DELETE 但允许 PATCH —— 直接把那个提交标记 submitted,内容就是刚绑好的这一版。
+            open_sub=$(jq -r '.data[] | select(.attributes.state == "READY_FOR_REVIEW") | .id' "$RUNNER_TEMP/subs.json" | head -1)
+            if [ -n "$open_sub" ]; then
+              echo "reusing existing READY_FOR_REVIEW submission $open_sub"
+              jq -n --arg rid "$open_sub" '{data:{type:"reviewSubmissions",id:$rid,attributes:{submitted:true}}}' > "$RUNNER_TEMP/review-submit.json"
+              asc_write PATCH "reviewSubmissions/$open_sub" "$RUNNER_TEMP/review-submit.json" | jq '{id: .data.id, submitted: .data.attributes.submitted, state: .data.attributes.state}'
+              SUBMIT_DONE=1
             fi
+            if [ "${stale:-0}" -gt 0 ]; then
+              echo "::warning::this app already has $stale open submission(s); Apple allows one per app+platform and they cannot be deleted via the API."
+            fi
+            if [ "${SUBMIT_DONE:-0}" != '1' ]; then
             jq -n --arg app "$app_id" \
               '{data:{type:"reviewSubmissions",attributes:{platform:"IOS"},relationships:{app:{data:{type:"apps",id:$app}}}}}' > "$RUNNER_TEMP/review.json"
             review_id=$(asc_write POST "reviewSubmissions" "$RUNNER_TEMP/review.json" | jq -r '.data.id // empty')
@@ -295,6 +305,7 @@ jobs:
             [ -n "$item_id" ] || { echo "::error::could not add version $version_id to review submission $review_id"; exit 1; }
             jq -n --arg rid "$review_id" '{data:{type:"reviewSubmissions",id:$rid,attributes:{submitted:true}}}' > "$RUNNER_TEMP/review-submit.json"
             asc_write PATCH "reviewSubmissions/$review_id" "$RUNNER_TEMP/review-submit.json" | jq '{id: .data.id, submitted: .data.attributes.submitted, state: .data.attributes.state}'
+            fi
           else
             echo "submission skipped (submit_for_review=false)"
           fi
