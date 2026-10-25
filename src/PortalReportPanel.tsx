@@ -11,7 +11,7 @@ import { colors, radius, spacing, type as typeScale } from './theme';
 import { useModalSafePadding } from './safe-area-runtime';
 import { APP_VERSION } from './version';
 import {
-  buildBody, clientInfo, describeFailure, headersFor, PORTAL_BASE, reportPath, redactLog,
+  buildBody, clientInfo, describeFailure, headersFor, normalizeBase, PORTAL_BASE, reportPath, redactLog,
   type LogItem, type ReportAuth, type ReportKind,
 } from './portal-report';
 
@@ -22,6 +22,9 @@ export default function PortalReportPanel({ open, onClose, lastFatal }: { open: 
   // 主题在 import 之后才定,所以样式表按组件挂载时构建(与 MobileNavRail 同一约定)。
   const s = useMemo(makeStyles, []);
   const [pat, setPat] = useState('');
+  // 门户域名在 TM 内网解析(公网 NXDOMAIN,2026-10-25 实测),所以地址要能改:内网/测试环境用一个 host,
+  // 正式分发时保持默认即可。
+  const [base, setBase] = useState(PORTAL_BASE);
   const [status, setStatus] = useState<Status>({ kind: 'idle' });
 
   const send = async (which: ReportKind) => {
@@ -36,7 +39,8 @@ export default function PortalReportPanel({ open, onClose, lastFatal }: { open: 
     const { body, tooBig, dropped } = buildBody(which, clientInfo(Platform.OS, 'zh'), items);
     if (tooBig) { setStatus({ kind: 'err', text: tr('portalReport.tooBig') }); return; }
     try {
-      const res = await fetch(`${PORTAL_BASE}${reportPath(which)}`, {
+      const root = normalizeBase(base);
+      const res = await fetch(`${root}${reportPath(which)}`, {
         method: 'POST',
         headers: headersFor(auth),
         body: JSON.stringify(body),
@@ -56,6 +60,16 @@ export default function PortalReportPanel({ open, onClose, lastFatal }: { open: 
         <View style={s.card} testID="portal-report-panel">
           <Text style={s.title}>{tr('portalReport.title')}</Text>
           <Text style={s.hint}>{tr('portalReport.patHint')}</Text>
+          <TextInput
+            value={base}
+            onChangeText={setBase}
+            placeholder={PORTAL_BASE}
+            placeholderTextColor={colors.textMuted}
+            autoCapitalize="none"
+            autoCorrect={false}
+            style={s.input}
+            testID="portal-report-base"
+          />
           <TextInput
             value={pat}
             onChangeText={setPat}
