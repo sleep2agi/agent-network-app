@@ -73,7 +73,15 @@ try {
     await page.getByTestId('req-tags').scrollIntoViewIfNeeded();
     await page.screenshot({ path: `${out}/${name}-tag-editor.png` });
     await page.getByTestId('req-detail-close').click();
-    if (name === 'desktop') await page.getByTestId('task-filter-tag-Docs').click();
+    if (name === 'desktop') {
+      // admin 2026-10-25:左栏标签组**默认折叠**了(标签太多)。先用组头把它展开,
+      // 再按标签筛 —— 断言本身不变,只是多了「展开」这一步动作。
+      if (!(await page.getByTestId('task-filter-tag-Docs').count())) {
+        await page.getByTestId('task-side-tags-header').click();
+        await page.getByTestId('task-filter-tag-Docs').waitFor({ timeout: 10000 });
+      }
+      await page.getByTestId('task-filter-tag-Docs').click();
+    }
     else { await page.getByTestId('task-tags-filter').click(); await page.getByTestId('task-tags-pick-Docs').click(); }
     ck(`${name} filters card`, await page.getByText('Ship the onboarding improvements', { exact: true }).count() === 0 && await page.getByText('Review API documentation', { exact: true }).count() === 1);
     await page.close();
