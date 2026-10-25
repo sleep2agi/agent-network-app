@@ -287,9 +287,19 @@ jobs:
             open_sub=$(jq -r '.data[] | select(.attributes.state == "READY_FOR_REVIEW") | .id' "$RUNNER_TEMP/subs.json" | head -1)
             if [ -n "$open_sub" ]; then
               echo "reusing existing READY_FOR_REVIEW submission $open_sub"
-              jq -n --arg rid "$open_sub" '{data:{type:"reviewSubmissions",id:$rid,attributes:{submitted:true}}}' > "$RUNNER_TEMP/review-submit.json"
-              asc_write PATCH "reviewSubmissions/$open_sub" "$RUNNER_TEMP/review-submit.json" | jq '{id: .data.id, submitted: .data.attributes.submitted, state: .data.attributes.state}'
-              SUBMIT_DONE=1
+              # 空提交直接 submitted=true 会 409 RELATIONSHIP.REQUIRED(App must have an approved
+              # appStoreVersions);所以先把这一版作为 item 加进这个已存在的提交,再提交。
+              jq -n --arg rid "$open_sub" --arg vid "$version_id" \
+                '{data:{type:"reviewSubmissionItems",relationships:{reviewSubmission:{data:{type:"reviewSubmissions",id:$rid}},appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/review-item.json"
+              item_id=$(asc_write POST "reviewSubmissionItems" "$RUNNER_TEMP/review-item.json" | jq -r '.data.id // empty')
+              if [ -n "$item_id" ]; then
+                echo "added version $version_id to existing submission $open_sub"
+                jq -n --arg rid "$open_sub" '{data:{type:"reviewSubmissions",id:$rid,attributes:{submitted:true}}}' > "$RUNNER_TEMP/review-submit.json"
+                asc_write PATCH "reviewSubmissions/$open_sub" "$RUNNER_TEMP/review-submit.json" | jq '{id: .data.id, submitted: .data.attributes.submitted, state: .data.attributes.state}'
+                SUBMIT_DONE=1
+              else
+                echo "::warning::could not add the version to the existing submission; falling back to a new one"
+              fi
             fi
             if [ "${stale:-0}" -gt 0 ]; then
               echo "::warning::this app already has $stale open submission(s); Apple allows one per app+platform and they cannot be deleted via the API."
