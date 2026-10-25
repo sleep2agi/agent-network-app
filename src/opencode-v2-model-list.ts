@@ -39,9 +39,9 @@ export function modelIdsFromCatalog(snapshot: OpenCodeCatalogSnapshot | null | u
  * 不排序、不补内置、不猜 provider 是否可用（那是服务器的事）。
  */
 export function reportedCatalogModels(
-  catalog: { models?: unknown } | null | undefined,
+  catalog: string[] | null | undefined,
 ): string[] {
-  const raw = Array.isArray(catalog?.models) ? catalog!.models : [];
+  const raw = Array.isArray(catalog) ? catalog : [];
   const out: string[] = [];
   const seen = new Set<string>();
   for (const value of raw) {

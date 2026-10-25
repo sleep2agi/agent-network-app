@@ -23,11 +23,11 @@ ck('not_opencode_v2 is readable', catalogErrorText('not_opencode_v2').includes('
 
 // #2293 —— 节点自报清单：只保留 provider/model 形状，去重保序，不补内置。
 ck('reported catalog: 保留 provider/model、去重、保序',
-  JSON.stringify(reportedCatalogModels({ models: ['deepseek/deepseek-flash', 'deepseek/deepseek-flash', 'opencode/mimo-v2.6-flash-free'] }))
+  JSON.stringify(reportedCatalogModels(['deepseek/deepseek-flash', 'deepseek/deepseek-flash', 'opencode/mimo-v2.6-flash-free']))
   === JSON.stringify(['deepseek/deepseek-flash', 'opencode/mimo-v2.6-flash-free']));
 ck('reported catalog: 不像模型 id 的一律丢掉（空串 / 没有斜杠 / 非字符串 / 超长）',
-  reportedCatalogModels({ models: ['', 'deepseek', 7, null, 'a/'.padEnd(500, 'x')] }).length === 0);
-ck('reported catalog: 缺字段/旧 Hub → 空数组（不是内置表）', reportedCatalogModels(null).length === 0 && reportedCatalogModels({}).length === 0);
+  reportedCatalogModels(['', 'deepseek', 7 as unknown as string, null as unknown as string, 'a/'.padEnd(500, 'x')]).length === 0);
+ck('reported catalog: 缺字段/旧 Hub → 空数组（不是内置表）', reportedCatalogModels(null).length === 0 && reportedCatalogModels([]).length === 0);
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);
