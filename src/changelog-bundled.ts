@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.306:",
+  "- 新增：设置 → 外观 里可以选折叠屏 / 平板左侧导航的形态 —— 「纯图标」（默认，与桌面端一致，长按看名字）或「图标 + 文字」。",
+  "",
   "What's new in 0.2.305:",
   "- 调整：「Agent 组织架构」页不再新建/改名/调整部门层级 —— 那棵树与人员是同一棵，改它会影响人员组织架构。部门结构统一在「用户管理 → 成员与部门」维护；这一页只管 Agent 属于哪个部门（批量归入照旧）。",
   "",

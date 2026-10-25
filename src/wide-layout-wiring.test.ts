@@ -50,8 +50,9 @@ ck('two-pane list width is computed from the area beside the rail (and the dragg
 ck('pane area = window minus the rail that is drawn and the insets',
   app.includes('const railWidth = iconsOnlyRail ? iconRailWidth(uiScale().densityFactor) : mobileRailWidth(uiScale().densityFactor);')
   && app.includes('const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right, railWidth) : width;'));
-ck('the rail variant is decided once, from the window width, and drives both the width and the component',
-  app.includes('const iconsOnlyRail = railShown && railIconsOnly(width);') && app.includes('iconsOnly={iconsOnlyRail}'));
+// 0.2.306: 形态由「窗口宽度 + 用户偏好」共同决定（设置 → 外观 可切回图标+文字）。
+ck('the rail variant is decided once, from the window width and the rail preference, and drives the component',
+  app.includes("const iconsOnlyRail = railShown && railIconsOnly(width) && railLabels !== 'labels';") && app.includes('iconsOnly={iconsOnlyRail}'));
 // Insets: the rail takes the left one (its background runs to the edge), the content the right one.
 ck('rail gets the left and bottom insets', /<MobileNavRail[\s\S]*?insetLeft=\{insets\.left\}[\s\S]*?insetBottom=\{tabBarInset\}[\s\S]*?\/>/.test(app));
 ck('content beside the rail honours the right inset (both sides on the phone stack)', app.includes('railShown ? { paddingRight: insets.right } : { paddingLeft: insets.left, paddingRight: insets.right }'));

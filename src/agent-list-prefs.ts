@@ -13,9 +13,13 @@ import { parseStoredListWidth } from './wide-layout';
 export const LIST_WIDTH_KEY = 'agent_list_pane_width_v1';
 export const COLLAPSED_KEY = 'agent_list_collapsed_v1';
 export const CONVERSATION_TAB_KEY = 'agent_list_tab_v1';
+// 折叠屏 / 平板左侧导航的形态:纯图标(对齐桌面,0.296 起的默认)还是「图标 + 文字」。
+// admin 2026-10-24 问「跟桌面端不太一样」,但这是口味问题,给个开关比替他决定好。
+export const RAIL_LABELS_KEY = 'agent_list_rail_labels_v1';
+export type RailLabels = 'icons' | 'labels';
 const PREFS_FILE = () => `${FileSystem.documentDirectory}agent_list_prefs_v1.json`;
 
-type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string };
+type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string };
 
 const webStorage = (): Storage | null => {
   try {
@@ -57,6 +61,27 @@ function writeKey(key: keyof Prefs, value: string): Promise<void> {
   nativeWrite = next;
   return next;
 }
+
+export const parseRailLabels = (v: string | null | undefined): RailLabels => (v === 'labels' ? 'labels' : 'icons');
+export const loadRailLabels = async (): Promise<RailLabels> => {
+  const v = parseRailLabels(await readKey(RAIL_LABELS_KEY));
+  if (v !== railLabelsMemo) { railLabelsMemo = v; railListeners.forEach(fn => fn(v)); }
+  return v;
+};
+export const saveRailLabels = (v: RailLabels): Promise<void> => writeKey(RAIL_LABELS_KEY, parseRailLabels(v));
+
+// 进程内的小 store(与 ui-scale 同款做法):设置页改完,App 里那条 rail 立刻跟着变,不用重挂整棵树。
+let railLabelsMemo: RailLabels = 'icons';
+const railListeners = new Set<(v: RailLabels) => void>();
+export const railLabelsNow = (): RailLabels => railLabelsMemo;
+export const onRailLabelsChange = (fn: (v: RailLabels) => void): (() => void) => { railListeners.add(fn); return () => { railListeners.delete(fn); }; };
+export const setRailLabels = (v: RailLabels): void => {
+  const next = parseRailLabels(v);
+  if (next === railLabelsMemo) { void saveRailLabels(next); return; }
+  railLabelsMemo = next;
+  railListeners.forEach(fn => fn(next));
+  void saveRailLabels(next);
+};
 
 /** null = never saved (use LIST_PANE_DEFAULT_WIDTH). */
 export const loadListPaneWidth = async (): Promise<number | null> => parseStoredListWidth(await readKey(LIST_WIDTH_KEY));
