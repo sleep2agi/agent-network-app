@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { nodeStatusPath } from './api';
-import { nodeInfoFacts, opencodeServerLabel, resumeSessionId, runtimeLabel, safeServerLabel, safeServerUrl } from './node-info';
+import { nodeInfoFacts, opencodeFlagsOf, opencodeServerLabel, resumeSessionId, runtimeLabel, safeServerLabel, safeServerUrl } from './node-info';
 import { factText, headerChips } from './node-page-model';
 
 let passed = 0;
@@ -115,5 +115,15 @@ check('共用 OpenCode Server：有模式下没端点 → 明写端口未上报'
 check('共用 OpenCode Server：报了端点就显示',
   opencodeServerLabel({ opencodeMode: 'copresence' }, 'http://127.0.0.1:4096') === '共享（copresence） · http://127.0.0.1:4096');
 check('OpenCode Server：两者都没有 → 不出现这一行', opencodeServerLabel({}, undefined) === null);
+
+// #2293 —— /api/nodes 不带 config_snapshot，代际/模式改看顶层标量；老 Hub 仍看快照。
+check('opencodeFlagsOf：顶层标量优先（真机路径）',
+  JSON.stringify(opencodeFlagsOf({ node_id: 'n_1', opencode_generation: 'v2', opencode_mode: 'copresence' }))
+  === JSON.stringify({ opencodeGeneration: 'v2', opencodeMode: 'copresence' }));
+check('opencodeFlagsOf：没有顶层标量时退回快照（旧 Hub / 夹具）',
+  JSON.stringify(opencodeFlagsOf({ node_id: 'n_1', config_snapshot: { flags: { opencodeGeneration: 'v1' } } }))
+  === JSON.stringify({ opencodeGeneration: 'v1' }));
+check('opencodeFlagsOf：两处都没有 → undefined（不编代际）',
+  opencodeFlagsOf({ node_id: 'n_1' }) === undefined);
 
 console.log(`node info: ${passed}/${passed} checks passed`);

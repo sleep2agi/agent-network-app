@@ -97,10 +97,10 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
     { label: '节点类型', value: node?.role ?? node?.config_snapshot?.role },
     // admin 2026-10-25：「OpenCodeV2 Runtime 看不出来」——代际就在 config_snapshot.flags 里，
     // 这里直接拼进 Runtime 值，头部小标签与「模型与运行时」摘要卡会一起显示。
-    { label: 'Runtime', value: runtimeLabel(session.runtime ?? node?.runtime ?? session.agent, node?.config_snapshot?.flags) },
+    { label: 'Runtime', value: runtimeLabel(session.runtime ?? node?.runtime ?? session.agent, opencodeFlagsOf(node)) },
     // 共用的是哪台 OpenCode Server / 哪个端口：节点自己才知道（loopback serve）。
     // 目前节点还没上报 → 明写「端口未上报」，不猜、不编。
-    { label: 'OpenCode Server', value: opencodeServerLabel(node?.config_snapshot?.flags, node?.config_snapshot?.opencode_server) },
+    { label: 'OpenCode Server', value: opencodeServerLabel(opencodeFlagsOf(node), node?.opencode_server ?? node?.config_snapshot?.opencode_server) },
     { label: 'Agent', value: session.agent },
     { label: '模型', value: session.model ?? node?.model ?? node?.config_snapshot?.model },
     { label: '版本', value: session.version },
@@ -109,6 +109,19 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
     { label: 'session-id', value: resumeSessionId(session.session_id), wrap: true, testID: 'node-runtime-session-id' },
     { label: '状态', value: session.status },
   ];
+}
+
+/**
+ * #2293 —— `/api/nodes` 不带整个 config_snapshot（终端 #312 的约定），所以代际/模式
+ * 改从顶层标量 `opencode_generation` / `opencode_mode` 读；老 Hub 或测试夹具只给
+ * 快照时退回快照。合并成一个「像 flags 的对象」，继续复用下面两个纯函数。
+ */
+export function opencodeFlagsOf(node: HubNode | null | undefined): Record<string, unknown> | undefined {
+  const snapshot = node?.config_snapshot?.flags;
+  const generation = node?.opencode_generation ?? (typeof snapshot?.opencodeGeneration === 'string' ? snapshot.opencodeGeneration : undefined);
+  const mode = node?.opencode_mode ?? (typeof snapshot?.opencodeMode === 'string' ? snapshot.opencodeMode : undefined);
+  if (!generation && !mode) return snapshot;
+  return { ...(snapshot ?? {}), ...(generation ? { opencodeGeneration: generation } : {}), ...(mode ? { opencodeMode: mode } : {}) };
 }
 
 /** Runtime 值的展示：OpenCode 代际从 config_snapshot.flags.opencodeGeneration 读，读不到就只显示 runtime。 */

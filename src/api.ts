@@ -311,6 +311,16 @@ export interface HubNode {
    * 旧 Hub 没有这一格 ⇒ undefined（当作「没上报过」，不是「这台机器没有模型」）。
    */
   opencode_catalog?: string[] | null;
+  /**
+   * #2293 —— `/api/nodes` 从快照里放出来的三个标量（**不是**整个快照）：
+   * 代际（v1/v2）、模式（copresence/…）、OpenCode serve 的 loopback 端点。
+   * 为什么需要：`/api/nodes` 刻意不带 `config_snapshot`（见终端 #312 约定），
+   * 于是 PR #1092 的「Runtime · V2」和「OpenCode Server」在真机上读不到值。
+   * 旧 Hub 没有 ⇒ undefined（不显示，也不编）。
+   */
+  opencode_generation?: 'v1' | 'v2' | null;
+  opencode_mode?: string | null;
+  opencode_server?: string | null;
 }
 
 /** GET /api/nodes — the registered-node list, used for avatar resolution.
