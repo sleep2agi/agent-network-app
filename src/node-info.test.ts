@@ -1,7 +1,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { nodeStatusPath } from './api';
-import { nodeInfoFacts, resumeSessionId, safeServerLabel, safeServerUrl } from './node-info';
+import { nodeInfoFacts, opencodeServerLabel, resumeSessionId, runtimeLabel, safeServerLabel, safeServerUrl } from './node-info';
 import { factText, headerChips } from './node-page-model';
 
 let passed = 0;
@@ -104,5 +104,16 @@ check('read-only details hide mutation surfaces except overview restart/stop (bo
 check('details use network-scoped full status rather than the list projection', detail.includes('fetchNodeStatus(cfg, alias)'));
 check('model & runtime summary reads modelSectionFacts (session-id beside 版本)', detail.includes('const runtimeFacts = modelSectionFacts(facts);') && detail.includes('runtimeFacts.map(fact => <FactCell'));
 check('fact values stay selectable; a wrapped session-id is not ellipsized', detail.includes('selectable') && detail.includes('...(fact.wrap ? {} : { numberOfLines: 2 })') && detail.includes("overflowWrap: 'anywhere'"));
+
+// admin 2026-10-25：「OpenCodeV2 Runtime 看不出来」+「没显示是哪个共享 OpenCode Server 的端口」
+check('Runtime 带代际：opencode + v2 → 显示 · V2', runtimeLabel('opencode-cli', { opencodeGeneration: 'v2' }) === 'opencode-cli · V2');
+check('Runtime 带代际：v1 → · V1', runtimeLabel('opencode-sdk', { opencodeGeneration: 'v1' }) === 'opencode-sdk · V1');
+check('Runtime 没报代际就只显示 runtime', runtimeLabel('opencode-cli', {}) === 'opencode-cli');
+check('非 opencode 运行时不被加尾巴', runtimeLabel('codex-tui', { opencodeGeneration: 'v2' }) === 'codex-tui');
+check('共用 OpenCode Server：有模式下没端点 → 明写端口未上报',
+  opencodeServerLabel({ opencodeMode: 'copresence' }, undefined) === '共享（copresence） · 端口未上报');
+check('共用 OpenCode Server：报了端点就显示',
+  opencodeServerLabel({ opencodeMode: 'copresence' }, 'http://127.0.0.1:4096') === '共享（copresence） · http://127.0.0.1:4096');
+check('OpenCode Server：两者都没有 → 不出现这一行', opencodeServerLabel({}, undefined) === null);
 
 console.log(`node info: ${passed}/${passed} checks passed`);
