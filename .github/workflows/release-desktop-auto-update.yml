@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.312:
+            - 改进：折叠屏/平板上「标签」筛选的下拉面板，点面板外面就会关掉（和「项目」「状态」这些下拉一致）。
+
             What's new in 0.2.311:
             - 修复：折叠屏 / 平板上「标签」筛选改成下拉面板 —— 点开可以搜索并按名字选标签，不用再在横向标签条里一直滑；「管理标签」固定在面板底部。
 
