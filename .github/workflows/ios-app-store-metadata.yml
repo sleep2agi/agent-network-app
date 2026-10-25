@@ -270,10 +270,20 @@ jobs:
           echo "reviewer notes updated"
 
           if [ "$SUBMIT_FOR_REVIEW" = 'true' ]; then
-            echo "submitting version $version_id for App Store review"
-            jq -n --arg vid "$version_id" \
-              '{data:{type:"appStoreVersionSubmissions",relationships:{appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/submission.json"
-            asc_write POST "appStoreVersionSubmissions" "$RUNNER_TEMP/submission.json" | jq '{id: .data.id, submitted: .data.attributes.submitted}'
+            # 2026-10-25 实测:老的 POST /v1/appStoreVersionSubmissions 已被 Apple 下线
+            # (403 FORBIDDEN_ERROR: the resource 'appStoreVersionSubmissions' does not allow 'CREATE')。
+            # 现在走 reviewSubmissions 三步:建提交 → 加 item(这一版) → submitted=true。
+            echo "submitting version $version_id for App Store review (reviewSubmissions flow)"
+            jq -n --arg app "$app_id" \
+              '{data:{type:"reviewSubmissions",attributes:{platform:"IOS"},relationships:{app:{data:{type:"apps",id:$app}}}}}' > "$RUNNER_TEMP/review.json"
+            review_id=$(asc_write POST "reviewSubmissions" "$RUNNER_TEMP/review.json" | jq -r '.data.id // empty')
+            [ -n "$review_id" ] || { echo "::error::could not create a review submission"; exit 1; }
+            jq -n --arg rid "$review_id" --arg vid "$version_id" \
+              '{data:{type:"reviewSubmissionItems",relationships:{reviewSubmission:{data:{type:"reviewSubmissions",id:$rid}},appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/review-item.json"
+            item_id=$(asc_write POST "reviewSubmissionItems" "$RUNNER_TEMP/review-item.json" | jq -r '.data.id // empty')
+            [ -n "$item_id" ] || { echo "::error::could not add version $version_id to review submission $review_id"; exit 1; }
+            jq -n --arg rid "$review_id" '{data:{type:"reviewSubmissions",id:$rid,attributes:{submitted:true}}}' > "$RUNNER_TEMP/review-submit.json"
+            asc_write PATCH "reviewSubmissions/$review_id" "$RUNNER_TEMP/review-submit.json" | jq '{id: .data.id, submitted: .data.attributes.submitted, state: .data.attributes.state}'
           else
             echo "submission skipped (submit_for_review=false)"
           fi
