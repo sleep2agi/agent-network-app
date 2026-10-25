@@ -184,6 +184,12 @@ for (const theme of ['light', 'dark']) {
   // can_manage=false:标签行右键没有菜单
   try {
     ({ ctx, page } = await open({ w: 1320, h: 754, kind: 'desktop' }, theme, false));
+    // 标签组默认折叠（admin 2026-10-25）：先展开，再验「没有管理权限就没有右键菜单」。
+    if (!(await box(page, tid('task-filter-tag-UI')))) {
+      await page.locator(tid('task-side-tags-header')).first().click();
+      await page.locator(tid('task-filter-tag-UI')).first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(200);
+    }
     await rightClick(page, tid('task-filter-tag-UI'));
     record(vp, 'gating tag', { noMenu: !(await box(page, tid('side-menu'))), noRename: !(await box(page, tid('side-menu-rename'))) });
     await ctx.close();
