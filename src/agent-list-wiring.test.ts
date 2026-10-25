@@ -95,3 +95,4 @@ ck('unknown / missing value falls back to icons', prefs.includes("v === 'labels'
 ck('App gates icons-only on the preference', app.includes("railShown && railIconsOnly(width) && railLabels !== 'labels'"));
 const scale = readFileSync(new URL('./UiScaleSettings.tsx', import.meta.url), 'utf8');
 ck('设置 → 外观 has the rail row', scale.includes('testID="settings-rail-labels-row"') && scale.includes("onPick={setRailLabels}"));
+ck('the rail row only shows where a rail exists (>=900 dp), not on desktop/phone', scale.includes('const railRowApplies = railIconsOnly(winWidth);') && scale.includes('{railRowApplies ?') && !/rnil/.test(scale));

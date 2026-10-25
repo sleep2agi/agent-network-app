@@ -7,13 +7,14 @@ import { localizedScaleSummary } from './i18n-settings-presentation';
 // option re-keys the whole tree (App.tsx), so the preview below — built from the same Text /
 // Ionicons / AliasAvatar / ds() as the real screens — is always rendered at the chosen scale.
 import { useSyncExternalStore } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing } from './theme';
 import { saveUiScalePrefs } from './storage';
 import { onRailLabelsChange, railLabelsNow, setRailLabels } from './agent-list-prefs';
+import { railIconsOnly } from './nav-chrome';
 import './i18n-rail';
 import { agentRowGeometry } from './agent-row-model';
 import {
@@ -83,6 +84,10 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
   useSyncExternalStore(onUiScalePrefsChange, uiScalePrefsKey, uiScalePrefsKey);
   // 折叠屏 / 平板左侧导航:纯图标(默认,对齐桌面)还是「图标 + 文字」。
   const rail = useSyncExternalStore(onRailLabelsChange, railLabelsNow, railLabelsNow);
+  // 这一项只在「会出现左侧 rail」的宽度上有意义(折叠屏/平板 ≥900 dp)。桌面端 rail 恒为纯图标、
+  // 手机上根本没有 rail,在这里显示只会让人困惑。
+  const winWidth = useWindowDimensions().width;
+  const railRowApplies = railIconsOnly(winWidth);
   const r = uiScale();
   const wide = uiScaleLayoutWide();
   const summary = localizedScaleSummary(r, wide);
@@ -110,7 +115,7 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
           <Segmented label={tr('settings.copy.100')} options={DENSITY_OPTIONS} selectedKey={r.density} isDefault={r.densityIsDefault} s={s} testPrefix="settings-density" onPick={density => persistUiScale({ density })} />
         </View>
       ) : null}
-      <View style={[s.row, s.themeRow]} testID="settings-rail-labels-row">
+      {railRowApplies ? <View style={[s.row, s.themeRow]} testID="settings-rail-labels-row">
         <View style={[s.rowCopy, s.themeRowCopy]}>
           <Text style={s.rowLabel}>{tr('railForm.title')}</Text>
           <Text style={s.rowHint}>{tr('railForm.hint')}</Text>
@@ -124,7 +129,7 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
           testPrefix="settings-rail-labels"
           onPick={setRailLabels}
         />
-      </View>
+      </View> : null}
       <UiScalePreview />
       <View style={[s.row, { justifyContent: 'flex-end' }]}>
         <Pressable
