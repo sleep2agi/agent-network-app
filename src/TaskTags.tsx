@@ -21,9 +21,10 @@ export function TaskTagFilter() {
   useTranslation();
   const [open, setOpen] = useState(false);
   const [query, setQuery] = useState('');
-  // 折叠屏/平板(≥900 dp):横向标签条太窄、要一直横滑,admin 2026-10-25「这边做不了标签筛选」。
-  // 宽屏改成下拉面板:搜索 + 竖排列表 + 管理标签,和「项目」下拉同一套交互。
-  const wide = railIconsOnly(useWindowDimensions().width);
+  // 双栏(≥700 dp,即折叠屏展开/平板/手机横屏)都用下拉面板:admin 2026-10-25 看板截图里
+  // 「全部标签 | ●TMWork客户端(被截断) | 管理标签」—— 横向条在双栏里会被切断,而且和桌面端不一致。
+  // 桌面端的标签筛选是竖排列表,这里对齐桌面。
+  const wide = useWindowDimensions().width >= 700;
   const items = useTaskBoard(s => s.items), filter = useTaskBoard(s => s.filter);
   const colorsOf = useTaskBoard(s => s.tagCatalog?.colors);
   const tagParents = useTaskBoard(s => s.tagCatalog?.parents ?? null);

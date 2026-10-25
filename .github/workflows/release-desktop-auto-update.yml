@@ -525,6 +525,10 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.313:
+            - 修复：折叠屏 / 平板上（含看板视图）的标签筛选统一改成桌面端那种竖排列表 + 搜索，横向标签条不再被截断。
+            - 改进：折叠屏 / 平板左侧导航再收窄一点（56 dp），内容区更宽。
+
             What's new in 0.2.312:
             - 改进：折叠屏/平板上「标签」筛选的下拉面板，点面板外面就会关掉（和「项目」「状态」这些下拉一致）。
 
