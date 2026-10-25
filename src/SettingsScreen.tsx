@@ -32,6 +32,7 @@ import { loadNotifySettings, mutedAgents, notifyProfileKey, saveNotifySettings, 
 import { permissionOnUserAction, type PermissionStatus } from './mobile-notify-model';
 import { dndAccessGranted, mobileNotificationsSupported, notificationPermission, openAppNotificationSettings, openDndAccessSettings, requestNotificationPermission } from './mobile-notifications';
 import NotifyDiagnosticsPanel from './NotifyDiagnosticsPanel';
+import PortalReportPanel from './PortalReportPanel';
 import { getNotifyDiagnostics, subscribeNotifyDiagnostics } from './notify-diagnostics';
 import { keepAliveAvailable, keepAliveLastError, keepAliveRunning, subscribeKeepAlive } from './keep-alive';
 import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runtime';
@@ -243,6 +244,7 @@ export default function SettingsScreen({
   const [wideDevices, setWideDevices] = useState(false);
   // 宽屏「更新日志」:关于右栏里推进去的一页(手机是关于子页里的三级页 detail = changelog)。
   const [wideChangelog, setWideChangelog] = useState(false);
+  const [portalReport, setPortalReport] = useState(false);
   // 修改密码(#653):手机是账号子页里的三级页(detail = changePassword);宽屏是账号右栏里推进去的一页。
   const [widePassword, setWidePassword] = useState(initialDetail === 'changePassword');
   const weakPassword = useWeakPassword(cfg);
@@ -1198,6 +1200,7 @@ export default function SettingsScreen({
             </View>
           ) : null}
 
+          <PortalReportPanel open={portalReport} onClose={() => setPortalReport(false)} lastFatal={lastFatal ? fatalSummary(lastFatal) : null} />
           {sectionsToRender.includes('about') && !showWideChangelog ? (
             <View style={sectionStyle}>
               {heading('about')}
@@ -1232,6 +1235,12 @@ export default function SettingsScreen({
                     </SettingsControlRow>
                   );
                 })() : null}
+                <SettingsRow
+                  label={tr('portalReport.row')}
+                  subtitle={tr('portalReport.rowHint')}
+                  onPress={() => setPortalReport(true)}
+                  testID="settings-portal-report-row"
+                />
                 {show('about', 'changelog') ? (
                   <SettingsRow label={tr('changelog.title')} subtitle={tr('changelog.rowHint')} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} testID="settings-changelog-row" />
                 ) : null}

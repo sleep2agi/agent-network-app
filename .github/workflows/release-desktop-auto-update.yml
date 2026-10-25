@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.308:
+            - 新增：设置 → 关于 里多了「上报日志与 SKILLS」——可以匿名上传，也可以填 PAT 让门户按设备归因。上报内容只含版本、平台与脱敏后的诊断摘要，token 与消息正文不会上传。
+
             What's new in 0.2.307:
             - 修复：「折叠屏 / 平板左侧导航」这个设置项只在真会出现左侧导航的宽度（折叠屏展开、平板）显示，桌面和手机上不再出现那个用不上的开关。
 
