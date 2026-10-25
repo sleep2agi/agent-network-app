@@ -145,6 +145,12 @@ for (const theme of ['light', 'dark']) {
     }, { patches: JSON.stringify(patches), shown: shown?.text });
     // ── 标签:Esc 取消 ──
     const tagSel = tid('task-filter-tag-UI');
+    // admin 2026-10-25:左栏标签组**默认折叠**。先展开再右键(断言不变)。
+    if (!(await box(page, tagSel))) {
+      await page.locator(tid('task-side-tags-header')).first().click();
+      await page.locator(tagSel).first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(200);
+    }
     await rightClick(page, tagSel);
     const tItems = await menuItems(page);
     await page.locator(tid('side-menu-rename')).first().click();
