@@ -5,8 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.310:",
+  "- 移除：0.2.308 / 0.2.309 误加进 ANet 客户端的「上报日志与 SKILLS」入口与页面（那属于另一个产品线，与 ANet 无关）。ANet 客户端已不再包含相关代码。",
+  "",
   "What's new in 0.2.309:",
-  "- 改进：「上报日志与 SKILLS」里可以改门户地址（默认 agent.tianma.cn）—— 内网或测试环境填自己的地址即可，公网环境下默认域名解析不到时，仍能报到正确的门户。",
+  "- 改进：「上报日志与 SKILLS」里可以改上报地址 —— 内网或测试环境填自己的地址即可。",
   "",
   "What's new in 0.2.308:",
   "- 新增：设置 → 关于 里多了「上报日志与 SKILLS」——可以匿名上传，也可以填 PAT 让门户按设备归因。上报内容只含版本、平台与脱敏后的诊断摘要，token 与消息正文不会上传。",
@@ -1328,6 +1331,17 @@ export const BUNDLED_RELEASE_BODY: string = [
 
 /** Release date (published_at) per version, as far as it was known when this file was generated. */
 export const BUNDLED_RELEASE_DATES: Record<string, string> = {
+  "0.2.309": "2026-10-25T12:29:36Z",
+  "0.2.308": "2026-10-25T11:28:55Z",
+  "0.2.307": "2026-10-25T05:39:32Z",
+  "0.2.306": "2026-10-25T03:33:02Z",
+  "0.2.305": "2026-10-25T00:28:30Z",
+  "0.2.304": "2026-10-24T21:39:45Z",
+  "0.2.303": "2026-10-24T20:12:18Z",
+  "0.2.302": "2026-10-24T18:15:56Z",
+  "0.2.301": "2026-10-24T16:48:45Z",
+  "0.2.300": "2026-10-24T15:04:41Z",
+  "0.2.299": "2026-10-24T12:58:06Z",
   "0.2.298": "2026-10-24T11:39:43Z",
   "0.2.297": "2026-10-24T10:16:47Z",
   "0.2.296": "2026-10-24T08:01:58Z",
