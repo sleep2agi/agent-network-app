@@ -8,7 +8,14 @@
 //   · **不报** token、消息正文、私钥、文件内容 —— redactDiagnostics/redactSkill 只放白名单字段。
 import { APP_VERSION } from './version';
 
+// TM 内网域名:公网解析失败(NXDOMAIN,2026-10-25 实测),所以面板里允许改地址。
 export const PORTAL_BASE = 'https://agent.tianma.cn';
+
+/** 把用户填的地址规整成可拼接的 base(去尾斜杠,空值回退默认)。 */
+export const normalizeBase = (raw: string | null | undefined): string => {
+  const v = String(raw ?? '').trim().replace(/\/+$/, '');
+  return v || PORTAL_BASE;
+};
 export const REPORT_LOG_PATH = '/api/report/logs';
 export const REPORT_SKILLS_PATH = '/api/report/skills';
 

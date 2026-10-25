@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.309:
+            - 改进：「上报日志与 SKILLS」里可以改门户地址（默认 agent.tianma.cn）—— 内网或测试环境填自己的地址即可，公网环境下默认域名解析不到时，仍能报到正确的门户。
+
             What's new in 0.2.308:
             - 新增：设置 → 关于 里多了「上报日志与 SKILLS」——可以匿名上传，也可以填 PAT 让门户按设备归因。上报内容只含版本、平台与脱敏后的诊断摘要，token 与消息正文不会上传。
 

@@ -1,5 +1,5 @@
 // 门户上报的纯逻辑:脱敏、两种鉴权、条数/体积上限。run: bun src/portal-report.test.ts
-import { buildBody, capItems, clientInfo, describeFailure, headersFor, MAX_ITEMS_PER_BATCH, redactLog, redactSkill } from './portal-report';
+import { buildBody, capItems, clientInfo, describeFailure, headersFor, MAX_ITEMS_PER_BATCH, normalizeBase, PORTAL_BASE, redactLog, redactSkill } from './portal-report';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log(`PASS: ${n}`); } else console.log(`FAIL: ${n}`); };
@@ -34,6 +34,11 @@ ck('401/403 → bad PAT copy', describeFailure(401) === 'portalReport.badPat' &&
 ck('413 → too big copy', describeFailure(413) === 'portalReport.tooBig');
 ck('429 → rate limited copy', describeFailure(429) === 'portalReport.rateLimited');
 ck('5xx → server copy', describeFailure(503) === 'portalReport.server');
+
+// ── 门户地址 ──
+ck('base: blank falls back to the default portal', normalizeBase('  ') === PORTAL_BASE);
+ck('base: trailing slashes are stripped', normalizeBase('http://10.0.0.9:8080///') === 'http://10.0.0.9:8080');
+ck('base: keeps a plain host as-is', normalizeBase('https://agent.tianma.cn') === 'https://agent.tianma.cn');
 
 console.log(`portal report: ${p}/${t}`);
 if (p !== t) process.exit(1);
