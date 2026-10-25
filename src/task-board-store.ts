@@ -37,6 +37,8 @@ export interface TaskBoardState {
   /** 管理标签的对话框 / 底部面板开着没有(左栏、手机标签筛选共用)。 */
   managingTags: boolean;
   creatingTag?: { parent: string | null } | null;
+  /** 从「左栏项目行 → 新建子项目」打开管理页时，新建项的父项目预设（#2220）。 */
+  creatingProject?: { parent: string | null } | null;
   /** GET /api/requirements/tags 的结果(用量、颜色、能不能管);null = 还没读到或读失败。 */
   tagCatalog: TagCatalog | null;
   /** 「管理项目 / 管理标签」用的那两个写 Hub 的处理函数(看板登记);左栏右键菜单走同一条路(#760)。 */
@@ -90,6 +92,8 @@ export function updateTaskItems(scope: string, fn: (items: Requirement[]) => Req
 }
 
 export const setTaskSection = (section: TaskSection) => { if (state.section !== section) { state = { ...state, section }; emit(); } };
+/** 左栏「新建子项目」：打开管理项目页，并把新建项的父项目预选上。 */
+export const setCreatingProject = (parent: string | null) => { state = { ...state, managingProjects: true, creatingProject: { parent } }; emit(); };
 export const setManagingProjects = (on: boolean, focus: string | null = null) => { if (state.managingProjects !== on || state.managerFocus !== focus) { state = { ...state, managingProjects: on, managerFocus: focus }; emit(); } };
 export const setManagingTags = (on: boolean, focus: string | null = null) => { if (state.managingTags !== on || state.managerFocus !== focus) { state = { ...state, managingTags: on, managerFocus: focus }; emit(); } };
 export const setSideMenu = (sideMenu: SideMenuTarget | null) => { if (state.sideMenu !== sideMenu) { state = { ...state, sideMenu }; emit(); } };

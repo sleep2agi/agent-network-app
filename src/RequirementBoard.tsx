@@ -1549,7 +1549,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           }}
           onUpdate={updateProjectOp}
           focus={managerFocus}
-          onClose={() => setManagingProjects(false)}
+          onClose={() => { setManagingProjects(false); patchTaskBoard(scope, { creatingProject: null }); }}
         />
       ) : null}
       {/* 手机没有左栏:长按筛选里的项目 / 标签出同一份菜单(#760);桌面的菜单挂在左栏。 */}

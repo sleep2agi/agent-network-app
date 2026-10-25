@@ -25,6 +25,9 @@ const projects: RequirementProject[] = [
 
 // ── 有哪些项 / 权限 ──
 ck('project menu: rename, color, archive', eq(sideItemActions('project', true, fake()), ['rename', 'color', 'archive']));
+// #2220：Hub 暴露 parentId 时，项目菜单多出「新建子项目」；旧 Hub 保持不变。
+ck('project menu with parent support: createChild first', eq(sideItemActions('project', true, fake(), true), ['createChild', 'rename', 'color', 'archive']));
+ck('project menu without parent support: unchanged', eq(sideItemActions('project', true, fake(), false), ['rename', 'color', 'archive']));
 ck('tag menu: create child, rename, color, delete (create availability checked separately)', eq(sideItemActions('tag', true, fake()), ['createChild', 'rename', 'color', 'delete']));
 ck('no permission → no rename (no menu at all)', eq(sideItemActions('project', false, fake()), []) && eq(sideItemActions('tag', false, fake()), []));
 ck('board not mounted (no ops) → no menu', eq(sideItemActions('project', true, null), []));
