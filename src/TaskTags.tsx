@@ -45,6 +45,10 @@ export function TaskTagFilter() {
         <Text style={{ color: colors.textMuted, marginLeft: 'auto' }}>▾</Text>
       </Pressable>
       {open ? (
+        // 点面板外面就关掉(其他下拉都是这个行为;折叠屏上很容易点了别处还以为没反应)。
+        <Pressable accessibilityRole="button" accessibilityLabel={t('tags.title')} onPress={() => { setOpen(false); setQuery(''); }} style={{ position: 'absolute', top: -6, left: -6, right: -6, height: 400, zIndex: 25 }} testID="task-tags-scrim" />
+      ) : null}
+      {open ? (
         <View testID="task-tags-panel" style={{ position: 'absolute', top: 48, left: 0, width: 260, zIndex: 30, padding: 6, gap: 4, borderRadius: radius.control, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }}>
           <TextInput
             value={query}
