@@ -279,11 +279,12 @@ jobs:
             asc_get "reviewSubmissions" --data-urlencode "filter[app]=$app_id" \
               --data-urlencode 'filter[platform]=IOS' --data-urlencode 'limit=50' > "$RUNNER_TEMP/subs.json"
             jq -r '.data[] | "\(.id) \(.attributes.state)"' "$RUNNER_TEMP/subs.json" | sed 's/^/    existing submission: /'
-            for old_id in $(jq -r '.data[] | select(.attributes.state == "READY_FOR_REVIEW" or .attributes.state == "UNRESOLVED_ISSUES") | .id' "$RUNNER_TEMP/subs.json"); do
-              echo "    removing stale submission $old_id"
-              : > "$RUNNER_TEMP/empty.json"
-              asc_write DELETE "reviewSubmissions/$old_id" "$RUNNER_TEMP/empty.json" > /dev/null || true
-            done
+            # Apple **不允许** DELETE reviewSubmissions(实测 403 'does not allow DELETE'),
+            # 所以旧提交只能在 App Store Connect 网页里清。这里只报告,并在提交必然失败前给出可操作的结论。
+            stale=$(jq -r '[.data[] | select(.attributes.state == "READY_FOR_REVIEW" or .attributes.state == "UNRESOLVED_ISSUES") | .id] | length' "$RUNNER_TEMP/subs.json")
+            if [ "${stale:-0}" -gt 0 ]; then
+              echo "::warning::this app already has $stale open submission(s); Apple allows one per app+platform and they cannot be deleted via the API. Clear them in App Store Connect (My Apps → the version → Submission) before submitting from CI."
+            fi
             jq -n --arg app "$app_id" \
               '{data:{type:"reviewSubmissions",attributes:{platform:"IOS"},relationships:{app:{data:{type:"apps",id:$app}}}}}' > "$RUNNER_TEMP/review.json"
             review_id=$(asc_write POST "reviewSubmissions" "$RUNNER_TEMP/review.json" | jq -r '.data.id // empty')
