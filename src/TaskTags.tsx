@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { ACCEPT_COLUMNS_HEADERS } from './requirement-columns';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, useWindowDimensions, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, radius } from './theme';
 import { t } from './i18n';
@@ -14,11 +14,16 @@ import type { HubConfig } from './api';
 import { appFetch } from './app-fetch';
 import { noteTagsUsed, setManagingTags, setSideMenu, setTaskFilter, useTaskBoard } from './task-board-store';
 import { pointerUi } from './pointer-ui';
+import { railIconsOnly } from './nav-chrome';
 import { canManageTags, catalogFromHub, localTagCounts, tagFilterEntries, tagSuggestions } from './task-tag-catalog';
 
 export function TaskTagFilter() {
   useTranslation();
   const [open, setOpen] = useState(false);
+  const [query, setQuery] = useState('');
+  // 折叠屏/平板(≥900 dp):横向标签条太窄、要一直横滑,admin 2026-10-25「这边做不了标签筛选」。
+  // 宽屏改成下拉面板:搜索 + 竖排列表 + 管理标签,和「项目」下拉同一套交互。
+  const wide = railIconsOnly(useWindowDimensions().width);
   const items = useTaskBoard(s => s.items), filter = useTaskBoard(s => s.filter);
   const colorsOf = useTaskBoard(s => s.tagCatalog?.colors);
   const tagParents = useTaskBoard(s => s.tagCatalog?.parents ?? null);
@@ -26,6 +31,49 @@ export function TaskTagFilter() {
   // #2139:卡片上的标签 + 授权可见的祖先(父标签零直属卡也能选,选中后命中原后代)。
   const tags = tagFilterEntries(items, catalogTags, tagParents);
   const manage = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
+  const q = query.trim().toLocaleLowerCase();
+  const shown = wide && q ? tags.filter(x => x.toLocaleLowerCase().includes(q)) : tags;
+  if (wide) {
+    return <View style={{ maxWidth: 260 }}>
+      <Pressable
+        testID="task-tags-filter"
+        accessibilityRole="button"
+        onPress={() => { setOpen(!open); if (open) setQuery(''); }}
+        style={{ minHeight: 44, flexDirection: 'row', alignItems: 'center', gap: 6, paddingHorizontal: 12, borderWidth: 1, borderColor: filter.tag || filter.untagged ? colors.accent : colors.border, borderRadius: radius.control, backgroundColor: colors.card }}
+      >
+        <Text numberOfLines={1} style={{ color: filter.tag || filter.untagged ? colors.accent : colors.text }}>{filter.untagged ? t('tagStats.untagged') : filter.tag || t('tags.title')}</Text>
+        <Text style={{ color: colors.textMuted, marginLeft: 'auto' }}>▾</Text>
+      </Pressable>
+      {open ? (
+        <View testID="task-tags-panel" style={{ position: 'absolute', top: 48, left: 0, width: 260, zIndex: 30, padding: 6, gap: 4, borderRadius: radius.control, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border }}>
+          <TextInput
+            value={query}
+            onChangeText={setQuery}
+            placeholder={t('tags.title')}
+            placeholderTextColor={colors.textMuted}
+            style={{ minHeight: 36, paddingHorizontal: 8, color: colors.text, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, borderRadius: radius.control }}
+            testID="task-tags-search"
+          />
+          <ScrollView style={{ maxHeight: 300 }} contentContainerStyle={{ gap: 2 }} keyboardShouldPersistTaps="handled">
+            {['', ...shown].map(tag => (
+              <Pressable
+                key={tag || 'all'}
+                testID={`task-tags-pick-${tag || 'all'}`}
+                accessibilityRole="button"
+                onPress={() => { setTaskFilter(tagFilterAfterPick(filter, tag, tagParents)); setOpen(false); setQuery(''); }}
+                style={{ minHeight: 40, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 10, borderRadius: radius.item, backgroundColor: (filter.tag === tag || (!tag && filter.untagged)) ? colors.subtleFill : 'transparent' }}
+              >
+                {tag && colorsOf?.[tag] ? <View style={{ width: 8, height: 8, borderRadius: radius.pill, backgroundColor: colorsOf[tag] }} /> : null}
+                <Text style={{ color: colors.text }} numberOfLines={1}>{tag || t('tags.all')}</Text>
+              </Pressable>
+            ))}
+            {shown.length === 0 && tags.length > 0 ? <Text style={{ color: colors.textMuted, padding: 8 }}>{t('tags.none')}</Text> : null}
+          </ScrollView>
+          {manage ? <Pressable testID="task-tags-manage" accessibilityRole="button" onPress={() => { setOpen(false); setManagingTags(true); }} style={{ minHeight: 40, justifyContent: 'center', paddingHorizontal: 10 }}><Text style={{ color: colors.accent }}>{t('tags.manage')}</Text></Pressable> : null}
+        </View>
+      ) : null}
+    </View>;
+  }
   return <View style={{ maxWidth: 260 }}>
     <Pressable testID="task-tags-filter" accessibilityRole="button" onPress={() => setOpen(!open)} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 8 }}><Text numberOfLines={1} style={{ color: filter.tag || filter.untagged ? colors.accent : colors.textMuted }}>{filter.untagged ? t('tagStats.untagged') : filter.tag || t('tags.title')}</Text></Pressable>
     {open ? (
