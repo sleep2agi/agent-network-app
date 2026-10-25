@@ -13,10 +13,11 @@ import { elevated } from './elevation';
 import { uiScale } from './ui-scale';
 import { anchorRowMenu, rowMenuHeight, rowMenuMetrics } from './agent-row-menu';
 import { useModalSafePadding } from './safe-area-runtime';
-import { setCreatingTag, setManagingProjects, setManagingTags, setSideMenu, useTaskBoard } from './task-board-store';
+import { setCreatingProject, setCreatingTag, setManagingProjects, setManagingTags, setSideMenu, useTaskBoard } from './task-board-store';
 import { tagCreateSupported } from './task-tag-create';
 import { canManageTags, TAG_COLORS } from './task-tag-catalog';
 import { canEditProject, runSideAction, sideItemActions, type SideAction } from './task-side-menu';
+import { hubExposesProjectParent } from './task-tree';
 
 const ICON: Record<SideAction, string> = { createChild: 'add-outline', rename: 'create-outline', color: 'color-palette-outline', archive: 'archive-outline', delete: 'trash-outline' };
 
@@ -36,7 +37,10 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
   if (!target) return null;
   const project = target.kind === 'project' ? projects?.find(p => p.id === target.key) : undefined;
   const canCreate = !!ops?.createTag && tagCreateSupported(catalog, target.key, capabilities);
-  const actions = sideItemActions(target.kind, target.kind === 'project' ? canEditProject(project) : manageTags, ops).filter(a => a !== 'createChild' || canCreate);
+  // #2220：项目也能「新建子项目」—— 但只有当 Hub 真的暴露 parentId（旧 Hub 不出现这一项）。
+  const canCreateProjectChild = hubExposesProjectParent(projects);
+  const actions = sideItemActions(target.kind, target.kind === 'project' ? canEditProject(project) : manageTags, ops, canCreateProjectChild)
+    .filter(a => a !== 'createChild' || (target.kind === 'project' ? canCreateProjectChild : canCreate));
   const close = () => { setView('menu'); setError(''); setSideMenu(null); };
   if (!actions.length || !ops) return null;
   const count = catalog?.counts[target.key] ?? 0;
@@ -51,6 +55,7 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
   const act = (a: SideAction) => {
     if (a === 'createChild') {
       if (target.kind === 'tag' && canCreate) { close(); setCreatingTag(target.key); }
+      else if (target.kind === 'project' && canCreateProjectChild) { close(); setCreatingProject(target.key); }
     } else if (a === 'rename') {
       close();
       if (!target.touch && onInlineRename) onInlineRename(target.kind, target.key);

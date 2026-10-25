@@ -16,6 +16,7 @@ import type { RequirementProject } from './requirements-model';
 import { activeProjects, checkProjectName, nameBlurOutcome, nextProjectColor, parentPatchForPick, projectRenamePatch, PROJECT_COLORS } from './task-board-model';
 import { hubExposesProjectParent, parentProjectOptions } from './task-tree';
 import { liftedShadow, useTaskStyles } from './TaskBoardParts';
+import { useTaskBoard } from './task-board-store';
 import { fieldStyles } from './TaskCreateDialog';
 
 export default function TaskProjectManager({ open, sheet, projects, counts, onCreate, onUpdate, onClose, focus }: {
@@ -39,13 +40,18 @@ export default function TaskProjectManager({ open, sheet, projects, counts, onCr
   const [color, setColor] = useState<string>(PROJECT_COLORS[0]);
   const [editing, setEditing] = useState<{ id: string; name: string } | null>(null);
   // #2113:新建 / 编辑时选父项目。Hub 没有这个字段时整块控件不渲染。
-  const [parentId, setParentId] = useState<string | null>(null);
+  // #2220：从左栏项目行「新建子项目」进来时，父项目已预选。
+  const creatingProject = useTaskBoard(st => st.creatingProject);
+  const [parentId, setParentId] = useState<string | null>(creatingProject?.parent ?? null);
   const [editParentId, setEditParentId] = useState<string | null>(null);
   const [error, setError] = useState('');
   const [busy, setBusy] = useState(false);
   // #2127(parent_forms):点父项目 chip 时 pointerdown(→onPressIn) 先于名称框 blur。先记下「正在选父项目」,
   // blur 就不提交;否则编辑行连同 chip 一起消失,父项目选择被吞掉。
   const pickingParent = useRef(false);
+  useEffect(() => {
+    if (open && !focus) setParentId(creatingProject?.parent ?? null);
+  }, [open, focus, creatingProject?.parent]); // eslint-disable-line react-hooks/exhaustive-deps
   useEffect(() => {
     const p = open && focus ? projects.find(x => x.id === focus) : undefined;
     if (p) { setEditing({ id: p.id, name: p.name }); setEditParentId(p.parentId ?? null); }

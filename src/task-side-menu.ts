@@ -10,9 +10,12 @@ import type { ManagerOps } from './task-board-store';
 export type SideAction = 'rename' | 'color' | 'archive' | 'delete' | 'createChild';
 
 /** 菜单里有哪几项。没有写 Hub 的路(看板没挂)或没权限(项目 viewer_can.edit=false、标签 can_manage=false)→ 空,菜单不开。 */
-export function sideItemActions(kind: 'project' | 'tag', can: boolean, ops: ManagerOps | null): SideAction[] {
+export function sideItemActions(kind: 'project' | 'tag', can: boolean, ops: ManagerOps | null,
+  /** 项目能不能建子项目：由调用方按 **Hub 是否暴露 parentId** 决定（旧 Hub 不出现这一项）。 */
+  projectChildAllowed = false): SideAction[] {
   if (!can || !ops) return [];
-  return kind === 'project' ? ['rename', 'color', 'archive'] : ['createChild', 'rename', 'color', 'delete'];
+  if (kind === 'tag') return ['createChild', 'rename', 'color', 'delete'];
+  return projectChildAllowed ? ['createChild', 'rename', 'color', 'archive'] : ['rename', 'color', 'archive'];
 }
 
 /** 项目:canEdit === false 就是 Hub 的 viewer_can.edit=false(对话框列出来的也是这份)。 */
