@@ -43,6 +43,11 @@ on:
         required: false
         type: boolean
         default: false
+      build_number:
+        description: "可选：把这一版的构建号（如 182）绑到该 App Store 版本；空 = 不改"
+        required: false
+        type: string
+        default: ""
       submit_for_review:
         description: After writing the copy, create the App Store version submission (irreversible; owner-authorized 2026-10-23)
         required: false
@@ -67,6 +72,7 @@ jobs:
           DEMO_HUB_URL: ${{ inputs.demo_hub_url }}
           DEMO_ACCOUNT: ${{ inputs.demo_account }}
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
           PHASED_RELEASE: ${{ inputs.phased_release }}
           RELEASE_TYPE: ${{ inputs.release_type }}
           WHATS_NEW: ${{ inputs.whats_new }}
@@ -137,6 +143,25 @@ jobs:
           [ -n "$version_id" ] || { echo "::error::version $VERSION not found"; exit 1; }
           vstate=$(jq -r --arg id "$version_id" '.data[] | select(.id == $id) | .attributes.appStoreState' <<<"$versions")
           echo "version $VERSION id=$version_id state=$vstate"
+
+          # 可选：把指定构建号绑到这一版（空 = 不动）。B 方案 = 把当天最新打的包绑上去再提审；
+          # 以前这一步只能去 App Store Connect 网页点，脚本没有入口。
+          if [ -n "${BUILD_NUMBER:-}" ]; then
+            build_id=$(asc_get builds --data-urlencode "filter[app]=$app_id" --data-urlencode "filter[version]=$BUILD_NUMBER" | jq -r '.data[0].id // empty')
+            [ -n "$build_id" ] || { echo "::error::build $BUILD_NUMBER not found for this app"; exit 1; }
+            bstate=$(asc_get "builds/$build_id" | jq -r '.data.attributes.processingState // "UNKNOWN"')
+            echo "build $BUILD_NUMBER id=$build_id processingState=$bstate"
+            if [ "$BUILD_NUMBER" != '' ] && [ "$bstate" != 'VALID' ] && [ "$DRY_RUN" != 'true' ]; then
+              echo "::warning::build $BUILD_NUMBER is $bstate, not VALID yet — Apple may still be processing it"
+            fi
+            if [ "$DRY_RUN" = 'true' ]; then
+              echo "    dry-run: would attach build $BUILD_NUMBER to version $VERSION"
+            else
+              jq -n --arg b "$build_id" '{data:{type:"builds",id:$b}}' > "$RUNNER_TEMP/build-rel.json"
+              asc_write PATCH "appStoreVersions/$version_id/relationships/build" "$RUNNER_TEMP/build-rel.json" > /dev/null
+              echo "attached build $BUILD_NUMBER to version $VERSION"
+            fi
+          fi
 
           lan_zh='局域网说明：本 App 是局域网中的 ANet 军团客户端，只连接你自己在局域网内运行的 ANet Hub；不提供服务端账号体系，也不会把你的数据发往公网云服务。'
           lan_en='Local network: this app is the ANet Legion client for a local network. It connects only to the ANet Hub you run on your own LAN. There is no hosted cloud service and your data is not sent to ours.'
