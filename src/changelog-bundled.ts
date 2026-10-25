@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.307:",
+  "- 修复：「折叠屏 / 平板左侧导航」这个设置项只在真会出现左侧导航的宽度（折叠屏展开、平板）显示，桌面和手机上不再出现那个用不上的开关。",
+  "",
   "What's new in 0.2.306:",
   "- 新增：设置 → 外观 里可以选折叠屏 / 平板左侧导航的形态 —— 「纯图标」（默认，与桌面端一致，长按看名字）或「图标 + 文字」。",
   "",
