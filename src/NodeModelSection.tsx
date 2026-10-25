@@ -8,7 +8,7 @@ import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
-import { fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
+import { fetchHubNodes, fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
 import { styles } from './app-styles';
 import {
   afterPoll,
@@ -25,9 +25,24 @@ import {
   type ModelChangePhase,
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { colors, spacing, radius } from './theme';
+
+/**
+ * #2293 —— 这台机器**自己上报**的模型清单（`GET /api/nodes` 的 `opencode_catalog`）。
+ * 只在这条 daemon 中继链走不通时用：手工 `anet node start` 起的 opencode 节点没有
+ * daemon 绑定，`read_opencode_catalog` 永远拿不到列表 → admin 只能手填。
+ * 读失败/旧 Hub 一律返回 []（不编内置清单，不假装有）。
+ */
+async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string[]> {
+  try {
+    const { nodes } = await fetchHubNodes(cfg);
+    return reportedCatalogModels((nodes ?? []).find(n => n.node_id === nodeId)?.opencode_catalog);
+  } catch {
+    return [];
+  }
+}
 
 export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: HubNode }) {
   // undefined = 还没读到;null = hub 没有这个接口
@@ -58,22 +73,31 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
     if (!v2) return;
     let live = true;
     const daemonId = nodeProviderDaemon(node);
+    // 中继链失败/走不通时的兜底：改读这台机器自己上报的清单（#2293）。
+    const fallback = async (reason: string) => {
+      const ids = await reportedModelList(cfg, node.node_id);
+      if (!live) return;
+      setV2Models(ids);
+      setV2Note(ids.length
+        ? `${reason}改用这台机器上次上报的 OpenCode 模型清单。`
+        : `${reason}这台机器也还没上报过模型清单 —— 仍可手输 provider/model。`);
+    };
     if (!daemonId) {
-      setV2Models([]);
-      setV2Note('这个节点没有所属 daemon，读不到 OpenCode 服务器上的模型列表。仍可手输 provider/model。');
+      setV2Note('这个节点没有所属 daemon，正在读它自己上报的模型清单…');
+      void fallback('');
       return;
     }
     setV2Note('正在从 OpenCode V2 服务器读取模型列表…');
     void (async () => {
       const queued = await queueOpenCodeCatalog(cfg, { nodeId: node.node_id, daemonNodeId: daemonId });
       if (!live) return;
-      if (!queued.ok) { setV2Models([]); setV2Note(catalogErrorText(queued.error)); return; }
+      if (!queued.ok) { void fallback(catalogErrorText(queued.error)); return; }
       for (let i = 0; i < 15; i++) {
         await new Promise(resolve => setTimeout(resolve, 1000));
         if (!live) return;
         const polled = await pollOpenCodeCatalog(cfg, queued.request_id);
         if (!live) return;
-        if (!polled.ok) { setV2Models([]); setV2Note(catalogErrorText(polled.error)); return; }
+        if (!polled.ok) { void fallback(catalogErrorText(polled.error)); return; }
         if (polled.status === 'ready') {
           const ids = modelIdsFromCatalog(polled.snapshot);
           setV2Models(ids);
@@ -81,7 +105,7 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
           return;
         }
       }
-      if (live) { setV2Models([]); setV2Note('OpenCode 服务器还没返回模型列表。仍可手输 provider/model。'); }
+      if (live) void fallback('OpenCode 服务器还没返回模型列表。');
     })();
     return () => { live = false; };
   }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status]);

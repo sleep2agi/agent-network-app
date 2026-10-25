@@ -33,6 +33,29 @@ export function modelIdsFromCatalog(snapshot: OpenCodeCatalogSnapshot | null | u
   return out;
 }
 
+/**
+ * #2293 —— 节点自报清单（Hub `/api/nodes` 的 `opencode_catalog.models`，已是
+ * `provider/model` 字符串）。这里只做三件事：丢空/超长、去重、保序 ——
+ * 不排序、不补内置、不猜 provider 是否可用（那是服务器的事）。
+ */
+export function reportedCatalogModels(
+  catalog: string[] | null | undefined,
+): string[] {
+  const raw = Array.isArray(catalog) ? catalog : [];
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const value of raw) {
+    if (typeof value !== 'string') continue;
+    const id = value.trim();
+    if (!id || id.length > 400 || !id.includes('/')) continue;
+    if (seen.has(id)) continue;
+    seen.add(id);
+    out.push(id);
+    if (out.length >= 400) break;
+  }
+  return out;
+}
+
 export function catalogErrorText(error: string | undefined): string {
   switch (error) {
     case 'not_opencode_v2': return '这个节点不是 OpenCode V2，不能从它的服务器拉模型列表。';
