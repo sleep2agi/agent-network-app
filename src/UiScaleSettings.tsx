@@ -13,6 +13,8 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing } from './theme';
 import { saveUiScalePrefs } from './storage';
+import { onRailLabelsChange, railLabelsNow, setRailLabels } from './agent-list-prefs';
+import './i18n-rail';
 import { agentRowGeometry } from './agent-row-model';
 import {
   DENSITY_OPTIONS,
@@ -79,6 +81,8 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
   useTranslation();
   // Re-render on a preference change even when nothing visible changes (「默认」 label).
   useSyncExternalStore(onUiScalePrefsChange, uiScalePrefsKey, uiScalePrefsKey);
+  // 折叠屏 / 平板左侧导航:纯图标(默认,对齐桌面)还是「图标 + 文字」。
+  const rail = useSyncExternalStore(onRailLabelsChange, railLabelsNow, railLabelsNow);
   const r = uiScale();
   const wide = uiScaleLayoutWide();
   const summary = localizedScaleSummary(r, wide);
@@ -106,6 +110,21 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
           <Segmented label={tr('settings.copy.100')} options={DENSITY_OPTIONS} selectedKey={r.density} isDefault={r.densityIsDefault} s={s} testPrefix="settings-density" onPick={density => persistUiScale({ density })} />
         </View>
       ) : null}
+      <View style={[s.row, s.themeRow]} testID="settings-rail-labels-row">
+        <View style={[s.rowCopy, s.themeRowCopy]}>
+          <Text style={s.rowLabel}>{tr('railForm.title')}</Text>
+          <Text style={s.rowHint}>{tr('railForm.hint')}</Text>
+        </View>
+        <Segmented
+          label={tr('railForm.title')}
+          options={[{ key: 'icons' as const, label: tr('railForm.icons') }, { key: 'labels' as const, label: tr('railForm.labels') }]}
+          selectedKey={rail}
+          isDefault={rail === 'icons'}
+          s={s}
+          testPrefix="settings-rail-labels"
+          onPick={setRailLabels}
+        />
+      </View>
       <UiScalePreview />
       <View style={[s.row, { justifyContent: 'flex-end' }]}>
         <Pressable

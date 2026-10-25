@@ -113,7 +113,7 @@ import NotifySettingsFixtureScreen, { readNotifyFixture } from './src/NotifySett
 import UpdatePromptFixtureScreen, { readUpdatePromptFixture } from './src/UpdatePromptFixtureScreen';
 import { chooseAppLayout, LIST_PANE_DEFAULT_WIDTH, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
 import TwoPaneDivider from './src/TwoPaneDivider';
-import { loadListPaneWidth, saveListPaneWidth } from './src/agent-list-prefs';
+import { loadListPaneWidth, loadRailLabels, onRailLabelsChange, railLabelsNow, saveListPaneWidth, type RailLabels } from './src/agent-list-prefs';
 import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
 import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcuts-model';
@@ -528,7 +528,10 @@ function AppRoot() {
   const railShown = navChrome === 'rail';
   // Vincent 2026-10-24 (Xiaomi foldable, Hub 设置):「跟那个桌面端它不太一样」— on a wide window the rail
   // drops its labels and takes the desktop's 64 dp box (src/nav-chrome.ts railIconsOnly).
-  const iconsOnlyRail = railShown && railIconsOnly(width);
+  // 折叠屏/平板左侧导航的形态(纯图标 = 对齐桌面)；用户可在 设置 → 外观 改。
+  const railLabels = useSyncExternalStore(onRailLabelsChange, railLabelsNow, railLabelsNow);
+  useEffect(() => { void loadRailLabels().catch(() => {}); }, []);
+  const iconsOnlyRail = railShown && railIconsOnly(width) && railLabels !== 'labels';
   const railWidth = iconsOnlyRail ? iconRailWidth(uiScale().densityFactor) : mobileRailWidth(uiScale().densityFactor);
   // Width to the right of the rail; the two panes split this, not the whole window.
   const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right, railWidth) : width;
