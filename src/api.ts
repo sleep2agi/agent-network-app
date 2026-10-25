@@ -299,6 +299,8 @@ export interface HubNode {
     role?: string | null;
     channels?: unknown[];
     flags?: Record<string, unknown>;
+    /** 节点上报的 OpenCode serve 地址（loopback）。多数节点还没报 → 界面写「端口未上报」。 */
+    opencode_server?: string | null;
   } | null;
 }
 

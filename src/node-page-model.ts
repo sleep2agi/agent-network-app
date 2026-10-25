@@ -124,7 +124,7 @@ export const PRIMARY_FACT_LABELS: readonly string[] = ['节点 ID', '服务器',
  * 「模型与运行时」摘要卡的字段,按两列网格的阅读顺序。
  * session-id 紧挨在 版本 后面,所以常规两列时它落在版本右边那一格。
  */
-export const RUNTIME_FACT_LABELS: readonly string[] = ['节点类型', 'Runtime', 'Agent', '模型', '版本', 'session-id'];
+export const RUNTIME_FACT_LABELS: readonly string[] = ['节点类型', 'Runtime', 'OpenCode Server', 'Agent', '模型', '版本', 'session-id'];
 
 /** 模型与运行时摘要:按 RUNTIME_FACT_LABELS 的顺序取,缺的标签不补行。 */
 export function modelSectionFacts(facts: readonly NodeInfoFact[]): NodeInfoFact[] {
