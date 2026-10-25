@@ -1,4 +1,4 @@
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels } from './opencode-v2-model-list';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else { console.error('❌', n); } };
@@ -20,6 +20,14 @@ const ids = modelIdsFromCatalog({
 ck('keeps provider/model and drops disabled providers and duplicates', JSON.stringify(ids) === JSON.stringify(['deepseek/deepseek-flash', 'openai/gpt-6']));
 ck('empty snapshot is an empty list, not a builtin fallback', modelIdsFromCatalog(null).length === 0);
 ck('not_opencode_v2 is readable', catalogErrorText('not_opencode_v2').includes('不是 OpenCode V2'));
+
+// #2293 —— 节点自报清单：只保留 provider/model 形状，去重保序，不补内置。
+ck('reported catalog: 保留 provider/model、去重、保序',
+  JSON.stringify(reportedCatalogModels({ models: ['deepseek/deepseek-flash', 'deepseek/deepseek-flash', 'opencode/mimo-v2.6-flash-free'] }))
+  === JSON.stringify(['deepseek/deepseek-flash', 'opencode/mimo-v2.6-flash-free']));
+ck('reported catalog: 不像模型 id 的一律丢掉（空串 / 没有斜杠 / 非字符串 / 超长）',
+  reportedCatalogModels({ models: ['', 'deepseek', 7, null, 'a/'.padEnd(500, 'x')] }).length === 0);
+ck('reported catalog: 缺字段/旧 Hub → 空数组（不是内置表）', reportedCatalogModels(null).length === 0 && reportedCatalogModels({}).length === 0);
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);

@@ -302,6 +302,20 @@ export interface HubNode {
     /** 节点上报的 OpenCode serve 地址（loopback）。多数节点还没报 → 界面写「端口未上报」。 */
     opencode_server?: string | null;
   } | null;
+  /**
+   * #2293（admin 2026-10-25）—— 这台机器上的 OpenCode V2 服务器**自己上报**的模型清单。
+   * 只在 `GET /api/nodes` 上出现（`/api/status` 有字节契约，刻意没加）。
+   * 为什么需要它：daemon 中继链（read_opencode_catalog）要求节点有
+   * `lifecycle_daemon_node_id` 或 active adoption；手工 `anet node start` 起的
+   * opencode 节点两样都是 null —— 于是列表恒空、只能手填。
+   * 旧 Hub 没有这一格 ⇒ undefined（当作「没上报过」，不是「这台机器没有模型」）。
+   */
+  opencode_catalog?: {
+    models: string[];
+    providers?: string[];
+    observed_at?: string;
+    default_model?: string | null;
+  } | null;
 }
 
 /** GET /api/nodes — the registered-node list, used for avatar resolution.
