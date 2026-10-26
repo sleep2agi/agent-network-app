@@ -17,7 +17,7 @@ import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
 
-// 菜单项不写死:读 scripts/emit-side-menu-items.ts 生成的那份 JSON(与单测同一数据源)。
+// 菜单项不写死:读 scripts/emit-side-menu-items.mjs 生成的那份 JSON(与单测同一数据源)。
 const MENU_ITEMS = JSON.parse(readFileSync(new URL('./menu-items.json', import.meta.url), 'utf8'));
 const PROJECT_ITEMS = MENU_ITEMS.project.join();
 const TAG_ITEMS = MENU_ITEMS.tag.join();

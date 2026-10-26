@@ -26,7 +26,7 @@ const projects: RequirementProject[] = [
 
 // ── 有哪些项 / 权限 ──
 // admin 2026-10-26:项目菜单第一项永远是「新建项目」(原来只有改名/颜色/归档,建不了项目)。
-// 菜单项的唯一数据源:tests/test-side-rename/menu-items.json(由 scripts/emit-side-menu-items.ts 生成)。
+// 菜单项的唯一数据源:tests/test-side-rename/menu-items.json(由 scripts/emit-side-menu-items.mjs 生成)。
 // 加了菜单项却忘了重新生成 → 这里先红,浏览器 drive 也就不会再单独红一次。
 const MENU_ITEMS = JSON.parse(readFileSync(new URL('../tests/test-side-rename/menu-items.json', import.meta.url), 'utf8')) as {
   project: string[]; projectWithChild: string[]; tag: string[];
