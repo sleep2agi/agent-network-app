@@ -17,7 +17,7 @@ import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, tagFilterAfterPick, type SidebarScope } from './task-board-model';
-import { setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
+import { setCreatingProject, setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
 import { aggregateCounts, includeTagAncestors, projectRows, tagDepth, tagRows, tagWithDescendants } from './task-tree';
 import { commitSideRename, renameKey } from './task-side-menu';
 import TaskSideItemMenu from './TaskSideItemMenu';
@@ -235,7 +235,12 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         {projects ? (
           <>
             <View style={[styles.divider, { backgroundColor: colors.border }]} />
-            <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header" />
+            <SectionHeader label={tr('tasks.copy.30')} testID="task-side-projects-header"
+              action={<Pressable accessibilityRole="button" accessibilityLabel={tr('tags.createProject')} onPress={() => setCreatingProject(null)}
+                hitSlop={8} style={state => [{ marginLeft: 'auto', paddingHorizontal: 4 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.8 }]}
+                testID="task-side-project-add">
+                <Ionicons name="add" size={15} color={colors.textMuted} />
+              </Pressable>} />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
             {/* #2102:Hub 给了 parent_id 就渲染树(缩进/折叠/祖先计数);没有就完全是旧的平铺。
                 #2106 P1:计数来自完整树 —— 折叠只改可见性,不改父项目的数字;
@@ -316,15 +321,16 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
 }
 
 /** 左栏的组头:标签 / 项目 / 按 Agent 用同一种样式与间距;collapsed 给了就是可折叠的(带箭头)。 */
-function SectionHeader({ label, first, collapsed, onToggle, testID }: { label: string; first?: boolean; collapsed?: boolean; onToggle?: () => void; testID: string }) {
+function SectionHeader({ label, first, collapsed, onToggle, action, testID }: { label: string; first?: boolean; collapsed?: boolean; onToggle?: () => void; action?: ReactNode; testID: string }) {
   const styles = makeSidebarStyles();
   const text = <Text style={[styles.sectionText, { color: colors.textMuted }]} numberOfLines={1}>{label}</Text>;
   const box = [styles.sectionHead, first && { paddingTop: spacing.xs }];
-  if (!onToggle) return <View style={box} testID={testID}>{text}</View>;
+  if (!onToggle) return <View style={[box, { flexDirection: 'row', alignItems: 'center' }]} testID={testID}>{text}{action}</View>;
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={collapsed ? tr('tags.expand') : tr('tags.collapse')} {...a11yState({ expanded: !collapsed })} onPress={onToggle}
       style={state => [box, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.8 }]} testID={testID}>
       {text}
+      {action}
       <Ionicons name={collapsed ? 'chevron-forward' : 'chevron-down'} size={13} color={colors.textMuted} />
     </Pressable>
   );

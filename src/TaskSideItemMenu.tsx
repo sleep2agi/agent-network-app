@@ -19,7 +19,7 @@ import { canManageTags, TAG_COLORS } from './task-tag-catalog';
 import { canEditProject, runSideAction, sideItemActions, type SideAction } from './task-side-menu';
 import { hubExposesProjectParent } from './task-tree';
 
-const ICON: Record<SideAction, string> = { createChild: 'add-outline', rename: 'create-outline', color: 'color-palette-outline', archive: 'archive-outline', delete: 'trash-outline' };
+const ICON: Record<SideAction, string> = { createProject: 'add-outline', createChild: 'add-outline', rename: 'create-outline', color: 'color-palette-outline', archive: 'archive-outline', delete: 'trash-outline' };
 
 export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: (kind: 'project' | 'tag', key: string) => void }) {
   useTranslation();
@@ -53,7 +53,8 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
     if (failed) setError(target.kind === 'tag' ? tr(failed) : failed); else close();
   };
   const act = (a: SideAction) => {
-    if (a === 'createChild') {
+    if (a === 'createProject') { close(); setCreatingProject(null); }
+    else if (a === 'createChild') {
       if (target.kind === 'tag' && canCreate) { close(); setCreatingTag(target.key); }
       else if (target.kind === 'project' && canCreateProjectChild) { close(); setCreatingProject(target.key); }
     } else if (a === 'rename') {
