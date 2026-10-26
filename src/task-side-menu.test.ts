@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 // 左栏项目 / 标签菜单(#760)—— run: bun src/task-side-menu.test.ts
 // 行为:纯函数(task-side-menu.ts)直接调,写 Hub 用假的 ManagerOps 记下调用。
 // 接线:屏幕 import react-native,这里读源码文本证明 右键 → 菜单、菜单「改名」→ 行内输入框、手机长按 → 同一份菜单、
@@ -25,11 +26,16 @@ const projects: RequirementProject[] = [
 
 // ── 有哪些项 / 权限 ──
 // admin 2026-10-26:项目菜单第一项永远是「新建项目」(原来只有改名/颜色/归档,建不了项目)。
-ck('project menu: create, rename, color, archive', eq(sideItemActions('project', true, fake()), ['createProject', 'copyName', 'rename', 'color', 'archive']));
+// 菜单项的唯一数据源:src/side-menu-items.json(由 scripts/emit-side-menu-items.mjs 生成)。
+// 加了菜单项却忘了重新生成 → 这里先红,浏览器 drive 也就不会再单独红一次。
+const MENU_ITEMS = JSON.parse(readFileSync(new URL('./side-menu-items.json', import.meta.url), 'utf8')) as {
+  project: string[]; projectWithChild: string[]; tag: string[];
+};
+ck('project menu matches the shared menu-items.json', eq(sideItemActions('project', true, fake()), MENU_ITEMS.project));
 // #2220：Hub 暴露 parentId 时，项目菜单多出「新建子项目」；旧 Hub 保持不变。
-ck('project menu with parent support: createChild after createProject', eq(sideItemActions('project', true, fake(), true), ['createProject', 'createChild', 'copyName', 'rename', 'color', 'archive']));
-ck('project menu without parent support: no createChild', eq(sideItemActions('project', true, fake(), false), ['createProject', 'copyName', 'rename', 'color', 'archive']));
-ck('tag menu: create child, rename, color, delete (create availability checked separately)', eq(sideItemActions('tag', true, fake()), ['createChild', 'copyName', 'rename', 'color', 'delete']));
+ck('project menu with parent support matches the shared menu-items.json', eq(sideItemActions('project', true, fake(), true), MENU_ITEMS.projectWithChild));
+ck('project menu without parent support = projectWithChild minus createChild', eq(sideItemActions('project', true, fake(), false), MENU_ITEMS.projectWithChild.filter(a => a !== 'createChild')));
+ck('tag menu matches the shared menu-items.json (create availability checked separately)', eq(sideItemActions('tag', true, fake()), MENU_ITEMS.tag));
 ck('no permission → no rename (no menu at all)', eq(sideItemActions('project', false, fake()), []) && eq(sideItemActions('tag', false, fake()), []));
 ck('board not mounted (no ops) → no menu', eq(sideItemActions('project', true, null), []));
 ck('viewer_can.edit=false project cannot be edited', !canEditProject(projects[2]) && canEditProject(projects[0]) && !canEditProject(undefined));

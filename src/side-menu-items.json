@@ -1,0 +1,24 @@
+{
+  "project": [
+    "createProject",
+    "copyName",
+    "rename",
+    "color",
+    "archive"
+  ],
+  "projectWithChild": [
+    "createProject",
+    "createChild",
+    "copyName",
+    "rename",
+    "color",
+    "archive"
+  ],
+  "tag": [
+    "createChild",
+    "copyName",
+    "rename",
+    "color",
+    "delete"
+  ]
+}
