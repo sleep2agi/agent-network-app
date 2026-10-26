@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.314:",
+  "- 新增：桌面端下载附件时显示进度与**剩余时长**（例如「下载中 · 62% · 剩余约 8 秒」），大文件不用再干等转圈。",
+  "",
   "What's new in 0.2.313:",
   "- 修复：折叠屏 / 平板上（含看板视图）的标签筛选统一改成桌面端那种竖排列表 + 搜索，横向标签条不再被截断。",
   "- 改进：折叠屏 / 平板左侧导航再收窄一点（56 dp），内容区更宽。",

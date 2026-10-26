@@ -5,6 +5,7 @@ import AttachmentFileCard from './AttachmentFileCard';
 import { appFetch } from './app-fetch';
 import { chooseSavePath, displayDownloadPath, downloadAuthedBytes, isTauriDesktop, revealInFolder, saveBrowserDownload, saveToDownloads } from './desktop-download';
 import { colors } from './theme';
+import { downloadEta, formatEta } from './download-eta';
 import { useBubbleInk } from './bubble-ink';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
@@ -14,7 +15,7 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
   const { t } = useTranslation();
   const linkInk = useBubbleInk('link');
   const busy = useRef(false);
-  const [state, setState] = useState<{ kind: 'ready' | 'downloading' | 'saved' | 'error'; path?: string; message?: string; messageKey?: string }>({ kind: 'ready' });
+  const [state, setState] = useState<{ kind: 'ready' | 'downloading' | 'saved' | 'error'; path?: string; message?: string; messageKey?: string; eta?: string }>({ kind: 'ready' });
   const download = async (direct: boolean) => {
     if (busy.current) return;
     busy.current = true;
@@ -26,7 +27,18 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
         target = await chooseSavePath(name);
         if (target === null) { setState(previous); return; }
       }
-      const bytes = await downloadAuthedBytes(appFetch, uri, token);
+      // 边下边算剩余时长:每 ~400ms 更新一次,避免每个 chunk 都触发重绘。
+      const startedAt = Date.now();
+      let lastPaint = 0;
+      const onProgress = (received: number, total?: number) => {
+        const now = Date.now();
+        if (now - lastPaint < 400 && received !== total) return;
+        lastPaint = now;
+        const { percent, etaSeconds } = downloadEta(received, total ?? size, now - startedAt);
+        const eta = formatEta(etaSeconds);
+        setState({ kind: 'downloading', eta: percent !== null && eta ? `${percent}% · 剩余约 ${eta}` : (eta ? `剩余约 ${eta}` : undefined) });
+      };
+      const bytes = await downloadAuthedBytes(appFetch, uri, token, onProgress);
       if (isTauriDesktop()) {
         const path = await saveToDownloads(name, bytes, target ?? null);
         setState({ kind: 'saved', path });
@@ -50,7 +62,7 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
   };
   return (
     <View style={{ maxWidth: '100%' }} testID={`attachment-file-desktop-${name}`}>
-      <AttachmentFileCard name={name} mime={mime} size={size} status={state.kind}
+      <AttachmentFileCard name={name} mime={mime} size={size} status={state.kind} progress={state.eta}
         detail={state.messageKey ? t(state.messageKey, { error: state.message ?? '' }) : state.message ?? (state.path ? displayDownloadPath(state.path) : t(isTauriDesktop() ? 'chat.file.saveHint' : 'chat.file.browserHint'))}
         onPress={state.kind === 'saved' ? () => { void reveal(); } : (e: any) => { void download(!!(e?.nativeEvent?.altKey ?? e?.altKey)); }} />
       {state.kind === 'saved' ? (
