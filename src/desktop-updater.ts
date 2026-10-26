@@ -1,3 +1,4 @@
+import { downloadEta } from './download-eta';
 import { stopLocalHub } from './local-hub';
 import { atLeast, type DesktopUpdateSource, type DesktopUpdateState } from './update-check-state';
 export type { DesktopUpdateState } from './update-check-state';
@@ -122,9 +123,10 @@ export async function installDesktopUpdate(): Promise<void> {
   const from = state.kind === 'available' ? { currentVersion: state.currentVersion, source: state.source } : {};
   let downloaded = 0;
   let total: number | undefined;
+  let startedAt = 0;
   try {
     await pendingUpdate.downloadAndInstall((event: any) => {
-      if (event.event === 'Started') total = event.data.contentLength || undefined;
+      if (event.event === 'Started') { total = event.data.contentLength || undefined; startedAt = Date.now(); }
       if (event.event === 'Progress') downloaded += event.data.chunkLength || 0;
       publish({
         kind: 'downloading',
@@ -133,6 +135,10 @@ export async function installDesktopUpdate(): Promise<void> {
         percent: total ? Math.min(100, Math.round(downloaded * 100 / total)) : undefined,
         downloaded,
         total,
+        ...(() => {
+          const eta = downloadEta(downloaded, total, startedAt ? Date.now() - startedAt : 0);
+          return { etaSeconds: eta.etaSeconds, speedBps: eta.speedBps };
+        })(),
       });
     });
     // app#246:重启前先停掉本 app 托管的本地 Hub,否则旧版 sidecar 会以孤儿身份继续占着端口和
