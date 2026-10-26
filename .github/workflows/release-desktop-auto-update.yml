@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.315:
+            - 修复：左栏「项目」组头右侧新增 **＋新建项目**；项目行右键菜单第一项也是「新建项目」。之前只有改名 / 颜色 / 归档，建不了项目。
+
             What's new in 0.2.314:
             - 新增：桌面端下载附件时显示进度与**剩余时长**（例如「下载中 · 62% · 剩余约 8 秒」），大文件不用再干等转圈。
 
