@@ -20,7 +20,9 @@ import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layou
 // 菜单项不写死:读 scripts/emit-side-menu-items.mjs 生成的那份 JSON(与单测同一数据源)。
 const MENU_ITEMS = JSON.parse(readFileSync(new URL('../../src/side-menu-items.json', import.meta.url), 'utf8'));
 const PROJECT_ITEMS = MENU_ITEMS.project.join();
-const TAG_ITEMS = MENU_ITEMS.tag.join();
+// 这个夹具的 Hub 不暴露「新建子标签」能力位,所以 createChild 会被过滤掉 ——
+// 期望值 = 共享 JSON 里的标签项减去 createChild(而不是再手写一份列表)。
+const TAG_ITEMS = MENU_ITEMS.tag.filter((a) => a !== 'createChild').join();
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
