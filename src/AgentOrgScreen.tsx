@@ -483,7 +483,7 @@ const makeStyles = () => StyleSheet.create({
   detailHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   memberTitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', flexGrow: 1, flexShrink: 1, gap: spacing.sm, maxWidth: '100%' },
   bulkAction: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, maxWidth: '100%' },
-  memberList: { maxHeight: '60vh', flexGrow: 0, minHeight: 0 },
+  memberList: { maxHeight: 400, flexGrow: 0, minHeight: 0 },
   title: { color: colors.text, fontSize: typeScale.heading, fontWeight: '600' },
   note: { color: colors.textMuted, fontSize: typeScale.small, lineHeight: 20 },
   info: { marginHorizontal: spacing.md, marginTop: spacing.sm, paddingHorizontal: spacing.sm },
