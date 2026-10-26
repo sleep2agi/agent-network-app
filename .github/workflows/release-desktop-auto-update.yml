@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.321:
+            - 新增：标签筛选里也有「新建标签」（手机横向条和宽屏下拉面板都有），和「新建项目」成对。
+
             What's new in 0.2.320:
             - 修复：手机 / 平板没有左栏，项目筛选弹层里现在也有「新建项目」（原来只有「管理项目」）。
 
