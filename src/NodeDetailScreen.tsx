@@ -696,7 +696,7 @@ export default function NodeDetailScreen({
           </Pressable>
         ) : null}
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
-        {node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} /> : null}
+        {node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} runtimeVersion={s.version} /> : null}
         {node && daemonProviderNodeRuntime(node.runtime) ? (
           <NodeDaemonProviderSection cfg={cfg} node={node} onManageBinding={() => setActiveSection('overview')} />
         ) : null}

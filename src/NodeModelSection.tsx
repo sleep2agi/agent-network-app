@@ -25,7 +25,7 @@ import {
   type ModelChangePhase,
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { colors, spacing, radius } from './theme';
 
@@ -44,7 +44,7 @@ async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string
   }
 }
 
-export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: HubNode }) {
+export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: HubConfig; node: HubNode; runtimeVersion?: string | null }) {
   // undefined = 还没读到;null = hub 没有这个接口
   const [view, setView] = useState<NodeConfigRead | null | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
@@ -78,8 +78,12 @@ export default function NodeModelSection({ cfg, node }: { cfg: HubConfig; node: 
       const ids = await reportedModelList(cfg, node.node_id);
       if (!live) return;
       setV2Models(ids);
-      setV2Note(ids.length
-        ? `${reason}改用这台机器上次上报的 OpenCode 模型清单。`
+      if (ids.length) { setV2Note(`${reason}改用这台机器上次上报的 OpenCode 模型清单。`); return; }
+      // #2293 —— 空列表时区分「版本太旧不会上报」和「真的还没上报」：
+      // 前者给出可执行的升级提示（TMAI欧 / TMAI文档欧 跑的就是 .146），后者仍是“等一等/手输”。
+      const fresh = reportsCatalogSince(runtimeVersion);
+      setV2Note(fresh === false
+        ? `${reason}这台节点的 agent-node ${runtimeVersion} 不会自动上报模型清单（需 ≥ 2.5.0-preview.160，升级后 3 分钟内生效）—— 现在仍可手输 provider/model。`
         : `${reason}这台机器也还没上报过模型清单 —— 仍可手输 provider/model。`);
     };
     if (!daemonId) {

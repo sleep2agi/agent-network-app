@@ -1,4 +1,4 @@
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else { console.error('❌', n); } };
@@ -28,6 +28,11 @@ ck('reported catalog: 保留 provider/model、去重、保序',
 ck('reported catalog: 不像模型 id 的一律丢掉（空串 / 没有斜杠 / 非字符串 / 超长）',
   reportedCatalogModels(['', 'deepseek', 7 as unknown as string, null as unknown as string, 'a/'.padEnd(500, 'x')]).length === 0);
 ck('reported catalog: 缺字段/旧 Hub → 空数组（不是内置表）', reportedCatalogModels(null).length === 0 && reportedCatalogModels([]).length === 0);
+
+// #2293 —— 版本门槛：catalog 是 agent-node 2.5.0-preview.160 起才真正上报的。
+ck('reportsCatalogSince: .160 起为真', reportsCatalogSince('2.5.0-preview.160') === true && reportsCatalogSince('2.5.0-preview.161') === true);
+ck('reportsCatalogSince: .146 / .159 为假（正是 TMAI欧 / 空转版）', reportsCatalogSince('2.5.0-preview.146') === false && reportsCatalogSince('2.5.0-preview.159') === false);
+ck('reportsCatalogSince: 看不懂的版本不判断（null）', reportsCatalogSince('dev') === null && reportsCatalogSince('') === null && reportsCatalogSince(null) === null && reportsCatalogSince('2.6.0-preview.200') === null);
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);
