@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.317:
+            - 新增：手机 / 平板端下载附件也显示进度与剩余时长（`下载中 · 62% · 剩余约 8 秒`），原来只有转圈；桌面端 0.314 已有。
+
             What's new in 0.2.316:
             - 改进：军团列表的分组更醒目 —— 每个团之间一条细分隔线，组名前一条 brand 色微光竖条，标题从灰字改成正文色。
 
