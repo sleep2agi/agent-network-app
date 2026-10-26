@@ -148,6 +148,9 @@ export const downloadAttachmentWith = async (
   fileId: string,
   name?: string,
   mime?: string,
+  /** 边下边报:已写入的字节数 + 服务端声明总量(拿不到就是 undefined)。
+   *  admin 2026-10-26「下载显示一下剩余时长」—— 手机端原来只有转圈。 */
+  onProgress?: (received: number, total?: number) => void,
 ): Promise<string> => {
   const dest = cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope(serverUrl, token));
   const info = await fs.getInfoAsync(dest);
@@ -182,18 +185,38 @@ export const downloadAttachmentWith = async (
   const cleanup = async () => { await fs.deleteAsync(part, { idempotent: true }).catch(() => {}); };
 
   let r: { status: number; headers?: Record<string, string> };
+  const download = fs.downloadAsync(`${serverUrl}/api/files/${fileId}`, part, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  // 进度:downloadAsync 不给我们字节数,那就每 400ms 看一眼 part 文件长到多大了。
+  // 只报数、不改任何判定 —— 成败仍由下面的校验决定。
+  let polling: ReturnType<typeof setInterval> | null = null;
+  if (onProgress) {
+    let total: number | undefined;
+    polling = setInterval(() => {
+      void (async () => {
+        try {
+          const info = await fs.getInfoAsync(part);
+          if (info.exists && typeof info.size === 'number') onProgress(info.size, total);
+        } catch { /* 轮询失败不影响下载 */ }
+      })();
+    }, 400) as unknown as ReturnType<typeof setInterval>;
+    // 第一个 chunk 可能 400ms 内就落地:立刻报一次 0,让 UI 马上进「下载中」。
+    onProgress(0, undefined);
+  }
   try {
-    r = await fs.downloadAsync(`${serverUrl}/api/files/${fileId}`, part, {
-      headers: { Authorization: `Bearer ${token}` },
-    });
+    r = await download;
   } catch (e) {
     // #10 CR2: downloadAsync itself can throw (native abort, offline, DNS,
     // TLS). The native module may have already opened and partly written
     // `part` before failing — clean it up before rethrowing so the next
     // attempt doesn't confuse itself with half-written bytes.
+    if (polling) clearInterval(polling);
     await cleanup();
     throw e;
   }
+
+  if (polling) { clearInterval(polling); polling = null; }
 
   if (r.status < 200 || r.status > 299) {
     // The body sitting in `part` right now is the server's error payload —

@@ -1,3 +1,4 @@
+import { downloadEta, formatEta } from './download-eta';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
   describeAttachmentError,
@@ -33,17 +34,19 @@ import './i18n-chat';
 // 那边没有 RN 依赖所以能直接单测 —— 见 attach-download.test.ts 的 witnessed-red。
 export { MAX_ATTACHMENT_BYTES, mimeFromName };
 
+
 export const downloadAttachment = (
   serverUrl: string,
   token: string,
   fileId: string,
   name?: string,
   mime?: string,
+  onProgress?: (received: number, total?: number) => void,
 ): Promise<string> =>
   downloadAttachmentWith(
     FileSystem as unknown as DownloadFs,
     FileSystem.cacheDirectory ?? '',
-    serverUrl, token, fileId, name, mime,
+    serverUrl, token, fileId, name, mime, onProgress,
   );
 
 
@@ -71,6 +74,8 @@ export function AttachmentFile({
   const [busy, setBusy] = useState(false);
   const busyRef = useRef(false);
   const [error, setError] = useState<string | null>(null);
+  /** 「62% · 剩余约 8 秒」—— 没有总量或还没算出速度时是 undefined。 */
+  const [progress, setProgress] = useState<string | undefined>(undefined);
 
   const open = async () => {
     if (busyRef.current) return;
@@ -79,20 +84,31 @@ export function AttachmentFile({
     setError(null);
     try {
       const resolvedMime = mime || mimeFromName(name);
-      const local = await downloadAttachment(serverUrl, token, fileId, name, resolvedMime);
+      const startedAt = Date.now();
+      let lastPaint = 0;
+      const onProgress = (received: number, total?: number) => {
+        const now = Date.now();
+        if (now - lastPaint < 400 && received !== total) return;
+        lastPaint = now;
+        const eta = downloadEta(received, total ?? size, now - startedAt);
+        const left = formatEta(eta.etaSeconds);
+        setProgress(eta.percent !== null && left ? `${eta.percent}% · 剩余约 ${left}` : left ? `剩余约 ${left}` : undefined);
+      };
+      const local = await downloadAttachment(serverUrl, token, fileId, name, resolvedMime, onProgress);
       await Sharing.shareAsync(local, {
         mimeType: resolvedMime || 'application/octet-stream',
         dialogTitle: name,
       });
     } catch (e) {
       setError(describeAttachmentError(e));
+      setProgress(undefined);
     } finally {
       busyRef.current = false;
       setBusy(false);
     }
   };
 
-  if (!label) return <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} detail={error ?? t('chat.file.nativeHint')} onPress={() => { void open(); }} />;
+  if (!label) return <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} progress={busy ? progress : undefined} detail={error ?? t('chat.file.nativeHint')} onPress={() => { void open(); }} />;
 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? name} onPress={open} hitSlop={6}>
