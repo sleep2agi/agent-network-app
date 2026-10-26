@@ -1026,12 +1026,19 @@ export default function AgentsScreen({
           accessibilityRole={section.collapsible ? 'button' : 'header'}
           accessibilityLabel={`${section.title} ${section.online}/${section.total} 在线${section.collapsible ? (section.collapsed ? ',已折叠' : ',已展开') : ''}`}
           accessibilityState={section.collapsible ? { expanded: !section.collapsed } : undefined}
-          style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+          // admin 2026-10-26「军团里面能分组吗…有明显的划分区，有点小发光，就是要震撼」:
+          // 每个团之间一条发丝分隔线(第一组不画),标题前缀一条 brand 色的微光竖条。
+          style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg },
+            section !== shownSections[0] ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null]}
         >
+          <View testID={`agent-group-glow-${section.title}`} style={{
+            width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.accent,
+            shadowColor: colors.accent, shadowOpacity: 0.45, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
+          }} />
           {section.collapsible ? (
             <Ionicons name={section.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
           ) : null}
-          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{section.title}</Text>
+          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.text }]}>{section.title}</Text>
           <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{section.online}/{section.total}</Text>
         </Pressable>
       )}
