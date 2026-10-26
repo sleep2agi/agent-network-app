@@ -7,17 +7,18 @@ import { checkProjectName, nextProjectColor } from './task-board-model';
 import { tagName } from './task-tag-catalog';
 import type { ManagerOps } from './task-board-store';
 
-export type SideAction = 'rename' | 'color' | 'archive' | 'delete' | 'createChild' | 'createProject';
+export type SideAction = 'rename' | 'color' | 'archive' | 'delete' | 'createChild' | 'createProject' | 'copyName';
 
 /** 菜单里有哪几项。没有写 Hub 的路(看板没挂)或没权限(项目 viewer_can.edit=false、标签 can_manage=false)→ 空,菜单不开。 */
 export function sideItemActions(kind: 'project' | 'tag', can: boolean, ops: ManagerOps | null,
   /** 项目能不能建子项目：由调用方按 **Hub 是否暴露 parentId** 决定（旧 Hub 不出现这一项）。 */
   projectChildAllowed = false): SideAction[] {
   if (!can || !ops) return [];
-  if (kind === 'tag') return ['createChild', 'rename', 'color', 'delete'];
+  if (kind === 'tag') return ['createChild', 'copyName', 'rename', 'color', 'delete'];
   // admin 2026-10-26(左栏右键 TMAI 只有改名/颜色/归档):「现在还建不了项目目录啊」——
   // 项目菜单第一项永远是「新建项目」(建的是新项目,与这一行能不能改无关)。
-  return projectChildAllowed ? ['createProject', 'createChild', 'rename', 'color', 'archive'] : ['createProject', 'rename', 'color', 'archive'];
+  const projectBase: SideAction[] = ['createProject', 'createChild', 'copyName', 'rename', 'color', 'archive'];
+  return projectChildAllowed ? projectBase : projectBase.filter(a => a !== 'createChild');
 }
 
 /** 项目:canEdit === false 就是 Hub 的 viewer_can.edit=false(对话框列出来的也是这份)。 */

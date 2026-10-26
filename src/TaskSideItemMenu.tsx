@@ -1,6 +1,7 @@
 // 项目 / 标签行的菜单(#760):桌面右键左栏的行 → 锚在鼠标处;手机长按筛选里的行 → 同一份菜单(触屏行高 + 遮罩)。
 // 项:改名 / 颜色 / 归档(项目)或 删除(标签,确认文案同「管理标签」)。没权限 = 菜单根本不开(task-side-menu sideItemActions)。
 // 改名:桌面交给左栏把那一行变成输入框(onInlineRename);手机打开管理对话框,直接进那一项的改名页。
+import * as Clipboard from 'expo-clipboard';
 import { useState } from 'react';
 import { Modal, Pressable, View, useWindowDimensions } from 'react-native';
 import { Text } from './ui-text';
@@ -19,7 +20,7 @@ import { canManageTags, TAG_COLORS } from './task-tag-catalog';
 import { canEditProject, runSideAction, sideItemActions, type SideAction } from './task-side-menu';
 import { hubExposesProjectParent } from './task-tree';
 
-const ICON: Record<SideAction, string> = { createProject: 'add-outline', createChild: 'add-outline', rename: 'create-outline', color: 'color-palette-outline', archive: 'archive-outline', delete: 'trash-outline' };
+const ICON: Record<SideAction, string> = { copyName: 'copy-outline', createProject: 'add-outline', createChild: 'add-outline', rename: 'create-outline', color: 'color-palette-outline', archive: 'archive-outline', delete: 'trash-outline' };
 
 export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: (kind: 'project' | 'tag', key: string) => void }) {
   useTranslation();
@@ -53,7 +54,11 @@ export default function TaskSideItemMenu({ onInlineRename }: { onInlineRename?: 
     if (failed) setError(target.kind === 'tag' ? tr(failed) : failed); else close();
   };
   const act = (a: SideAction) => {
-    if (a === 'createProject') { close(); setCreatingProject(null); }
+    if (a === 'copyName') {
+      // 复制这一行显示的名字(项目的 name / 标签的键),方便贴到聊天里指给别人。
+      void Clipboard.setStringAsync(target.kind === 'project' ? (project?.name ?? target.key) : target.key).catch(() => undefined);
+      close();
+    } else if (a === 'createProject') { close(); setCreatingProject(null); }
     else if (a === 'createChild') {
       if (target.kind === 'tag' && canCreate) { close(); setCreatingTag(target.key); }
       else if (target.kind === 'project' && canCreateProjectChild) { close(); setCreatingProject(target.key); }

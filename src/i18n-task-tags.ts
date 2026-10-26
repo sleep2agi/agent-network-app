@@ -20,6 +20,7 @@ registerTranslations({
   'tags.create': ['新建标签', 'Create tag'],
   'tags.createChild': ['新建子标签', 'Create child tag'],
   'tags.createProject': ['新建项目', 'Create project'],
+  'tags.copyName': ['复制名称', 'Copy name'],
   'tags.createUnsupported': ['需要升级Hub后创建子标签', 'Upgrade the Hub to create child tags'],
   'tags.createUnconfirmed': ['无法确认标签是否创建成功，请刷新目录后检查，勿重复提交。', 'Creation could not be confirmed. Refresh the catalog and check before submitting again.'],
   'tags.name': ['标签名称', 'Tag name'],
