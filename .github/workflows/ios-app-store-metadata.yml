@@ -18,16 +18,10 @@ on:
         required: true
         type: boolean
         default: true
-      demo_hub_url:
-        description: Optional demo Hub URL reachable without a LAN, for the reviewer notes
-        required: false
-        type: string
-        default: ""
-      demo_account:
-        description: Optional demo account (user / password) for the reviewer notes
-        required: false
-        type: string
-        default: ""
+      # #2097 —— 这里**故意没有** demo_hub_url / demo_account 输入。
+      # dispatch 输入会留在 run 元数据里（谁能触发就能看到），把账号或带 token 的 URL
+      # 当普通输入传，等于把凭据写进 GitHub 的审计记录。演示信息改由
+      # environment `macos-signing` 的 secrets（REVIEW_DEMO_*）提供，见下方 env。
       whats_new:
         description: "这一版的「新功能」(=whatsNew, 用户更新页看到的);空 = 不改"
         required: false
@@ -62,6 +56,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: macos-signing
     steps:
+      # #2097 回归门：本文件**不得**再出现凭据型 dispatch 输入，也不得在 dry-run 回显 notes。
+      # 放在第一步，万一有人改回来，这次 dispatch 会立刻红，而不是等安全审计发现。
+      - name: Guard — no credential-bearing dispatch inputs
+        shell: bash
+        run: node scripts/check-ios-metadata-no-credential-inputs.mjs
       - name: Update listing copy and reviewer notes without exposing credentials
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -69,8 +68,9 @@ jobs:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
           VERSION: ${{ inputs.version }}
           DRY_RUN: ${{ inputs.dry_run }}
-          DEMO_HUB_URL: ${{ inputs.demo_hub_url }}
-          DEMO_ACCOUNT: ${{ inputs.demo_account }}
+          # #2097 —— 从受保护 environment 的 secret 读，绝不再从 dispatch 输入读。
+          DEMO_HUB_URL: ${{ secrets.REVIEW_DEMO_HUB_URL }}
+          DEMO_ACCOUNT: ${{ secrets.REVIEW_DEMO_ACCOUNT }}
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
           BUILD_NUMBER: ${{ inputs.build_number }}
           PHASED_RELEASE: ${{ inputs.phased_release }}
@@ -252,7 +252,11 @@ jobs:
 
 
           if [ "$DRY_RUN" = 'true' ]; then
-            echo "    dry-run: would set notes to:"; printf '%s\n' "$notes" | sed 's/^/      /'
+            # #2097 —— dry-run **不再打印 notes 全文**：演示地址/账号就在里面。
+            # 只输出“有没有提供”和长度，足以判断将要写什么，又不泄露内容。
+            echo "    dry-run: reviewer notes length=${#notes} chars"
+            if [ -n "$DEMO_HUB_URL" ]; then echo "    dry-run: demo hub: provided"; else echo "    dry-run: demo hub: not provided"; fi
+            if [ -n "$DEMO_ACCOUNT" ]; then echo "    dry-run: demo account: provided"; else echo "    dry-run: demo account: not provided"; fi
             # 只读跑也要把版本摘要打出来 —— releaseType 是提审前的判断依据,以前 dry-run 看不到。
             echo 'App Store version summary:'
             asc_get "appStoreVersions/$version_id?include=build" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null), linkedBuildNumber: (([.included[]? | select(.type == "builds") | .attributes.version] | first) // null)}'
