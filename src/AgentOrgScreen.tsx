@@ -464,14 +464,18 @@ function StructureSelector(p: { title: string; options: { id: string | null; lab
 }
 
 const makeStyles = () => StyleSheet.create({
-  page: { width: '100%', maxWidth: 700, alignSelf: 'center' },
+  // admin 2026-10-26「放在中间很奇怪，为什么不放到左侧」：
+  // 这页以前是 `alignSelf:'center' + maxWidth:700`，在宽窗口里整块浮在中间、左边一大片空白。
+  // 改成从左侧起排并放宽上限：宽窗口用满内容区（外层 SettingsScreen 自己已有 maxWidth:760），
+  // 手机/窄窗仍按原有单列布局（`phone` 分支不变）。
+  page: { width: '100%', maxWidth: 760, alignSelf: 'stretch' },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   toolbarContext: { flexGrow: 1, flexShrink: 1, minWidth: 160, gap: spacing.xs },
   compactAction: { ...buttonStyle('secondary'), height: 'auto', minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, flexShrink: 1 },
   actionLabel: { ...buttonTextStyle('secondary'), fontSize: typeScale.small, flexShrink: 1 },
   workspace: { marginHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' },
   columns: { flexDirection: 'row', minHeight: 440 },
-  navigation: { width: '32%', maxWidth: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
+  navigation: { width: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
   sectionLabel: { color: colors.textMuted, fontSize: typeScale.small, fontWeight: '600', padding: spacing.sm, marginBottom: spacing.xs },
   departmentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingRight: spacing.sm, marginBottom: 2, borderRadius: radius.item },
   count: { color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'], backgroundColor: colors.subtleFill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.item },
@@ -479,7 +483,7 @@ const makeStyles = () => StyleSheet.create({
   detailHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   memberTitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', flexGrow: 1, flexShrink: 1, gap: spacing.sm, maxWidth: '100%' },
   bulkAction: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, maxWidth: '100%' },
-  memberList: { maxHeight: 400, flexGrow: 0, minHeight: 0 },
+  memberList: { maxHeight: '60vh', flexGrow: 0, minHeight: 0 },
   title: { color: colors.text, fontSize: typeScale.heading, fontWeight: '600' },
   note: { color: colors.textMuted, fontSize: typeScale.small, lineHeight: 20 },
   info: { marginHorizontal: spacing.md, marginTop: spacing.sm, paddingHorizontal: spacing.sm },
