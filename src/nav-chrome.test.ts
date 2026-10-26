@@ -134,8 +134,8 @@ ck('rail badge updates live from the unread store', rail.includes('subscribeUnre
 // ── iconsOnly rail (wide window = desktop's 64 dp icon rail): Vincent 2026-10-24 折叠屏 Hub 设置 ──
 ck('rail drops labels only on a wide window (>= 900 dp): Vincent 折叠屏 ≈980 dp yes, 手机横屏 844 dp no',
   !railIconsOnly(844) && !railIconsOnly(ICON_RAIL_MIN_WIDTH - 1) && railIconsOnly(ICON_RAIL_MIN_WIDTH) && railIconsOnly(983));
-ck('iconsOnly rail is the desktop 64 dp box, floored at the Material touch minimum',
-  iconRailWidth(1) === 64 && iconRailWidth(0.85) === 54 && iconRailWidth(1.15) === 74 && iconRailWidth(Number.NaN) === 64);
+ck('iconsOnly rail is 56 dp at standard density, floored at the Material touch minimum',
+  iconRailWidth(1) === 56 && iconRailWidth(0.85) === 48 && iconRailWidth(1.15) === 64 && iconRailWidth(Number.NaN) === 56);
 ck('iconsOnly rail is narrower than the labelled rail at every density',
   iconRailWidth(0.85) < mobileRailWidth(0.85) && iconRailWidth(1) < mobileRailWidth(1) && iconRailWidth(1.15) < mobileRailWidth(1.15));
 ck('rail keeps the desktop brand mark + version in iconsOnly (no label to make room for)',

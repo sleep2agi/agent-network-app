@@ -133,10 +133,11 @@ export const ICON_RAIL_MIN_WIDTH = 900;
 export function railIconsOnly(windowWidth: number): boolean {
   return Number.isFinite(windowWidth) && windowWidth >= ICON_RAIL_MIN_WIDTH;
 }
-/** The desktop rail's 64 dp (× 界面密度), floored at the Material touch minimum. */
+/** The desktop rail's 64 dp (× 界面密度), floored at the Material touch minimum.
+ *  admin 2026-10-25（折叠屏看板截图）：「左边那个节点列表可以窄一点」—— 再收 8 dp 到 56。 */
 export function iconRailWidth(density: number): number {
   const d = Number.isFinite(density) && density > 0 ? density : 1;
-  return Math.max(RAIL_TOUCH_MIN, Math.round(64 * d));
+  return Math.max(RAIL_TOUCH_MIN, Math.round(56 * d));
 }
 
 /**
