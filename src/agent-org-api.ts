@@ -29,7 +29,16 @@ function agentOf(value: unknown): OrgAgent | null {
   let departmentId: string | null | undefined;
   if (row.department_id === null) departmentId = null;
   else if (typeof row.department_id === 'string' && row.department_id.trim()) departmentId = row.department_id.trim();
-  return departmentId === undefined ? { nodeId: row.node_id, alias } : { nodeId: row.node_id, alias, departmentId };
+  // #2596 —— Hub .162 起目录行带 updated_at / lifecycle_state（同 /api/nodes 的投影）。
+  // 老 Hub 没有这两格 ⇒ undefined ⇒ placeAgents 保持旧行为（不去重、不过滤）。
+  const agent: OrgAgent = departmentId === undefined
+    ? { nodeId: row.node_id, alias }
+    : { nodeId: row.node_id, alias, departmentId };
+  if (typeof row.updated_at === 'string' && row.updated_at.trim()) agent.updatedAt = row.updated_at.trim();
+  else if (row.updated_at === null) agent.updatedAt = null;
+  if (typeof row.lifecycle_state === 'string' && row.lifecycle_state.trim()) agent.lifecycleState = row.lifecycle_state.trim();
+  else if (row.lifecycle_state === null) agent.lifecycleState = null;
+  return agent;
 }
 
 function agentsOf(value: unknown): OrgAgent[] {

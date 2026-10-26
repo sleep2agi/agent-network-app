@@ -292,6 +292,91 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   ck('bulk assign is bounded to 4 in flight', /\[0, 1, 2, 3\]\.map\(\(\) => worker\(\)\)/.test(screen));
   ck('bulk assign reports how many moved and failed', /t\('agentOrg\.bulkDone', \{ ok, fail \}\)/.test(screen));
 
+// #2596 —— 同 alias 多节点：Hub 里这是**真实数据**（重装/换机后旧 node 行还在）。
+// 以前全部显示成同名 Agent；现在按活跃度折叠成一个，并把被合并的 nodeId 保留下来。
+{
+  const NOW = Date.parse('2026-10-26T12:00:00Z');
+  const day = 86_400_000;
+  const iso = (msAgo: number) => new Date(NOW - msAgo).toISOString();
+  // 同 alias（大小写不同也算同一个）、三个 nodeId，一个活跃、一个 3 天前、一个 30 天前
+  const dup = placeAgents(data({
+    owners: [owner('u1', 'eng', [
+      { nodeId: 'n-old', alias: '通信欧', updatedAt: iso(30 * day), lifecycleState: 'active' },
+      { nodeId: 'n-new', alias: '通信欧', updatedAt: iso(60_000), lifecycleState: 'active' },
+      { nodeId: 'n-mid', alias: '通信欧', updatedAt: iso(3 * day), lifecycleState: 'active' },
+    ], '爱丽丝')],
+    unowned: [],
+  }), [], { now: NOW });
+  ck('🔴 同 alias 只留一行（最活跃的那个）', dup.filter(a => a.alias === '通信欧').length === 1);
+  ck('留下的是 updated_at 最新的 nodeId', dup.find(a => a.alias === '通信欧')?.nodeId === 'n-new');
+  ck('被合并的 nodeId 不丢，按活跃度排序', JSON.stringify(dup.find(a => a.alias === '通信欧')?.duplicateNodeIds) === JSON.stringify(['n-mid', 'n-old']));
+
+  // 近 7 天默认过滤：30 天前的**独立** alias 应该被隐藏
+  const stale = placeAgents(data({
+    owners: [owner('u1', 'eng', [
+      { nodeId: 'n-fresh', alias: '新节点', updatedAt: iso(2 * day) },
+      { nodeId: 'n-stale', alias: '老节点', updatedAt: iso(30 * day) },
+    ], '爱丽丝')],
+    unowned: [],
+  }), [], { now: NOW });
+  ck('🔴 超过 7 天没动的 Agent 默认不显示', !stale.some(a => a.alias === '老节点') && stale.some(a => a.alias === '新节点'));
+  ck('recentDays: 0 表示不过滤', placeAgents(data({
+    owners: [owner('u1', 'eng', [{ nodeId: 'n-stale', alias: '老节点', updatedAt: iso(400 * day) }], '爱丽丝')],
+    unowned: [],
+  }), [], { now: NOW, recentDays: 0 }).some(a => a.alias === '老节点'));
+
+  // 向后兼容：老 Hub 没有 updated_at ⇒ 既不过滤也不过早去重
+  const legacy = placeAgents(data({
+    owners: [owner('u1', 'eng', [
+      { nodeId: 'n-a', alias: '旧节点' }, { nodeId: 'n-b', alias: '旧节点' },
+    ], '爱丽丝')],
+    unowned: [],
+  }), [], { now: NOW });
+  ck('🔴 老 Hub（无 updated_at）不过滤：两条同名都保留', legacy.filter(a => a.alias === '旧节点').length === 2);
+
+  // 混合：只有一条有 updated_at 时，按“有时间的优先”，且没有时间的那条不被过滤掉
+  const mixed = placeAgents(data({
+    owners: [owner('u1', 'eng', [
+      { nodeId: 'n-time', alias: '混合', updatedAt: iso(day) },
+      { nodeId: 'n-untimed', alias: '混合' },
+      { nodeId: 'n-noTime-old-alias', alias: '只有时间未知' },
+    ], '爱丽丝')],
+    unowned: [],
+  }), [], { now: NOW });
+  ck('有 updated_at 的行赢得折叠', mixed.find(a => a.alias === '混合')?.nodeId === 'n-time');
+  ck('update_at 未知的行不会被当成“很久没动”而隐藏', mixed.some(a => a.alias === '只有时间未知'));
+
+  // 大小写/空白不同的 alias 视为同一组
+  const casey = placeAgents(data({
+    owners: [owner('u1', 'eng', [
+      { nodeId: 'n-x', alias: 'Bob', updatedAt: iso(day) },
+      { nodeId: 'n-y', alias: 'bob', updatedAt: iso(2 * day) },
+    ], '爱丽丝')],
+    unowned: [],
+  }), [], { now: NOW });
+  ck('alias 大小写不同也折叠成一组', casey.filter(a => a.alias.toLowerCase() === 'bob').length === 1);
+}
+
+// #2596 —— 目录 JSON 解析：新字段只在存在时带上，老形状不受影响。
+{
+  const page = parseDirectoryPage({
+    people: [{
+      user_id: 'u1', username: 'alice', display_name: '爱丽丝', department: null,
+      agents: [
+        { node_id: 'n1', alias: '甲', updated_at: '2026-10-26 14:01:21', lifecycle_state: 'active' },
+        { node_id: 'n2', alias: '乙' },
+      ],
+    }],
+    has_more: false,
+    agent_department_supported: true,
+  });
+  const a1 = page.people[0].agents[0];
+  const a2 = page.people[0].agents[1];
+  ck('解析 updated_at', a1.updatedAt === '2026-10-26 14:01:21');
+  ck('解析 lifecycle_state', a1.lifecycleState === 'active');
+  ck('老形状（无这两格）不塞 undefined 值以外的东西', a2.updatedAt === undefined && a2.lifecycleState === undefined);
+}
+
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
 
