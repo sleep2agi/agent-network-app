@@ -57,7 +57,7 @@ check('section disables the control from modelControlAvailability and shows its 
 check('section offers suggested models plus a custom id input', section.includes('suggestedModels(') && section.includes('TextInput'));
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
 check('known node mounts daemon Provider control for co-presence and legacy model control for other runtimes',
-  detail.includes('{node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} />')
+  detail.includes('{node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} runtimeVersion={s.version} />')
   && detail.includes('{node && daemonProviderNodeRuntime(node.runtime) ? (')
   && detail.includes('<NodeDaemonProviderSection cfg={cfg} node={node}'));
 

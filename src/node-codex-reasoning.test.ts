@@ -17,7 +17,7 @@ const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 
 check('detail mounts reasoning section for codex-app-server', detail.includes('<NodeCodexReasoningSection') && detail.includes("node.runtime === 'codex-app-server'"));
 check('detail mounts execution section before reasoning', detail.indexOf('<NodeCodexExecutionSection') < detail.indexOf('<NodeCodexReasoningSection'));
 check('model and daemon Provider sections not gated by readOnly',
-  detail.includes('{node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} />')
+  detail.includes('{node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} runtimeVersion={s.version} />')
   && detail.includes('{node && daemonProviderNodeRuntime(node.runtime) ? (')
   && detail.includes('<NodeDaemonProviderSection cfg={cfg} node={node}')
   && !detail.includes('!readOnly && node ? <NodeModelSection')
