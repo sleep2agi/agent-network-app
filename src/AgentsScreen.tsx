@@ -6,7 +6,7 @@
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
 import * as Clipboard from 'expo-clipboard';
-import { fetchOrg } from './org-api';
+import { fetchDepartmentNodes, fetchOrg } from './org-api';
 import { groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
 import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -194,6 +194,9 @@ export default function AgentsScreen({
   // 组织架构(board #419):有部门、且有人分了部门时,「人员」按部门分小组(部门路径做小标题,未分配的最后)。
   // 旧 Hub 没有 /departments → null,照旧一个平的列表。
   const [org, setOrg] = useState<OrgData | null>(null);
+  /** alias → 部门名(Hub 的真实归属)。空 Map = 退回 alias 前缀分组,行为与以前一致。
+   *  admin 2026-10-26:「军团里面能分组吗…有明显的划分区」—— 按部门分比猜前缀可靠。 */
+  const [deptByAlias, setDeptByAlias] = useState<Map<string, string>>(new Map());
   // 群会话(RFC-042):和私信同一次 /api/dm/threads 拿到。null = 这个 Hub 没有群(没有 group_threads 字段)→ 区块不画。
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const loadPeople = useCallback(async () => {
@@ -475,8 +478,9 @@ export default function AgentsScreen({
         activityAt: alias => activityByAlias.get(alias) ?? 0,
       },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
+      teamOf: alias => deptByAlias.get(alias),
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -509,6 +513,22 @@ export default function AgentsScreen({
   const groupsShown = groupsCollapsed ? [] : groupsMatched;
   const groupsHeaderHRef = useRef<number | null>(null);
   const groupsSectionHRef = useRef<number | null>(null);
+  // 部门归属:每个部门一次 nodes 查询(部门通常 <20 个,并发即可;任一失败就少一组,不阻塞列表)。
+  useEffect(() => {
+    if (!org || !org.departments.length) { setDeptByAlias(new Map()); return; }
+    let alive = true;
+    void Promise.all(org.departments.map(async d => {
+      const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
+      return { name: d.name, nodes };
+    })).then(groups => {
+      if (!alive) return;
+      const map = new Map<string, string>();
+      for (const g of groups) for (const n of g.nodes) if (n.alias && !map.has(n.alias)) map.set(n.alias, g.name);
+      setDeptByAlias(map);
+    }).catch(() => { if (alive) setDeptByAlias(new Map()); });
+    return () => { alive = false; };
+  }, [org, cfg]);
+
   const peopleGroups = useMemo(() => groupPeopleByDepartment(org, peopleShown.rows), [org, peopleShown.rows]);
   const peopleGroupHeadHRef = useRef<number | null>(null);
   // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。
