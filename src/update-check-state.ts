@@ -10,7 +10,9 @@ export type DesktopUpdateSource = 'mirror' | 'github';
 export type DesktopUpdateState =
   | { kind: 'idle' | 'unsupported' | 'checking' | 'up-to-date' }
   | { kind: 'available'; version: string; notes: string; currentVersion?: string; source?: DesktopUpdateSource }
-  | { kind: 'downloading'; version: string; percent?: number; currentVersion?: string; source?: DesktopUpdateSource; downloaded?: number; total?: number }
+  | { kind: 'downloading'; version: string; percent?: number; currentVersion?: string; source?: DesktopUpdateSource; downloaded?: number; total?: number
+      /** 预计剩余秒数 / 速率(由 download-eta 算,桌面更新下载也一样显示,admin 2026-10-26)。 */
+      etaSeconds?: number | null; speedBps?: number | null }
   | { kind: 'error'; message: string };
 
 export type UpdateRowView = {

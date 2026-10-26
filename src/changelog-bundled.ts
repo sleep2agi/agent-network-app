@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.323:",
+  "- 新增：桌面客户端**自身更新**的下载也显示剩余时长（「正在下载 · 62% · 剩余约 1 分 20 秒」）。",
+  "",
   "What's new in 0.2.322:",
   "- 新增：军团（Agent 列表）右键菜单也能「复制名称」，把会话名直接贴到聊天或任务里。",
   "",
