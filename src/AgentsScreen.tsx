@@ -5,6 +5,7 @@
 // 🔴 样式必须从 ./app-styles 引入,不能在本文件复制一份 —— 那是 let 变量,
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
+import * as Clipboard from 'expo-clipboard';
 import { fetchOrg } from './org-api';
 import { groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
 import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
@@ -616,6 +617,10 @@ export default function AgentsScreen({
       case 'pin': onTogglePin?.(alias); return;
       case 'mute': onToggleMute?.(alias); return;
       case 'openWindow': onOpenChatWindow?.(alias); return;
+      case 'copyAlias':
+        // 复制会话名(alias)到剪贴板;失败静默,不打断操作。
+        void Clipboard.setStringAsync(alias).catch(() => undefined);
+        return;
       case 'detail': onOpenNodeDetail(alias); return;
       case 'hide':
         if (isConversationHidden(convFlags, alias, liveUnread.lastAt[alias] ?? 0)) updateConversationFlags(f => restoreConversation(f, alias));
