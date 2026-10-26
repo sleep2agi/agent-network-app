@@ -16,6 +16,6 @@ const items = {
   projectWithChild: sideItemActions('project', true, ops, true),
   tag: sideItemActions('tag', true, ops),
 };
-const out = join(here, '../tests/test-side-rename/menu-items.json');
+const out = join(here, '../src/side-menu-items.json');
 writeFileSync(out, `${JSON.stringify(items, null, 2)}\n`);
 console.log('wrote', out, JSON.stringify(items));
