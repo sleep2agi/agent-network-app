@@ -158,7 +158,7 @@ for (const theme of ['light', 'dark']) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     record(vp, 'tag esc', {
-      items: tItems.map(i => i.id).join() === 'rename,color,delete',
+      items: tItems.map(i => i.id).join() === 'copyName,rename,color,delete',
       inputGone: !(await box(page, tid('task-side-rename-UI'))),
       nameKept: (await box(page, `${tagSel} div[dir="auto"]`))?.text === 'UI',
       noRequest: (await page.evaluate(() => (window.__tagOps ?? []).length)) === 0,
