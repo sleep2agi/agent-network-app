@@ -1036,14 +1036,17 @@ export default function AgentsScreen({
           style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg },
             section !== shownSections[0] ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null]}
         >
-          <View testID={`agent-group-glow-${section.title}`} style={{
+          {/* 整组都离线时竖条不发亮、标题转灰:一眼看出这一团现在没人(不是没数据)。 */}
+          <View testID={`agent-group-glow-${section.title}`} style={section.online === 0 ? {
+            width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.border,
+          } : {
             width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.accent,
             shadowColor: colors.accent, shadowOpacity: 0.45, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
           }} />
           {section.collapsible ? (
             <Ionicons name={section.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
           ) : null}
-          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.text }]}>{section.title}</Text>
+          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: section.online === 0 ? colors.textMuted : colors.text }]}>{section.title}</Text>
           <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{section.online}/{section.total}</Text>
         </Pressable>
       )}
