@@ -25,11 +25,11 @@ const projects: RequirementProject[] = [
 
 // ── 有哪些项 / 权限 ──
 // admin 2026-10-26:项目菜单第一项永远是「新建项目」(原来只有改名/颜色/归档,建不了项目)。
-ck('project menu: create, rename, color, archive', eq(sideItemActions('project', true, fake()), ['createProject', 'rename', 'color', 'archive']));
+ck('project menu: create, rename, color, archive', eq(sideItemActions('project', true, fake()), ['createProject', 'copyName', 'rename', 'color', 'archive']));
 // #2220：Hub 暴露 parentId 时，项目菜单多出「新建子项目」；旧 Hub 保持不变。
-ck('project menu with parent support: createChild after createProject', eq(sideItemActions('project', true, fake(), true), ['createProject', 'createChild', 'rename', 'color', 'archive']));
-ck('project menu without parent support: no createChild', eq(sideItemActions('project', true, fake(), false), ['createProject', 'rename', 'color', 'archive']));
-ck('tag menu: create child, rename, color, delete (create availability checked separately)', eq(sideItemActions('tag', true, fake()), ['createChild', 'rename', 'color', 'delete']));
+ck('project menu with parent support: createChild after createProject', eq(sideItemActions('project', true, fake(), true), ['createProject', 'createChild', 'copyName', 'rename', 'color', 'archive']));
+ck('project menu without parent support: no createChild', eq(sideItemActions('project', true, fake(), false), ['createProject', 'copyName', 'rename', 'color', 'archive']));
+ck('tag menu: create child, rename, color, delete (create availability checked separately)', eq(sideItemActions('tag', true, fake()), ['createChild', 'copyName', 'rename', 'color', 'delete']));
 ck('no permission → no rename (no menu at all)', eq(sideItemActions('project', false, fake()), []) && eq(sideItemActions('tag', false, fake()), []));
 ck('board not mounted (no ops) → no menu', eq(sideItemActions('project', true, null), []));
 ck('viewer_can.edit=false project cannot be edited', !canEditProject(projects[2]) && canEditProject(projects[0]) && !canEditProject(undefined));

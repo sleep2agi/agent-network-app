@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.319:",
+  "- 新增：左栏项目和标签的右键菜单都能「复制名称」，方便把名字贴到聊天里。",
+  "",
   "What's new in 0.2.318:",
   "- 新增：左栏「标签」组头右侧也有 ＋（新建标签），和「项目」一致 —— 不用再翻到底部的「管理标签」。",
   "",
