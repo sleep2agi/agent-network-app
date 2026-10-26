@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.316:
+            - 改进：军团列表的分组更醒目 —— 每个团之间一条细分隔线，组名前一条 brand 色微光竖条，标题从灰字改成正文色。
+
             What's new in 0.2.315:
             - 修复：左栏「项目」组头右侧新增 **＋新建项目**；项目行右键菜单第一项也是「新建项目」。之前只有改名 / 颜色 / 归档，建不了项目。
 
