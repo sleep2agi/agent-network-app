@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.325:",
+  "- 新增：桌面军团页支持 ⌘K / Ctrl+K 直接聚焦搜索，Esc 清空。",
+  "",
   "What's new in 0.2.324:",
   "- 改进：军团里整组都离线的分区，标题转灰、微光竖条熄灭 —— 一眼看出这一团现在没人，而不是没数据。",
   "",

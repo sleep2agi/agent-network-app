@@ -227,6 +227,22 @@ export default function AgentsScreen({
   // (compact)接。搜索框平时 > 10 个 agent 才出现;按了快捷键就算 agent 少也临时露出来并聚焦。
   // 从别的页切回来时列表刚挂上、会话还在加载,搜索框可能还没渲染:记下「要聚焦」,等它出现的那次渲染后再聚焦。
   const searchRef = useRef<any>(null);
+  // 桌面一键搜:⌘K / Ctrl+K 聚焦搜索,Esc 清空(admin 2026-10-27 之后补的键盘可达性;手机不挂)。
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const onKey = (e: KeyboardEvent) => {
+      if ((e.metaKey || e.ctrlKey) && (e.key === 'k' || e.key === 'K')) {
+        e.preventDefault();
+        searchRef.current?.focus?.();
+        searchRef.current?.select?.();
+      } else if (e.key === 'Escape' && document.activeElement && searchRef.current) {
+        const el = document.activeElement as HTMLElement;
+        if (el.getAttribute?.('data-testid') === 'agents-search' || el === searchRef.current) setQuery('');
+      }
+    };
+    document.addEventListener('keydown', onKey);
+    return () => document.removeEventListener('keydown', onKey);
+  }, []);
   const [searchOpen, setSearchOpen] = useState(false);
   const [, setSearchFocusTick] = useState(0);
   const wantSearchFocus = useRef(false);
