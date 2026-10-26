@@ -68,3 +68,22 @@ export function catalogErrorText(error: string | undefined): string {
     default: return error ? `读取 OpenCode 模型列表失败：${error}` : '读取 OpenCode 模型列表失败。';
   }
 }
+
+/**
+ * #2293 —— 这台节点的 agent-node 版本是否够新到**自动上报**模型清单。
+ *
+ * 判据来自发布事实：`opencode_catalog` 是 `agent-node@2.5.0-preview.160` 起才真正上报的
+ * （`.159` 因为“读错目录 + 键放错顶层”导致功能空转，已在 `.160` 修复）。
+ *
+ * 返回 `null` = 版本号看不懂（例如 `dev`、空串、或 major.minor 不同），此时**不要**给用户
+ * 任何“版本太旧”的结论 —— 只回到原来的“还没上报过”文案。
+ */
+export function reportsCatalogSince(version: string | null | undefined): boolean | null {
+  const raw = typeof version === 'string' ? version.trim() : '';
+  const m = /^(\d+)\.(\d+)\.(\d+)-preview\.(\d+)$/.exec(raw);
+  if (!m) return null;
+  const [major, minor, patch, preview] = [Number(m[1]), Number(m[2]), Number(m[3]), Number(m[4])];
+  // 只对同一条 2.5.0 线给判断；换了版本线就交给 null（不猜）。
+  if (major !== 2 || minor !== 5 || patch !== 0) return null;
+  return preview >= 160;
+}
