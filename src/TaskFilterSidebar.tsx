@@ -17,7 +17,7 @@ import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import { personKey } from './requirement-people';
 import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, tagFilterAfterPick, type SidebarScope } from './task-board-model';
-import { setCreatingProject, setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
+import { setCreatingTag, setCreatingProject, setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
 import { aggregateCounts, includeTagAncestors, projectRows, tagDepth, tagRows, tagWithDescendants } from './task-tree';
 import { commitSideRename, renameKey } from './task-side-menu';
 import TaskSideItemMenu from './TaskSideItemMenu';
@@ -215,6 +215,13 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
           first
           collapsed={tagsCollapsed}
           onToggle={() => { const next = !tagsCollapsed; setTagsCollapsed(next); writeTagsCollapsed(next); }}
+          // 与「项目」同一套入口(admin 2026-10-26「现在还建不了项目目录啊」之后):
+          // 组头右侧 ＋ 直接进新建标签,不用先翻到底部的「管理标签」。
+          action={manageTags ? <Pressable accessibilityRole="button" accessibilityLabel={tr('tags.create')} onPress={() => setCreatingTag(null)}
+            hitSlop={8} style={state => [{ marginLeft: 'auto', paddingHorizontal: 4 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.8 }]}
+            testID="task-side-tag-add">
+            <Ionicons name="add" size={15} color={colors.textMuted} />
+          </Pressable> : undefined}
           testID="task-side-tags-header"
         />
         {!tagsCollapsed ? (
