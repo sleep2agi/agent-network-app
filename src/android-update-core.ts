@@ -123,6 +123,8 @@ export type ReleaseJson = {
   name?: string;
   body?: string | null;
   html_url?: string;
+  /** GitHub release 的发布时间（ISO 8601）。更新弹窗显示它（admin 2026-10-27）。 */
+  published_at?: string;
   draft?: boolean;
   prerelease?: boolean;
   assets?: ReleaseAsset[];
