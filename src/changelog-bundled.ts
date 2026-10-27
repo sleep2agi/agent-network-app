@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.328:",
+  "- 新增：节点详情页显示该 agent 所属**部门**（有部门归属时才显示），从军团点进来就能对上「它归谁」。",
+  "",
   "What's new in 0.2.327:",
   "- 改进：按部门分区时，没有部门归属的 agent 统一进「未归属」一组（不再被名字前缀拆成好几组）。",
   "",

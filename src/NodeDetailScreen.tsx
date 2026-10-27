@@ -67,6 +67,7 @@ import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
+import { fetchDepartmentNodes, fetchOrg } from './org-api';
 import { fetchHostSupervisors, fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
@@ -232,6 +233,8 @@ export default function NodeDetailScreen({
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
+  /** 这个节点所在的 Hub 部门(空 = 没归属 / 旧 Hub 没有部门表)。逐个部门查到就停。 */
+  const [department, setDepartment] = useState<string | null>(null);
   const [nodeListState, setNodeListState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [pendingAction, setPendingAction] = useState<NodeLifecycleAction | null>(null);
   const [confirmAlias, setConfirmAlias] = useState('');
@@ -367,6 +370,21 @@ export default function NodeDetailScreen({
       .catch(() => { if (live) setHostDaemons(undefined); });
     return () => { live = false; };
   }, [cfg, handStartedNodeId, onOverviewTab]);
+
+  useEffect(() => {
+    let live = true;
+    setDepartment(null);
+    void (async () => {
+      const org = await fetchOrg(cfg, cfg.networkId ?? '').catch(() => null);
+      if (!org || !org.departments.length) return;
+      for (const d of org.departments) {
+        const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
+        if (!live) return;
+        if (nodes.some(n => n.alias === alias)) { setDepartment(d.name); return; }
+      }
+    })();
+    return () => { live = false; };
+  }, [cfg, alias]);
 
   // board #585 —— 启动请求提交后:节点上线 / daemon 报失败 / 2 分钟没动静,各说一句。
   const watchOnline = state.kind === 'ready' && state.session.status !== 'offline';
@@ -516,6 +534,13 @@ export default function NodeDetailScreen({
             <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
           </View>
+          {/* 所属部门:有部门表且这个节点有归属时才出现(admin 2026-10-26 按部门分区之后,
+              从军团点进来就能对上「它归谁」,不用再翻组织架构页)。 */}
+          {department ? (
+            <View testID="node-detail-department" style={[localStyles.chip, { backgroundColor: colors.subtleFill }]}>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} numberOfLines={1}>{department}</Text>
+            </View>
+          ) : null}
           {/* #460 降级:原因 + 修法在提示条里(悬停 / 点按)。 */}
           <DegradedBadge info={nodeDegraded(s)} testID="node-degraded" size="header" />
         </View>
