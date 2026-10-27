@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.338:",
+  "- 新增：节点详情页的节点名旁多了「复制别名」按钮，方便贴到聊天里 @ 它或写进任务。",
+  "",
   "What's new in 0.2.337:",
   "- 修复：节点详情里的部门名过长时不再把头部挤变形（超过 180dp 省略尾部）。",
   "- 附带：镜像通道的「最新版」判定不再依赖 GitHub 会偶发返回空的接口（发版脚本声明当前版为最新）。",
