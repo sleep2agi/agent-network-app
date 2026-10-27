@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.329:
+            - 改进：「未归属」分区固定排在军团列表最底部（它不是部门，是待整理的一堆）。
+
             What's new in 0.2.328:
             - 新增：节点详情页显示该 agent 所属**部门**（有部门归属时才显示），从军团点进来就能对上「它归谁」。
 
