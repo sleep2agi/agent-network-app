@@ -1016,6 +1016,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   // 两种摆法里筛选条都是同一个横向 ScrollView ⇒ 内容宽一直量得到,窗口拉宽后能挪回一行。
   const SEARCH_BOX_W = 200;
   const [filtersW, setFiltersW] = useState(0);
+  /** 收起的看板列(桌面多列时给内容让位;不落盘,重开就展开)。 */
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
   // 标题 + 分段 + 搜索 + 新建 + 左右留白 + 四个间隙:筛选以外这一行要占的宽(各自 onLayout 量出来,不按字数估)。
   const [fixedParts, setFixedParts] = useState<{ title: number; seg: number; new: number }>({ title: 0, seg: 0, new: 0 });
   const measureFixed = (k: 'title' | 'seg' | 'new', w: number) => setFixedParts(p => (Math.abs(p[k] - w) < 0.5 ? p : { ...p, [k]: w }));
@@ -1109,7 +1111,26 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
 
   const kanban = () => {
     const over = dragView.phase === 'dragging' && dragView.over !== dragView.from ? dragView.over : null;
+    /** 收起某一列(桌面多列时给内容让位):只显示竖排列名 + 数量,再点展开。 */
+    const collapsedCols = collapsedColumns;
+    const toggleColumn = (id: string) => setCollapsedColumns(prev => {
+      const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next;
+    });
     const renderColumn = (col: (typeof columns)[number]) => {
+      if (collapsedCols.has(col.column)) {
+        return (
+          <Pressable key={col.column} accessibilityRole="button" accessibilityLabel={`${col.column} ${col.items.length}`}
+            onPress={() => toggleColumn(col.column)} testID={`req-col-collapsed-${col.column}`}
+            style={[s.columnHead, { flex: -1, flexBasis: 44, width: 44, height: undefined, minHeight: 120, paddingVertical: spacing.md,
+              alignItems: 'center', justifyContent: 'flex-start', gap: spacing.sm, borderRadius: BOARD_RADIUS.card, borderWidth: 2, borderColor: colors.border }]}>
+            <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
+            <Text style={{ color: colors.textMuted, fontSize: 12, transform: [{ rotate: '90deg' }], width: 90, textAlign: 'center' }} numberOfLines={1}>
+              {taskText(REQ_COLUMN_LABEL[col.column] ?? col.column)}
+            </Text>
+            <Text style={{ color: colors.textMuted, fontSize: 12 }}>{col.items.length}</Text>
+          </Pressable>
+        );
+      }
       const isOver = over === col.column;
       const at = isOver && draggingItem ? dropIndex(col.items, draggingItem, col.column) : -1;
       const quick = quickAdd?.column === col.column ? quickAdd : null;
@@ -1124,6 +1145,10 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
             <View style={[s.columnDot, { backgroundColor: STATUS_TONE[col.column]() }]} />
             <Text style={[s.columnName, statusCapsuleText(col.column, col.column === 'abandoned' ? colors.textMuted : colors.text)]}>{taskText(REQ_COLUMN_LABEL[col.column])}</Text>
             <View style={s.countPill} testID={`req-count-${col.column}`}><Text style={s.countText}>{col.items.length}</Text></View>
+            <Pressable accessibilityRole="button" accessibilityLabel={`${col.column} collapse`} hitSlop={6}
+              onPress={() => toggleColumn(col.column)} testID={`req-col-collapse-${col.column}`} style={{ marginLeft: 'auto', paddingHorizontal: 4 }}>
+              <Ionicons name="chevron-back" size={13} color={colors.textMuted} />
+            </Pressable>
             {col.column === 'abandoned' && filter.showAbandoned && !statuses.includes('abandoned') ? (
               <Pressable
                 accessibilityRole="button"
