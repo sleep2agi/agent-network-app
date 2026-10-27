@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.332:",
+  "- 新增：标签超过 8 个时，左栏「标签」组头下也有过滤框（和「项目」一致）。",
+  "",
   "What's new in 0.2.331:",
   "- 新增：看板列头可以**收起**（点列头右侧箭头），收起后只留一条竖排列名 + 数量，再点展开；列多时给内容让位。",
   "",

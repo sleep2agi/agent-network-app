@@ -44,6 +44,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const [showEmptyProjects, setShowEmptyProjects] = useState(false);
   /** 项目多时的左栏过滤(只在项目 >8 个时出现;不影响「显示空项目」的折叠语义)。 */
   const [projectQ, setProjectQ] = useState('');
+  /** 标签多时的左栏过滤(同上;层级缩进由 tagRows 负责,这里只筛名字)。 */
+  const [tagQ, setTagQ] = useState('');
   // #2102:树的折叠状态(只在 Hub 真的回了 parent_id 时才可能出现折叠箭头)。
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
   // #2122 F4:目录(标签父子)变了之后,旧的 tagDescendants 可能已经指向不存在的子孙,
@@ -229,7 +231,12 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         {!tagsCollapsed ? (
           <>
             {tagRow('', tr('tags.all'), icon('pricetags-outline', !filter.tag), null)}
-            {tagRows(tagNames, tagCatalog?.parents ?? null).map(r => tagRow(
+            {tagNames.length > 8 ? (
+              <TextInput value={tagQ} onChangeText={setTagQ} placeholder={tr('tags.title')} placeholderTextColor={colors.textMuted}
+                style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
+                testID="task-side-tag-filter" autoCapitalize="none" />
+            ) : null}
+            {tagRows(tagNames.filter(n => !tagQ.trim() || n.toLowerCase().includes(tagQ.trim().toLowerCase())), tagCatalog?.parents ?? null).map(r => tagRow(
               r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
               tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
             ))}
