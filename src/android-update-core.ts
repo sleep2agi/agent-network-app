@@ -1,3 +1,4 @@
+import { downloadEta, formatEta } from './download-eta';
 import { describeUpdateRow, formatCheckedAt, type UpdateRowView } from './update-check-state';
 import type { UpdateRoute } from './update-route';
 
@@ -165,6 +166,8 @@ export type DownloadProgress = {
   route?: UpdateRoute;
   percent?: number;
   written?: number;
+  /** 开始下载的时刻(ms):用来算剩余时长(admin 2026-10-26「下载显示一下剩余时长」)。 */
+  startedAt?: number;
   total?: number;
   verifying?: boolean;
   /** 首选来源失败、已自动切到当前来源时,首选那个为什么失败(内部)。 */
@@ -396,10 +399,15 @@ export function describeAndroidUpdateRow(
       return describeUpdateRow({ kind: 'available', version: state.version, notes: state.notes }, opts);
     case 'downloading':
       if (state.verifying) return { label: `正在校验 v${state.version} 安装包`, detail: '点击查看进度', tone: 'accent', busy: true, actionable: true };
-      return {
-        label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}`,
-        detail: '点击查看进度', tone: 'accent', busy: true, actionable: true,
-      };
+      {
+        // 剩余时长:有开始时间就能算(安卓更新是 77 MB 级,只给百分比用户没法判断还要多久)。
+        const eta = downloadEta(state.written ?? 0, state.total, state.startedAt ? Date.now() - state.startedAt : 0);
+        const left = formatEta(eta.etaSeconds);
+        return {
+          label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}${left ? ` · 剩余约 ${left}` : ''}`,
+          detail: '点击查看进度', tone: 'accent', busy: true, actionable: true,
+        };
+      }
     case 'download-error':
       return { label: `下载失败：${state.message}`, detail: '点击重试或在浏览器中下载', tone: 'danger', busy: false, actionable: true };
     case 'ready':

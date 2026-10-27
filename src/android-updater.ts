@@ -477,14 +477,15 @@ async function downloadFrom(url: string, fileUri: string, rel: Release, extra: D
     await FileSystem.deleteAsync(fileUri, { idempotent: true }).catch(() => undefined);
   };
   try {
-    publish({ ...rel, ...extra, kind: 'downloading', percent: 0, written: 0, total: rel.apk.size });
+    const startedAt = Date.now();
+    publish({ ...rel, ...extra, kind: 'downloading', percent: 0, written: 0, total: rel.apk.size, startedAt });
     const onProgress = (p: { totalBytesWritten: number; totalBytesExpectedToWrite: number }) => {
       armStall();
       const expected = p.totalBytesExpectedToWrite > 0 ? p.totalBytesExpectedToWrite : rel.apk.size;
       const percent = downloadPercent(p.totalBytesWritten, expected);
       // 只在百分比变了时重画(77 MB 的回调很密);已下字节随之更新。
       if (state.kind === 'downloading' && state.percent !== percent) {
-        publish({ ...rel, ...extra, kind: 'downloading', percent, written: p.totalBytesWritten, total: expected });
+        publish({ ...rel, ...extra, kind: 'downloading', percent, written: p.totalBytesWritten, total: expected, startedAt });
       }
     };
     progressRef = onProgress;
