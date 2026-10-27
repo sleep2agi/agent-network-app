@@ -144,6 +144,28 @@ ck('prompt verifying line', view({ ...rel, kind: 'downloading', route: 'mirror',
 }
 ck('prompt ready after failed install: 重新安装 + settings button', (() => { const v = view({ ...rel, kind: 'ready', fileUri: 'f', installAttempted: true, route: 'github' }); return v.primary?.label === '重新安装' && v.showOpenSettings; })());
 ck('prompt: no view for non-release states', androidPromptView({ kind: 'checking' }, { currentVersion: '0.2.117' }) === null);
+
+// ── 更新弹窗要显示「这一版什么时候发的」（admin 2026-10-27）──
+{
+  const withDate = androidPromptView(
+    { kind: 'available', version: '0.2.327', notes: '', apk: { url: 'u', size: 79 * 1024 * 1024, name: 'a.apk' }, releaseUrl: 'r', publishedAt: '2026-10-27T02:07:31Z' },
+    { currentVersion: '0.2.326' },
+  )!;
+  ck('prompt: release date shows up before the size', /^\d{4}-\d{2}-\d{2} · 79\.0 MB$/.test(withDate.meta));
+  ck('prompt: release date is the release day, not "now"', withDate.meta.startsWith('2026-10-2'));
+
+  const noDate = androidPromptView(
+    { kind: 'available', version: '0.2.327', notes: '', apk: { url: 'u', size: 79 * 1024 * 1024, name: 'a.apk' }, releaseUrl: 'r' },
+    { currentVersion: '0.2.326' },
+  )!;
+  ck('prompt: no publishedAt ⇒ meta stays just the size (never invent a date)', noDate.meta === '79.0 MB');
+
+  const badDate = androidPromptView(
+    { kind: 'available', version: '0.2.327', notes: '', apk: { url: 'u', size: 10 * 1024 * 1024, name: 'a.apk' }, releaseUrl: 'r', publishedAt: 'not-a-date' },
+    { currentVersion: '0.2.326' },
+  )!;
+  ck('prompt: unparseable date is dropped, not rendered as Invalid Date', badDate.meta === '10.0 MB');
+}
 ck('versionLine strips prefixes', versionLine('desktop-v0.2.117', 'v0.2.118').current === 'v0.2.117' && versionLine(undefined, '0.2.118').current === undefined);
 
 // ── 桌面:清单地址 → 来源 ──
