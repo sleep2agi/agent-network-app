@@ -538,7 +538,7 @@ export default function NodeDetailScreen({
               从军团点进来就能对上「它归谁」,不用再翻组织架构页)。 */}
           {department ? (
             <View testID="node-detail-department" style={[localStyles.chip, { backgroundColor: colors.subtleFill }]}>
-              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} numberOfLines={1}>{department}</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, maxWidth: 180 }} numberOfLines={1} ellipsizeMode="tail">{department}</Text>
             </View>
           ) : null}
           {/* #460 降级:原因 + 修法在提示条里(悬停 / 点按)。 */}
