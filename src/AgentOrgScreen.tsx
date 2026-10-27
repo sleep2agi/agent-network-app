@@ -96,12 +96,12 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
               <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>
               <Text testID="agent-org-summary" style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
             </View>
-            <OrgAction label={t('agentOrg.newDepartmentAction')} icon="add" disabled={!data.departmentsApi || saving} testID="agent-org-new-department" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: null }); }} />
           </View>
           <View style={!p.phone ? styles.columns : undefined}>
           {showTree ? (
             <View testID="agent-org-navigation" style={!p.phone ? styles.navigation : undefined}>
-              <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} />
+              <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} disabled={!data.departmentsApi || saving}
+                onCreate={parent => { setDeptNote(''); setDeptEditor({ mode: 'create', parent }); }} />
             </View>
           ) : null}
           {showDetail ? (
@@ -271,9 +271,11 @@ function DepartmentEditor(p: { cfg: HubConfig; networkId: string; data: AgentOrg
   </DialogFrame>;
 }
 
-function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void }) {
+function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void; onCreate: (parent: string | null) => void; disabled?: boolean }) {
   const { t } = useTranslation();
   const rows = flattenTree(orgTree(p.data));
+  // A department head cannot create a root department; owner/admin can create anywhere.
+  const canCreateRoot = !p.disabled && (p.data.departments.length === 0 || p.data.departments.some(d => d.viewer_can?.create_child !== false));
   return (
     <View testID="agent-org-departments" style={{ padding: spacing.sm }}>
       <Text style={styles.sectionLabel}>{t('agentOrg.departments')}</Text>
@@ -287,6 +289,8 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
           selected={p.focus === row.dept.id}
           count={agentCount(p.placed, p.data, row.dept.id)}
           onPress={() => p.onFocus(row.dept.id)}
+          onAddChild={!p.disabled && row.dept.viewer_can?.create_child !== false ? () => p.onCreate(row.dept.id) : undefined}
+          addLabel={`${t('agentOrg.newChild')}: ${row.dept.name}`}
         />
       )) : <SettingsRow label={t('agentOrg.empty')} testID="agent-org-empty" />}
       {p.data.directory || agentCount(p.placed, p.data, null) > 0 ? (
@@ -298,19 +302,30 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
           onPress={() => p.onFocus(null)}
         />
       ) : null}
+      <Pressable testID="agent-org-new-department" accessibilityRole="button" accessibilityLabel={t('agentOrg.newDepartmentAction')} accessibilityState={{ disabled: !canCreateRoot }} disabled={!canCreateRoot}
+        onPress={() => p.onCreate(null)} style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.createRow, !canCreateRoot && { opacity: 0.45 }, (pressed || hovered) && canCreateRoot && { backgroundColor: colors.rowHover }]}>
+        <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
+        <Text style={styles.createRowLabel}>{t('agentOrg.newDepartmentAction')}</Text>
+      </Pressable>
       </ScrollView>
     </View>
   );
 }
 
-function DepartmentRow(p: { testID: string; label: string; depth?: number; selected: boolean; count: number; onPress: () => void }) {
+function DepartmentRow(p: { testID: string; label: string; depth?: number; selected: boolean; count: number; onPress: () => void; onAddChild?: () => void; addLabel?: string }) {
   const { t } = useTranslation();
-  return <Pressable testID={p.testID} accessibilityRole="button" accessibilityLabel={`${p.label}, ${t('agentOrg.agentsCount', { count: p.count })}`} accessibilityState={{ selected: p.selected }} aria-selected={p.selected} onPress={p.onPress}
-    style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRow, { paddingLeft: spacing.sm + (p.depth ?? 0) * 16 }, (pressed || hovered) && { backgroundColor: colors.rowHover }, p.selected && { backgroundColor: colors.railActiveBg }]}>
-    <Ionicons name={p.testID === 'agent-org-dept-unassigned' ? 'file-tray-outline' : 'folder-outline'} size={17} color={p.selected ? colors.accent : colors.textMuted} />
-    <Text testID={`${p.testID}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: p.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: p.selected ? '600' : '400' }}>{p.label}</Text>
-    <Text testID={`${p.testID}-value`} style={[styles.count, { flexShrink: 0 }]}>{p.count}</Text>
-  </Pressable>;
+  return <View style={[styles.departmentRow, p.selected && { backgroundColor: colors.railActiveBg }]}>
+    <Pressable testID={p.testID} accessibilityRole="button" accessibilityLabel={`${p.label}, ${t('agentOrg.agentsCount', { count: p.count })}`} accessibilityState={{ selected: p.selected }} aria-selected={p.selected} onPress={p.onPress}
+      style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRowMain, { paddingLeft: spacing.sm + (p.depth ?? 0) * 16 }, (pressed || hovered) && { backgroundColor: colors.rowHover }]}>
+      <Ionicons name={p.testID === 'agent-org-dept-unassigned' ? 'file-tray-outline' : 'folder-outline'} size={17} color={p.selected ? colors.accent : colors.textMuted} />
+      <Text testID={`${p.testID}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: p.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: p.selected ? '600' : '400' }}>{p.label}</Text>
+      <Text testID={`${p.testID}-value`} style={[styles.count, { flexShrink: 0 }]}>{p.count}</Text>
+    </Pressable>
+    {p.onAddChild ? <Pressable testID={`${p.testID}-add-child`} accessibilityRole="button" accessibilityLabel={p.addLabel ?? t('agentOrg.newChild')} onPress={p.onAddChild}
+      style={({ pressed }: PressableStateCallbackType) => [styles.rowAdd, pressed && { backgroundColor: colors.rowHover }]}>
+      <Ionicons name="add" size={19} color={colors.accent} />
+    </Pressable> : null}
+  </View>;
 }
 
 function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; actions: ReactNode; onBulkAssign?: (departmentId: string, nodeIds: string[]) => void; bulkBusy?: boolean }) {
@@ -476,7 +491,11 @@ const makeStyles = () => StyleSheet.create({
   columns: { flexDirection: 'row', minHeight: 440 },
   navigation: { width: '32%', maxWidth: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
   sectionLabel: { color: colors.textMuted, fontSize: typeScale.small, fontWeight: '600', padding: spacing.sm, marginBottom: spacing.xs },
-  departmentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingRight: spacing.sm, marginBottom: 2, borderRadius: radius.item },
+  departmentRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2, borderRadius: radius.item, overflow: 'hidden' },
+  departmentRowMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingRight: spacing.sm },
+  rowAdd: { width: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
+  createRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingHorizontal: spacing.sm, marginTop: spacing.xs, borderRadius: radius.item },
+  createRowLabel: { color: colors.accent, fontSize: typeScale.small, fontWeight: '600' },
   count: { color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'], backgroundColor: colors.subtleFill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.item },
   detail: { padding: spacing.md, gap: spacing.sm, minWidth: 0 },
   detailHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },

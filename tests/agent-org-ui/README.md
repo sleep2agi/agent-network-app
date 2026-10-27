@@ -104,11 +104,13 @@ mobile keyboard testing.
 ```
 
 Runs full App Settings navigation in desktop/mobile light/dark against the existing
-export, without building. Latest result: **94/94 checks, 24 screenshots** in
+export, without building. Latest result: **106/106 checks, 24 screenshots** in
 `artifacts/departments/`. The updated `verify.mjs` passes
 **130/130 checks, 28 screenshots** with the extended server.
 
-Covers blank-name validation, root/child POST responses shaped as `{ department }`,
+Creation is opened directly from the department directory: a root create row plus
+a per-row `+` that preselects that department as parent. Covers those entry points
+and zero writes while merely opening them, blank-name validation, root/child POST responses shaped as `{ department }`,
 rename and reparent PATCH payloads, exclusion of self/descendants, parent search,
 shared human/Agent tree warning, persisted reload, server failure, revoked
 permission (403), `viewer_can.manage/create_child` denial without writes,
@@ -132,8 +134,9 @@ paths in its report. Screenshots are evidence, not pixel-baseline comparisons.
 navigation. A missing marker fails immediately; it does not poll for a new export.
 The unchanged329-agent fixture is used, not333 or500 agents.
 
-- Header context/summary plus new-department button, sidebar32percent/max240,
-  initially closed information disclosure, and count outside the compact bulk button.
+- Header context/summary plus the directory's create row and per-row child shortcut,
+  sidebar32percent/max240, initially closed information disclosure, and count
+  outside the compact bulk button.
 - Explicit confirmation before any PUT, including one matching agent; closing
   either picker or confirmation and Escape confirmation all produce zero writes.
 - Exact matching nodeIDs only, one successful assignment, six successes/two
