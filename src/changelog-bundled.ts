@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.336:",
+  "- 改进：左栏的项目 / 标签过滤框支持 Esc 一键清空。",
+  "",
   "What's new in 0.2.335:",
   "- 新增：手机（安卓）**应用更新**的下载也显示剩余时长（「正在下载 v0.2.335 62% · 剩余约 20 秒」）。",
   "",
