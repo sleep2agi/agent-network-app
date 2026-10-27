@@ -177,6 +177,8 @@ export function buildSections(
     })
     .sort(
       (a, b) =>
+        // 「未归属」永远排最后:它不是部门,是待整理的那一堆(admin 2026-10-26 按部门分区之后)。
+        (a.title === '未归属' ? 1 : 0) - (b.title === '未归属' ? 1 : 0) ||
         (b.online > 0 ? 1 : 0) - (a.online > 0 ? 1 : 0) ||
         b.online - a.online ||
         a.title.localeCompare(b.title),
