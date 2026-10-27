@@ -480,7 +480,9 @@ export default function AgentsScreen({
         activityAt: alias => activityByAlias.get(alias) ?? 0,
       },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
-      teamOf: alias => deptByAlias.get(alias),
+      // 有部门数据时,没有归属的 agent 统一进「未归属」——按部门分区就要把没分配的也显式列出来,
+      // 否则它们会被前缀拆成好几种「看起来像部门」的组。没有部门数据时 undefined = 旧行为。
+      teamOf: alias => (deptByAlias.size ? (deptByAlias.get(alias) ?? '未归属') : undefined),
     }),
     [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias],
   );
