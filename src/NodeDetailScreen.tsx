@@ -67,6 +67,7 @@ import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
+import * as Clipboard from 'expo-clipboard';
 import { fetchDepartmentNodes, fetchOrg } from './org-api';
 import { fetchHostSupervisors, fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
@@ -530,6 +531,12 @@ export default function NodeDetailScreen({
           <Text style={{ color: colors.text, fontSize: typeScale.heading, fontWeight: weight.strong }} selectable numberOfLines={1}>
             {s.alias}
           </Text>
+          {/* 复制别名:贴到聊天里 @ 它、或写进任务卡(和左栏项目/标签/军团右键同一套)。 */}
+          <Pressable accessibilityRole="button" accessibilityLabel="复制别名" hitSlop={8} testID="node-detail-copy-alias"
+            onPress={() => { void Clipboard.setStringAsync(s.alias).catch(() => undefined); }}
+            style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+          </Pressable>
           <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
             <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
