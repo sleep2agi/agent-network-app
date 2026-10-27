@@ -944,7 +944,7 @@ export default function AgentsScreen({
           </Pressable>
         </View>
         {sessions.length > 10 || searchOpen || query ? (
-          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder={t('chat.searchAgent')} placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
+          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder={deptByAlias.size ? `${t('chat.searchAgent')} · 部门` : t('chat.searchAgent')} placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
         ) : null}
       </View>
       ) : (
