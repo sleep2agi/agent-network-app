@@ -343,7 +343,7 @@ export async function checkAndroidUpdate(
       lastCheckedAt = Date.now();
       if (verdict.kind === 'available') dismissed = false;
       if (verdict.kind === 'available') {
-        return publish({ kind: 'available', version: verdict.version, notes: verdict.notes, apk: verdict.apk, releaseUrl: verdict.releaseUrl, checkRoute: route });
+        return publish({ kind: 'available', version: verdict.version, notes: verdict.notes, apk: verdict.apk, releaseUrl: verdict.releaseUrl, checkRoute: route, ...(verdict.publishedAt ? { publishedAt: verdict.publishedAt } : {}) });
       }
       return publish(verdict.kind === 'up-to-date' ? { ...verdict, route } : verdict);
     } catch (error: any) {

@@ -32,6 +32,27 @@ export type AndroidPromptView = {
 };
 
 export type DownloadProgressView = { percent?: number; bytes?: string; verifying: boolean; /** 预计剩余秒数(桌面更新下载);null/缺失 = 还看不出速度。 */ etaSeconds?: number | null };
+/**
+ * 更新弹窗里的「发布日期」（admin 2026-10-27：更新页要能看出这一版是什么时候发的）。
+ *
+ * 数据来自 GitHub release 的 `published_at`（ISO 8601）。只显示到**日**：用户关心的是
+ * “这是新发的还是很久以前的”，精确到秒既没用又占地方。
+ * 解析不出来（老客户端 / 字段缺失 / 格式异常）⇒ 返回 undefined，**不显示**，绝不猜一个日期。
+ */
+export const formatReleaseDate = (iso: string | undefined): string | undefined => {
+  const raw = String(iso ?? '').trim();
+  if (!raw) return undefined;
+  const ms = Date.parse(raw);
+  if (!Number.isFinite(ms)) return undefined;
+  const d = new Date(ms);
+  const pad = (n: number) => String(n).padStart(2, '0');
+  return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+};
+
+/** 「79.0 MB」+「2026-10-27」→「2026-10-27 · 79.0 MB」；缺哪半就只显示另一半。 */
+export const releaseMetaLine = (publishedAt: string | undefined, size: string): string =>
+  [formatReleaseDate(publishedAt), size].filter(Boolean).join(' · ');
+
 const clampPercent = (p: number | undefined) => (p == null || !Number.isFinite(p) ? undefined : Math.max(0, Math.min(100, Math.round(p))));
 
 /** 下载失败的统一说法。下载来源/切换/每个来源的原因都是内部细节,不展示(Vincent 2026-09-26)。 */
@@ -44,7 +65,7 @@ export function androidPromptView(state: AndroidUpdateState, opts: { currentVers
   const view: AndroidPromptView = {
     title: state.kind === 'ready' ? '安装新版本' : '发现新版本',
     versions: versionLine(opts.currentVersion, state.version),
-    meta: formatSize(state.apk.size) ?? '',
+    meta: releaseMetaLine((state as { publishedAt?: string }).publishedAt, formatSize(state.apk.size) ?? ''),
     showOpenSettings: state.kind === 'ready' && state.installAttempted,
     showLater: state.kind !== 'downloading',
   };

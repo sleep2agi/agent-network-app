@@ -123,6 +123,8 @@ export type ReleaseJson = {
   name?: string;
   body?: string | null;
   html_url?: string;
+  /** GitHub release 的发布时间（ISO 8601）。更新弹窗显示它（admin 2026-10-27）。 */
+  published_at?: string;
   draft?: boolean;
   prerelease?: boolean;
   assets?: ReleaseAsset[];
@@ -173,14 +175,14 @@ export type AndroidUpdateState =
   | { kind: 'idle' | 'checking' }
   | { kind: 'up-to-date'; latest: string; route?: UpdateRoute }
   | { kind: 'error'; message: string; rateLimitResetAt?: number }
-  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute }
-  | ({ kind: 'downloading'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute } & DownloadProgress)
-  | { kind: 'download-error'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; message: string; attempts?: RouteAttempt[] }
-  | { kind: 'ready'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; fileUri: string; installAttempted: boolean; route?: UpdateRoute };
+  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string }
+  | ({ kind: 'downloading'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string } & DownloadProgress)
+  | { kind: 'download-error'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string; message: string; attempts?: RouteAttempt[] }
+  | { kind: 'ready'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string; fileUri: string; installAttempted: boolean; route?: UpdateRoute };
 
 export type AndroidReleaseVerdict =
   | { kind: 'up-to-date'; latest: string }
-  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string }
+  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; publishedAt?: string }
   | { kind: 'error'; message: string };
 
 export function evaluateAndroidRelease(release: ReleaseJson | null | undefined, currentVersion: string): AndroidReleaseVerdict {
@@ -197,6 +199,11 @@ export function evaluateAndroidRelease(release: ReleaseJson | null | undefined, 
     version: latest,
     notes: String(release.body ?? '').trim(),
     apk,
+    // 更新弹窗要显示「这一版是什么时候发的」（admin 2026-10-27）。GitHub release JSON 自带
+    // published_at，**不需要额外请求**；解析不出来就不显示，不猜。
+    ...(typeof release.published_at === 'string' && release.published_at.trim()
+      ? { publishedAt: release.published_at.trim() }
+      : {}),
     releaseUrl: typeof release.html_url === 'string' && release.html_url ? release.html_url : ANDROID_RELEASES_PAGE,
   };
 }
