@@ -233,6 +233,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             {tagRow('', tr('tags.all'), icon('pricetags-outline', !filter.tag), null)}
             {tagNames.length > 8 ? (
               <TextInput value={tagQ} onChangeText={setTagQ} placeholder={tr('tags.title')} placeholderTextColor={colors.textMuted}
+                onKeyPress={e => { if (e.nativeEvent.key === 'Escape') setTagQ(''); }}
                 style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
                 testID="task-side-tag-filter" autoCapitalize="none" />
             ) : null}
@@ -261,6 +262,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             {/* 项目多(>8)时给一个过滤框:491 张卡、十几个项目时靠肉眼翻很慢。 */}
             {activeProjects(projects).length > 8 ? (
               <TextInput value={projectQ} onChangeText={setProjectQ} placeholder={tr('tasks.copy.30')} placeholderTextColor={colors.textMuted}
+                onKeyPress={e => { if (e.nativeEvent.key === 'Escape') setProjectQ(''); }}
                 style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
                 testID="task-side-project-filter" autoCapitalize="none" />
             ) : null}
