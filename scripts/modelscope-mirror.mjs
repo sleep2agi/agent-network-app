@@ -225,12 +225,20 @@ const fileSha256 = (path) => new Promise((done, fail) => {
   createReadStream(path).on('error', fail).on('data', (chunk) => hash.update(chunk)).on('end', () => done(hash.digest('hex')));
 });
 
+const BOOLEAN_FLAGS = new Set(['--assume-newest', '--dry-run']);
+
 function parseArgs(argv) {
   const args = { command: argv[0] };
-  for (let index = 1; index < argv.length; index += 2) {
+  for (let index = 1; index < argv.length; index += 1) {
     const key = argv[index];
-    if (!key?.startsWith('--') || argv[index + 1] === undefined) throw new Error(`bad argument near ${key}`);
+    if (!key?.startsWith('--')) throw new Error(`bad argument near ${key}`);
+    // 布尔开关(--assume-newest / --dry-run)不带值,别把下一个 token 当值吃掉。
+    if (BOOLEAN_FLAGS.has(key) || argv[index + 1] === undefined || argv[index + 1]?.startsWith('--')) {
+      args[key.slice(2)] = true;
+      continue;
+    }
     args[key.slice(2)] = argv[index + 1];
+    index += 1;
   }
   return args;
 }
