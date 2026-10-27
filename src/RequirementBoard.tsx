@@ -42,7 +42,7 @@ import { usePoll } from './usePoll';
 import { statusChoices, supportsAbandoned, isClosedColumn, statusCapsuleText } from './requirement-columns';
 import { abandonedShown, hiddenAbandonedCount, applyFilter, EMPTY_FILTER, applyMove, boardColumns, createInput, DEFAULT_SORT, DRAG_IDLE, dragReduce, dropIndex, emptyDraft, activeProjects, defaultProjectFor, NO_PROJECT, projectCounts, filterActive, hasRoles, ownerFilterSections, roleKinds, localToday, addChecklistItem, moveChecklistItem, removeChecklistItem, setChecklistDone, neighbourColumn, nextSort, revertMove, sortRows, toggleIn, hidesDone, toggleHideDone, UNASSIGNED, quickFilterOn, toggleQuickFilter, type QuickFilter, type CreateDraft, type DragEvent, type DragState, type EditPatch, type SortKey, type SortSpec } from './task-board-model';
 import { applyChanges, checklistCounts, cursorAfterList, hasFullText, mergeListRows, needsFullText, planBoardRead, type BoardSyncState } from './board-sync';
-import { enterTaskScope, noteTagsUsed, patchTaskBoard, setManagingProjects, setManagingTags, setSideMenu, type ManagerOps, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
+import { enterTaskScope, noteTagsUsed, patchTaskBoard, setCreatingProject, setManagingProjects, setManagingTags, setSideMenu, type ManagerOps, setTaskFilter, setTaskSearch, setTaskSection, taskBoardState, taskScopeKey, updateTaskItems, useTaskBoard, type TaskSection } from './task-board-store';
 import { recallBoard, rememberBoard } from './swr-cache';
 import { PRIORITY_CODE, priorityChoices, priorityLabel, supportsLowest } from './task-priority';
 import { BOARD_RADIUS, CONTROL_H, cardBg, CardActivityLine, CardMeta, ChecklistCompact, ChecklistProgress, Chip, QuickChip, ParticipantStack, ProjectChip, DueChip, OwnerBadge, PriorityDot, Segmented, STATUS_TONE, useTaskStyles, type TaskStyles, a11yState } from './TaskBoardParts';
@@ -1472,7 +1472,8 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
       if (st.tagCatalog) patchTaskBoard(scope, { tagCatalog: refreshedCatalog ?? applyTagOpToCatalog(st.tagCatalog, op) });
       // 正在筛的标签被改名 / 合并 / 删掉:筛选跟过去(删了就回到全部)。
       const cur = st.filter.tag;
-      if (cur && op.op !== 'color' && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
+      const movesName = op.op === 'rename' || op.op === 'merge' || op.op === 'delete';
+      if (cur && movesName && (op.op === 'rename' ? op.from === cur : op.op === 'merge' ? op.from.includes(cur) : op.tag === cur)) setTaskFilter({ ...st.filter, tag: op.op === 'delete' ? '' : op.to });
       return null;
     } catch (e) {
       if (e instanceof TagOpError && e.status === 404) void fetchTagCatalog(cfg).then(cat => { if (cat) patchTaskBoard(scope, { tagCatalog: cat }); }).catch(() => {});
@@ -1548,7 +1549,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
           }}
           onUpdate={updateProjectOp}
           focus={managerFocus}
-          onClose={() => setManagingProjects(false)}
+          onClose={() => { setManagingProjects(false); patchTaskBoard(scope, { creatingProject: null }); }}
         />
       ) : null}
       {/* 手机没有左栏:长按筛选里的项目 / 标签出同一份菜单(#760);桌面的菜单挂在左栏。 */}
@@ -1882,11 +1883,17 @@ function FilterMenu({ open, touch, owners, selectedOwners, priorities, selectedP
             <Pressable onPress={() => { onClear(open.kind); onClose(); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-reset" accessibilityRole="button">
               <Text style={s.link}>{tr('tasks.copy.63')}</Text>
             </Pressable>
-            {/* 手机 / 双栏没有左栏:「管理项目」放在项目筛选弹层里。 */}
+            {/* 手机 / 双栏没有左栏:「管理项目 / 新建项目」放在项目筛选弹层里。
+                admin 2026-10-26「现在还建不了项目目录啊」—— 桌面加了组头 ＋，手机这条路也得能新建。 */}
             {open.kind === 'project' ? (
-              <Pressable onPress={() => { onClose(); setManagingProjects(true); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-manage-projects" accessibilityRole="button">
-                <Text style={s.link}>{tr('tasks.copy.64')}</Text>
-              </Pressable>
+              <View style={{ flexDirection: 'row', alignItems: 'center' }}>
+                <Pressable onPress={() => { onClose(); setCreatingProject(null); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-new-project" accessibilityRole="button">
+                  <Text style={s.link}>{tr('tags.createProject')}</Text>
+                </Pressable>
+                <Pressable onPress={() => { onClose(); setManagingProjects(true); }} style={{ height: 36, justifyContent: 'center', paddingHorizontal: spacing.md }} testID="task-filter-manage-projects" accessibilityRole="button">
+                  <Text style={s.link}>{tr('tasks.copy.64')}</Text>
+                </Pressable>
+              </View>
             ) : null}
           </View>
         </View>

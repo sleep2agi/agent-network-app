@@ -117,7 +117,9 @@ const openEditor = async () => {
   await page.route(`${HUB}/**`, route => route.fulfill(answer(route.request())));
   await page.addInitScript(initScript, { hubUrl: HUB, theme: 'light' });
   await page.goto(WEB_URL);
-  await page.getByText('定时任务', { exact: true }).first().click({ timeout: 25000 });
+  // 0.2.296: a wide Android window (this drive runs at 1200×850) now draws the desktop-style icon-only
+  // rail, so 「定时任务」 is an aria-label / testID, not visible text. Both shapes are accepted.
+  await page.locator('[data-testid="nav-rail-scheduled"]').or(page.getByText('定时任务', { exact: true })).first().click({ timeout: 25000 });
   await page.locator('[data-testid="schedule-detail"]').getByText('编辑', { exact: true }).click({ timeout: 15000 });
   await page.locator('[data-testid="schedule-form"]').waitFor({ timeout: 10000 });
   const box = page.getByPlaceholder('节点收到的任务');

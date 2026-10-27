@@ -95,7 +95,12 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
     // Codex 节点才有这一行。值只来自会话上报的 codex_home，没有就写「未上报」。
     ...(isCodexNode(session, node) ? [{ label: 'codex_home', value: visibleCodexHome(session.codex_home) ?? '未上报' }] : []),
     { label: '节点类型', value: node?.role ?? node?.config_snapshot?.role },
-    { label: 'Runtime', value: session.runtime ?? node?.runtime ?? session.agent },
+    // admin 2026-10-25：「OpenCodeV2 Runtime 看不出来」——代际就在 config_snapshot.flags 里，
+    // 这里直接拼进 Runtime 值，头部小标签与「模型与运行时」摘要卡会一起显示。
+    { label: 'Runtime', value: runtimeLabel(session.runtime ?? node?.runtime ?? session.agent, opencodeFlagsOf(node)) },
+    // 共用的是哪台 OpenCode Server / 哪个端口：节点自己才知道（loopback serve）。
+    // 目前节点还没上报 → 明写「端口未上报」，不猜、不编。
+    { label: 'OpenCode Server', value: opencodeServerLabel(opencodeFlagsOf(node), node?.opencode_server ?? node?.config_snapshot?.opencode_server) },
     { label: 'Agent', value: session.agent },
     { label: '模型', value: session.model ?? node?.model ?? node?.config_snapshot?.model },
     { label: '版本', value: session.version },
@@ -104,4 +109,38 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
     { label: 'session-id', value: resumeSessionId(session.session_id), wrap: true, testID: 'node-runtime-session-id' },
     { label: '状态', value: session.status },
   ];
+}
+
+/**
+ * #2293 —— `/api/nodes` 不带整个 config_snapshot（终端 #312 的约定），所以代际/模式
+ * 改从顶层标量 `opencode_generation` / `opencode_mode` 读；老 Hub 或测试夹具只给
+ * 快照时退回快照。合并成一个「像 flags 的对象」，继续复用下面两个纯函数。
+ */
+export function opencodeFlagsOf(node: HubNode | null | undefined): Record<string, unknown> | undefined {
+  const snapshot = node?.config_snapshot?.flags;
+  const generation = node?.opencode_generation ?? (typeof snapshot?.opencodeGeneration === 'string' ? snapshot.opencodeGeneration : undefined);
+  const mode = node?.opencode_mode ?? (typeof snapshot?.opencodeMode === 'string' ? snapshot.opencodeMode : undefined);
+  if (!generation && !mode) return snapshot;
+  return { ...(snapshot ?? {}), ...(generation ? { opencodeGeneration: generation } : {}), ...(mode ? { opencodeMode: mode } : {}) };
+}
+
+/** Runtime 值的展示：OpenCode 代际从 config_snapshot.flags.opencodeGeneration 读，读不到就只显示 runtime。 */
+export function runtimeLabel(runtime: string | null | undefined, flags: Record<string, unknown> | undefined): string | string | null | undefined {
+  const base = runtime ?? '';
+  const gen = typeof flags?.opencodeGeneration === 'string' ? flags.opencodeGeneration : '';
+  if (!base) return base;
+  if (!/^opencode/i.test(base)) return base;
+  if (gen === 'v2') return `${base} · V2`;
+  if (gen === 'v1') return `${base} · V1`;
+  return base;
+}
+
+/** 「共用哪台 OpenCode Server」：模式来自 flags.opencodeMode；endpoint 只有节点上报了才有。
+ *  没上报就明写「端口未上报」——不拿 127.0.0.1 之类的猜测充数。 */
+export function opencodeServerLabel(flags: Record<string, unknown> | undefined, endpoint: unknown): string | null {
+  const mode = typeof flags?.opencodeMode === 'string' ? flags.opencodeMode : '';
+  const url = typeof endpoint === 'string' && endpoint.trim() ? endpoint.trim() : '';
+  if (!mode && !url) return null;
+  const modeText = mode === 'copresence' ? '共享（copresence）' : mode || '未知模式';
+  return url ? `${modeText} · ${url}` : `${modeText} · 端口未上报`;
 }

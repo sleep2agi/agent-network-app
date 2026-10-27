@@ -88,3 +88,11 @@ ck('AgentUnreadBadge inline variant only changes placement', badge.includes('inl
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
+
+// 折叠屏导航形态是用户偏好(0.306):默认纯图标,可在 设置 → 外观 改成「图标 + 文字」。
+ck('rail labels preference has its own key and a store', prefs.includes("RAIL_LABELS_KEY = 'agent_list_rail_labels_v1'") && prefs.includes('export const onRailLabelsChange') && prefs.includes('export const setRailLabels'));
+ck('unknown / missing value falls back to icons', prefs.includes("v === 'labels' ? 'labels' : 'icons'"));
+ck('App gates icons-only on the preference', app.includes("railShown && railIconsOnly(width) && railLabels !== 'labels'"));
+const scale = readFileSync(new URL('./UiScaleSettings.tsx', import.meta.url), 'utf8');
+ck('设置 → 外观 has the rail row', scale.includes('testID="settings-rail-labels-row"') && scale.includes("onPick={setRailLabels}"));
+ck('the rail row only shows where a rail exists (>=900 dp), not on desktop/phone', scale.includes('const railRowApplies = railIconsOnly(winWidth);') && scale.includes('{railRowApplies ?') && !/rnil/.test(scale));

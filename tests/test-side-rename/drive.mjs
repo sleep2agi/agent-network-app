@@ -13,9 +13,16 @@
 // Phone 390×844 (Android UA, touch):
 //   longpress : 项目筛选里长按一个项目 → 同一份菜单(行高 ≥ 44);改名 → 管理项目里那一项直接是输入框
 // Exit 1 when any check fails or a viewport could not be opened.
-import { mkdirSync } from 'node:fs';
+import { mkdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { serveExport, initScript, findChromium, ANDROID_UA } from '../test-layout-sweep/harness.mjs';
+
+// 菜单项不写死:读 scripts/emit-side-menu-items.mjs 生成的那份 JSON(与单测同一数据源)。
+const MENU_ITEMS = JSON.parse(readFileSync(new URL('../../src/side-menu-items.json', import.meta.url), 'utf8'));
+const PROJECT_ITEMS = MENU_ITEMS.project.join();
+// 这个夹具的 Hub 不暴露「新建子标签」能力位,所以 createChild 会被过滤掉 ——
+// 期望值 = 共享 JSON 里的标签项减去 createChild(而不是再手写一份列表)。
+const TAG_ITEMS = MENU_ITEMS.tag.filter((a) => a !== 'createChild').join();
 
 const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright');
 const WEB = process.env.WEB_DIR;
@@ -109,7 +116,7 @@ for (const theme of ['light', 'dark']) {
     await rightClick(page, rowSel);
     const pItems = await menuItems(page);
     if (OUT) await page.screenshot({ path: join(OUT, `desktop-${theme}-menu.png`) });
-    record(vp, 'project menu', { opened: !!(await box(page, tid('side-menu'))), items: pItems.map(i => i.id).join() === 'rename,color,archive' }, { items: pItems.map(i => i.id).join() });
+    record(vp, 'project menu', { opened: !!(await box(page, tid('side-menu'))), items: pItems.map(i => i.id).join() === PROJECT_ITEMS }, { items: pItems.map(i => i.id).join() });
     // ── 改名 → 行内输入框,量对齐 ──
     await page.locator(tid('side-menu-rename')).first().click();
     const inputSel = tid('task-side-rename-p_a');
@@ -145,6 +152,12 @@ for (const theme of ['light', 'dark']) {
     }, { patches: JSON.stringify(patches), shown: shown?.text });
     // ── 标签:Esc 取消 ──
     const tagSel = tid('task-filter-tag-UI');
+    // admin 2026-10-25:左栏标签组**默认折叠**。先展开再右键(断言不变)。
+    if (!(await box(page, tagSel))) {
+      await page.locator(tid('task-side-tags-header')).first().click();
+      await page.locator(tagSel).first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(200);
+    }
     await rightClick(page, tagSel);
     const tItems = await menuItems(page);
     await page.locator(tid('side-menu-rename')).first().click();
@@ -152,7 +165,7 @@ for (const theme of ['light', 'dark']) {
     await page.keyboard.press('Escape');
     await page.waitForTimeout(300);
     record(vp, 'tag esc', {
-      items: tItems.map(i => i.id).join() === 'rename,color,delete',
+      items: tItems.map(i => i.id).join() === TAG_ITEMS,
       inputGone: !(await box(page, tid('task-side-rename-UI'))),
       nameKept: (await box(page, `${tagSel} div[dir="auto"]`))?.text === 'UI',
       noRequest: (await page.evaluate(() => (window.__tagOps ?? []).length)) === 0,
@@ -178,6 +191,12 @@ for (const theme of ['light', 'dark']) {
   // can_manage=false:标签行右键没有菜单
   try {
     ({ ctx, page } = await open({ w: 1320, h: 754, kind: 'desktop' }, theme, false));
+    // 标签组默认折叠（admin 2026-10-25）：先展开，再验「没有管理权限就没有右键菜单」。
+    if (!(await box(page, tid('task-filter-tag-UI')))) {
+      await page.locator(tid('task-side-tags-header')).first().click();
+      await page.locator(tid('task-filter-tag-UI')).first().waitFor({ timeout: 10000 });
+      await page.waitForTimeout(200);
+    }
     await rightClick(page, tid('task-filter-tag-UI'));
     record(vp, 'gating tag', { noMenu: !(await box(page, tid('side-menu'))), noRename: !(await box(page, tid('side-menu-rename'))) });
     await ctx.close();
@@ -198,7 +217,7 @@ for (const theme of ['light', 'dark']) {
     await page.waitForTimeout(300);
     const items = await menuItems(page);
     if (OUT) await page.screenshot({ path: join(OUT, `phone-${theme}-sheet.png`) });
-    record(pvp, 'longpress', { opened: !!(await box(page, tid('side-menu'))), items: items.map(i => i.id).join() === 'rename,color,archive', touchRows: items.every(i => i.h >= 44) }, { items: items.map(i => `${i.id}:${r1(i.h)}`).join() });
+    record(pvp, 'longpress', { opened: !!(await box(page, tid('side-menu'))), items: items.map(i => i.id).join() === PROJECT_ITEMS, touchRows: items.every(i => i.h >= 44) }, { items: items.map(i => `${i.id}:${r1(i.h)}`).join() });
     await page.locator(tid('side-menu-rename')).first().tap();
     await page.locator(tid('project-name-input-p_a')).first().waitFor({ timeout: 4000 });
     record(pvp, 'rename page', { managerOpen: !!(await box(page, tid('project-manager'))), editingThatProject: (await box(page, tid('project-name-input-p_a')))?.text === '示例项目-A' });

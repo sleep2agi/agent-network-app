@@ -27,7 +27,7 @@ await run(new URL('./artifacts/bulk/', import.meta.url).pathname, async ({ c, pa
     await shot(name);
   };
   await navigate('agentTeams'); await el('tree').waitFor();
-  test('full App toolbar summary with create row in the directory', (await el('summary').innerText()).includes('329') && await el('new-department').isVisible() && await bounded('department-actions') && await el('dept-tmai-add-child').count() === 1);
+  test('full App toolbar summary and new button', (await el('summary').innerText()).includes('329') && await el('new-department').isVisible() && await bounded('department-actions'));
   test('info disclosure initially closed', await el('independent-note').count() === 0);
   await el('info-toggle').click();
   test('info disclosure reveals independent Agent location', await el('independent-note').isVisible());

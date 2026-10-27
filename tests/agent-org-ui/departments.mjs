@@ -10,11 +10,6 @@ await run(new URL('./artifacts/departments/', import.meta.url).pathname, async (
   await navigate('agentTeams'); await el('tree').waitFor();
   test('full App Settings navigation', true);
   await shot('tree');
-  test('directory exposes root create and per-row child shortcut', await el('new-department').isVisible() && await el('dept-tmai-add-child').count() === 1);
-  await el('dept-tmai-add-child').click();
-  test('per-row shortcut preselects that department as parent', (await el('department-parent-value').innerText()).includes('TMAI'));
-  test('per-row shortcut without submit writes nothing', (await state()).writes.length === 0);
-  await page.keyboard.press('Escape');
   await el('new-department').click();
   test('shared human and Agent tree warning', /共用|共享/.test(await el('shared-tree-note').innerText()));
   test('blank name cannot submit', await el('department-save').getAttribute('aria-disabled') === 'true');
@@ -51,7 +46,7 @@ await run(new URL('./artifacts/departments/', import.meta.url).pathname, async (
   s = await state();
   test('server failure keeps editor and no false success', s.writes.at(-1).status === 500 && s.departments.find(d => d.id === root.id)?.name === 'Fixture New Root' && await el('department-result').count() === 0);
   await shot('server-failure'); await page.keyboard.press('Escape');
-  await mode(''); if (c.phone && await el('back').count()) await el('back').click(); await el('new-department').click(); await el('department-name').fill('Refresh Recovery'); await mode('refreshFail=1');
+  await mode(''); await el('new-department').click(); await el('department-name').fill('Refresh Recovery'); await mode('refreshFail=1');
   await el('department-save').click(); await el('department-error').waitFor(); s = await state(); const writesBeforeRetry = s.writes.length;
   test('confirmed write with failed refresh not reported successful', s.writes.at(-1).status === 200 && await el('department-result').count() === 0 && await el('department-editor').isVisible());
   await mode(''); await el('department-save').click(); await saved();
@@ -62,7 +57,7 @@ await run(new URL('./artifacts/departments/', import.meta.url).pathname, async (
   await shot('permission-revoked'); await page.keyboard.press('Escape');
   await mode('restricted=1'); await navigate('agentTeams'); await el('tree').waitFor(); await focus('tmai'); s = await state();
   const beforeDenied = s.writes.length;
-  test('viewer_can denies child rename reparent controls', await el('new-child').count() === 0 && await el('rename-department').count() === 0 && await el('reparent-department').count() === 0 && await el('dept-tmai-add-child').count() === 0);
+  test('viewer_can denies child rename reparent controls', await el('new-child').count() === 0 && await el('rename-department').count() === 0 && await el('reparent-department').count() === 0);
   // Root permission is not part of Department.viewer_can; do not invent a wire field.
   test('denied department navigation issues no writes', (await state()).writes.length === beforeDenied);
   await shot('role-denied');

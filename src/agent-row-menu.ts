@@ -13,7 +13,7 @@
 // 纯数据模块(不 import react-native),与本文件同为 ck 测试可直跑。
 import { radius } from './theme';
 
-export type AgentRowMenuKey = 'read' | 'pin' | 'mute' | 'openWindow' | 'detail' | 'hide';
+export type AgentRowMenuKey = 'read' | 'pin' | 'mute' | 'openWindow' | 'copyAlias' | 'detail' | 'hide';
 
 export interface AgentRowMenuItem {
   /** 稳定键:渲染、testID、测试都按它取,不按文案。 */
@@ -43,6 +43,8 @@ export function agentRowMenuItems(s: AgentRowMenuState): AgentRowMenuItem[] {
   if (s.canPin) items.push({ key: 'pin', label: s.pinned ? '取消置顶' : '置顶' });
   if (s.canMute) items.push({ key: 'mute', label: s.muted ? '开启提醒' : '消息免打扰' });
   if (s.canOpenWindow) items.push({ key: 'openWindow', label: '在新窗口打开' });
+  // 复制会话名(alias):贴进聊天里指人 / 在任务里 @ 他,不用手打(和左栏项目/标签同一套,admin 2026-10-26)。
+  items.push({ key: 'copyAlias', label: '复制名称' });
   items.push({ key: 'detail', label: '节点详情' });
   items.push({ key: 'hide', label: s.hidden ? '恢复显示' : '不显示该对话' });
   return items;

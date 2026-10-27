@@ -142,7 +142,10 @@ export function holdWhileActive<T>(prev: T | null, live: T, active: boolean): T 
 export function buildSections(
   sessions: Session[],
   query: string,
-  opts: { match?: Matcher; sort?: SortContext; unread?: UnreadContext } = {},
+  opts: { match?: Matcher; sort?: SortContext; unread?: UnreadContext
+    /** 分组标题(部门):给了就按 Hub 的真实归属分,拿不到返回 undefined 则该行退回 alias 前缀。
+     *  admin 2026-10-26「军团里面能分组吗…明显的划分区」—— 部门是有数据的,不用猜前缀。 */
+    teamOf?: (alias: string) => string | undefined } = {},
 ): AgentSection[] {
   const q = query.trim();
   const match = opts.match ?? substringMatch;
@@ -160,7 +163,7 @@ export function buildSections(
 
   const groups = new Map<string, Session[]>();
   for (const s of unpinned) {
-    const key = teamOf(s.alias);
+    const key = opts.teamOf?.(s.alias) ?? teamOf(s.alias);
     const bucket = groups.get(key);
     if (bucket) bucket.push(s);
     else groups.set(key, [s]);

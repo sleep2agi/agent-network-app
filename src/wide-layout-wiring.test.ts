@@ -45,7 +45,14 @@ ck('two-pane list highlights the selection', two.includes('selectedAlias={twoPan
 // With the rail, the panes split the width beside it (not the whole window).
 ck('two-pane node screens get pane width + touch', (two.match(/layoutWidth=\{paneAreaWidth - paneListWidth\} touch/g) ?? []).length === 2);
 ck('two-pane list width is computed from the area beside the rail (and the dragged preference)', two.includes('{ width: paneListWidth, paddingBottom: tabBarInset }') && app.includes('const paneListWidth = twoPaneListWidth(paneAreaWidth, listPaneWidth);'));
-ck('pane area = window minus rail and insets when the rail shows', app.includes('const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right, mobileRailWidth(uiScale().densityFactor)) : width;'));
+// 0.2.296: the rail is 64 dp on a wide window (railIconsOnly) and 72+ otherwise, so the pane area has to
+// subtract whichever one is actually drawn — never the labelled width unconditionally.
+ck('pane area = window minus the rail that is drawn and the insets',
+  app.includes('const railWidth = iconsOnlyRail ? iconRailWidth(uiScale().densityFactor) : mobileRailWidth(uiScale().densityFactor);')
+  && app.includes('const paneAreaWidth = railShown ? contentWidthBesideRail(width, insets.left, insets.right, railWidth) : width;'));
+// 0.2.306: 形态由「窗口宽度 + 用户偏好」共同决定（设置 → 外观 可切回图标+文字）。
+ck('the rail variant is decided once, from the window width and the rail preference, and drives the component',
+  app.includes("const iconsOnlyRail = railShown && railIconsOnly(width) && railLabels !== 'labels';") && app.includes('iconsOnly={iconsOnlyRail}'));
 // Insets: the rail takes the left one (its background runs to the edge), the content the right one.
 ck('rail gets the left and bottom insets', /<MobileNavRail[\s\S]*?insetLeft=\{insets\.left\}[\s\S]*?insetBottom=\{tabBarInset\}[\s\S]*?\/>/.test(app));
 ck('content beside the rail honours the right inset (both sides on the phone stack)', app.includes('railShown ? { paddingRight: insets.right } : { paddingLeft: insets.left, paddingRight: insets.right }'));

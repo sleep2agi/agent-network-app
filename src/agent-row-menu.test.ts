@@ -34,8 +34,8 @@ const base: AgentRowMenuState = { unread: false, pinned: false, muted: false, hi
 const labels = (s: Partial<AgentRowMenuState>) => agentRowMenuItems({ ...base, ...s }).map(i => i.label);
 const keys = (s: Partial<AgentRowMenuState>) => agentRowMenuItems({ ...base, ...s }).map(i => i.key);
 
-ck('phone default: 标为未读 / 置顶 / 消息免打扰 / 节点详情 / 不显示该对话, in that order',
-  JSON.stringify(labels({})) === JSON.stringify(['标为未读', '置顶', '消息免打扰', '节点详情', '不显示该对话']), labels({}));
+ck('phone default: 标为未读 / 置顶 / 消息免打扰 / 复制名称 / 节点详情 / 不显示该对话, in that order',
+  JSON.stringify(labels({})) === JSON.stringify(['标为未读', '置顶', '消息免打扰', '复制名称', '节点详情', '不显示该对话']), labels({}));
 ck('unread → 标为已读', labels({ unread: true })[0] === '标为已读');
 ck('read → 标为未读', labels({ unread: false })[0] === '标为未读');
 ck('pinned → 取消置顶', labels({ pinned: true })[1] === '取消置顶');
@@ -45,14 +45,14 @@ ck('unmuted → 消息免打扰', labels({ muted: false })[2] === '消息免打�
 ck('hidden row → 恢复显示 (last)', labels({ hidden: true }).at(-1) === '恢复显示');
 ck('visible row → 不显示该对话 (last)', labels({ hidden: false }).at(-1) === '不显示该对话');
 ck('all eight state combinations keep the same key order',
-  [0, 1, 2, 3, 4, 5, 6, 7].every(b => JSON.stringify(keys({ unread: !!(b & 1), pinned: !!(b & 2), muted: !!(b & 4) })) === JSON.stringify(['read', 'pin', 'mute', 'detail', 'hide'])));
+  [0, 1, 2, 3, 4, 5, 6, 7].every(b => JSON.stringify(keys({ unread: !!(b & 1), pinned: !!(b & 2), muted: !!(b & 4) })) === JSON.stringify(['read', 'pin', 'mute', 'copyAlias', 'detail', 'hide'])));
 ck('desktop adds 在新窗口打开 between 免打扰 and 节点详情',
-  JSON.stringify(keys({ canOpenWindow: true })) === JSON.stringify(['read', 'pin', 'mute', 'openWindow', 'detail', 'hide']));
+  JSON.stringify(keys({ canOpenWindow: true })) === JSON.stringify(['read', 'pin', 'mute', 'openWindow', 'copyAlias', 'detail', 'hide']));
 ck('no pin / mute callbacks → those items are absent (not dead buttons)',
-  JSON.stringify(keys({ canPin: false, canMute: false })) === JSON.stringify(['read', 'detail', 'hide']));
+  JSON.stringify(keys({ canPin: false, canMute: false })) === JSON.stringify(['read', 'copyAlias', 'detail', 'hide']));
 ck('never a delete item (deleting a node lives in 节点详情 → 危险操作)',
   [0, 1, 2, 3].every(b => !agentRowMenuItems({ ...base, canOpenWindow: !!(b & 1), hidden: !!(b & 2) }).some(i => /删除/.test(i.label) || (i.key as string) === 'delete')));
-ck('keys are unique', new Set(keys({ canOpenWindow: true })).size === 6);
+ck('keys are unique', new Set(keys({ canOpenWindow: true })).size === 7);
 
 // ── 尺寸 ────────────────────────────────────────────────────────────────────
 const touch = rowMenuMetrics(true);

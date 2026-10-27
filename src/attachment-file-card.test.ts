@@ -120,10 +120,13 @@ assert.ok(dm.includes("purpose: 'dm'"));
 assert.ok(dm.includes('if (a.needsAuth && Platform.OS === \'web\') return <AttachmentFileDesktop'));
 assert.ok(card.includes('numberOfLines={2}') && card.includes('attachment-file-extension'));
 assert.ok(card.includes("extension: { flexShrink: 0, maxWidth: '45%' }") && card.includes('stem: { flexShrink: 1, minWidth: 0 }'), 'normal extensions never shrink; short names stay adjacent to their extension');
-assert.ok(card.includes('<ActivityIndicator') && card.includes("status === 'uploading' || status === 'downloading'") && !/progress\s*=/.test(card), 'transport activity is indeterminate, not fabricated byte progress');
+assert.ok(card.includes('<ActivityIndicator') && card.includes("status === 'uploading' || status === 'downloading'"), 'upload has no byte progress (we never get upload bytes)');
+// admin 2026-10-26「下载显示一下剩余时长」:下载进度只能来自真实字节数(onProgress 轮询 part 文件),
+// 卡片只负责显示别人算好的字符串 —— 不许在卡片里凭空造数字。
+assert.ok(card.includes('progress?: string') && card.includes('{progress ?') && !/percent|Math\.round\(.*100/.test(card), 'card renders a caller-supplied progress string only (no fabricated numbers)');
 assert.ok(card.includes('backgroundColor: colors.card') && card.includes('color: colors.text'));
 assert.ok(card.includes('useTranslation()') && card.includes('t(fileStatusKey[status])'), 'file cards resolve current language reactively');
 assert.ok(desktop.indexOf('busy.current = true') < desktop.indexOf('await chooseSavePath(name)'));
 assert.ok(!desktop.includes('openPath') && !desktop.includes('shell'));
-assert.ok(native.includes('await downloadAttachment(serverUrl, token, fileId, name, resolvedMime)') && native.includes('await Sharing.shareAsync(local'));
+assert.ok(native.includes('await downloadAttachment(serverUrl, token, fileId, name, resolvedMime, onProgress)') && native.includes('await Sharing.shareAsync(local'));
 console.log('attachment file card: pure model, metadata, browser transport and wiring checks passed');

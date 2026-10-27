@@ -2,6 +2,7 @@
  * 更新弹窗(安卓 / 桌面)要显示的文字 —— 纯函数,ck 测试直接跑;组件只负责摆放。
  * 「当前版本 vX → 新版本 vY」、大小、进度、失败提示都从这里出。下载来源是内部细节,这里一个字都不写。
  */
+import { formatEta } from './download-eta';
 import { RELEASE_NOTES_LINK_LABEL, type AndroidUpdateState } from './android-update-core';
 import { parseReleaseNotes, type NoteGroup } from './release-notes';
 import type { DesktopUpdateState } from './update-check-state';
@@ -30,7 +31,7 @@ export type AndroidPromptView = {
   showLater: boolean;
 };
 
-export type DownloadProgressView = { percent?: number; bytes?: string; verifying: boolean };
+export type DownloadProgressView = { percent?: number; bytes?: string; verifying: boolean; /** 预计剩余秒数(桌面更新下载);null/缺失 = 还看不出速度。 */ etaSeconds?: number | null };
 const clampPercent = (p: number | undefined) => (p == null || !Number.isFinite(p) ? undefined : Math.max(0, Math.min(100, Math.round(p))));
 
 /** 下载失败的统一说法。下载来源/切换/每个来源的原因都是内部细节,不展示(Vincent 2026-09-26)。 */
@@ -99,8 +100,9 @@ export function desktopPromptView(state: DesktopUpdateState, fallbackCurrent: st
   if (state.kind === 'downloading') {
     const bytes = formatProgressBytes(state.downloaded, state.total);
     const pct = state.percent == null ? undefined : `${state.percent}%`;
-    view.progressLine = ['正在下载安装…', bytes, pct].filter(Boolean).join(' · ');
-    view.progress = { percent: clampPercent(state.percent), bytes, verifying: false };
+    const eta = formatEta(state.etaSeconds ?? null);
+    view.progressLine = ['正在下载安装…', bytes, pct, eta ? `剩余约 ${eta}` : undefined].filter(Boolean).join(' · ');
+    view.progress = { percent: clampPercent(state.percent), bytes, verifying: false, etaSeconds: state.etaSeconds ?? null };
   }
   return view;
 }

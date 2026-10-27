@@ -105,7 +105,10 @@ const menu = read('./TaskSideItemMenu.tsx');
 const dialog = read('./TaskTagCreateDialog.tsx');
 const board = read('./RequirementBoard.tsx');
 const sidebar = read('./TaskFilterSidebar.tsx');
-ck('menu hides child action without creation capability', menu.includes(".filter(a => a !== 'createChild' || canCreate)"));
+// #2220：项目也能「新建子项目」了，所以判据从"只有标签能建"变成"按 kind 各看各的能力位"；
+// 意图不变：没有能力位时「新建子项目」这一项必须被过滤掉。
+ck('menu hides child action without creation capability',
+  menu.includes("a !== 'createChild' || (target.kind === 'project' ? canCreateProjectChild : canCreate)"));
 ck('menu capability comes from board state', menu.includes('useTaskBoard(s => s.capabilities)') && menu.includes('tagCreateSupported(catalog, target.key, capabilities)'));
 ck('menu transfers human-readable parent to dialog', menu.includes('setCreatingTag(target.key)') && board.includes('initialParent={creatingTag.parent}'));
 ck('native-safe bounded dialog with fixed footer and Enter submission', dialog.includes('<DialogFrame') && dialog.includes('footer={') && !dialog.includes('<Modal') && dialog.includes('onSubmitEditing={() => { void submit(); }}'));

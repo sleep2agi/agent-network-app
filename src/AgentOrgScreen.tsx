@@ -96,24 +96,21 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
               <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>
               <Text testID="agent-org-summary" style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
             </View>
+            {/* admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:部门结构不在这里改。
+                这棵树是 Hub 的网络级部门(人和 Agent 共用),增删改统一收在「用户管理 → 成员与部门」;
+                这一页只负责 Agent 归属。 */}
+            <Text testID="agent-org-departments-elsewhere" style={styles.note}>{t('agentOrg.departmentsElsewhere')}</Text>
           </View>
           <View style={!p.phone ? styles.columns : undefined}>
           {showTree ? (
             <View testID="agent-org-navigation" style={!p.phone ? styles.navigation : undefined}>
-              <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} disabled={!data.departmentsApi || saving}
-                onCreate={parent => { setDeptNote(''); setDeptEditor({ mode: 'create', parent }); }} />
+              <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} />
             </View>
           ) : null}
           {showDetail ? (
             <View style={!p.phone ? { flex: 1, minWidth: 0 } : undefined} testID="agent-org-detail">
               <DepartmentDetail key={focus ?? 'unassigned'} data={data} placed={placed} focus={focus ?? null} phone={p.phone} onFocus={setFocus} onBack={() => setFocus(undefined)}
-                actions={<>
-                  {focus && data.departments.find(d => d.id === focus)?.viewer_can?.create_child !== false ? <OrgAction label={t('agentOrg.newChild')} disabled={!data.departmentsApi || saving} testID="agent-org-new-child" onPress={() => { setDeptNote(''); setDeptEditor({ mode: 'create', parent: focus }); }} /> : null}
-                  {focus && data.departments.find(d => d.id === focus)?.viewer_can?.manage !== false ? <>
-                    <OrgAction label={t('agentOrg.renameDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-rename-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'rename', dept, parent: dept.parent_id }); } }} />
-                    <OrgAction label={t('agentOrg.reparentDepartment')} disabled={!data.departmentsApi || saving} testID="agent-org-reparent-department" onPress={() => { const dept = data.departments.find(d => d.id === focus); if (dept) { setDeptNote(''); setDeptEditor({ mode: 'reparent', dept, parent: dept.parent_id }); } }} />
-                  </> : null}
-                </>}
+                actions={null}
                 bulkBusy={saving}
                 onBulkAssign={async (departmentId, nodeIds) => {
                   if (bulkPending.current) return;
@@ -271,11 +268,9 @@ function DepartmentEditor(p: { cfg: HubConfig; networkId: string; data: AgentOrg
   </DialogFrame>;
 }
 
-function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void; onCreate: (parent: string | null) => void; disabled?: boolean }) {
+function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void }) {
   const { t } = useTranslation();
   const rows = flattenTree(orgTree(p.data));
-  // A department head cannot create a root department; owner/admin can create anywhere.
-  const canCreateRoot = !p.disabled && (p.data.departments.length === 0 || p.data.departments.some(d => d.viewer_can?.create_child !== false));
   return (
     <View testID="agent-org-departments" style={{ padding: spacing.sm }}>
       <Text style={styles.sectionLabel}>{t('agentOrg.departments')}</Text>
@@ -289,8 +284,6 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
           selected={p.focus === row.dept.id}
           count={agentCount(p.placed, p.data, row.dept.id)}
           onPress={() => p.onFocus(row.dept.id)}
-          onAddChild={!p.disabled && row.dept.viewer_can?.create_child !== false ? () => p.onCreate(row.dept.id) : undefined}
-          addLabel={`${t('agentOrg.newChild')}: ${row.dept.name}`}
         />
       )) : <SettingsRow label={t('agentOrg.empty')} testID="agent-org-empty" />}
       {p.data.directory || agentCount(p.placed, p.data, null) > 0 ? (
@@ -302,30 +295,19 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
           onPress={() => p.onFocus(null)}
         />
       ) : null}
-      <Pressable testID="agent-org-new-department" accessibilityRole="button" accessibilityLabel={t('agentOrg.newDepartmentAction')} accessibilityState={{ disabled: !canCreateRoot }} disabled={!canCreateRoot}
-        onPress={() => p.onCreate(null)} style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.createRow, !canCreateRoot && { opacity: 0.45 }, (pressed || hovered) && canCreateRoot && { backgroundColor: colors.rowHover }]}>
-        <Ionicons name="add-circle-outline" size={18} color={colors.accent} />
-        <Text style={styles.createRowLabel}>{t('agentOrg.newDepartmentAction')}</Text>
-      </Pressable>
       </ScrollView>
     </View>
   );
 }
 
-function DepartmentRow(p: { testID: string; label: string; depth?: number; selected: boolean; count: number; onPress: () => void; onAddChild?: () => void; addLabel?: string }) {
+function DepartmentRow(p: { testID: string; label: string; depth?: number; selected: boolean; count: number; onPress: () => void }) {
   const { t } = useTranslation();
-  return <View style={[styles.departmentRow, p.selected && { backgroundColor: colors.railActiveBg }]}>
-    <Pressable testID={p.testID} accessibilityRole="button" accessibilityLabel={`${p.label}, ${t('agentOrg.agentsCount', { count: p.count })}`} accessibilityState={{ selected: p.selected }} aria-selected={p.selected} onPress={p.onPress}
-      style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRowMain, { paddingLeft: spacing.sm + (p.depth ?? 0) * 16 }, (pressed || hovered) && { backgroundColor: colors.rowHover }]}>
-      <Ionicons name={p.testID === 'agent-org-dept-unassigned' ? 'file-tray-outline' : 'folder-outline'} size={17} color={p.selected ? colors.accent : colors.textMuted} />
-      <Text testID={`${p.testID}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: p.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: p.selected ? '600' : '400' }}>{p.label}</Text>
-      <Text testID={`${p.testID}-value`} style={[styles.count, { flexShrink: 0 }]}>{p.count}</Text>
-    </Pressable>
-    {p.onAddChild ? <Pressable testID={`${p.testID}-add-child`} accessibilityRole="button" accessibilityLabel={p.addLabel ?? t('agentOrg.newChild')} onPress={p.onAddChild}
-      style={({ pressed }: PressableStateCallbackType) => [styles.rowAdd, pressed && { backgroundColor: colors.rowHover }]}>
-      <Ionicons name="add" size={19} color={colors.accent} />
-    </Pressable> : null}
-  </View>;
+  return <Pressable testID={p.testID} accessibilityRole="button" accessibilityLabel={`${p.label}, ${t('agentOrg.agentsCount', { count: p.count })}`} accessibilityState={{ selected: p.selected }} aria-selected={p.selected} onPress={p.onPress}
+    style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRow, { paddingLeft: spacing.sm + (p.depth ?? 0) * 16 }, (pressed || hovered) && { backgroundColor: colors.rowHover }, p.selected && { backgroundColor: colors.railActiveBg }]}>
+    <Ionicons name={p.testID === 'agent-org-dept-unassigned' ? 'file-tray-outline' : 'folder-outline'} size={17} color={p.selected ? colors.accent : colors.textMuted} />
+    <Text testID={`${p.testID}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: p.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: p.selected ? '600' : '400' }}>{p.label}</Text>
+    <Text testID={`${p.testID}-value`} style={[styles.count, { flexShrink: 0 }]}>{p.count}</Text>
+  </Pressable>;
 }
 
 function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; actions: ReactNode; onBulkAssign?: (departmentId: string, nodeIds: string[]) => void; bulkBusy?: boolean }) {
@@ -482,20 +464,20 @@ function StructureSelector(p: { title: string; options: { id: string | null; lab
 }
 
 const makeStyles = () => StyleSheet.create({
-  page: { width: '100%', maxWidth: 700, alignSelf: 'center' },
+  // admin 2026-10-26「放在中间很奇怪，为什么不放到左侧」：
+  // 这页以前是 `alignSelf:'center' + maxWidth:700`，在宽窗口里整块浮在中间、左边一大片空白。
+  // 改成从左侧起排并放宽上限：宽窗口用满内容区（外层 SettingsScreen 自己已有 maxWidth:760），
+  // 手机/窄窗仍按原有单列布局（`phone` 分支不变）。
+  page: { width: '100%', maxWidth: 760, alignSelf: 'stretch' },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   toolbarContext: { flexGrow: 1, flexShrink: 1, minWidth: 160, gap: spacing.xs },
   compactAction: { ...buttonStyle('secondary'), height: 'auto', minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, flexShrink: 1 },
   actionLabel: { ...buttonTextStyle('secondary'), fontSize: typeScale.small, flexShrink: 1 },
   workspace: { marginHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' },
   columns: { flexDirection: 'row', minHeight: 440 },
-  navigation: { width: '32%', maxWidth: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
+  navigation: { width: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
   sectionLabel: { color: colors.textMuted, fontSize: typeScale.small, fontWeight: '600', padding: spacing.sm, marginBottom: spacing.xs },
-  departmentRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 2, borderRadius: radius.item, overflow: 'hidden' },
-  departmentRowMain: { flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingRight: spacing.sm },
-  rowAdd: { width: 40, minHeight: 44, alignItems: 'center', justifyContent: 'center' },
-  createRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingHorizontal: spacing.sm, marginTop: spacing.xs, borderRadius: radius.item },
-  createRowLabel: { color: colors.accent, fontSize: typeScale.small, fontWeight: '600' },
+  departmentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingRight: spacing.sm, marginBottom: 2, borderRadius: radius.item },
   count: { color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'], backgroundColor: colors.subtleFill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.item },
   detail: { padding: spacing.md, gap: spacing.sm, minWidth: 0 },
   detailHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },

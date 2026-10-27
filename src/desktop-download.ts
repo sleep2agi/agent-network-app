@@ -14,11 +14,30 @@ export function bytesToBase64(bytes: Uint8Array): string {
   return btoa(binary);
 }
 
-export async function downloadAuthedBytes(fetcher: AuthedFetch, url: string, token: string): Promise<Uint8Array> {
+export async function downloadAuthedBytes(fetcher: AuthedFetch, url: string, token: string, onProgress?: (received: number, total?: number) => void): Promise<Uint8Array> {
   const response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
-  const bytes = new Uint8Array(await response.arrayBuffer());
-  return bytes;
+  const declared = Number(response.headers.get('content-length'));
+  const total = Number.isFinite(declared) && declared > 0 ? declared : undefined;
+  // admin 2026-10-26「下载显示一下剩余时长」:有 body 流就边读边报进度,没有就退回整块读。
+  const body = (response as unknown as { body?: ReadableStream<Uint8Array> | null }).body;
+  if (!onProgress || !body || typeof body.getReader !== 'function') {
+    const bytes = new Uint8Array(await response.arrayBuffer());
+    onProgress?.(bytes.byteLength, total ?? bytes.byteLength);
+    return bytes;
+  }
+  const reader = body.getReader();
+  const chunks: Uint8Array[] = [];
+  let received = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    if (value) { chunks.push(value); received += value.byteLength; onProgress(received, total); }
+  }
+  const out = new Uint8Array(received);
+  let at = 0;
+  for (const c of chunks) { out.set(c, at); at += c.byteLength; }
+  return out;
 }
 
 export const isTauriDesktop = (): boolean => !!(globalThis as any).__TAURI_INTERNALS__;

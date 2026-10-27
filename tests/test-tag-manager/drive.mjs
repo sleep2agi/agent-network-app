@@ -87,6 +87,14 @@ async function open(v, theme, canManage) {
   return { ctx, page };
 }
 
+// admin 2026-10-25:左栏标签组**默认折叠**(标签太多)。需要标签行的用例先点组头展开;
+// 「默认就是折叠的」这件事单独断言('sidebar' 里的 defaultCollapsed)。
+async function expandTags(page) {
+  if ((await boxes(page, '[data-testid^="task-filter-tag-"]')).length) return;
+  await page.locator(tid('task-side-tags-header')).first().click();
+  await page.waitForTimeout(250);
+}
+
 for (const theme of ['light', 'dark']) {
   // ── desktop ──
   {
@@ -94,6 +102,9 @@ for (const theme of ['light', 'dark']) {
     let ctx, page;
     try { ({ ctx, page } = await open({ w: 1320, h: 754, kind: 'desktop' }, theme, 'yes')); } catch (e) { record(vp, 'open', { opened: false }, { error: String(e).split('\n')[0] }); continue; }
     if (OUT) await page.screenshot({ path: join(OUT, `desktop-${theme}-sidebar.png`) });
+    // 首屏:标签组应当**折叠**(admin 2026-10-25「默认折叠起来」)。
+    const defaultCollapsed = (await boxes(page, '[data-testid^="task-filter-tag-"]')).length === 0;
+    await expandTags(page);
     const tagsHead = await box(page, tid('task-side-tags-header'));
     const projHead = await box(page, tid('task-side-projects-header'));
     const tagsText = await headerText(page, 'task-side-tags-header');
@@ -106,6 +117,7 @@ for (const theme of ['light', 'dark']) {
     const lastTagRow = [...tagRows, ...(manage ? [manage] : [])].reduce((m, b) => (b.b > m.b ? b : m), { b: 0 });
     const firstProj = await box(page, tid('task-side-project-all'));
     record(vp, 'sidebar', {
+      defaultCollapsed,
       bothHeaders: !!tagsHead && !!projHead,
       textPainted: !!tagsText?.painted && tagsText.w >= 16 && !!projText?.painted && projText.w >= 16,
       textAligned: tagTexts.length === 2 && Math.abs(tagTexts[0] - tagTexts[1]) <= 0.5,
@@ -193,6 +205,8 @@ for (const theme of ['light', 'dark']) {
     const vp = `desktop 1320x754 ${theme} ${mode === 'old' ? 'old-hub' : 'scoped'}`;
     let ctx, page;
     try { ({ ctx, page } = await open({ w: 1320, h: 754, kind: 'desktop' }, theme, mode)); } catch (e) { record(vp, 'open', { opened: false }, { error: String(e).split('\n')[0] }); continue; }
+    // 门控要在**展开之后**看:折叠时「管理标签」本来就不在,断言会假通过。
+    await expandTags(page);
     record(vp, 'gating', { noManageEntry: !(await box(page, tid('task-side-manage-tags'))), tagsStillListed: (await boxes(page, '[data-testid^="task-filter-tag-"]')).length >= 6 });
     await ctx.close();
   }

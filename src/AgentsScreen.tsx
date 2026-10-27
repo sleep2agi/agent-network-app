@@ -5,7 +5,8 @@
 // 🔴 样式必须从 ./app-styles 引入,不能在本文件复制一份 —— 那是 let 变量,
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
-import { fetchOrg } from './org-api';
+import * as Clipboard from 'expo-clipboard';
+import { fetchDepartmentNodes, fetchOrg } from './org-api';
 import { groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
 import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -193,6 +194,9 @@ export default function AgentsScreen({
   // 组织架构(board #419):有部门、且有人分了部门时,「人员」按部门分小组(部门路径做小标题,未分配的最后)。
   // 旧 Hub 没有 /departments → null,照旧一个平的列表。
   const [org, setOrg] = useState<OrgData | null>(null);
+  /** alias → 部门名(Hub 的真实归属)。空 Map = 退回 alias 前缀分组,行为与以前一致。
+   *  admin 2026-10-26:「军团里面能分组吗…有明显的划分区」—— 按部门分比猜前缀可靠。 */
+  const [deptByAlias, setDeptByAlias] = useState<Map<string, string>>(new Map());
   // 群会话(RFC-042):和私信同一次 /api/dm/threads 拿到。null = 这个 Hub 没有群(没有 group_threads 字段)→ 区块不画。
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const loadPeople = useCallback(async () => {
@@ -474,8 +478,9 @@ export default function AgentsScreen({
         activityAt: alias => activityByAlias.get(alias) ?? 0,
       },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
+      teamOf: alias => deptByAlias.get(alias),
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -508,6 +513,22 @@ export default function AgentsScreen({
   const groupsShown = groupsCollapsed ? [] : groupsMatched;
   const groupsHeaderHRef = useRef<number | null>(null);
   const groupsSectionHRef = useRef<number | null>(null);
+  // 部门归属:每个部门一次 nodes 查询(部门通常 <20 个,并发即可;任一失败就少一组,不阻塞列表)。
+  useEffect(() => {
+    if (!org || !org.departments.length) { setDeptByAlias(new Map()); return; }
+    let alive = true;
+    void Promise.all(org.departments.map(async d => {
+      const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
+      return { name: d.name, nodes };
+    })).then(groups => {
+      if (!alive) return;
+      const map = new Map<string, string>();
+      for (const g of groups) for (const n of g.nodes) if (n.alias && !map.has(n.alias)) map.set(n.alias, g.name);
+      setDeptByAlias(map);
+    }).catch(() => { if (alive) setDeptByAlias(new Map()); });
+    return () => { alive = false; };
+  }, [org, cfg]);
+
   const peopleGroups = useMemo(() => groupPeopleByDepartment(org, peopleShown.rows), [org, peopleShown.rows]);
   const peopleGroupHeadHRef = useRef<number | null>(null);
   // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。
@@ -616,6 +637,10 @@ export default function AgentsScreen({
       case 'pin': onTogglePin?.(alias); return;
       case 'mute': onToggleMute?.(alias); return;
       case 'openWindow': onOpenChatWindow?.(alias); return;
+      case 'copyAlias':
+        // 复制会话名(alias)到剪贴板;失败静默,不打断操作。
+        void Clipboard.setStringAsync(alias).catch(() => undefined);
+        return;
       case 'detail': onOpenNodeDetail(alias); return;
       case 'hide':
         if (isConversationHidden(convFlags, alias, liveUnread.lastAt[alias] ?? 0)) updateConversationFlags(f => restoreConversation(f, alias));
@@ -1026,12 +1051,22 @@ export default function AgentsScreen({
           accessibilityRole={section.collapsible ? 'button' : 'header'}
           accessibilityLabel={`${section.title} ${section.online}/${section.total} 在线${section.collapsible ? (section.collapsed ? ',已折叠' : ',已展开') : ''}`}
           accessibilityState={section.collapsible ? { expanded: !section.collapsed } : undefined}
-          style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+          // admin 2026-10-26「军团里面能分组吗…有明显的划分区，有点小发光，就是要震撼」:
+          // 每个团之间一条发丝分隔线(第一组不画),标题前缀一条 brand 色的微光竖条。
+          style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg },
+            section !== shownSections[0] ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null]}
         >
+          {/* 整组都离线时竖条不发亮、标题转灰:一眼看出这一团现在没人(不是没数据)。 */}
+          <View testID={`agent-group-glow-${section.title}`} style={section.online === 0 ? {
+            width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.border,
+          } : {
+            width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.accent,
+            shadowColor: colors.accent, shadowOpacity: 0.45, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
+          }} />
           {section.collapsible ? (
             <Ionicons name={section.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
           ) : null}
-          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{section.title}</Text>
+          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: section.online === 0 ? colors.textMuted : colors.text }]}>{section.title}</Text>
           <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{section.online}/{section.total}</Text>
         </Pressable>
       )}

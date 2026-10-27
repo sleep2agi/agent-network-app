@@ -5,8 +5,10 @@ import { filePresentation, fileStatusKey, formatFileSize, type FileCardStatus } 
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
 
-export default function AttachmentFileCard({ name, mime, size, status = 'ready', detail, onPress, testID = 'attachment-file-card' }: {
+export default function AttachmentFileCard({ name, mime, size, status = 'ready', detail, progress, onPress, testID = 'attachment-file-card' }: {
   name: string; mime?: string; size?: number; status?: FileCardStatus; detail?: string;
+  /** 下载中的人话进度（「62% · 剩余约 8 秒」）；有就接在状态后面。 */
+  progress?: string;
   onPress?: (event: GestureResponderEvent) => void; testID?: string;
 }) {
   const { t } = useTranslation();
@@ -28,7 +30,7 @@ export default function AttachmentFileCard({ name, mime, size, status = 'ready',
           <View style={styles.meta}>
             {sizeText ? <Text style={styles.secondary}>{sizeText}</Text> : null}
             {busy ? <ActivityIndicator size="small" color={colors.textMuted} testID="attachment-file-busy" /> : null}
-            <Text style={[styles.secondary, failed && styles.error]} testID={`attachment-file-status-${status}`}>{statusText}</Text>
+            <Text style={[styles.secondary, failed && styles.error]} testID={`attachment-file-status-${status}`}>{statusText}{progress ? ` · ${progress}` : ''}</Text>
           </View>
         </View>
         <View style={[styles.icon, { backgroundColor: file.color }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">

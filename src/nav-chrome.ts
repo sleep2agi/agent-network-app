@@ -116,6 +116,31 @@ export function mobileRailWidth(density: number): number {
 }
 
 /**
+ * Vincent 2026-10-24 (Xiaomi foldable, unfolded, Hub 设置):「跟那个桌面端它不太一样，你这个得改一下」.
+ * Side by side the two navs are indeed different: the desktop rail is 64 dp with icons only (name on
+ * hover), the two-pane rail is 72+ dp and carries a label under every icon — the labels are what make it
+ * read as "the phone UI stretched", and 「定时任务」 forces the wider box.
+ *
+ * So above this window width the two-pane rail drops the labels and takes the desktop's 64 dp box.
+ * 900 dp, not the 1000 first guessed: Vincent's unfolded Xiaomi foldable reports ≈ 980 dp (1966 px at
+ * ~2.0 density) — the screenshot he sent is that device, so a 1000 gate would have missed it. A phone
+ * in landscape (≈ 844 dp in the web harness) stays labelled.
+ * Touch has no hover, so a long press shows the name (ToastAndroid) instead of a tooltip. Narrower
+ * two-pane windows (tablet portrait, phone landscape) keep the labelled rail — there the extra width
+ * is the only thing that makes the destination readable at 10 dp label size.
+ */
+export const ICON_RAIL_MIN_WIDTH = 900;
+export function railIconsOnly(windowWidth: number): boolean {
+  return Number.isFinite(windowWidth) && windowWidth >= ICON_RAIL_MIN_WIDTH;
+}
+/** The desktop rail's 64 dp (× 界面密度), floored at the Material touch minimum.
+ *  admin 2026-10-25（折叠屏看板截图）：「左边那个节点列表可以窄一点」—— 再收 8 dp 到 56。 */
+export function iconRailWidth(density: number): number {
+  const d = Number.isFinite(density) && density > 0 ? density : 1;
+  return Math.max(RAIL_TOUCH_MIN, Math.round(56 * d));
+}
+
+/**
  * The brand mark and version take ~70 dp. A phone in landscape inside the two-pane has
  * ~330–360 dp of height after the status and gesture bars, so drop them there and keep
  * every destination reachable without scrolling. Unfolded foldables (≈ 780–850 dp tall)

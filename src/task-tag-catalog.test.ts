@@ -86,5 +86,13 @@ ck('create input carries tags', eq(withTags.tags, ['UI']) && eq(createRequiremen
 const noTags = createInput({ ...emptyDraft(), name: 'x' })!;
 ck('create without tags sends no tags field', !('tags' in noTags) && createRequirementBody(cfg, noTags).tags === undefined && !JSON.stringify(createRequirementBody(cfg, noTags)).includes('tags'));
 
+
+// ── 改父级(Hub #2204)────────────────────────────────────────────────────────
+ck('reparent: 本地目录把子标签改挂到新父下', applyTagOpToCatalog(cat, { op: 'reparent', tag: 'UI', parent: '设计' }).parents?.UI === '设计');
+ck('reparent: parent=null 升为顶级(键被删掉)', !('UI' in (applyTagOpToCatalog({ ...cat, parents: { UI: '设计' } }, { op: 'reparent', tag: 'UI', parent: null }).parents ?? {})));
+ck('reparent: 不动卡片上的标签串', applyTagOp(['UI', 'TMWork'], { op: 'reparent', tag: 'UI', parent: '设计' }) === null);
+ck('reparent: Hub 不支持时给出明确提示,不是笼统失败', tagOpErrorKey(400, 'invalid_tag_op') === 'tags.opUnsupported');
+ck('reparent: 成环 / 太深有自己的提示', tagOpErrorKey(400, 'tag_cycle') === 'tags.parentInvalid' && tagOpErrorKey(400, 'tag_too_deep') === 'tags.parentInvalid');
+
 console.log(`tag catalog: ${p}/${total}`);
 if (p !== total) process.exit(1);

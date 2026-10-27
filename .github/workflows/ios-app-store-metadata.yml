@@ -18,13 +18,27 @@ on:
         required: true
         type: boolean
         default: true
-      demo_hub_url:
-        description: Optional demo Hub URL reachable without a LAN, for the reviewer notes
+      # #2097 —— 这里**故意没有** demo_hub_url / demo_account 输入。
+      # dispatch 输入会留在 run 元数据里（谁能触发就能看到），把账号或带 token 的 URL
+      # 当普通输入传，等于把凭据写进 GitHub 的审计记录。演示信息改由
+      # environment `macos-signing` 的 secrets（REVIEW_DEMO_*）提供，见下方 env。
+      whats_new:
+        description: "这一版的「新功能」(=whatsNew, 用户更新页看到的);空 = 不改"
         required: false
         type: string
         default: ""
-      demo_account:
-        description: Optional demo account (user / password) for the reviewer notes
+      release_type:
+        description: "MANUAL = 审核通过后等你手动放行;AFTER_APPROVAL = 审核一过就自动上线。空 = 不改"
+        required: false
+        type: string
+        default: ""
+      phased_release:
+        description: Also create a 7-day phased release for this version (App Store rollout in steps, can be paused or cancelled while live)
+        required: false
+        type: boolean
+        default: false
+      build_number:
+        description: "可选：把这一版的构建号（如 182）绑到该 App Store 版本；空 = 不改"
         required: false
         type: string
         default: ""
@@ -42,6 +56,11 @@ jobs:
     runs-on: ubuntu-latest
     environment: macos-signing
     steps:
+      # #2097 回归门：本文件**不得**再出现凭据型 dispatch 输入，也不得在 dry-run 回显 notes。
+      # 放在第一步，万一有人改回来，这次 dispatch 会立刻红，而不是等安全审计发现。
+      - name: Guard — no credential-bearing dispatch inputs
+        shell: bash
+        run: node scripts/check-ios-metadata-no-credential-inputs.mjs
       - name: Update listing copy and reviewer notes without exposing credentials
         env:
           APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
@@ -49,9 +68,14 @@ jobs:
           APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
           VERSION: ${{ inputs.version }}
           DRY_RUN: ${{ inputs.dry_run }}
-          DEMO_HUB_URL: ${{ inputs.demo_hub_url }}
-          DEMO_ACCOUNT: ${{ inputs.demo_account }}
+          # #2097 —— 从受保护 environment 的 secret 读，绝不再从 dispatch 输入读。
+          DEMO_HUB_URL: ${{ secrets.REVIEW_DEMO_HUB_URL }}
+          DEMO_ACCOUNT: ${{ secrets.REVIEW_DEMO_ACCOUNT }}
           SUBMIT_FOR_REVIEW: ${{ inputs.submit_for_review }}
+          BUILD_NUMBER: ${{ inputs.build_number }}
+          PHASED_RELEASE: ${{ inputs.phased_release }}
+          RELEASE_TYPE: ${{ inputs.release_type }}
+          WHATS_NEW: ${{ inputs.whats_new }}
           BUNDLE_ID: top.vansin.agentnetwork
         shell: bash
         run: |
@@ -120,6 +144,25 @@ jobs:
           vstate=$(jq -r --arg id "$version_id" '.data[] | select(.id == $id) | .attributes.appStoreState' <<<"$versions")
           echo "version $VERSION id=$version_id state=$vstate"
 
+          # 可选：把指定构建号绑到这一版（空 = 不动）。B 方案 = 把当天最新打的包绑上去再提审；
+          # 以前这一步只能去 App Store Connect 网页点，脚本没有入口。
+          if [ -n "${BUILD_NUMBER:-}" ]; then
+            build_id=$(asc_get builds --data-urlencode "filter[app]=$app_id" --data-urlencode "filter[version]=$BUILD_NUMBER" | jq -r '.data[0].id // empty')
+            [ -n "$build_id" ] || { echo "::error::build $BUILD_NUMBER not found for this app"; exit 1; }
+            bstate=$(asc_get "builds/$build_id" | jq -r '.data.attributes.processingState // "UNKNOWN"')
+            echo "build $BUILD_NUMBER id=$build_id processingState=$bstate"
+            if [ "$BUILD_NUMBER" != '' ] && [ "$bstate" != 'VALID' ] && [ "$DRY_RUN" != 'true' ]; then
+              echo "::warning::build $BUILD_NUMBER is $bstate, not VALID yet — Apple may still be processing it"
+            fi
+            if [ "$DRY_RUN" = 'true' ]; then
+              echo "    dry-run: would attach build $BUILD_NUMBER to version $VERSION"
+            else
+              jq -n --arg b "$build_id" '{data:{type:"builds",id:$b}}' > "$RUNNER_TEMP/build-rel.json"
+              asc_write PATCH "appStoreVersions/$version_id/relationships/build" "$RUNNER_TEMP/build-rel.json" > /dev/null
+              echo "attached build $BUILD_NUMBER to version $VERSION"
+            fi
+          fi
+
           lan_zh='局域网说明：本 App 是局域网中的 ANet 军团客户端，只连接你自己在局域网内运行的 ANet Hub；不提供服务端账号体系，也不会把你的数据发往公网云服务。'
           lan_en='Local network: this app is the ANet Legion client for a local network. It connects only to the ANet Hub you run on your own LAN. There is no hosted cloud service and your data is not sent to ours.'
 
@@ -146,6 +189,36 @@ jobs:
             echo "    updated description"
           done
 
+          # 「新功能」(whatsNew)：App Store 更新页给老用户看的一段。首次上架可以留空,
+          # 但只要有值就必须两种语言都有,否则某一语言的更新页会是空白。
+          if [ -n "$WHATS_NEW" ]; then
+            new_zh=$'首个上架版本：局域网里的 ANet 军团客户端。\n- 项目可以像文件夹一样有父项目：左侧缩进、可折叠，父项目数字含子项目。\n- 标签也有父子：按父标签筛选会同时命中子标签（左侧栏与手机快筛都支持）。\n- 新建/编辑项目可直接选父项目；归档项目不出现在候选里。\n- 修复：编辑项目时点父项目，输入框失焦不会再把这次点击吞掉。'
+            new_en=$'First App Store release: the ANet Legion client for your own local network.\n- Projects can have a parent project: indented on the left, collapsible, and a parent counts its children.\n- Tags have parents too: filtering by a parent tag also matches its children (sidebar and the phone quick filter).\n- Pick a parent project when creating or editing; archived projects are not offered.\n- Fix: pressing a parent chip while renaming no longer loses the click to the input blur.'
+            jq -r '.data[] | "\(.id)\t\(.attributes.locale)"' <<<"$locs" | while IFS=$'\t' read -r loc_id locale; do
+              case "$locale" in
+                zh*) text="$new_zh" ;;
+                *) text="$new_en" ;;
+              esac
+              if [ "$DRY_RUN" = 'true' ]; then
+                echo "--- $locale would set whatsNew: $(printf '%s' "$text" | head -1)…"
+                continue
+              fi
+              jq -n --arg id "$loc_id" --arg t "$text" \
+                '{data:{type:"appStoreVersionLocalizations",id:$id,attributes:{whatsNew:$t}}}' > "$RUNNER_TEMP/whatsnew.json"
+              # 首次上架(还没有已发布版本)时 Apple 不允许写 whatsNew:
+              # 409 STATE_ERROR "Attribute 'whatsNew' cannot be edited at this time"。
+              # 那不是配置错误,只是这个版本没有「更新说明」这一栏;记一行 WARN 继续。
+              if out=$(asc_write PATCH "appStoreVersionLocalizations/$loc_id" "$RUNNER_TEMP/whatsnew.json" 2>&1); then
+                echo "--- $locale whatsNew updated"
+              elif grep -q "whatsNew' cannot be edited" <<<"$out"; then
+                echo "::warning::$locale whatsNew is not editable for this version (first release) — skipped"
+              else
+                printf '%s\n' "$out" >&2
+                exit 1
+              fi
+            done
+          fi
+
           notes_zh="ANet 军团运行在局域网中：App 启动后需要填写你自己部署的 Hub 地址（例如 http://<局域网IP>:8787 或 https://hub.local）并登录，之后才能看到 Agent 列表与会话。"
           notes_en='ANet Legion runs on a local network. After launch the app asks for the Hub address you run yourself (e.g. http://<lan-ip>:8787 or https://hub.local) and a login; only then does it show agents and chats.'
           notes="$notes_zh"$'\n\n'"$notes_en"
@@ -161,8 +234,32 @@ jobs:
           fi
           detail_id=$(jq -r '.data.id // empty' <<<"$detail" 2>/dev/null || true)
           echo "--- review detail: ${detail_id:-none}"
+          # 上架闸门:MANUAL = 审核通过后等你手动点「发布」;AFTER_APPROVAL = 一过审就自动上线。
+          # 只改这一项,不碰版本号/描述/截图;版本已上架后 Apple 不允许改,这里会直接报错。
+          if [ -n "$RELEASE_TYPE" ]; then
+            case "$RELEASE_TYPE" in
+              MANUAL|AFTER_APPROVAL) ;;
+              *) echo "::error::release_type must be MANUAL or AFTER_APPROVAL"; exit 1 ;;
+            esac
+            if [ "$DRY_RUN" = 'true' ]; then
+              echo "dry-run: would set releaseType to $RELEASE_TYPE"
+            else
+              jq -n --arg rt "$RELEASE_TYPE" \
+                '{data:{type:"appStoreVersions",id:"'"$version_id"'",attributes:{releaseType:$rt}}}' > "$RUNNER_TEMP/release-type.json"
+              asc_write PATCH "appStoreVersions/$version_id" "$RUNNER_TEMP/release-type.json" | jq '{releaseType: .data.attributes.releaseType}'
+            fi
+          fi
+
+
           if [ "$DRY_RUN" = 'true' ]; then
-            echo "    dry-run: would set notes to:"; printf '%s\n' "$notes" | sed 's/^/      /'
+            # #2097 —— dry-run **不再打印 notes 全文**：演示地址/账号就在里面。
+            # 只输出“有没有提供”和长度，足以判断将要写什么，又不泄露内容。
+            echo "    dry-run: reviewer notes length=${#notes} chars"
+            if [ -n "$DEMO_HUB_URL" ]; then echo "    dry-run: demo hub: provided"; else echo "    dry-run: demo hub: not provided"; fi
+            if [ -n "$DEMO_ACCOUNT" ]; then echo "    dry-run: demo account: provided"; else echo "    dry-run: demo account: not provided"; fi
+            # 只读跑也要把版本摘要打出来 —— releaseType 是提审前的判断依据,以前 dry-run 看不到。
+            echo 'App Store version summary:'
+            asc_get "appStoreVersions/$version_id?include=build" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null), linkedBuildNumber: (([.included[]? | select(.type == "builds") | .attributes.version] | first) // null)}'
             exit 0
           fi
           if [ -n "$detail_id" ]; then
@@ -177,13 +274,76 @@ jobs:
           echo "reviewer notes updated"
 
           if [ "$SUBMIT_FOR_REVIEW" = 'true' ]; then
-            echo "submitting version $version_id for App Store review"
-            jq -n --arg vid "$version_id" \
-              '{data:{type:"appStoreVersionSubmissions",relationships:{appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/submission.json"
-            asc_write POST "appStoreVersionSubmissions" "$RUNNER_TEMP/submission.json" | jq '{id: .data.id, submitted: .data.attributes.submitted}'
+            # 2026-10-25 实测:老的 POST /v1/appStoreVersionSubmissions 已被 Apple 下线
+            # (403 FORBIDDEN_ERROR: the resource 'appStoreVersionSubmissions' does not allow 'CREATE')。
+            # 现在走 reviewSubmissions 三步:建提交 → 加 item(这一版) → submitted=true。
+            echo "submitting version $version_id for App Store review (reviewSubmissions flow)"
+            # Apple 每个 app+platform 只允许一个「进行中的提交」。失败重试会在后台留下 READY_FOR_REVIEW
+            # 的旧提交(2026-10-25 连续两次 409 就是这个后果),所以先看一遍并清掉未提交的旧提交。
+            asc_get "reviewSubmissions" --data-urlencode "filter[app]=$app_id" \
+              --data-urlencode 'filter[platform]=IOS' --data-urlencode 'limit=50' > "$RUNNER_TEMP/subs.json"
+            jq -r '.data[] | "\(.id) \(.attributes.state)"' "$RUNNER_TEMP/subs.json" | sed 's/^/    existing submission: /'
+            # Apple **不允许** DELETE reviewSubmissions(实测 403 'does not allow DELETE'),
+            # 所以旧提交只能在 App Store Connect 网页里清。这里只报告,并在提交必然失败前给出可操作的结论。
+            stale=$(jq -r '[.data[] | select(.attributes.state == "READY_FOR_REVIEW" or .attributes.state == "UNRESOLVED_ISSUES") | .id] | length' "$RUNNER_TEMP/subs.json")
+            # 已经有 READY_FOR_REVIEW 的提交时,别再新建(新建后 item 加不进去:409 ENTITY_STATE_INVALID)。
+            # Apple 禁 DELETE 但允许 PATCH —— 直接把那个提交标记 submitted,内容就是刚绑好的这一版。
+            open_sub=$(jq -r '.data[] | select(.attributes.state == "READY_FOR_REVIEW") | .id' "$RUNNER_TEMP/subs.json" | head -1)
+            if [ -n "$open_sub" ]; then
+              echo "reusing existing READY_FOR_REVIEW submission $open_sub"
+              # 空提交直接 submitted=true 会 409 RELATIONSHIP.REQUIRED(App must have an approved
+              # appStoreVersions);所以先把这一版作为 item 加进这个已存在的提交,再提交。
+              jq -n --arg rid "$open_sub" --arg vid "$version_id" \
+                '{data:{type:"reviewSubmissionItems",relationships:{reviewSubmission:{data:{type:"reviewSubmissions",id:$rid}},appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/review-item.json"
+              item_id=$(asc_write POST "reviewSubmissionItems" "$RUNNER_TEMP/review-item.json" | jq -r '.data.id // empty')
+              if [ -n "$item_id" ]; then
+                echo "added version $version_id to existing submission $open_sub"
+                jq -n --arg rid "$open_sub" '{data:{type:"reviewSubmissions",id:$rid,attributes:{submitted:true}}}' > "$RUNNER_TEMP/review-submit.json"
+                asc_write PATCH "reviewSubmissions/$open_sub" "$RUNNER_TEMP/review-submit.json" | jq '{id: .data.id, submitted: .data.attributes.submitted, state: .data.attributes.state}'
+                SUBMIT_DONE=1
+              else
+                echo "::warning::could not add the version to the existing submission; falling back to a new one"
+              fi
+            fi
+            if [ "${stale:-0}" -gt 0 ]; then
+              echo "::warning::this app already has $stale open submission(s); Apple allows one per app+platform and they cannot be deleted via the API."
+            fi
+            if [ "${SUBMIT_DONE:-0}" != '1' ]; then
+            jq -n --arg app "$app_id" \
+              '{data:{type:"reviewSubmissions",attributes:{platform:"IOS"},relationships:{app:{data:{type:"apps",id:$app}}}}}' > "$RUNNER_TEMP/review.json"
+            review_id=$(asc_write POST "reviewSubmissions" "$RUNNER_TEMP/review.json" | jq -r '.data.id // empty')
+            [ -n "$review_id" ] || { echo "::error::could not create a review submission"; exit 1; }
+            jq -n --arg rid "$review_id" --arg vid "$version_id" \
+              '{data:{type:"reviewSubmissionItems",relationships:{reviewSubmission:{data:{type:"reviewSubmissions",id:$rid}},appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/review-item.json"
+            item_id=$(asc_write POST "reviewSubmissionItems" "$RUNNER_TEMP/review-item.json" | jq -r '.data.id // empty')
+            [ -n "$item_id" ] || { echo "::error::could not add version $version_id to review submission $review_id"; exit 1; }
+            jq -n --arg rid "$review_id" '{data:{type:"reviewSubmissions",id:$rid,attributes:{submitted:true}}}' > "$RUNNER_TEMP/review-submit.json"
+            asc_write PATCH "reviewSubmissions/$review_id" "$RUNNER_TEMP/review-submit.json" | jq '{id: .data.id, submitted: .data.attributes.submitted, state: .data.attributes.state}'
+            fi
           else
             echo "submission skipped (submit_for_review=false)"
           fi
 
+
+          # 灰度:7 天分批放量。Apple 只在版本发布后按天数推进,期间可以暂停/取消 ——
+          # 这是唯一能在「用户已经能更新」之后还踩刹车的官方机制,所以发版前把它配好。
+          # 幂等:已有 phased release 就只报告状态,不重复创建。
+          if [ "$PHASED_RELEASE" = 'true' ] && [ "$DRY_RUN" != 'true' ]; then
+            existing=$(asc_get "appStoreVersions/$version_id/appStoreVersionPhasedRelease" 2>/dev/null \
+              | jq -r '.data.id // empty' || true)
+            if [ -n "$existing" ]; then
+              echo "phased release already exists ($existing)"
+              asc_get "appStoreVersionPhasedRelease/$existing" | jq '{state: .data.attributes.phasedReleaseState, day: .data.attributes.currentDayNumber, start: .data.attributes.startDate}'
+            else
+              jq -n --arg vid "$version_id" \
+                '{data:{type:"appStoreVersionPhasedReleases",attributes:{phasedReleaseState:"INACTIVE"},relationships:{appStoreVersion:{data:{type:"appStoreVersions",id:$vid}}}}}' > "$RUNNER_TEMP/phased.json"
+              asc_write POST "appStoreVersionPhasedReleases" "$RUNNER_TEMP/phased.json" | jq '{id: .data.id, state: .data.attributes.phasedReleaseState}'
+            fi
+          elif [ "$PHASED_RELEASE" = 'true' ]; then
+            echo "phased release skipped (dry_run=true)"
+          fi
+
           echo 'App Store version summary:'
-          asc_get "appStoreVersions/$version_id" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, linkedBuild: (.data.relationships.build.data.id // null)}'
+          # releaseType 决定「审核通过后会不会立刻上线」:AFTER_APPROVAL = 自动,MANUAL = owner 手动放行。
+          # 这跟 phased release(7 天分批)是两件事,所以两个都打印出来,提审前一眼能看到。
+          asc_get "appStoreVersions/$version_id?include=build" | jq '{version: .data.attributes.versionString, state: .data.attributes.appStoreState, releaseType: .data.attributes.releaseType, linkedBuild: (.data.relationships.build.data.id // null), linkedBuildNumber: (([.included[]? | select(.type == "builds") | .attributes.version] | first) // null)}'

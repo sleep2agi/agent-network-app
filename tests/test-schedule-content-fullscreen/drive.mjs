@@ -153,7 +153,8 @@ async function openSchedules(page, kind, theme) {
   await page.goto(WEB_URL);
   const rail = page.locator('[data-testid="desktop-rail"] [aria-label="定时任务"]');
   if (kind === 'desktop' && await rail.first().waitFor({ timeout: 25000 }).then(() => true, () => false)) await rail.first().click();
-  else await page.getByText('定时任务', { exact: true }).first().click({ timeout: 25000 });
+  // 0.2.296: the wide-window rail is icon-only, so the destination is a testID/aria-label there.
+  else await page.locator('[data-testid="nav-rail-scheduled"]').or(page.getByText('定时任务', { exact: true })).first().click({ timeout: 25000 });
   if (kind === 'phone') await page.getByText('示例巡检计划', { exact: true }).first().click({ timeout: 15000 });
   await page.locator(tid('schedule-detail')).waitFor({ timeout: 15000 });
   await page.waitForTimeout(400);

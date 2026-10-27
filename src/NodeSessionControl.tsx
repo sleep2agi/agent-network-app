@@ -47,6 +47,8 @@ export default function NodeSessionControl({ cfg, target }: { cfg: HubConfig; ta
     if (!unknown) setNotice(result.outcome ? t(result.outcome === 'already_idle' ? 'sessionControl.alreadyIdle' : 'sessionControl.processed') : '');
   };
   const enabled = !busy && !unknown && canBackgroundSession(state, readAt, now);
+  // 手机:一行装得下的短标签;桌面:完整标签(有空间,也说明了 Ctrl+B)。
+  const touch = !pointerUi();
   const action = (label: string, run_: () => void, disabled: boolean, id: string) => (
     <Pressable testID={id} accessibilityRole="button" accessibilityLabel={label} accessibilityState={{ disabled }} disabled={disabled}
       onPress={run_} hitSlop={6} style={({ pressed }) => ({ minHeight: 32, justifyContent: 'center', paddingHorizontal: spacing.sm,
@@ -64,12 +66,12 @@ export default function NodeSessionControl({ cfg, target }: { cfg: HubConfig; ta
     <View testID="node-session-control" style={{ flexDirection: 'column', gap: 4, paddingHorizontal: spacing.lg, paddingVertical: 6,
       backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, flexShrink: 1 }}>{t('sessionControl.title')}</Text>
+        <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, flexShrink: 0 }}>{touch ? t('sessionControl.titleShort') : t('sessionControl.title')}</Text>
         {state ? <Text testID="session-control-status" style={{ color: state.active ? colors.accent : colors.textMuted, fontSize: 12 }}>{t(state.active ? 'sessionControl.running' : 'sessionControl.idle')}</Text> : null}
         {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
         <View style={{ flex: 1 }} />
-        {action(t(readAt ? 'sessionControl.refresh' : 'sessionControl.read'), () => void run(false), !!busy, 'session-control-refresh')}
-        {action(pointerUi() ? t('sessionControl.background') : t('sessionControl.backgroundTouch'), () => void run(true), !enabled, 'session-control-background')}
+        {action(touch ? t('sessionControl.readShort') : t(readAt ? 'sessionControl.refresh' : 'sessionControl.read'), () => void run(false), !!busy, 'session-control-refresh')}
+        {action(touch ? t('sessionControl.backgroundShort') : t('sessionControl.background'), () => void run(true), !enabled, 'session-control-background')}
       </View>
       {line ? <Text testID="session-control-notice" accessibilityLiveRegion="polite" style={{ color: unknown ? colors.blocked : colors.textMuted, fontSize: 11, lineHeight: 15 }}>{line}</Text> : null}
     </View>

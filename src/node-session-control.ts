@@ -97,6 +97,10 @@ export async function runSessionControl(cfg: HubConfig, target: SessionControlTa
           return { ok: false, error: body === undefined && mutation ? 'unknown' : 'access_denied',
             detail: [detailTag, errorDetailLabel('http', response.status)].filter(Boolean).join(' ') };
         }
+        // 旧 Hub 对未实现的 /api 路径返回 200 + 纯文本帮助页（实测 commhub-server 0.9.0-preview.144 就是这样），
+        // 这是「能力不存在」，不是「暂时读不到」：重试永远不会成功，不能显示「请稍后刷新状态」。
+        const mediaType = (response.headers.get('content-type') || '').toLowerCase();
+        if (response.ok && !mediaType.includes('json')) return { ok: false, error: 'unsupported', detail: detailTag || undefined };
         let data: unknown;
         try { data = await response.json(); } catch { return { ok: false, error: mutation ? 'unknown' : 'unavailable', detail: [detailTag, errorDetailLabel('body')].filter(Boolean).join(' ') }; }
         if (!response.ok) return { ok: false, error: record(data) && typeof data.error === 'string' ? data.error : 'unavailable',
