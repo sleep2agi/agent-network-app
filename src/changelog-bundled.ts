@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.333:",
+  "- 修复：节点文件的长路径 / 长文件名会把内容顶出边界（admin 2026-10-27 截图里路径只剩「AGENTS.m…」）；现在按容器截断并中间省略。",
+  "",
   "What's new in 0.2.332:",
   "- 新增：标签超过 8 个时，左栏「标签」组头下也有过滤框（和「项目」一致）。",
   "",
