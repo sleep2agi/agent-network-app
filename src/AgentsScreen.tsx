@@ -471,7 +471,9 @@ export default function AgentsScreen({
   );
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
-      match: pinyinMatch,
+      // 搜索也命中部门名:分区改成按部门之后,「搜 TMWork 找到这一部门的 agent」比
+      // 「只搜 alias」更符合直觉(admin 2026-10-26 的分区诉求)。alias 命中逻辑不变。
+      match: (alias, q) => pinyinMatch(alias, q) || (deptByAlias.get(alias) ?? '').toLowerCase().includes(q.trim().toLowerCase()),
       sort: {
         pinned: alias => pinnedAliases.includes(alias),
         sortByActivity: SORT_BY_ACTIVITY,
