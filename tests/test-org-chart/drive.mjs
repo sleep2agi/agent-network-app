@@ -127,12 +127,25 @@ for (const theme of ['light', 'dark']) {
     await shot('1-root');
     record(where, 'open: 成员与部门 like the screenshot', {
       title: title === '成员与部门', crumb: crumb === '示例网络', deptRow: !!dept,
+      perRowAdd: await page.locator(tid('org-dept-add-d_infra')).count() === 1,
       unassignedPeople: unassigned === 4,
       // 条贴着屏幕底(安全区垫在条里),三个按钮在安全区上面、一样宽、同一行。
       barAtBottom: !!bar && Math.abs(bar.y + bar.height - V.h) <= 1 && btns.every(b => b && Math.abs(b.y + b.height - (V.h - 24)) <= 1),
       threeEqual: btns.every(Boolean) && Math.max(...btns.map(b => b.width)) - Math.min(...btns.map(b => b.width)) <= 0.5 && Math.abs(btns[0].y - btns[2].y) <= 0.5,
       inView: !!bar && bar.x >= 0 && bar.x + bar.width <= V.w + 0.5,
     }, { title, crumb, bar: bar && `${r1(bar.y)}+${r1(bar.height)}`, widths: btns.map(b => b && r1(b.width)).join('/'), btnBottom: btns[0] && r1(btns[0].y + btns[0].height), unassigned });
+  });
+  await step('row-add', async () => {
+    const before = (await calls(page)).length;
+    await page.locator(tid('org-dept-add-d_infra')).tap();
+    await page.locator(tid('org-dept-form')).waitFor({ timeout: 3000 });
+    const parent = (await page.locator(tid('org-dept-parent')).innerText()).replace(/\s+/g, ' ');
+    await shot('1b-row-add-form');
+    record(where, 'directory row + opens a child form with that row as parent', {
+      parentIsRow: parent.includes('军团基建'), noWrite: (await calls(page)).length === before,
+    }, { parent });
+    await page.locator(tid('org-back')).tap();
+    await page.waitForTimeout(200);
   });
   await step('drill', async () => {
     await page.locator(tid('org-dept-d_infra')).tap();
@@ -226,6 +239,15 @@ for (const theme of ['light', 'dark']) {
       name: name === '军团基建', sideBySide: !!tree && !!detail && tree.x + tree.width <= detail.x + 1 && Math.abs(tree.y - detail.y) <= 1,
       alignedWithCards: !!orgCard && !!membersCard && Math.abs(orgCard.x - membersCard.x) <= 0.5 && Math.abs(orgCard.r - membersCard.r) <= 0.5,
     }, { name, orgCard: orgCard && `${r1(orgCard.x)}..${r1(orgCard.r)}`, membersCard: membersCard && `${r1(membersCard.x)}..${r1(membersCard.r)}` });
+  });
+  await step('tree-row-add', async () => {
+    if (!win) throw new Error('no settings window');
+    await win.locator(tid('org-tree-add-d_infra')).click();
+    await win.locator(tid('org-dept-dialog')).waitFor({ timeout: 3000 });
+    const parent = (await win.locator(tid('org-dept-parent')).innerText()).replace(/\s+/g, ' ');
+    if (OUT) await win.screenshot({ path: `${OUT}/desktop-${theme}-tree-row-add.png` });
+    record(where, 'tree row + preselects that department as parent', { parentIsRow: parent.includes('军团基建'), noWrite: (await calls(win)).every(x => x.method !== 'POST') }, { parent });
+    await win.locator(tid('org-dept-cancel')).click();
   });
   await step('add', async () => {
     if (!win) throw new Error('no settings window');

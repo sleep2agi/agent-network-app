@@ -189,9 +189,9 @@ export function OrgPhoneModal({ cfg, networkId, networkName, org, people, onChan
     setBusy(true); setError('');
     try { await fn(); onChanged(); after?.(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
-  const openForm = (mode: 'create' | 'edit', dept?: Department) => {
-    setForm(mode === 'create' ? { name: '', id: '', parent: here, leader: null } : { name: dept!.name, id: dept!.id, parent: dept!.parent_id, leader: dept!.leader_user_id });
-    push({ kind: 'form', mode, dept, parent: here });
+  const openForm = (mode: 'create' | 'edit', dept?: Department, parent: DeptKey = here) => {
+    setForm(mode === 'create' ? { name: '', id: '', parent, leader: null } : { name: dept!.name, id: dept!.id, parent: dept!.parent_id, leader: dept!.leader_user_id });
+    push({ kind: 'form', mode, dept, parent });
   };
   const memberSheet = (p: OrgPerson) => {
     const where = departmentOf(org, p.user_id);
@@ -275,11 +275,19 @@ export function OrgPhoneModal({ cfg, networkId, networkName, org, people, onChan
                 {kids.map((d, i) => (
                   <View key={d.id}>
                     {i ? <Sep /> : null}
-                    <Row onPress={() => push({ kind: 'dept', id: d.id })} testID={`org-dept-${d.id}`} accessibilityLabel={`${d.name},${totalMembers(org, d.id)} 人`}>
-                      <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }} numberOfLines={1}>{d.name}</Text>
-                      <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{totalMembers(org, d.id)}</Text>
-                      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
-                    </Row>
+                    <View style={{ flexDirection: 'row', alignItems: 'center', backgroundColor: colors.card }}>
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Row onPress={() => push({ kind: 'dept', id: d.id })} testID={`org-dept-${d.id}`} accessibilityLabel={`${d.name},${totalMembers(org, d.id)} 人`}>
+                          <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }} numberOfLines={1}>{d.name}</Text>
+                          <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{totalMembers(org, d.id)}</Text>
+                          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+                        </Row>
+                      </View>
+                      {perms.canCreateUnder(d.id) ? <Pressable accessibilityRole="button" accessibilityLabel={`在${d.name}下新建子部门`} onPress={() => openForm('create', undefined, d.id)} testID={`org-dept-add-${d.id}`}
+                        style={state => [{ width: 48, height: 56, alignItems: 'center', justifyContent: 'center' }, state.pressed ? { backgroundColor: colors.rowHover } : null]}>
+                        <Ionicons name="add" size={20} color={colors.accent} />
+                      </Pressable> : null}
+                    </View>
                   </View>
                 ))}
                 {kids.length && mine.length ? <Sep inset={0} /> : null}
@@ -451,9 +459,9 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
     setBusy(true); setError('');
     try { await fn(); onChanged(); after?.(); } catch (e) { setError(e instanceof Error ? e.message : String(e)); } finally { setBusy(false); }
   };
-  const openForm = (mode: 'create' | 'edit', d?: Department) => {
+  const openForm = (mode: 'create' | 'edit', d?: Department, parent: DeptKey = sel) => {
     setError('');
-    setForm(mode === 'create' ? { name: '', id: '', parent: sel, leader: null, sub: 'none' } : { name: d!.name, id: d!.id, parent: d!.parent_id, leader: d!.leader_user_id, sub: 'none' });
+    setForm(mode === 'create' ? { name: '', id: '', parent, leader: null, sub: 'none' } : { name: d!.name, id: d!.id, parent: d!.parent_id, leader: d!.leader_user_id, sub: 'none' });
     setDialog({ kind: 'form', mode, dept: d });
   };
   const btn = (label: string, onPress: () => void, testID: string, tone: 'plain' | 'accent' | 'danger' = 'plain', disabled?: boolean) => (
@@ -466,18 +474,25 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
     const on = sel === id;
     const open = id ? !collapsed.has(id) : true;
     const off = perms.head && !perms.inScope(id);
+    const canAdd = !!id && perms.canCreateUnder(id) && !off;
     return (
-      <Pressable key={id ?? '__root'} accessibilityRole="button" accessibilityState={{ selected: on, disabled: off }} disabled={off} onPress={() => { setSel(id); setQ(''); }} testID={`org-tree-${id ?? 'root'}`}
-        style={state => [{ height: 34, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: spacing.sm + depth * 16, paddingRight: spacing.md, borderRadius: radius.item, opacity: off ? 0.45 : 1 }, on ? { backgroundColor: colors.rowActive } : ((state as { hovered?: boolean }).hovered && !off ? { backgroundColor: colors.rowHover } : null)]}>
-        {hasChildren && id ? (
-          <Pressable accessibilityRole="button" accessibilityLabel={open ? '收起' : '展开'} hitSlop={6} onPress={() => setCollapsed(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; })} testID={`org-tree-toggle-${id}`}>
-            <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={12} color={colors.textMuted} />
-          </Pressable>
-        ) : <View style={{ width: 12 }} />}
-        <Ionicons name={id ? 'git-network-outline' : 'business-outline'} size={14} color={colors.textMuted} />
-        <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.small, fontWeight: on ? weight.strong : undefined }} numberOfLines={1}>{name}</Text>
-        <Text style={{ color: colors.textMuted, fontSize: 11 }}>{count}</Text>
-      </Pressable>
+      <View key={id ?? '__root'} style={[{ flexDirection: 'row', alignItems: 'center', borderRadius: radius.item }, on ? { backgroundColor: colors.rowActive } : null]}>
+        <Pressable accessibilityRole="button" accessibilityState={{ selected: on, disabled: off }} disabled={off} onPress={() => { setSel(id); setQ(''); }} testID={`org-tree-${id ?? 'root'}`}
+          style={state => [{ flex: 1, minWidth: 0, height: 34, flexDirection: 'row', alignItems: 'center', gap: 6, paddingLeft: spacing.sm + depth * 16, paddingRight: canAdd ? 2 : spacing.md, borderRadius: radius.item, opacity: off ? 0.45 : 1 }, (state as { hovered?: boolean }).hovered && !off ? { backgroundColor: colors.rowHover } : null]}>
+          {hasChildren && id ? (
+            <Pressable accessibilityRole="button" accessibilityLabel={open ? '收起' : '展开'} hitSlop={6} onPress={() => setCollapsed(s => { const n = new Set(s); if (n.has(id)) n.delete(id); else n.add(id); return n; })} testID={`org-tree-toggle-${id}`}>
+              <Ionicons name={open ? 'chevron-down' : 'chevron-forward'} size={12} color={colors.textMuted} />
+            </Pressable>
+          ) : <View style={{ width: 12 }} />}
+          <Ionicons name={id ? 'git-network-outline' : 'business-outline'} size={14} color={colors.textMuted} />
+          <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.small, fontWeight: on ? weight.strong : undefined }} numberOfLines={1}>{name}</Text>
+          <Text style={{ color: colors.textMuted, fontSize: 11 }}>{count}</Text>
+        </Pressable>
+        {canAdd ? <Pressable accessibilityRole="button" accessibilityLabel={`在${name}下新建子部门`} onPress={() => openForm('create', undefined, id)} testID={`org-tree-add-${id}`}
+          style={state => [{ width: 28, height: 34, alignItems: 'center', justifyContent: 'center' }, state.pressed ? { backgroundColor: colors.rowHover } : null]}>
+          <Ionicons name="add" size={16} color={colors.accent} />
+        </Pressable> : null}
+      </View>
     );
   };
   const kids = childrenOf(org, sel);
