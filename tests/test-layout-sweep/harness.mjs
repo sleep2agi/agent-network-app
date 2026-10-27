@@ -286,6 +286,8 @@ export async function openStubWindow(page, label, scripts, { timeout = 5000 } = 
 export function findChromium() {
   const base = `${process.env.HOME}/.cache/ms-playwright`;
   for (const d of ['chromium-1234', 'chromium-1217', 'chromium-1208']) for (const p of [`${base}/${d}/chrome-linux64/chrome`, `${base}/${d}/chrome-linux/chrome`]) if (existsSync(p)) return p;
+  // macOS 本地跑 drive:没有 Playwright 的 Linux 包时用系统 Chrome(CI 仍是上面的 Linux 路径)。
+  for (const p of ['/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', '/Applications/Chromium.app/Contents/MacOS/Chromium']) if (existsSync(p)) return p;
   return undefined;
 }
 

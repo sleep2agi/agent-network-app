@@ -51,6 +51,9 @@ ck('phone: 设置 gets a 管理本部门 group only with managed ids', settings.
 ck('phone: it opens the full-screen head mode', settings.includes('<ManageDepartmentPhone cfg={cfg} networkId={me.networkId}'));
 const chart = src('OrgChart.tsx');
 ck('org chart: every write button is gated by perms', ['perms.canManage(dept.id) ?', 'perms.canCreateUnder(sel) ?', 'perms.canMoveMember(p.user_id) ?', 'perms.canUnassign ?', 'perms.inScope(sel) ?'].every(x => chart.includes(x)));
+ck('org chart: every directory row has a direct, gated child-create shortcut', chart.includes('{perms.canCreateUnder(d.id) ? <Pressable') && chart.includes('testID={`org-dept-add-${d.id}`}') && chart.includes("openForm('create', undefined, d.id)")
+  && chart.includes('const canAdd = !!id && perms.canCreateUnder(id) && !off;') && chart.includes('testID={`org-tree-add-${id}`}') && chart.includes("openForm('create', undefined, id)"));
+ck('org chart: row shortcut preselects that row as parent, not the current selection', /const openForm = \(mode: 'create' \| 'edit', dept\?: Department, parent: DeptKey = here\)/.test(chart) && /const openForm = \(mode: 'create' \| 'edit', d\?: Department, parent: DeptKey = sel\)/.test(chart) && chart.includes('parent, leader: null }'));
 ck('org chart: phone sheet / bottom bar only list allowed actions', chart.includes("...(perms.canMoveMember(p.user_id) ? [{ label: '调动到其他部门…'") && chart.includes('if (items.length) setSheet(') && chart.includes('{bar.length ? ('));
 const count = (re: RegExp) => (chart.match(re) ?? []).length;
 ck('org chart: every picker call site uses the head limits', count(/<DeptPickList org=/g) === count(/rootDisabled=\{!perms\.rootPickable\}/g) && count(/<PersonPickList org=/g) === count(/people=\{perms\.candidates\(people\)\}/g) && count(/<PersonPickList org=/g) >= 4);
