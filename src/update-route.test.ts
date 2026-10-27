@@ -17,7 +17,7 @@ import {
   ROUTE_LAST_OK_KEY,
   routeOrder,
 } from './update-route';
-import { androidPromptView, desktopPromptView, DOWNLOAD_FAILED_TITLE, versionLine, type AndroidPromptView } from './update-prompt-model';
+import { androidPromptView, desktopPromptView, DOWNLOAD_FAILED_TITLE, formatReleaseDate, versionLine, type AndroidPromptView } from './update-prompt-model';
 import { androidChannelApkUrl, apkCacheFileName, describeAndroidUpdateRow, notesFromMirrorManifest, type AndroidUpdateState } from './android-update-core';
 import { SETTINGS_CATEGORIES } from './settings-model';
 import { describeUpdateRow } from './update-check-state';
@@ -165,6 +165,25 @@ ck('prompt: no view for non-release states', androidPromptView({ kind: 'checking
     { currentVersion: '0.2.326' },
   )!;
   ck('prompt: unparseable date is dropped, not rendered as Invalid Date', badDate.meta === '10.0 MB');
+
+// ── 桌面端弹窗也要有「发布日期」（admin 2026-10-27）──
+{
+  const withDate = desktopPromptView(
+    { kind: 'available', version: '0.2.327', notes: '', currentVersion: '0.2.326', publishedAt: '2026-10-27T02:07:31Z' },
+    '0.2.326',
+  )!;
+  ck('desktop prompt: released line uses the same formatter as the mobile sheet', withDate.released === `${formatReleaseDate('2026-10-27T02:07:31Z')} 发布`);
+  const noDate = desktopPromptView(
+    { kind: 'available', version: '0.2.327', notes: '', currentVersion: '0.2.326' },
+    '0.2.326',
+  )!;
+  ck('desktop prompt: no publishedAt ⇒ no released line (never invent)', noDate.released === undefined);
+  const bad = desktopPromptView(
+    { kind: 'available', version: '0.2.327', notes: '', currentVersion: '0.2.326', publishedAt: 'nope' },
+    '0.2.326',
+  )!;
+  ck('desktop prompt: unparseable date dropped', bad.released === undefined);
+}
 }
 ck('versionLine strips prefixes', versionLine('desktop-v0.2.117', 'v0.2.118').current === 'v0.2.117' && versionLine(undefined, '0.2.118').current === undefined);
 

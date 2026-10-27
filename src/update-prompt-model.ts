@@ -109,6 +109,8 @@ export function androidNotesView(notes: string | null | undefined, opts: { curre
 
 export type DesktopPromptView = {
   versions: VersionLine;
+  /** 「2026-10-27 发布」；取不到发布日期就不画这一行（admin 2026-10-27）。 */
+  released?: string;
   progressLine?: string;
   progress?: DownloadProgressView;
 };
@@ -118,6 +120,8 @@ export function desktopPromptView(state: DesktopUpdateState, fallbackCurrent: st
   const view: DesktopPromptView = {
     versions: versionLine(state.currentVersion ?? fallbackCurrent, state.version),
   };
+  const released = formatReleaseDate((state as { publishedAt?: string }).publishedAt);
+  if (released) view.released = `${released} 发布`;
   if (state.kind === 'downloading') {
     const bytes = formatProgressBytes(state.downloaded, state.total);
     const pct = state.percent == null ? undefined : `${state.percent}%`;
