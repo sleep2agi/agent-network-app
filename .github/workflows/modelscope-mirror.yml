@@ -32,6 +32,11 @@ on:
         description: 'Release tag to (re)sync, e.g. desktop-v0.2.98. Empty = newest published desktop release.'
         required: false
         type: string
+      assume_newest:
+        description: 'Treat the given tag as the newest release (skips the releases listing; use when publishing the latest version)'
+        required: false
+        type: boolean
+        default: false
 
 permissions:
   contents: read
@@ -118,6 +123,7 @@ jobs:
             --remote "$RUNNER_TEMP/remote.json" \
             --out "$RUNNER_TEMP/mirror" \
             --tag "$TAG" \
+            ${{ inputs.assume_newest && '--assume-newest' || '' }} \
             --wait-apk-minutes "$WAIT_APK_MINUTES"
 
       - name: Upload (one commit) and verify anonymously

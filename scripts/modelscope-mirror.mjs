@@ -246,14 +246,21 @@ async function prepare(args) {
   // GitHub 的分页 releases 列表偶尔返回空数组(2026-10-27 实测 3 次里 1 次 len=0)。
   // 空响应会让 selectNewestDesktopRelease 得到 null ⇒ isNewest=false ⇒ 只传版本目录、
   // 不动 desktop/latest/VERSION,线上就一直停在上一版。空了就重试。
+  // --assume-newest:调用方声明「这个 tag 就是最新版」,跳过 releases 列表。
+  // 为什么需要:2026-10-27 GitHub 的 releases 列表对 Actions token 连续返回空数组(5/5),
+  // 镜像因此一直判 isNewest=false,desktop/latest/VERSION 卡在上一版。发布脚本知道自己是发最新版,
+  // 这个断言比"再猜一次空列表"可靠。
+  const assumeNewest = args['assume-newest'] === true || args['assume-newest'] === 'true';
   let releases = [];
-  for (let attempt = 0; attempt < 5; attempt += 1) {
-    releases = await githubApi(repository, 'releases?per_page=100');
-    if (Array.isArray(releases) && releases.length > 0) break;
-    console.log(`releases listing came back empty (attempt ${attempt + 1}) — retrying`);
-    await sleepMs(10_000);
+  if (!assumeNewest) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      releases = await githubApi(repository, 'releases?per_page=100');
+      if (Array.isArray(releases) && releases.length > 0) break;
+      console.log(`releases listing came back empty (attempt ${attempt + 1}) — retrying`);
+      await sleepMs(10_000);
+    }
   }
-  const newest = selectNewestDesktopRelease(releases);
+  const newest = assumeNewest ? null : selectNewestDesktopRelease(releases);
   const tag = args.tag || newest?.tag_name;
   if (!tag) throw new Error('no published desktop-v* release with latest.json found');
   if (!parseDesktopTag(tag)) throw new Error(`not a desktop release tag: ${tag}`);
@@ -284,7 +291,7 @@ async function prepare(args) {
   if (release.draft) throw new Error(`${tag} is a draft`);
 
   const version = parseDesktopTag(tag).text;
-  const isNewest = newest?.tag_name === tag;
+  const isNewest = assumeNewest ? true : newest?.tag_name === tag;
   const manifestAsset = release.assets.find((asset) => asset.name === 'latest.json');
   if (!manifestAsset) throw new Error(`${tag} has no latest.json`);
 
