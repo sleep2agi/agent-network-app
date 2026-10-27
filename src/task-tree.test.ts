@@ -56,8 +56,9 @@ const side = readFileSync(new URL('./TaskFilterSidebar.tsx', import.meta.url), '
 // #2106 反例 2 / 3:计数必须从完整树算;可见行单独算;主树与空项目区共用 totals。
 ck('侧栏:父计数来自完整树(折叠不影响数字)', /aggregateCounts\(projectRows\(active\), n => pCounts\.get\(n\.id\) \?\? 0\)/.test(side));
 ck('侧栏:可见行单独按折叠算', /const visible = projectRows\(active, collapsedProjects\);/.test(side));
-ck('侧栏:主树与空项目区共用同一批可见行(父不重复)', /const emptyRows = visible\.filter\(r => \(totals\.get\(r\.node\.id\) \?\? 0\) === 0\);/.test(side)
-  && /\{withTasks\.map\(drawRow\)\}/.test(side));
+// 0.330 起两条都多了一层「左栏项目过滤」的 matchQ();语义不变(仍共用同一批可见行)。
+ck('侧栏:主树与空项目区共用同一批可见行(父不重复)', side.includes('const emptyRows = visible.filter') && side.includes('&& matchQ(r));')
+  && side.includes('{withTasks.map(drawRow)}'));
 ck('侧栏用 tagRows + tagCatalog.parents 渲染标签层级', /tagRows\(tagNames, tagCatalog\?\.parents \?\? null\)/.test(side));
 // #2106 反例 4 / P2:筛选带后代集合;标签按 depth 真缩进。
 ck('侧栏:点击标签时把后代集合写进筛选', /tagFilterAfterPick\(filter, tag, tagCatalog\?\.parents \?\? null\)/.test(side));

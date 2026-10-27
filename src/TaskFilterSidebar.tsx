@@ -42,6 +42,8 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const [showEmptyProjects, setShowEmptyProjects] = useState(false);
+  /** 项目多时的左栏过滤(只在项目 >8 个时出现;不影响「显示空项目」的折叠语义)。 */
+  const [projectQ, setProjectQ] = useState('');
   // #2102:树的折叠状态(只在 Hub 真的回了 parent_id 时才可能出现折叠箭头)。
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
   // #2122 F4:目录(标签父子)变了之后,旧的 tagDescendants 可能已经指向不存在的子孙,
@@ -249,6 +251,12 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
                 <Ionicons name="add" size={15} color={colors.textMuted} />
               </Pressable>} />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
+            {/* 项目多(>8)时给一个过滤框:491 张卡、十几个项目时靠肉眼翻很慢。 */}
+            {activeProjects(projects).length > 8 ? (
+              <TextInput value={projectQ} onChangeText={setProjectQ} placeholder={tr('tasks.copy.30')} placeholderTextColor={colors.textMuted}
+                style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
+                testID="task-side-project-filter" autoCapitalize="none" />
+            ) : null}
             {/* #2102:Hub 给了 parent_id 就渲染树(缩进/折叠/祖先计数);没有就完全是旧的平铺。
                 #2106 P1:计数来自完整树 —— 折叠只改可见性,不改父项目的数字;
                 主树与空项目区共用同一批「可见行」,所以父节点不会两处各画一次,
@@ -257,8 +265,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
               const active = activeProjects(projects);
               const totals = aggregateCounts(projectRows(active), n => pCounts.get(n.id) ?? 0);
               const visible = projectRows(active, collapsedProjects);
-              const withTasks = visible.filter(r => (totals.get(r.node.id) ?? 0) > 0);
-              const emptyRows = visible.filter(r => (totals.get(r.node.id) ?? 0) === 0);
+              const matchQ = (r: (typeof visible)[number]) => !projectQ.trim() || r.node.name.toLowerCase().includes(projectQ.trim().toLowerCase());
+              const withTasks = visible.filter(r => (totals.get(r.node.id) ?? 0) > 0 && matchQ(r));
+              const emptyRows = visible.filter(r => (totals.get(r.node.id) ?? 0) === 0 && matchQ(r));
               const drawRow = (r: (typeof visible)[number]) => (
                 r.hasChildren
                   ? <View key={`prow:${r.node.id}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
