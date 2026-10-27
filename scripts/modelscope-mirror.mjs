@@ -243,7 +243,16 @@ async function prepare(args) {
   const waitApkMinutes = Number(args['wait-apk-minutes'] || 0);
   if (!args.out) throw new Error('--out is required');
 
-  const releases = await githubApi(repository, 'releases?per_page=100');
+  // GitHub 的分页 releases 列表偶尔返回空数组(2026-10-27 实测 3 次里 1 次 len=0)。
+  // 空响应会让 selectNewestDesktopRelease 得到 null ⇒ isNewest=false ⇒ 只传版本目录、
+  // 不动 desktop/latest/VERSION,线上就一直停在上一版。空了就重试。
+  let releases = [];
+  for (let attempt = 0; attempt < 5; attempt += 1) {
+    releases = await githubApi(repository, 'releases?per_page=100');
+    if (Array.isArray(releases) && releases.length > 0) break;
+    console.log(`releases listing came back empty (attempt ${attempt + 1}) — retrying`);
+    await sleepMs(10_000);
+  }
   const newest = selectNewestDesktopRelease(releases);
   const tag = args.tag || newest?.tag_name;
   if (!tag) throw new Error('no published desktop-v* release with latest.json found');
