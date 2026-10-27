@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.330:",
+  "- 新增：项目超过 8 个时，任务左栏「项目」组头下出现过滤框，输几个字就能定位（不用再逐个翻）。",
+  "",
   "What's new in 0.2.329:",
   "- 改进：「未归属」分区固定排在军团列表最底部（它不是部门，是待整理的一堆）。",
   "",
