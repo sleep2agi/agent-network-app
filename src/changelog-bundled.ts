@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.327:",
+  "- 改进：按部门分区时，没有部门归属的 agent 统一进「未归属」一组（不再被名字前缀拆成好几组）。",
+  "",
   "What's new in 0.2.326:",
   "- 新增：军团搜索也能搜**部门名**（例如输 TMWork 就列出该部门的 agent），不只是搜会话名。",
   "",
