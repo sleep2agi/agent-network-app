@@ -272,19 +272,34 @@ export function ChangelogPhone({ entries, online }: { entries: ChangelogEntry[];
   const pk = usePicker(entries);
   const [selecting, setSelecting] = useState(false);
   const [copied, setCopied] = useState(false);
+  // 手机上也要能搜:280+ 条一路滚更难受(桌面 0.342 起已有搜索)。
+  const [q, setQ] = useState('');
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase().replace(/^v(?=\d)/, '');
+    if (!needle) return entries;
+    return entries.filter(e => e.version.toLowerCase().includes(needle)
+      || e.sections.some(sec => (sec.title ?? '').toLowerCase().includes(needle)
+        || sec.items.some(item => String(item).toLowerCase().includes(needle))));
+  }, [entries, q]);
   const safe = useModalSafePadding('fullScreen');
   const n = pk.selected.size;
   const openPreview = (versions: string[]) => { setCopied(false); pk.setPreview({ versions }); };
   return (
     <View style={styles.phoneRoot} testID="changelog-phone">
       <ScrollView contentContainerStyle={[styles.phoneContent, selecting && { paddingBottom: 96 }]} testID="changelog-phone-scroll">
+        <TextInput value={q} onChangeText={setQ} placeholder={tr('changelog.search')} placeholderTextColor={colors.textMuted}
+          style={[{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 10, paddingVertical: 8 }]}
+          testID="changelog-phone-search" autoCapitalize="none" />
+        {q.trim() && !shown.length ? (
+          <Text testID="changelog-phone-no-match" style={{ color: colors.textMuted, paddingVertical: 8 }}>{tr('changelog.noMatch')}</Text>
+        ) : null}
         <View style={styles.phoneTopRow}>
           <OfflineHint online={online} style={{ flex: 1 }} />
           <Pressable accessibilityRole="button" testID="changelog-select-toggle" onPress={() => { setSelecting(s => !s); pk.setSelected(new Set()); }} hitSlop={8} style={styles.phoneTopBtn}>
             <Text style={styles.accentText}>{selecting ? tr('changelog.cancelSelect') : tr('changelog.selectMany')}</Text>
           </Pressable>
         </View>
-        {entries.map(e => {
+        {shown.map(e => {
           const on = pk.selected.has(e.version);
           return (
             // 多选时整张卡片可点(勾选);平时卡片只是容器 —— 套一层 disabled 的 Pressable 会把里面的「复制」一起禁掉。
