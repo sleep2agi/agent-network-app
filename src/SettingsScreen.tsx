@@ -1,3 +1,4 @@
+import * as Clipboard from 'expo-clipboard';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { maskedHubHost } from './mask-hub-address';
 import { t as tr } from './i18n';
@@ -1204,6 +1205,12 @@ export default function SettingsScreen({
               <BrandMark size={36} style={{ marginTop: 8, marginBottom: 12 }} />
               <SettingsGroup>
                 {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
+                {/* 反馈问题时经常要「你什么版本、什么平台」:一键复制,不用手打。 */}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.285')} onPress={() => {
+                    void Clipboard.setStringAsync(`v${APP_VERSION} · ${Platform.OS}`).catch(() => undefined);
+                  }} testID="settings-copy-version" />
+                ) : null}
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
                   // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
