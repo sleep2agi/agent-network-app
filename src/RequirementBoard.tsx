@@ -1,3 +1,4 @@
+import { readCollapsedColumns, writeCollapsedColumns } from './task-sidebar-prefs';
 import { ownerCounts, ownerLabel } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import TaskListTable from './TaskListTable';
@@ -1017,7 +1018,7 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
   const SEARCH_BOX_W = 200;
   const [filtersW, setFiltersW] = useState(0);
   /** 收起的看板列(桌面多列时给内容让位;不落盘,重开就展开)。 */
-  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(new Set());
+  const [collapsedColumns, setCollapsedColumns] = useState<Set<string>>(() => readCollapsedColumns());
   // 标题 + 分段 + 搜索 + 新建 + 左右留白 + 四个间隙:筛选以外这一行要占的宽(各自 onLayout 量出来,不按字数估)。
   const [fixedParts, setFixedParts] = useState<{ title: number; seg: number; new: number }>({ title: 0, seg: 0, new: 0 });
   const measureFixed = (k: 'title' | 'seg' | 'new', w: number) => setFixedParts(p => (Math.abs(p[k] - w) < 0.5 ? p : { ...p, [k]: w }));
@@ -1114,7 +1115,9 @@ function ScopedRequirementBoard({ cfg, desktop, dispatch, onOpenVoiceSettings, s
     /** 收起某一列(桌面多列时给内容让位):只显示竖排列名 + 数量,再点展开。 */
     const collapsedCols = collapsedColumns;
     const toggleColumn = (id: string) => setCollapsedColumns(prev => {
-      const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id); return next;
+      const next = new Set(prev); if (next.has(id)) next.delete(id); else next.add(id);
+      writeCollapsedColumns(next);
+      return next;
     });
     const renderColumn = (col: (typeof columns)[number]) => {
       if (collapsedCols.has(col.column)) {
