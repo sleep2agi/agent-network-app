@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.346:
+            - 改进：左栏项目 / 标签过滤支持拼音首字母（例如 `yh` 能搜到「用户管理」），和军团搜索同一套规则。
+
             What's new in 0.2.345:
             - 改进：更新日志搜索没有结果时显示「没有匹配的版本或内容」，不再是一片空白。
 

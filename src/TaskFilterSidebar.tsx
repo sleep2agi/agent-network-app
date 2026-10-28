@@ -1,3 +1,4 @@
+import { pinyinMatch } from './lib/pinyin';
 import { ownerCounts } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
@@ -237,10 +238,10 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
                 style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
                 testID="task-side-tag-filter" autoCapitalize="none" />
             ) : null}
-            {tagQ.trim() && !tagNames.some(n => n.toLowerCase().includes(tagQ.trim().toLowerCase())) ? (
+            {tagQ.trim() && !tagNames.some(n => pinyinMatch(n, tagQ)) ? (
               <Text style={[styles.itemText, { color: colors.textMuted, paddingHorizontal: spacing.sm, paddingVertical: 4 }]} numberOfLines={1}>{tr('tasks.copy.245')}</Text>
             ) : null}
-            {tagRows(tagNames.filter(n => !tagQ.trim() || n.toLowerCase().includes(tagQ.trim().toLowerCase())), tagCatalog?.parents ?? null).map(r => tagRow(
+            {tagRows(tagNames.filter(n => !tagQ.trim() || pinyinMatch(n, tagQ)), tagCatalog?.parents ?? null).map(r => tagRow(
               r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
               tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
             ))}
@@ -277,7 +278,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
               const active = activeProjects(projects);
               const totals = aggregateCounts(projectRows(active), n => pCounts.get(n.id) ?? 0);
               const visible = projectRows(active, collapsedProjects);
-              const matchQ = (r: (typeof visible)[number]) => !projectQ.trim() || r.node.name.toLowerCase().includes(projectQ.trim().toLowerCase());
+              const matchQ = (r: (typeof visible)[number]) => !projectQ.trim() || pinyinMatch(r.node.name, projectQ);
               const withTasks = visible.filter(r => (totals.get(r.node.id) ?? 0) > 0 && matchQ(r));
               const emptyRows = visible.filter(r => (totals.get(r.node.id) ?? 0) === 0 && matchQ(r));
               const drawRow = (r: (typeof visible)[number]) => (

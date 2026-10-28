@@ -59,7 +59,7 @@ ck('侧栏:可见行单独按折叠算', /const visible = projectRows\(active, c
 // 0.330 起两条都多了一层「左栏项目过滤」的 matchQ();语义不变(仍共用同一批可见行)。
 ck('侧栏:主树与空项目区共用同一批可见行(父不重复)', side.includes('const emptyRows = visible.filter') && side.includes('&& matchQ(r));')
   && side.includes('{withTasks.map(drawRow)}'));
-ck('侧栏用 tagRows + tagCatalog.parents 渲染标签层级', /tagRows\(tagNames[^,]*,\s*tagCatalog\?\.parents/.test(side));
+ck('侧栏用 tagRows + tagCatalog.parents 渲染标签层级', /tagRows\(tagNames[\s\S]{0,90}?tagCatalog\?\.parents/.test(side));
 // #2106 反例 4 / P2:筛选带后代集合;标签按 depth 真缩进。
 ck('侧栏:点击标签时把后代集合写进筛选', /tagFilterAfterPick\(filter, tag, tagCatalog\?\.parents \?\? null\)/.test(side));
 ck('侧栏:标签行按 depth 缩进', /tagDepth\(r\.node\.name, tagCatalog\?\.depths \?\? null/.test(side) && /depth > 0 && \{ paddingLeft:/.test(side));
