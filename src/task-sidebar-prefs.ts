@@ -14,3 +14,20 @@ export function readTagsCollapsed(): boolean {
 export function writeTagsCollapsed(collapsed: boolean): void {
   try { (globalThis as { localStorage?: Storage }).localStorage?.setItem(KEY, collapsed ? '1' : '0'); } catch { /* 只是偏好 */ }
 }
+
+// 看板列收起状态(0.331 加的功能):关掉再开就全展开了,用户每次都得重新收一遍。
+const COLS_KEY = 'anet.taskBoard.collapsedColumns';
+
+export function readCollapsedColumns(): Set<string> {
+  try {
+    const raw = (globalThis as { localStorage?: Storage }).localStorage?.getItem(COLS_KEY) ?? null;
+    const parsed = raw ? JSON.parse(raw) : [];
+    return new Set(Array.isArray(parsed) ? parsed.filter((v): v is string => typeof v === 'string') : []);
+  } catch { return new Set(); }
+}
+
+export function writeCollapsedColumns(ids: Iterable<string>): void {
+  try {
+    (globalThis as { localStorage?: Storage }).localStorage?.setItem(COLS_KEY, JSON.stringify([...ids]));
+  } catch { /* 只是偏好 */ }
+}
