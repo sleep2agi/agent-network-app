@@ -75,7 +75,7 @@ const sidebarSource = readFileSync(new URL('./TaskFilterSidebar.tsx', import.met
 // #2102:标签行改成先过 tagRows(有 parents 才分层),数字仍取自同一份 tagCounts。
 ck('sidebar wiring: sort and badges share counts', sidebarSource.includes('const visibleTagNames = sidebarTagNames(tagCounts, filter.tag, tagCatalog?.nodes?.filter(n => n.registered).map(n => n.name));')
   && sidebarSource.includes('includeTagAncestors(visibleTagNames, tagCatalog?.parents ?? null, knownTags)')
-  && /tagRows\(tagNames[^,]*,\s*tagCatalog\?\.parents/.test(sidebarSource) && /\.map\(r => tagRow\(/.test(sidebarSource)
+  && /tagRows\(tagNames[\s\S]{0,90}?tagCatalog\?\.parents/.test(sidebarSource) && /\.map\(r => tagRow\(/.test(sidebarSource)
   && /tagCounts\.get\(r\.node\.name\) \?\? 0/.test(sidebarSource));
 ck('sidebar wiring: all-tags row remains before sorted tags', sidebarSource.indexOf("{tagRow('', tr('tags.all')") >= 0 && sidebarSource.indexOf("{tagRow('', tr('tags.all')") < sidebarSource.indexOf('{tagRows(tagNames'));
 
