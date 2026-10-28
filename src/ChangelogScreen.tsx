@@ -183,6 +183,13 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
         <TextInput value={q} onChangeText={setQ} placeholder={tr('changelog.search')} placeholderTextColor={colors.textMuted}
           style={[styles.toolBtnText, { minWidth: 160, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control }]}
           testID="changelog-search" autoCapitalize="none" onKeyPress={(e: { nativeEvent: { key: string } }) => { if (e.nativeEvent.key === 'Escape') setQ(''); }} />
+        {/* 鼠标用户没有 Esc 习惯:给一个明确的清除按钮。 */}
+        {q ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('changelog.clearSearch')} testID="changelog-search-clear"
+            onPress={() => setQ('')} hitSlop={6} style={({ pressed }) => [{ paddingHorizontal: 4 }, pressed && { opacity: 0.7 }]}>
+            <Ionicons name="close-circle" size={14} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="button" testID="changelog-select-all" onPress={() => pk.setSelected(allOn ? new Set() : new Set(entries.map(e => e.version)))} style={({ pressed, hovered }: any) => [styles.toolBtn, (pressed || hovered) && styles.hover]}>
           <Text style={styles.toolBtnText}>{allOn ? tr('changelog.clear') : tr('changelog.selectAll')}</Text>
         </Pressable>

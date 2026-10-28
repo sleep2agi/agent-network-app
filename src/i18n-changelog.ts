@@ -32,5 +32,6 @@ registerTranslations({
   'changelog.current': ['当前版本', 'Current'],
   'changelog.search': ['搜版本号或内容', 'Search versions or text'],
   'changelog.noMatch': ['没有匹配的版本或内容', 'No matching versions or text'],
+  'changelog.clearSearch': ['清空搜索', 'Clear search'],
   'changelog.back': ['关于', 'About'],
 });
