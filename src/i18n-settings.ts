@@ -289,6 +289,8 @@ const copy = [
   ['Agent 组织架构', 'Agent organization'],
   ['Agent 团队', 'Agent teams'],
   ['我的头像', 'My avatar'],
+  // 末尾追加(编号按位置,不能插中间):关于页「复制版本号」。
+  ['复制版本号', 'Copy version'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);
