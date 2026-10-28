@@ -262,15 +262,15 @@ try {
 } catch (error) { noId = String(error); }
 check('a missing release id fails closed', noId.includes('release id is required'));
 
-// 15) 工作流接线：在 draft 阶段（attach-android-apk 之后）跑这个脚本
+// 15) 工作流接线：finalize-release 在同一 runner 里先核草稿、再挂已完成的 APK、最后归一化。
 const workflow = readFileSync('.github/workflows/release-desktop-auto-update.yml', 'utf8').replace(/\r\n?/g, '\n');
-const normalizeJob = workflow.slice(workflow.indexOf('normalize-updater-manifest:'));
-check('release workflow declares the normalizer job', workflow.includes('normalize-updater-manifest:'));
+const normalizeJob = workflow.slice(workflow.indexOf('id: normalize-updater-manifest'));
+check('release workflow declares the normalizer step', workflow.includes('id: normalize-updater-manifest'));
 check('release workflow has a single prepare-release job', workflow.includes('prepare-release:') && workflow.includes('node scripts/prepare-desktop-release.mjs'));
 check('build matrix depends on prepare-release', /build-release:\n\s+needs: \[prepare-release\]/.test(workflow));
 check('every matrix job uploads into the same release id', /releaseId: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));
-check('draft verification reads the release by id', /verify-draft:[\s\S]{0,2500}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));
-check('normalizer reads the release by id', /normalize-updater-manifest:[\s\S]{0,1200}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));
+check('draft verification reads the release by id', /id: verify-draft[\s\S]{0,800}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));
+check('normalizer reads the release by id', /id: normalize-updater-manifest[\s\S]{0,500}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));
 check('build matrix no longer deletes drafts per job', !workflow.includes('Remove stale draft releases for this tag'));
 
 // 16) prepare-release 的 0/1/2 drafts 与 published 判定
@@ -282,10 +282,10 @@ check('two drafts fail closed', planReleaseDraft([{ id: 7, tag_name: tag, draft:
 check('a published release blocks the tag', planReleaseDraft([{ id: 9, tag_name: tag, draft: false }], tag).action === 'fail'
   && planReleaseDraft([{ id: 9, tag_name: tag, draft: false }], tag).reason === 'already-published');
 check('other tags are ignored', planReleaseDraft([{ id: 1, tag_name: 'desktop-v0.2.286', draft: true }], tag).action === 'create');
-check('normalizer runs after the APK attach', /normalize-updater-manifest:[\s\S]{0,200}needs: \[prepare-release, attach-android-apk\]/.test(workflow));
-check('normalizer only runs for publish builds', /normalize-updater-manifest:[\s\S]{0,300}if: inputs\.publish == true/.test(workflow));
-check('normalizer runs this script', normalizeJob.slice(0, 2000).includes('node scripts/normalize-desktop-update-manifest.mjs'));
-check('normalizer passes the release tag', normalizeJob.slice(0, 2000).includes('RELEASE_TAG='));
-check('normalizer job is declared after attach-android-apk', workflow.indexOf('normalize-updater-manifest:') > workflow.indexOf('attach-android-apk:'));
+check('finalize does not wait out an in-progress android-build', !workflow.includes('seq 1 40') && !workflow.includes('sleep 30'));
+check('normalizer only runs for publish builds', /finalize-release:[\s\S]{0,250}if: inputs\.publish == true/.test(workflow));
+check('normalizer runs this script', normalizeJob.slice(0, 800).includes('node scripts/normalize-desktop-update-manifest.mjs'));
+check('normalizer passes the release tag', normalizeJob.slice(0, 800).includes('RELEASE_TAG='));
+check('normalizer runs after the APK attach in the same job', workflow.indexOf('id: normalize-updater-manifest') > workflow.indexOf('id: attach-android-apk'));
 
 console.log(`desktop update manifest normalize: ${passed}/${total} checks passed`);

@@ -342,7 +342,7 @@ ck('resolve 失败 → fail-closed', (() => {
 })());
 ck('verify-draft 不再按 tag 列举/计数草稿', !wf.includes('Require exactly one draft release for this tag') && !wf.includes('draft releases for $tag:'));
 ck('verify-draft 仍然把 release_id 传成 RELEASE_ID',
-  /verify-draft:[\s\S]{0,2500}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(wf));
+  /id: verify-draft[\s\S]{0,800}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(wf));
 
 
 // 6. 草稿必须指向真实构建提交。tauri-action 建草稿时用的是默认分支 HEAD
