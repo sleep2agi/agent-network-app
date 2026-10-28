@@ -180,6 +180,12 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
     <View style={styles.desktopRoot} testID="changelog-desktop">
       <View style={styles.toolbar} testID="changelog-toolbar">
         {/* 更新日志有 280+ 条,没有搜索就只能一路滚(admin 2026-10-28 之后的可用性改进)。 */}
+        {q ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('changelog.clearSearch')} testID="changelog-phone-search-clear"
+            onPress={() => setQ('')} hitSlop={6} style={{ position: 'absolute', right: 22, top: 26, zIndex: 2 }}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
         <TextInput value={q} onChangeText={setQ} placeholder={tr('changelog.search')} placeholderTextColor={colors.textMuted}
           style={[styles.toolBtnText, { minWidth: 160, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control }]}
           testID="changelog-search" autoCapitalize="none" onKeyPress={(e: { nativeEvent: { key: string } }) => { if (e.nativeEvent.key === 'Escape') setQ(''); }} />
