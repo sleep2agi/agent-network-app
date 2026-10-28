@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Text } from './ui-text';
+import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
@@ -165,11 +165,23 @@ function OfflineHint({ online, style }: { online: boolean | null; style?: any })
 export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[]; online: boolean | null }) {
   useTranslation();
   const pk = usePicker(entries);
+  const [q, setQ] = useState('');
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase();
+    if (!needle) return entries;
+    return entries.filter(e => e.version.toLowerCase().includes(needle)
+      || e.sections.some(sec => (sec.title ?? '').toLowerCase().includes(needle)
+        || sec.items.some(item => String(item).toLowerCase().includes(needle))));
+  }, [entries, q]);
   const n = pk.selected.size;
   const allOn = entries.length > 0 && n === entries.length;
   return (
     <View style={styles.desktopRoot} testID="changelog-desktop">
       <View style={styles.toolbar} testID="changelog-toolbar">
+        {/* 更新日志有 280+ 条,没有搜索就只能一路滚(admin 2026-10-28 之后的可用性改进)。 */}
+        <TextInput value={q} onChangeText={setQ} placeholder={tr('changelog.search')} placeholderTextColor={colors.textMuted}
+          style={[styles.toolBtnText, { minWidth: 160, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control }]}
+          testID="changelog-search" autoCapitalize="none" onKeyPress={(e: { nativeEvent: { key: string } }) => { if (e.nativeEvent.key === 'Escape') setQ(''); }} />
         <Pressable accessibilityRole="button" testID="changelog-select-all" onPress={() => pk.setSelected(allOn ? new Set() : new Set(entries.map(e => e.version)))} style={({ pressed, hovered }: any) => [styles.toolBtn, (pressed || hovered) && styles.hover]}>
           <Text style={styles.toolBtnText}>{allOn ? tr('changelog.clear') : tr('changelog.selectAll')}</Text>
         </Pressable>
@@ -187,7 +199,7 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
         </Pressable>
       </View>
       <ScrollView style={styles.desktopScroll} contentContainerStyle={styles.desktopScrollContent} testID="changelog-desktop-scroll">
-      {entries.map(e => {
+      {shown.map(e => {
         const on = pk.selected.has(e.version);
         return (
           <View key={e.version} style={[styles.cardDesktop, on && styles.cardOn]} testID={`changelog-card-${e.version}`}>

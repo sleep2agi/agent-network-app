@@ -30,5 +30,6 @@ registerTranslations({
   'changelog.offline': ['连不上更新服务器，显示的是本机保存的更新日志', 'Offline: showing the changelog saved on this device'],
   'changelog.loading': ['正在获取最新的更新日志…', 'Fetching the latest changelog…'],
   'changelog.current': ['当前版本', 'Current'],
+  'changelog.search': ['搜版本号或内容', 'Search versions or text'],
   'changelog.back': ['关于', 'About'],
 });

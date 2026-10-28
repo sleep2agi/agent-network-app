@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.342:",
+  "- 新增：更新日志页顶部可以搜索（版本号或内容），不用再从 280+ 条里一路滚。",
+  "",
   "What's new in 0.2.341:",
   "- 改进：看板列的收起状态会被记住，重开客户端不用每次重新收一遍。",
   "",
