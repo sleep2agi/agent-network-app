@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.347:",
+  "- 改进：更新日志搜索框有内容时显示清除按钮（不用记 Esc）。",
+  "",
   "What's new in 0.2.346:",
   "- 改进：左栏项目 / 标签过滤支持拼音首字母（例如 `yh` 能搜到「用户管理」），和军团搜索同一套规则。",
   "",
