@@ -197,6 +197,8 @@ export default function AgentsScreen({
   /** alias → 部门名(Hub 的真实归属)。空 Map = 退回 alias 前缀分组,行为与以前一致。
    *  admin 2026-10-26:「军团里面能分组吗…有明显的划分区」—— 按部门分比猜前缀可靠。 */
   const [deptByAlias, setDeptByAlias] = useState<Map<string, string>>(new Map());
+  /** 刚被「不显示该对话」的那条 + 撤销条(误点一次就消失,用户会以为丢了)。 */
+  const [lastHidden, setLastHidden] = useState<{ alias: string; at: number } | null>(null);
   // 群会话(RFC-042):和私信同一次 /api/dm/threads 拿到。null = 这个 Hub 没有群(没有 group_threads 字段)→ 区块不画。
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const loadPeople = useCallback(async () => {
@@ -647,8 +649,15 @@ export default function AgentsScreen({
         return;
       case 'detail': onOpenNodeDetail(alias); return;
       case 'hide':
-        if (isConversationHidden(convFlags, alias, liveUnread.lastAt[alias] ?? 0)) updateConversationFlags(f => restoreConversation(f, alias));
-        else updateConversationFlags(f => hideConversation(f, alias, liveUnread.lastAt[alias] ?? 0));
+        if (isConversationHidden(convFlags, alias, liveUnread.lastAt[alias] ?? 0)) {
+          updateConversationFlags(f => restoreConversation(f, alias));
+          setLastHidden(null);
+        } else {
+          updateConversationFlags(f => hideConversation(f, alias, liveUnread.lastAt[alias] ?? 0));
+          // 8 秒内可撤销:误点一下不该等于「这条没了」。
+          setLastHidden({ alias, at: Date.now() });
+          setTimeout(() => setLastHidden(cur => (cur && cur.alias === alias && Date.now() - cur.at >= 8000 ? null : cur)), 8200);
+        }
         return;
     }
   };
@@ -1142,7 +1151,19 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      ListHeaderComponent={groupsVisible || peopleShown.visible || (compact && managedDepts.ids.length) || registeredRows.length > 0 ? (<>
+      ListHeaderComponent={lastHidden || groupsVisible || peopleShown.visible || (compact && managedDepts.ids.length) || registeredRows.length > 0 ? (<>
+        {/* 误点「不显示该对话」的 8 秒撤销条(admin 2026-10-28 转来的用户反馈:容易不小心归档了)。 */}
+        {lastHidden ? (
+          <View testID="agents-hide-undo" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.subtleFill }}>
+            <Text style={{ flex: 1, color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>已隐藏「{lastHidden.alias}」</Text>
+            <Pressable accessibilityRole="button" testID="agents-hide-undo-button" onPress={() => {
+              updateConversationFlags(f => restoreConversation(f, lastHidden.alias));
+              setLastHidden(null);
+            }} style={{ paddingHorizontal: spacing.sm, paddingVertical: 4 }}>
+              <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>撤销</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <RegisteredAgentsSection
           rows={registeredRows}
           loaded={agentDirectory.loaded}
