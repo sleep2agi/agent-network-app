@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.339:",
+  "- 新增：误点「不显示该对话」后有 **8 秒撤销条**，不会再把重要会话一下弄丢。",
+  "",
   "What's new in 0.2.338:",
   "- 新增：节点详情页的节点名旁多了「复制别名」按钮，方便贴到聊天里 @ 它或写进任务。",
   "",
