@@ -167,7 +167,8 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
   const pk = usePicker(entries);
   const [q, setQ] = useState('');
   const shown = useMemo(() => {
-    const needle = q.trim().toLowerCase();
+    // 允许输入「v0.2.343」这种带前缀的写法(界面上版本号就是 v0.2.343,用户会照着打)。
+    const needle = q.trim().toLowerCase().replace(/^v(?=\d)/, '');
     if (!needle) return entries;
     return entries.filter(e => e.version.toLowerCase().includes(needle)
       || e.sections.some(sec => (sec.title ?? '').toLowerCase().includes(needle)
