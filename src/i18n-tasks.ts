@@ -245,6 +245,8 @@ export const taskCopy = [
  ['极低','Lowest'],
  ['废弃','Abandoned'],
  ['显示空项目','Show empty projects'],
+ ['无匹配项目','No matching projects'],
+ ['无匹配标签','No matching tags'],
  ['无父项目','No parent'],
  ['父项目','Parent project'],
 ] as const;

@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.343:
+            - 改进：左栏项目 / 标签过滤没有结果时显示「无匹配项目 / 无匹配标签」，不再是空白一片。
+
             What's new in 0.2.342:
             - 新增：更新日志页顶部可以搜索（版本号或内容），不用再从 280+ 条里一路滚。
 

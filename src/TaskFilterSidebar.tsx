@@ -237,6 +237,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
                 style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
                 testID="task-side-tag-filter" autoCapitalize="none" />
             ) : null}
+            {tagQ.trim() && !tagNames.some(n => n.toLowerCase().includes(tagQ.trim().toLowerCase())) ? (
+              <Text style={[styles.itemText, { color: colors.textMuted, paddingHorizontal: spacing.sm, paddingVertical: 4 }]} numberOfLines={1}>{tr('tasks.copy.245')}</Text>
+            ) : null}
             {tagRows(tagNames.filter(n => !tagQ.trim() || n.toLowerCase().includes(tagQ.trim().toLowerCase())), tagCatalog?.parents ?? null).map(r => tagRow(
               r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
               tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
@@ -291,6 +294,11 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
               );
               return (
                 <>
+                  {!withTasks.length && !emptyRows.length && projectQ.trim() ? (
+                    <Text style={[styles.itemText, { color: colors.textMuted, paddingHorizontal: spacing.sm, paddingVertical: 4 }]} numberOfLines={1}>
+                      {tr('tasks.copy.244')}
+                    </Text>
+                  ) : null}
                   {withTasks.map(drawRow)}
                   {emptyRows.length ? (
                     <Pressable accessibilityRole="button" {...a11yState({ expanded: showEmptyProjects })} onPress={() => setShowEmptyProjects(v => !v)}
