@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.340:",
+  "- 新增：切换账号后，如果本账号一条置顶都没有、但另一个账号有，会提示「要沿用到当前账号吗？」——不再让人以为置顶莫名掉了。",
+  "",
   "What's new in 0.2.339:",
   "- 新增：误点「不显示该对话」后有 **8 秒撤销条**，不会再把重要会话一下弄丢。",
   "",
