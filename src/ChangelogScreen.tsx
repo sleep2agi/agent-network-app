@@ -200,6 +200,9 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
         </Pressable>
       </View>
       <ScrollView style={styles.desktopScroll} contentContainerStyle={styles.desktopScrollContent} testID="changelog-desktop-scroll">
+      {q.trim() && !shown.length ? (
+        <Text testID="changelog-no-match" style={{ color: colors.textMuted, paddingVertical: 12 }}>{tr('changelog.noMatch')}</Text>
+      ) : null}
       {shown.map(e => {
         const on = pk.selected.has(e.version);
         return (
