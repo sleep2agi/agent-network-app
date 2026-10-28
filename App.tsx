@@ -99,7 +99,7 @@ import TaskWindow from './src/TaskWindow';
 import { readTaskWindowRoute } from './src/task-window-model';
 import { readDaemonSettingsWindow } from './src/daemon-settings-window';
 import DaemonSettingsWindow from './src/DaemonSettingsWindow';
-import { loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
+import { otherProfilePins, loadPinnedChats, requestedChatAlias, requestedChatProfileId, requestedWorkspaceProfileId, savePinnedChats } from './src/desktop-chat-menu';
 import { SETTINGS_CATEGORY_EVENT, SETTINGS_SESSION_EVENT, closeSettingsWindow, followThemeInSettingsTitleBar, notifySessionChanged, openSettingsWindow, requestedSettingsCategory, requestedSettingsDetail, requestedSettingsWindow, settingsCategoryFromQuery } from './src/desktop-settings-window';
 import { loadChatPins, saveChatPins, togglePinned } from './src/chat-pins';
 import { ROW_MENU_EMPTY_HINT } from './src/agent-row-menu';
@@ -1308,8 +1308,20 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   // 导航栏悬停提示(微信/飞书式):只记当前悬停的 tab key,提示条挂在按钮右侧。
   const [railHover, setRailHover] = useState<string | null>(null);
   const taskUnread = useTaskUnreadCount();
+  const PIN_CARRY_DISMISSED = 'anet_pin_carry_dismissed_v1';
+
   const [pinnedAliases, setPinnedAliases] = useState(() => loadPinnedChats(cfg.profileId));
   useEffect(() => setPinnedAliases(loadPinnedChats(cfg.profileId)), [cfg.profileId]);
+  // 当前 profile 一条置顶都没有、但别的 profile 有 ⇒ 提示「要不要沿用」。
+  // 只提示一次(用户点了任一按钮就记下),避免每次启动都打扰。
+  const [pinCarry, setPinCarry] = useState<{ profileId: string | null; aliases: string[] } | null>(null);
+  useEffect(() => {
+    if (pinnedAliases.length) { setPinCarry(null); return; }
+    const other = otherProfilePins(cfg.profileId);
+    if (!other) return;
+    if (globalThis.localStorage?.getItem(PIN_CARRY_DISMISSED) === `${cfg.profileId ?? ''}|${other.profileId ?? ''}`) return;
+    setPinCarry(other);
+  }, [cfg.profileId, pinnedAliases.length]);
   const togglePin = (alias: string) => setPinnedAliases(current => {
     const next = current.includes(alias) ? current.filter(item => item !== alias) : [alias, ...current];
     savePinnedChats(next, cfg.profileId);
@@ -1498,6 +1510,27 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       </View> : null}
       <View style={desktopStyles.content}>
         {/* #653 弱密码横幅:右侧内容栏顶上;点了打开设置窗口的「修改密码」(没有桌面壳时嵌在主窗口)。 */}
+        {pinCarry ? (
+          <View testID="pin-carry-banner" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.subtleFill }}>
+            <Text style={{ flex: 1, color: colors.textSecondary, fontSize: 12 }} numberOfLines={2}>
+              上次在 {pinCarry.profileId ?? '另一个账号'} 下置顶了 {pinCarry.aliases.length} 个会话，要沿用到当前账号吗？
+            </Text>
+            <Pressable accessibilityRole="button" testID="pin-carry-accept" onPress={() => {
+              savePinnedChats([...pinCarry.aliases, ...pinnedAliases], cfg.profileId);
+              setPinnedAliases(loadPinnedChats(cfg.profileId));
+              globalThis.localStorage?.setItem(PIN_CARRY_DISMISSED, `${cfg.profileId ?? ''}|${pinCarry.profileId ?? ''}`);
+              setPinCarry(null);
+            }} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+              <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>沿用</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" testID="pin-carry-dismiss" onPress={() => {
+              globalThis.localStorage?.setItem(PIN_CARRY_DISMISSED, `${cfg.profileId ?? ''}|${pinCarry.profileId ?? ''}`);
+              setPinCarry(null);
+            }} style={{ paddingHorizontal: 8, paddingVertical: 4 }}>
+              <Text style={{ color: colors.textMuted, fontSize: 12 }}>忽略</Text>
+            </Pressable>
+          </View>
+        ) : null}
         {screen.name !== 'settings' ? (
           <WeakPasswordBanner cfg={cfg} desktop onOpen={() => { void openSettingsWindow('account', 'changePassword').then(opened => { if (!opened) { requestSettingsDetail('changePassword'); setScreen({ name: 'settings' }); } }); }} />
         ) : null}

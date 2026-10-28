@@ -19,6 +19,26 @@ export function savePinnedChats(aliases: string[], profileId?: string): void {
   localStorage.setItem(pinKey(profileId), JSON.stringify([...new Set(aliases)]));
 }
 
+/** 别的 profile 下有没有置顶(localStorage 按 profileId 分 key)。
+ *  为什么问:切换账号/换 Hub 后置顶"看起来丢了"——其实是存在另一个 key 下。
+ *  admin 2026-10-28 转来的用户反馈「置顶过一段时间就会掉」就属于这一类观感问题。 */
+export function otherProfilePins(currentProfileId?: string): { profileId: string | null; aliases: string[] } | null {
+  if (typeof localStorage === 'undefined') return null;
+  const mine = pinKey(currentProfileId);
+  try {
+    for (let i = 0; i < localStorage.length; i += 1) {
+      const key = localStorage.key(i);
+      if (!key || key === mine || !key.startsWith(PIN_KEY)) continue;
+      const parsed = JSON.parse(localStorage.getItem(key) ?? '[]');
+      if (Array.isArray(parsed) && parsed.length) {
+        const suffix = key === PIN_KEY ? null : key.slice(PIN_KEY.length + 1);
+        return { profileId: suffix, aliases: parsed.filter((v): v is string => typeof v === 'string') };
+      }
+    }
+  } catch { /* 读不动就当没有 */ }
+  return null;
+}
+
 export function chatWindowLabel(alias: string, profileId = ''): string {
   let hash = 5381;
   for (const ch of `${profileId}\0${alias}`) hash = ((hash << 5) + hash) ^ ch.charCodeAt(0);
