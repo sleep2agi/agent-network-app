@@ -51,3 +51,8 @@ export function permissionReasonText(code: string | null | undefined): string | 
   const key = code.trim();
   return PERMISSION_REASONS[key] ?? `未知的拒绝原因：${key}`;
 }
+
+/** 从白名单里去掉一项;去完为空时保留空数组(= 一个都不允许),不自动变回「不限制」。 */
+export function withoutItem(list: readonly string[], item: string): string[] {
+  return list.filter(x => x !== item);
+}
