@@ -70,15 +70,17 @@ export const assertDraftReleaseIdentity = ({
 
 const SHA256_DIGEST = /^sha256:([0-9a-f]{64})$/;
 
-export const releaseAssetNames = (product, version, includeLinux = true) => [
+export const releaseAssetNames = (product, version, includeLinux = true, includeWindows = true) => [
   ...(includeLinux ? [`${product}_${version}_amd64.deb`, `${product}_${version}_amd64.deb.sig`] : []),
   `${product}_${version}_aarch64.dmg`,
   `${product}_${version}_aarch64.app.tar.gz`,
   `${product}_${version}_aarch64.app.tar.gz.sig`,
-  `${product}_${version}_x64-setup.exe`,
-  `${product}_${version}_x64-setup.exe.sig`,
-  `${product}_${version}_x64_en-US.msi`,
-  `${product}_${version}_x64_en-US.msi.sig`,
+  ...(includeWindows ? [
+    `${product}_${version}_x64-setup.exe`,
+    `${product}_${version}_x64-setup.exe.sig`,
+    `${product}_${version}_x64_en-US.msi`,
+    `${product}_${version}_x64_en-US.msi.sig`,
+  ] : []),
   'latest.json',
 ];
 
@@ -92,8 +94,9 @@ const matchesAsset = (entryUrl, asset) => urlCandidates(asset).includes(entryUrl
  * `gh release view --json assets` returns (name, state, digest, apiUrl, url).
  * Throws on the first broken contract.
  */
-export function assertDesktopReleaseDraft({ product, version, release, manifest, expectedCommit, includeLinux = true }) {
+export function assertDesktopReleaseDraft({ product, version, release, manifest, expectedCommit, includeLinux = true, includeWindows = true }) {
   if (typeof includeLinux !== 'boolean') throw new Error('includeLinux must be boolean');
+  if (typeof includeWindows !== 'boolean') throw new Error('includeWindows must be boolean');
   if (!product || !version) throw new Error('product and version are required');
   if (!release || typeof release !== 'object') throw new Error('release is required');
   if (release.isDraft !== true) throw new Error(`desktop-v${version} is not a draft`);
@@ -103,7 +106,7 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
   if (!Array.isArray(release.assets)) throw new Error('release assets missing');
   const names = release.assets.map((asset) => asset?.name);
   if (new Set(names).size !== names.length) throw new Error('release has duplicate asset names');
-  for (const name of releaseAssetNames(product, version, includeLinux)) {
+  for (const name of releaseAssetNames(product, version, includeLinux, includeWindows)) {
     if (!names.includes(name)) throw new Error(`draft is missing ${name}`);
   }
   for (const asset of release.assets) {
@@ -120,6 +123,9 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
   if (!includeLinux && release.assets.some(asset => /\.deb(?:\.sig)?$/.test(asset.name))) {
     throw new Error('Linux assets present but Linux was not selected');
   }
+  if (!includeWindows && release.assets.some(asset => /_x64(?:-setup\.exe|_en-US\.msi)(?:\.sig)?$/.test(asset.name))) {
+    throw new Error('Windows assets present but Windows was not selected');
+  }
 
   if (manifest?.version !== version) {
     throw new Error(`latest.json version ${JSON.stringify(manifest?.version)} is not ${version}`);
@@ -131,7 +137,11 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
   if (!includeLinux && Object.keys(manifest.platforms).some(key => key.startsWith('linux-'))) {
     throw new Error('Linux updater entries present but Linux was not selected');
   }
-  for (const key of ['darwin-aarch64', 'windows-x86_64', ...linuxPlatforms]) {
+  const windowsPlatforms = includeWindows ? ['windows-x86_64'] : [];
+  if (!includeWindows && Object.keys(manifest.platforms).some(key => key.startsWith('windows-'))) {
+    throw new Error('Windows updater entries present but Windows was not selected');
+  }
+  for (const key of ['darwin-aarch64', ...windowsPlatforms, ...linuxPlatforms]) {
     const entry = manifest.platforms[key];
     if (!entry || typeof entry.url !== 'string' || !entry.url) throw new Error(`latest.json missing ${key} url`);
     if (typeof entry.signature !== 'string' || !entry.signature) throw new Error(`latest.json missing ${key} signature`);
@@ -143,10 +153,12 @@ export function assertDesktopReleaseDraft({ product, version, release, manifest,
       throw new Error(`latest.json ${key} does not point at ${debName}`);
     }
   }
-  const exeName = `${product}_${version}_x64-setup.exe`;
-  const exe = release.assets.find((asset) => asset.name === exeName);
-  if (!matchesAsset(manifest.platforms['windows-x86_64'].url, exe)) {
-    throw new Error(`latest.json windows-x86_64 does not point at ${exeName}`);
+  if (includeWindows) {
+    const exeName = `${product}_${version}_x64-setup.exe`;
+    const exe = release.assets.find((asset) => asset.name === exeName);
+    if (!matchesAsset(manifest.platforms['windows-x86_64'].url, exe)) {
+      throw new Error(`latest.json windows-x86_64 does not point at ${exeName}`);
+    }
   }
   const macName = `${product}_${version}_aarch64.app.tar.gz`;
   const mac = release.assets.find((asset) => asset.name === macName);
@@ -161,9 +173,13 @@ function ghJson(args) {
 }
 
 function main() {
-  const linuxInput = process.env.INCLUDE_LINUX ?? 'true';
-  if (!['true', 'false'].includes(linuxInput)) throw new Error('INCLUDE_LINUX must be true or false');
-  const includeLinux = linuxInput === 'true';
+  const selected = (name, fallback) => {
+    const value = process.env[name] ?? fallback;
+    if (!['true', 'false'].includes(value)) throw new Error(`${name} must be true or false`);
+    return value === 'true';
+  };
+  const includeLinux = selected('INCLUDE_LINUX', 'true');
+  const includeWindows = selected('INCLUDE_WINDOWS', 'true');
   const expectedCommit = process.env.EXPECTED_COMMIT || '';
   if (!/^[0-9a-f]{40}$/.test(expectedCommit)) throw new Error('EXPECTED_COMMIT must be a 40-character SHA');
   const repository = process.env.GITHUB_REPOSITORY || 'sleep2agi/agent-network-app';
@@ -213,6 +229,7 @@ function main() {
     manifest,
     expectedCommit,
     includeLinux,
+    includeWindows,
   });
   const debName = `${config.productName}_${config.version}_amd64.deb`;
   const evidence = includeLinux

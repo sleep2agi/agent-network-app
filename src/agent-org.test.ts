@@ -1,6 +1,6 @@
 // Agent 组织架构:点设置入口必须打开页面;部门树和负责人是 Hub 数据;调整结构写 Hub(PUT),失败回滚。
 import { existsSync, readFileSync } from 'node:fs';
-import { agentCount, agentsDirectlyIn, placeAgents, type AgentOrgData, type OrgOwner } from './agent-org-model';
+import { agentCount, agentsDirectlyIn, canAdjustPlacement, canPlaceAgent, placeAgents, type AgentOrgData, type OrgOwner } from './agent-org-model';
 import { DIRECTORY_MAX_PAGES, loadAgentOrg, moveAgentDepartment, parseDirectoryPage } from './agent-org-api';
 import { agentOrgTranslations } from './i18n-agent-org';
 import type { Department } from './org-model';
@@ -287,10 +287,21 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   const screen = readFileSync(new URL('./AgentOrgScreen.tsx', import.meta.url), 'utf8');
   ck('bulk assign only shows on the unassigned detail', screen.includes("p.focus === null && filtered.length > 0 && p.onBulkAssign"));
   ck('bulk assign respects the current search filter', /t\('agentOrg\.bulkAssign', \{ count: filtered\.length \}\)/.test(screen));
-  ck('bulk picker lists real departments only', /options=\{flattenTree\(orgTree\(p\.data\)\)\.map\(row => \(\{ id: row\.dept\.id/.test(screen));
+  ck('bulk picker lists real departments only', /flattenTree\(orgTree\(p\.data\)\)\.filter\(row => p\.canPlace\?\.\(row\.dept\.id\) !== false\)\.map\(row => \(\{ id: row\.dept\.id/.test(screen));
   ck('bulk assign reuses the per-node department PUT', /moveAgentDepartment\(p\.cfg, p\.networkId, nodeId, departmentId\)/.test(screen));
   ck('bulk assign is bounded to 4 in flight', /\[0, 1, 2, 3\]\.map\(\(\) => worker\(\)\)/.test(screen));
   ck('bulk assign reports how many moved and failed', /t\('agentOrg\.bulkDone', \{ ok, fail \}\)/.test(screen));
+  ck('placement writes wait for auth and stay inside the head scope', screen.includes('fetchAuthMe(p.cfg)') && screen.includes('canPlaceAgent(placement, from, pickDept)') && screen.includes('p.canPlace?.(row.dept.id) !== false'));
+
+{
+  const scope = new Set(['fe']);
+  ck('admin can move anywhere, including clearing placement', canPlaceAgent(null, 'sales', null) && canPlaceAgent(null, null, 'fe'));
+  ck('a head can move an unassigned agent into their own subtree', canPlaceAgent(scope, null, 'fe'));
+  ck('a head cannot clear placement or move outside their subtree', !canPlaceAgent(scope, 'fe', null) && !canPlaceAgent(scope, 'fe', 'sales') && !canPlaceAgent(scope, 'sales', 'fe'));
+  ck('permissions still loading hide every write', !canPlaceAgent(new Set(), null, 'fe'));
+  ck('adjust entry is hidden until auth, and hidden for people with no scope', !canAdjustPlacement(undefined) && !canAdjustPlacement(new Set()) && canAdjustPlacement(null) && canAdjustPlacement(scope));
+  ck('the adjust panel is not rendered without placement rights', screen.includes("canAdjustPlacement(placement)"));
+}
 
 // #2596 —— 同 alias 多节点：Hub 里这是**真实数据**（重装/换机后旧 node 行还在）。
 // 以前全部显示成同名 Agent；现在按活跃度折叠成一个，并把被合并的 nodeId 保留下来。

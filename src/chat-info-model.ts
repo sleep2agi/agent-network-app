@@ -12,6 +12,8 @@ import { comboFromEvent, FIXED_SHORTCUTS, type KeyEventLike } from './shortcuts-
 export type ChatInfoRowKey =
   | 'node'
   | 'search'
+  | 'files'
+  | 'links'
   | 'btw'
   | 'pin'
   | 'mute'
@@ -54,7 +56,11 @@ export function chatInfoGroups(input: ChatInfoInput): ChatInfoRow[][] {
   const groups: ChatInfoRow[][] = [];
   if (input.canOpenNode) groups.push([{ key: 'node', kind: 'profile', label: input.alias, section: 'overview' }]);
 
-  const tools: ChatInfoRow[] = [{ key: 'search', kind: 'link', label: '查找聊天内容' }];
+  const tools: ChatInfoRow[] = [
+    { key: 'search', kind: 'link', label: '查找聊天内容' },
+    { key: 'files', kind: 'link', label: '会话文件' },
+    { key: 'links', kind: 'link', label: '会话链接' },
+  ];
   if (input.btw) tools.push({ key: 'btw', kind: 'link', label: 'BTW 旁路提问' });
   groups.push(tools);
 

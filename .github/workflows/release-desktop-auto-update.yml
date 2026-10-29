@@ -12,6 +12,11 @@ on:
         required: false
         default: true
         type: boolean
+      include_windows:
+        description: Also build and verify Windows x64 (deferred by default)
+        required: false
+        default: false
+        type: boolean
       include_linux:
         description: Also build and verify Ubuntu 24.04 amd64 (deferred by default)
         required: false
@@ -66,6 +71,7 @@ jobs:
           version=$(node -p 'require("./package.json").version')
           export VERSION="$version"
           export REQUESTED_COMMIT="${{ inputs.commit }}"
+          export INCLUDE_WINDOWS="${{ inputs.include_windows }}"
           export INCLUDE_LINUX="${{ inputs.include_linux }}"
           node scripts/prepare-desktop-release.mjs
 
@@ -82,9 +88,9 @@ jobs:
       # 真正的一次写入者由 normalize-updater-manifest 收口。
       max-parallel: 1
       matrix:
-        # Linux is opt-in, not a skipped matrix job that delays the primary pair.
-        # When requested it still uses the production updater/signing/retention gates.
-        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-24.04","args":"--bundles deb"}]' || '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
+        # macOS is the only default leg. Windows and Linux are explicit opt-ins:
+        # a skipped matrix row still queues behind max-parallel:1 and delays the DMG.
+        include: ${{ fromJSON(format('[{0}{1}{2}]', '{"platform":"macos-14","args":"--bundles app,dmg"}', inputs.include_windows && ',{"platform":"windows-latest","args":"--bundles nsis,msi"}' || '', inputs.include_linux && ',{"platform":"ubuntu-24.04","args":"--bundles deb"}' || '')) }}
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -2340,6 +2346,7 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
+          INCLUDE_WINDOWS: ${{ inputs.include_windows }}
           INCLUDE_LINUX: ${{ inputs.include_linux }}
         run: node scripts/verify-desktop-release-draft.mjs
 

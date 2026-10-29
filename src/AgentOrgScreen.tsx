@@ -8,8 +8,10 @@ import DialogFrame from './DialogFrame';
 import { listenEscapeClose } from './escape-close';
 import type { HubConfig } from './api';
 import { loadAgentOrg, moveAgentDepartment } from './agent-org-api';
-import { agentCount, agentsDirectlyIn, orgTree, placeAgents, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
-import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
+import { agentCount, agentsDirectlyIn, canAdjustPlacement, canPlaceAgent, orgTree, placeAgents, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
+import { childrenOf, deptPathLabel, flattenTree, managedDepartmentIds, subtreeIds, type Department } from './org-model';
+import { fetchAuthMe } from './user-admin-api';
+import { canManageUsers } from './user-admin';
 import { createDepartment, updateDepartment, OrgRequestError } from './org-api';
 import { SettingsButton, SettingsChoiceRow, SettingsGroup, SettingsRow } from './settings-kit';
 import { buttonStyle, buttonTextStyle } from './elevation';
@@ -48,7 +50,17 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
   const [deptEditor, setDeptEditor] = useState<{ dept?: Department; parent: string | null; mode: 'create' | 'rename' | 'reparent' } | null>(null);
   const [deptNote, setDeptNote] = useState('');
   const [infoOpen, setInfoOpen] = useState(false);
+  const [placement, setPlacement] = useState<ReadonlySet<string> | null | undefined>(undefined);
   const bulkPending = useRef(false);
+
+  useEffect(() => {
+    let live = true;
+    setPlacement(undefined);
+    void fetchAuthMe(p.cfg).then(me => {
+      if (live) setPlacement(canManageUsers(me, p.networkId) ? null : new Set(managedDepartmentIds(me, p.networkId)));
+    }, () => { if (live) setPlacement(new Set()); });
+    return () => { live = false; };
+  }, [p.cfg.serverUrl, p.cfg.token, p.networkId]);
 
   useEffect(() => {
     let live = true;
@@ -112,7 +124,9 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
               <DepartmentDetail key={focus ?? 'unassigned'} data={data} placed={placed} focus={focus ?? null} phone={p.phone} onFocus={setFocus} onBack={() => setFocus(undefined)}
                 actions={null}
                 bulkBusy={saving}
+                canPlace={to => canPlaceAgent(placement ?? new Set(), null, to)}
                 onBulkAssign={async (departmentId, nodeIds) => {
+                  if (!canPlaceAgent(placement ?? new Set(), null, departmentId)) { setAdjustNote(t('agentOrg.saveForbidden')); return; }
                   if (bulkPending.current) return;
                   const selected = new Set(nodeIds);
                   const targets = placed.filter(a => a.departmentId === null && selected.has(a.nodeId)).map(a => a.nodeId);
@@ -150,7 +164,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
           <Text style={styles.note}>{!data.directory ? t('agentOrg.directoryMissing') : !data.departmentsApi ? t('agentOrg.noTree') : t('agentOrg.readOnly')}</Text>
         </View> : null}
       </View> : null}
-      {phase.kind === 'ready' ? (
+      {phase.kind === 'ready' && canAdjustPlacement(placement) ? (
         <DemoAdjust
           data={data}
           placed={placed}
@@ -159,11 +173,14 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
           pickDept={pickDept}
           note={adjustNote}
           saving={saving || !!deptEditor}
+          canMove={(from, to) => placement === undefined ? true : canPlaceAgent(placement, from, to)}
           onPickAgent={setPickAgent}
           onPickDept={setPickDept}
           onApply={() => {
             if (saving) return;
             if (!pickAgent || pickDept === undefined) { setAdjustNote(t('agentOrg.demoNeedPick')); return; }
+            const from = placed.find(agent => agent.nodeId === pickAgent)?.departmentId ?? null;
+            if (placement !== undefined && !canPlaceAgent(placement, from, pickDept)) { setAdjustNote(t('agentOrg.saveForbidden')); return; }
             const nodeId = pickAgent;
             const previous = moves.find(m => m.nodeId === nodeId);
             setMoves(prev => [...prev.filter(m => m.nodeId !== nodeId), { nodeId, departmentId: pickDept }]);
@@ -310,7 +327,7 @@ function DepartmentRow(p: { testID: string; label: string; depth?: number; selec
   </Pressable>;
 }
 
-function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; actions: ReactNode; onBulkAssign?: (departmentId: string, nodeIds: string[]) => void; bulkBusy?: boolean }) {
+function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; actions: ReactNode; onBulkAssign?: (departmentId: string, nodeIds: string[]) => void; bulkBusy?: boolean; canPlace?: (departmentId: string) => boolean }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -349,7 +366,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
       </View>
       <Text style={styles.note}>{t('agentOrg.directMembers')}</Text>
       {bulkOpen ? <StructureSelector title={t('agentOrg.bulkPickDept')} onClose={() => setBulkOpen(false)}
-            options={flattenTree(orgTree(p.data)).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-bulk-dept-${row.dept.id}` }))}
+            options={flattenTree(orgTree(p.data)).filter(row => p.canPlace?.(row.dept.id) !== false).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-bulk-dept-${row.dept.id}` }))}
             selected={undefined}
             onPick={id => { setBulkOpen(false); if (id) setBulkSelection({ departmentId: id, nodeIds: filtered.map(agent => agent.nodeId) }); }} /> : null}
       {bulkSelection ? <DialogFrame title={t('agentOrg.bulkConfirmTitle')} closeLabel={t('agentOrg.close')} onClose={() => setBulkSelection(null)} testID="agent-org-bulk-confirm"
@@ -409,6 +426,7 @@ function DemoAdjust(p: {
   onPickAgent: (id: string) => void;
   onPickDept: (id: string | null) => void;
   onApply: () => void;
+  canMove: (from: string | null, to: string | null) => boolean;
 }) {
   const { t } = useTranslation();
   const [expanded, setExpanded] = useState(false);
@@ -439,7 +457,10 @@ function DemoAdjust(p: {
       {p.note ? <Text accessibilityLiveRegion="polite" testID="agent-org-demo-result" style={[styles.note, { paddingHorizontal: spacing.md, paddingBottom: spacing.md }]}>{p.note}</Text> : null}
       {selector ? <StructureSelector key={selector} title={t(selector === 'agent' ? 'agentOrg.demoPickAgent' : 'agentOrg.demoPickDept')} onClose={() => setSelector(null)}
         options={selector === 'agent' ? p.placed.map(agent => ({ id: agent.nodeId, label: agent.alias, subtitle: agent.ownerName ?? t('agentOrg.noOwner'), testID: `agent-org-demo-agent-${agent.nodeId}` }))
-          : [{ id: null, label: t('agentOrg.unowned'), testID: 'agent-org-demo-dept-unassigned' }, ...flattenTree(orgTree({ departments })).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-demo-dept-${row.dept.id}` }))]}
+          : [
+            ...(p.canMove(p.placed.find(agent => agent.nodeId === p.pickAgent)?.departmentId ?? null, null) ? [{ id: null, label: t('agentOrg.unowned'), testID: 'agent-org-demo-dept-unassigned' }] : []),
+            ...flattenTree(orgTree({ departments })).filter(row => p.canMove(p.placed.find(agent => agent.nodeId === p.pickAgent)?.departmentId ?? null, row.dept.id)).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-demo-dept-${row.dept.id}` })),
+          ]}
         selected={selector === 'agent' ? p.pickAgent : p.pickDept}
         onPick={id => { if (selector === 'agent' && id !== null) p.onPickAgent(id); else if (selector === 'department') p.onPickDept(id); setSelector(null); }} /> : null}
     </View>
@@ -457,9 +478,15 @@ function StructureSelector(p: { title: string; options: { id: string | null; lab
           <Ionicons name="search-outline" size={17} color={colors.textMuted} />
           <TextInput autoFocus value={query} onChangeText={setQuery} testID="agent-org-selector-search" placeholder={t('agentOrg.searchOptions')} accessibilityLabel={t('agentOrg.searchOptions')} placeholderTextColor={colors.textMuted} style={styles.searchInput} />
         </View>
+        {needle ? (
+          <ScrollView style={{ flexGrow: 0, flexShrink: 1, maxHeight: 360 }} keyboardShouldPersistTaps="handled">
+            {options.length ? options.map(item => <SettingsChoiceRow key={item.testID} testID={item.testID} label={item.label} subtitle={item.subtitle} selected={p.selected === item.id} onPress={() => p.onPick(item.id)} />) : <Text style={[styles.note, { padding: spacing.lg }]}>{t('agentOrg.noResults')}</Text>}
+          </ScrollView>
+        ) : (
         <FlatList data={options} keyExtractor={item => item.testID} style={{ flexGrow: 0, flexShrink: 1, maxHeight: 360 }} keyboardShouldPersistTaps="handled" initialNumToRender={12}
           renderItem={({ item }) => <SettingsChoiceRow testID={item.testID} label={item.label} subtitle={item.subtitle} selected={p.selected === item.id} onPress={() => p.onPick(item.id)} />}
           ListEmptyComponent={<Text style={[styles.note, { padding: spacing.lg }]}>{t('agentOrg.noResults')}</Text>} />
+        )}
   </DialogFrame>;
 }
 

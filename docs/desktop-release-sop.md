@@ -15,7 +15,7 @@ Two workflows, two purposes:
 | Workflow | Produces | Use for |
 |---|---|---|
 | `.github/workflows/desktop-tauri.yml` | **unsigned** macOS arm64 + Windows x64 bundles, as Actions artifacts | throwaway test builds |
-| `.github/workflows/release-desktop-auto-update.yml` | signed macOS (notarized) and Windows bundles; opt-in signed Ubuntu 24.04 amd64 `.deb`; updater signatures, `latest.json`, one **draft** Release | every real release |
+| `.github/workflows/release-desktop-auto-update.yml` | signed, notarized macOS DMG by default; opt-in signed Windows and Ubuntu 24.04 amd64 bundles; updater signatures, `latest.json`, one **draft** Release | every real release |
 
 Unsigned artifacts are for testing only. Label them as such: macOS Gatekeeper
 blocks them and Windows shows SmartScreen.
