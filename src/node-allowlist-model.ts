@@ -1,7 +1,11 @@
 // 节点权限白名单的**显示规则**(Hub RFC-041 白名单小节)。
 //
 // 三条不能违反的规则,全在这里收口:
-//   1. null / undefined = 不限制(界面必须写「不限制」); [] = 一个都不允许 —— 两者完全不同;
+//   1. null / undefined = 不限制(界面必须写「不限制」)。
+//      `[]` 不是「一个都不允许」—— Hub 侧的合法取值只有两种：null(不限制) 与非空数组(只允许这些)。
+//      GET /api/nodes 永远不会返回 []，PUT [] 会拿到 400 empty_allowlist_ambiguous。
+//      所以这里把 [] 当「不限制」渲染：显示成「全部禁止」等于承诺一个系统不支持的能力，
+//      而且用户会以为自己收紧了，实际是放开的。
 //   2. 保活类工具不许被单独禁用(挡掉它们,节点既干不了活也报不了自己干不了,变成更隐蔽的假活节点);
 //   3. 拒绝原因码要照实显示,它们指向完全不同的排查动作,不能合并成「权限不足」。
 export const ALWAYS_TOOLS = ['get_inbox', 'ack_inbox', 'send_reply', 'report_status'] as const;
@@ -11,7 +15,9 @@ export const isAlwaysTool = (tool: string): boolean => (ALWAYS_TOOLS as readonly
 /** 白名单的「人话」:null = 不限制;空数组 = 一个都不允许;否则列出来。 */
 export function allowlistText(list: readonly string[] | null | undefined, kind: 'peer' | 'tool'): string {
   if (list === null || list === undefined) return '不限制';
-  if (list.length === 0) return kind === 'peer' ? '不与任何节点通信' : '不允许任何工具';
+  // [] 只可能是本地过滤后的中间态（例如只填了保活类工具被 withoutAlwaysTools 过滤光），
+  // 它最终会按 null 提交，所以显示也必须与 null 一致。
+  if (list.length === 0) return '不限制';
   return list.join('、');
 }
 
@@ -36,6 +42,7 @@ export const PERMISSION_REASONS: Record<string, string> = {
   tool_not_allowed: '这个工具被「可用工具」白名单挡住了：把该工具加进清单，或清空清单',
   secret_transport_plain: '密钥只能走加密通道，当前连接是明文：改用 https / wss 再试',
   secret_transport_unknown: '无法确认通道是否加密：检查服务端地址是否 https / wss',
+  empty_allowlist_ambiguous: '白名单不能提交空清单：清空请用「不限制」；只填保活类工具也等于「不限制」',
 };
 
 /** 原因码 → 可执行的一句话。未知码原样带出,别吞掉(吞掉等于让排查人猜)。 */
