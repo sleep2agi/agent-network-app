@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.357:
+            - 新增：军团每个分组标题显示**未读总数**（>99 显示 99+），一眼看出哪一团在喊你。
+
             What's new in 0.2.356:
             - 新增：设置 → 关于「复制诊断信息」—— 版本、平台、更新渠道、更新状态、服务器（脱敏），反馈问题时贴一行就够；**不含账号与 token**。
 
