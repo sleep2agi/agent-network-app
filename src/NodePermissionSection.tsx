@@ -70,7 +70,10 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   };
   const saveTools = async (next: string[] | null) => {
     if (busy) return;
-    const safe = next === null ? null : withoutAlwaysTools(next);
+    // 只填了保活类工具时，过滤后是空数组；空数组 Hub 会拒（400 empty_allowlist_ambiguous），
+    // 而且语义上它就是「不限制」（保活类本来就不可禁用）。所以按 null 提交并说明。
+    const filtered = next === null ? null : withoutAlwaysTools(next);
+    const safe = filtered !== null && filtered.length === 0 ? null : filtered;
     setBusy(true); setListError(''); setListNote('');
     const res = await putNodeToolAllowlist(cfg, node.node_id, safe);
     setBusy(false);
