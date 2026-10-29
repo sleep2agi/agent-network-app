@@ -171,6 +171,50 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
         </View>
       )}
 
+      {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
+      {error ? <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-perm-error">{error}</Text> : null}
+      {savedNote && !error ? <Text style={{ color: colors.running, fontSize: typeScale.small }} testID="node-perm-saved">{savedNote}</Text> : null}
+
+      {report ? (
+        <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' }}>
+          <Pressable
+            testID="node-perm-report"
+            accessibilityRole="button"
+            accessibilityState={{ expanded: open, disabled: report.total === 0 }}
+            disabled={report.total === 0}
+            onPress={() => setOpen(v => !v)}
+            style={({ pressed }) => [{ minHeight: compact ? 52 : 44, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.rowHover }]}
+          >
+            <Ionicons name="shield-checkmark-outline" size={18} color={report.total > 0 ? colors.accent : colors.textMuted} />
+            <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }} testID="node-perm-report-headline">{reportHeadline(report)}</Text>
+            {report.total > 0 ? <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} /> : null}
+          </Pressable>
+          {open && report.total > 0 ? (
+            <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.md }} testID="node-perm-report-detail">
+              <View style={{ gap: spacing.xs }}>
+                <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>按原因</Text>
+                {report.byReason.map(r => (
+                  <View key={r.reason} style={{ flexDirection: 'row', gap: spacing.md }} testID={`node-perm-reason-${r.reason}`}>
+                    <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.small, lineHeight: 18 }}>{r.label}</Text>
+                    <Text style={{ color: colors.text, fontSize: typeScale.small, fontWeight: weight.strong }}>{r.hits} 次</Text>
+                  </View>
+                ))}
+              </View>
+              <View style={{ gap: spacing.xs }}>
+                <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>按操作</Text>
+                {report.byRoute.map(r => (
+                  <View key={`${r.route}|${r.reason}`} style={{ flexDirection: 'row', gap: spacing.md }} testID="node-perm-route">
+                    <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.small, lineHeight: 18 }} numberOfLines={2}>{r.label}</Text>
+                    <Text style={{ color: colors.text, fontSize: typeScale.small, fontWeight: weight.strong }}>{r.hits} 次</Text>
+                  </View>
+                ))}
+              </View>
+              <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }} testID="node-perm-report-footnote">{reportFootnote(report)}</Text>
+            </View>
+          ) : null}
+        </View>
+      ) : null}
+
       {/* 两张白名单:值来自节点行;null = 不限制,空数组 = 一个都不允许 —— 文案必须区分开。 */}
       <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md }} testID="node-allowlist-card">
         <View style={{ gap: 2 }}>
@@ -228,49 +272,6 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
         {listNote && !listError ? <Text style={{ color: colors.running, fontSize: typeScale.small }} testID="node-allowlist-saved">{listNote}</Text> : null}
       </View>
 
-      {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
-      {error ? <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-perm-error">{error}</Text> : null}
-      {savedNote && !error ? <Text style={{ color: colors.running, fontSize: typeScale.small }} testID="node-perm-saved">{savedNote}</Text> : null}
-
-      {report ? (
-        <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' }}>
-          <Pressable
-            testID="node-perm-report"
-            accessibilityRole="button"
-            accessibilityState={{ expanded: open, disabled: report.total === 0 }}
-            disabled={report.total === 0}
-            onPress={() => setOpen(v => !v)}
-            style={({ pressed }) => [{ minHeight: compact ? 52 : 44, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.rowHover }]}
-          >
-            <Ionicons name="shield-checkmark-outline" size={18} color={report.total > 0 ? colors.accent : colors.textMuted} />
-            <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }} testID="node-perm-report-headline">{reportHeadline(report)}</Text>
-            {report.total > 0 ? <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} /> : null}
-          </Pressable>
-          {open && report.total > 0 ? (
-            <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.md }} testID="node-perm-report-detail">
-              <View style={{ gap: spacing.xs }}>
-                <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>按原因</Text>
-                {report.byReason.map(r => (
-                  <View key={r.reason} style={{ flexDirection: 'row', gap: spacing.md }} testID={`node-perm-reason-${r.reason}`}>
-                    <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.small, lineHeight: 18 }}>{r.label}</Text>
-                    <Text style={{ color: colors.text, fontSize: typeScale.small, fontWeight: weight.strong }}>{r.hits} 次</Text>
-                  </View>
-                ))}
-              </View>
-              <View style={{ gap: spacing.xs }}>
-                <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>按操作</Text>
-                {report.byRoute.map(r => (
-                  <View key={`${r.route}|${r.reason}`} style={{ flexDirection: 'row', gap: spacing.md }} testID="node-perm-route">
-                    <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.small, lineHeight: 18 }} numberOfLines={2}>{r.label}</Text>
-                    <Text style={{ color: colors.text, fontSize: typeScale.small, fontWeight: weight.strong }}>{r.hits} 次</Text>
-                  </View>
-                ))}
-              </View>
-              <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }} testID="node-perm-report-footnote">{reportFootnote(report)}</Text>
-            </View>
-          ) : null}
-        </View>
-      ) : null}
     </View>
   );
 }
