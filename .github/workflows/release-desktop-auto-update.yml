@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.359:
+            - 新增：权限分区里可展开「被拒绝时会看到什么」，把 6 个原因码各自的排查动作摊开写清楚（不再一律说「权限不足」）。
+
             What's new in 0.2.358:
             - 新增：节点「权限」分区可以设置**可通信节点**与**可用工具**两张白名单 —— 不填 = 不限制，清空按钮可一键解除；保活类工具不可禁用（挡掉会让节点变成"假活"）。
 

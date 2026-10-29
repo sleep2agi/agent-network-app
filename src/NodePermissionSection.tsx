@@ -13,7 +13,7 @@ import { Text } from './ui-text';
 
 import { fetchNodePermissionReport, putNodePeerAllowlist, putNodePermissionMode, putNodeToolAllowlist, type HubConfig, type HubNode } from './api';
 import { TextInput } from './ui-text';
-import { ALWAYS_TOOLS, allowlistText, isAlwaysTool, parseAllowlistInput, withoutAlwaysTools } from './node-allowlist-model';
+import { ALWAYS_TOOLS, PERMISSION_REASONS, allowlistText, isAlwaysTool, parseAllowlistInput, permissionReasonText, withoutAlwaysTools } from './node-allowlist-model';
 import { Ionicons } from './icons';
 import {
   NODE_PERMISSION_OPTIONS,
@@ -50,6 +50,8 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   const [toolDraft, setToolDraft] = useState('');
   const [listError, setListError] = useState('');
   const [listNote, setListNote] = useState('');
+  /** 「被拒绝时会看到什么」的展开状态:六个原因码指向不同排查动作,合并成「权限不足」会误导。 */
+  const [reasonOpen, setReasonOpen] = useState(false);
 
   useEffect(() => { setMode(normalizeMode(node.permission_mode)); }, [node.node_id, node.permission_mode]);
   useEffect(() => {
@@ -177,6 +179,27 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
       {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
       {error ? <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-perm-error">{error}</Text> : null}
       {savedNote && !error ? <Text style={{ color: colors.running, fontSize: typeScale.small }} testID="node-perm-saved">{savedNote}</Text> : null}
+
+      {/* 原因码说明:六个码的排查动作完全不同,摊开写清楚,别让人以为都是「权限不足」。 */}
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' }}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: reasonOpen }} testID="node-perm-reasonhelp-toggle"
+          onPress={() => setReasonOpen(v => !v)}
+          style={({ pressed }) => [{ minHeight: compact ? 52 : 44, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.rowHover }]}>
+          <Ionicons name="help-circle-outline" size={18} color={colors.textMuted} />
+          <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }}>被拒绝时会看到什么（按原因码）</Text>
+          <Ionicons name={reasonOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        </Pressable>
+        {reasonOpen ? (
+          <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.sm }} testID="node-perm-reasonhelp">
+            {Object.keys(PERMISSION_REASONS).map(code => (
+              <View key={code} style={{ gap: 2 }} testID={`node-perm-reasonhelp-${code}`}>
+                <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, fontFamily: 'monospace' }}>{code}</Text>
+                <Text style={{ color: colors.text, fontSize: typeScale.small, lineHeight: 18 }}>{permissionReasonText(code)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
 
       {report ? (
         <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' }}>
