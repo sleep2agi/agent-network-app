@@ -11,7 +11,7 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 
-import { fetchNodePermissionReport, putNodePeerAllowlist, putNodePermissionMode, putNodeToolAllowlist, type HubConfig, type HubNode } from './api';
+import { fetchHubNodes, fetchNodePermissionReport, putNodePeerAllowlist, putNodePermissionMode, putNodeToolAllowlist, type HubConfig, type HubNode } from './api';
 import { TextInput } from './ui-text';
 import { ALWAYS_TOOLS, PERMISSION_REASONS, allowlistText, isAlwaysTool, parseAllowlistInput, permissionReasonText, withoutAlwaysTools, withoutItem } from './node-allowlist-model';
 import { Ionicons } from './icons';
@@ -52,8 +52,19 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   const [listNote, setListNote] = useState('');
   /** 「被拒绝时会看到什么」的展开状态:六个原因码指向不同排查动作,合并成「权限不足」会误导。 */
   const [reasonOpen, setReasonOpen] = useState(false);
+  /** 可通信节点的候选(Hub 节点列表):比手打别名可靠。 */
+  const [peerChoices, setPeerChoices] = useState<string[]>([]);
+  const [peerPickOpen, setPeerPickOpen] = useState(false);
 
   useEffect(() => { setMode(normalizeMode(node.permission_mode)); }, [node.node_id, node.permission_mode]);
+  useEffect(() => {
+    let alive = true;
+    void fetchHubNodes(cfg)
+      .then(r => { if (alive) setPeerChoices((r.nodes ?? []).map(n => n.alias).filter(a => !!a && a !== node.alias).sort()); })
+      .catch(() => { if (alive) setPeerChoices([]); });
+    return () => { alive = false; };
+  }, [cfg, node.alias]);
+
   useEffect(() => {
     setPeers(node.peer_allowlist ?? null);
     setTools(node.tool_allowlist ?? null);
@@ -264,6 +275,30 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
             </View>
           ) : null}
         </View>
+        {peerChoices.length ? (
+          <View style={{ gap: 6 }}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: peerPickOpen }} testID="node-peer-allowlist-pick-toggle"
+              onPress={() => setPeerPickOpen(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ color: colors.accent, fontSize: typeScale.small }}>{peerPickOpen ? '收起节点列表' : '从节点列表选择'}</Text>
+              <Ionicons name={peerPickOpen ? 'chevron-up' : 'chevron-down'} size={13} color={colors.accent} />
+            </Pressable>
+            {peerPickOpen ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID="node-peer-allowlist-pick">
+                {peerChoices.map(a => {
+                  const on = !!peers && peers.includes(a);
+                  return (
+                    <Pressable key={a} accessibilityRole="button" disabled={busy} testID={`node-peer-allowlist-pick-${a}`}
+                      onPress={() => void savePeers(on ? withoutItem(peers ?? [], a) : [...(peers ?? []), a])}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: on ? colors.accent : colors.border }}>
+                      <Ionicons name={on ? 'checkmark' : 'add'} size={12} color={on ? colors.accent : colors.textMuted} />
+                      <Text style={{ color: colors.text, fontSize: typeScale.small }}>{a}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
         <TextInput value={peerDraft} onChangeText={setPeerDraft} placeholder="填别名或 node_id，逗号分隔；留空 = 不限制"
           placeholderTextColor={colors.textMuted} autoCapitalize="none" testID="node-peer-allowlist-input"
           style={{ color: colors.text, fontSize: typeScale.small, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 6 }} />
