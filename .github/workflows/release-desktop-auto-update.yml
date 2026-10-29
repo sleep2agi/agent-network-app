@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.355:
+            - 改进：下载中也会显示包来源（国内镜像 / GitHub），排查慢速或失败时不用再问。
+
             What's new in 0.2.354:
             - 改进：发现新版本时写明包来自「国内镜像」还是「GitHub」，排查更新问题少问一轮。
 
