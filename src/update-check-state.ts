@@ -63,8 +63,11 @@ export function describeUpdateRow(
       return { label: '检查中…', tone: 'muted', busy: true, actionable: false };
     case 'up-to-date':
       return { label: `已是最新版本 v${opts.currentVersion}`, detail: checked, tone: 'muted', busy: false, actionable: true };
-    case 'available':
-      return { label: `发现新版本 v${state.version}`, detail: '点击查看并安装', tone: 'accent', busy: false, actionable: true };
+    case 'available': {
+      // 说清这个包从哪来:镜像走不通时用户常问「你从哪下的」,提前写出来省一轮排查。
+      const from = state.source === 'mirror' ? '国内镜像' : state.source === 'github' ? 'GitHub' : null;
+      return { label: `发现新版本 v${state.version}`, detail: from ? `来源：${from} · 点击查看并安装` : '点击查看并安装', tone: 'accent', busy: false, actionable: true };
+    }
     case 'downloading':
       return {
         label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}`,
