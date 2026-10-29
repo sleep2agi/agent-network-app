@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.360:
+            - 改进：工具白名单里写了保活类工具时，保存按钮会禁用并点名是哪一个（不再"看起来存成功"）。
+
             What's new in 0.2.359:
             - 新增：权限分区里可展开「被拒绝时会看到什么」，把 6 个原因码各自的排查动作摊开写清楚（不再一律说「权限不足」）。
 

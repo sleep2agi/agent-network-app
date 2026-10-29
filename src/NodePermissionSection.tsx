@@ -107,6 +107,8 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
     onChanged?.(next);
   };
 
+  // 草稿里出现保活类工具时:提示 + 禁用保存(而不是偷偷过滤掉,用户会以为自己设置成功了)。
+  const alwaysInDraft = parseAllowlistInput(toolDraft)?.filter(isAlwaysTool) ?? [];
   const layout = permissionLayout(compact);
   const selected = optionFor(mode);
 
@@ -255,7 +257,7 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
           <Pressable accessibilityRole="button" testID="node-peer-allowlist-save" disabled={busy}
             onPress={() => void savePeers(parseAllowlistInput(peerDraft))}
-            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent }}>
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent, opacity: alwaysInDraft.length ? 0.5 : 1 }}>
             <Text style={{ color: colors.onAccent, fontSize: typeScale.small, fontWeight: weight.strong }}>保存</Text>
           </Pressable>
           <Pressable accessibilityRole="button" testID="node-peer-allowlist-clear" disabled={busy}
@@ -279,11 +281,13 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
         <TextInput value={toolDraft} onChangeText={setToolDraft} placeholder="填工具名，逗号分隔；留空 = 不限制"
           placeholderTextColor={colors.textMuted} autoCapitalize="none" testID="node-tool-allowlist-input"
           style={{ color: colors.text, fontSize: typeScale.small, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 6 }} />
-        {toolDraft.trim() && isAlwaysTool(toolDraft.trim()) ? (
-          <Text style={{ color: colors.failed, fontSize: typeScale.small }}>这是保活类工具，不能单独禁用</Text>
+        {alwaysInDraft.length ? (
+          <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-tool-allowlist-always-error">
+            {alwaysInDraft.join('、')} 是保活类工具，不能单独禁用；请先删掉再保存
+          </Text>
         ) : null}
         <View style={{ flexDirection: 'row', gap: spacing.sm }}>
-          <Pressable accessibilityRole="button" testID="node-tool-allowlist-save" disabled={busy}
+          <Pressable accessibilityRole="button" testID="node-tool-allowlist-save" disabled={busy || alwaysInDraft.length > 0}
             onPress={() => void saveTools(parseAllowlistInput(toolDraft))}
             style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent }}>
             <Text style={{ color: colors.onAccent, fontSize: typeScale.small, fontWeight: weight.strong }}>保存</Text>
