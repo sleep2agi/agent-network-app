@@ -68,11 +68,14 @@ export function describeUpdateRow(
       const from = state.source === 'mirror' ? '国内镜像' : state.source === 'github' ? 'GitHub' : null;
       return { label: `发现新版本 v${state.version}`, detail: from ? `来源：${from} · 点击查看并安装` : '点击查看并安装', tone: 'accent', busy: false, actionable: true };
     }
-    case 'downloading':
+    case 'downloading': {
+      const from = state.source === 'mirror' ? '国内镜像' : state.source === 'github' ? 'GitHub' : null;
       return {
         label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}`,
+        ...(from ? { detail: `来源：${from}` } : {}),
         tone: 'accent', busy: true, actionable: false,
       };
+    }
     case 'error':
       return { label: `检查更新失败：${updateErrorReason(state.message)}`, detail: '点击重试', tone: 'danger', busy: false, actionable: true };
     case 'unsupported':
