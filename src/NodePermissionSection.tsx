@@ -179,7 +179,7 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
 
       {/* 原因码说明:六个码的排查动作完全不同,摊开写清楚,别让人以为都是「权限不足」。 */}
       <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' }}>
-        <Pressable accessibilityRole="button" accessibilityState={{ expanded: reasonOpen }} testID="node-perm-reason-help-toggle"
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: reasonOpen }} testID="node-perm-reasonhelp-toggle"
           onPress={() => setReasonOpen(v => !v)}
           style={({ pressed }) => [{ minHeight: compact ? 52 : 44, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.rowHover }]}>
           <Ionicons name="help-circle-outline" size={18} color={colors.textMuted} />
@@ -187,9 +187,9 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
           <Ionicons name={reasonOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
         </Pressable>
         {reasonOpen ? (
-          <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.sm }} testID="node-perm-reason-help">
+          <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.sm }} testID="node-perm-reasonhelp">
             {Object.keys(PERMISSION_REASONS).map(code => (
-              <View key={code} style={{ gap: 2 }} testID={`node-perm-reason-help-${code}`}>
+              <View key={code} style={{ gap: 2 }} testID={`node-perm-reasonhelp-${code}`}>
                 <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, fontFamily: 'monospace' }}>{code}</Text>
                 <Text style={{ color: colors.text, fontSize: typeScale.small, lineHeight: 18 }}>{permissionReasonText(code)}</Text>
               </View>
