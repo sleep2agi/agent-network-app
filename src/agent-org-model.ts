@@ -206,3 +206,23 @@ export function agentCount(placed: readonly PlacedAgent[], data: AgentOrgData, d
 export function orgTree(data: Pick<AgentOrgData, 'departments'>): OrgData {
   return { departments: data.departments, members: [] };
 }
+
+/**
+ * Agent 归属的写权限。`managed = null` 是管理员（可写任意部门，含清空归属）；
+ * 部门负责人只能把 Agent 移进自己负责的子树，不能清空、也不能移出范围。
+ * `managed` 还没从 /api/auth/me 回来时按空集处理：按钮先不出现，Hub 仍是最终判定。
+ */
+export function canAdjustPlacement(managed: ReadonlySet<string> | null | undefined): boolean {
+  if (managed === undefined) return false;
+  return managed === null || managed.size > 0;
+}
+
+export function canPlaceAgent(
+  managed: ReadonlySet<string> | null,
+  from: string | null,
+  to: string | null,
+): boolean {
+  if (managed === null) return true;
+  if (to === null || !managed.has(to)) return false;
+  return from === null || managed.has(from);
+}

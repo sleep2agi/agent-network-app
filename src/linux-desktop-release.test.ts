@@ -27,23 +27,20 @@ const workflow = readWorkflow(readFileSync(new URL('../.github/workflows/release
 const config = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
 const secrets = [...workflow.matchAll(/secrets\.([A-Z0-9_]+)/g)].map((match) => match[1]);
 const secretSet = [...new Set(secrets)].sort();
-const matrices = (text: string) => {
-  const match = text.match(/include: \$\{\{ fromJSON\(inputs\.include_linux && '(\[.*\])' \|\| '(\[.*\])'\) \}\}/);
-  if (!match) throw new Error('missing explicit platform selection');
-  return [JSON.parse(match[1]), JSON.parse(match[2])];
-};
-const [withLinux, primaryOnly] = matrices(workflow);
-check('opt-in release matrix builds the deb on Ubuntu 24.04',
-  withLinux.some((row: any) => row.platform === 'ubuntu-24.04' && row.args === '--bundles deb'));
+const selection = workflow.match(/include: \$\{\{ fromJSON\(format\('\[\{0\}\{1\}\{2\}\]', '(\{.*?\})', inputs\.include_windows && ',(\{.*?\})' \|\| '', inputs\.include_linux && ',(\{.*?\})' \|\| ''\)\) \}\}/);
+if (!selection) throw new Error('missing explicit platform selection');
+const [macRow, windowsRow, linuxRow] = [1, 2, 3].map(i => JSON.parse(selection[i]));
+check('default release is the macOS DMG; Windows and Linux are appended only when selected',
+  macRow.platform === 'macos-14' && macRow.args === '--bundles app,dmg'
+  && windowsRow.platform === 'windows-latest' && windowsRow.args === '--bundles nsis,msi'
+  && linuxRow.platform === 'ubuntu-24.04' && linuxRow.args === '--bundles deb'
+  && !workflow.includes('inputs.include_linux && \'[{'));
 check('platform selection survives a Windows CRLF checkout',
-  JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
-check('default release matrix contains only the exact macOS and Windows bundles',
-  JSON.stringify(primaryOnly) === JSON.stringify([
-    { platform: 'macos-14', args: '--bundles app,dmg' },
-    { platform: 'windows-latest', args: '--bundles nsis,msi' },
-  ]));
-check('Linux selection defaults off and is passed to the draft verifier',
-  /include_linux:[\s\S]*?default: false\n\s+type: boolean/.test(workflow)
+  readWorkflow(workflow.replace(/\n/g, '\r\n')).includes(selection[0]));
+check('Windows and Linux default off and reach prepare plus draft verification',
+  /include_windows:[\s\S]*?default: false\n\s+type: boolean/.test(workflow)
+  && /include_linux:[\s\S]*?default: false\n\s+type: boolean/.test(workflow)
+  && workflow.includes('INCLUDE_WINDOWS: ${{ inputs.include_windows }}')
   && workflow.includes('INCLUDE_LINUX: ${{ inputs.include_linux }}'));
 check('release build does not apply the test updater overlay or --no-sign',
   !workflow.includes('tauri.test.conf.json') && !workflow.includes('--no-sign'));
@@ -80,7 +77,8 @@ check('publish defaults to creating the draft and can be turned off',
   && workflow.includes('Build signed bundles without uploading a release'));
 check('draft verification runs only when publishing',
   workflow.includes('verify-desktop-release-draft.mjs')
-  && /verify-draft:[\s\S]{0,120}needs: \[prepare-release, build-release\]/.test(workflow));
+  && /finalize-release:[\s\S]{0,200}needs: \[prepare-release, build-release\]/.test(workflow)
+  && /id: verify-draft[\s\S]{0,400}node scripts\/verify-desktop-release-draft\.mjs/.test(workflow));
 check('linux reuses the existing updater key and adds no secret',
   secretSet.join() === [
     'APPLE_API_ISSUER',
@@ -168,5 +166,13 @@ check('primary-only draft still rejects a missing macOS signature', throws(() =>
 check('primary-only draft still rejects a mismatched source SHA', throws(() => assertDesktopReleaseDraft({
   ...primaryInput, expectedCommit: 'b'.repeat(40),
 }), /targetCommitish/));
+
+const macRelease = { ...primaryRelease, assets: primaryRelease.assets.filter(item => !/_x64(?:-setup\.exe|_en-US\.msi)(?:\.sig)?$/.test(item.name)) };
+const macManifest = { version, platforms: { 'darwin-aarch64': manifest.platforms['darwin-aarch64'] } };
+const macInput = { ...primaryInput, release: macRelease, manifest: macManifest, includeWindows: false };
+check('mac-only draft does not require Windows assets', assertDesktopReleaseDraft(macInput).debSha256 === null);
+check('mac-only draft rejects an unexpected Windows installer', throws(() => assertDesktopReleaseDraft({ ...macInput, release: primaryRelease }), /Windows assets/));
+check('mac-only draft rejects an unexpected Windows updater entry', throws(() => assertDesktopReleaseDraft({ ...macInput, manifest: primaryManifest }), /Windows updater entries/));
+check('selecting Windows still requires the omitted installer', throws(() => assertDesktopReleaseDraft({ ...macInput, includeWindows: true }), /missing.*setup\.exe/));
 
 console.log(`\n${passed} passed`);

@@ -64,7 +64,9 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
+import { historyFiles, historyLinks, type HistoryFile, type HistoryLink } from './chat-history-index';
 import ChatInfoPanel from './ChatInfoPanel';
+import { openExternal } from './open-external';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
 import { chatComposerKind, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
@@ -531,6 +533,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const { height: plusWindowHeight } = useWindowDimensions();
   // 聊天信息(chat-info-model.ts):页头右侧只剩「⋯」,搜索 / 置顶 / 免打扰 / 窗口置顶 / 节点设置都在里面。
   const [infoOpen, setInfoOpen] = useState(false);
+  const [historyList, setHistoryList] = useState<'files' | 'links' | null>(null);
   const [paneWidth, setPaneWidth] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const windowPin = useDesktopWindowPin();
@@ -1176,10 +1179,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchOpen, searchQuery, messages, hasOlder, conversationKeyFor]);
 
-  const openSearch = () => {
+  const openSearch = (query = '') => {
     savedOffsetRef.current = lastOffsetRef.current;
     searchPagesRef.current = 0;
     setSearchFailed(false);
+    if (query) setSearchQuery(query);
     setSearchOpen(true);
     setTimeout(() => searchInputRef.current?.focus(), 50);
   };
@@ -2104,6 +2108,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       case 'mute': onToggleMute?.(); return;
       case 'windowPin': windowPin.toggle(); return;
       case 'search': setInfoOpen(false); openSearch(); return;
+      case 'files':
+      case 'links': {
+        setHistoryList(row.key);
+        void (async () => {
+          for (let i = 0; i < 8 && hasOlder; i++) await loadOlder();
+        })();
+        return;
+      }
       case 'btw': setInfoOpen(false); runPlusItem('btw'); return;
       default:
         // 头像行(概览)和各分区行:打开节点信息页的那个分区。
@@ -2992,8 +3004,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         subtitle={subtitle}
         paneWidth={paneWidth}
         headerHeight={headerHeight}
-        onClose={() => setInfoOpen(false)}
+        onClose={() => { setHistoryList(null); setInfoOpen(false); }}
         onRow={onInfoRow}
+        history={historyList ? {
+          kind: historyList,
+          files: historyFiles(messages),
+          links: historyLinks(messages),
+          onBack: () => setHistoryList(null),
+          onPick: (query: string) => { setHistoryList(null); setInfoOpen(false); openSearch(query); },
+        } : null}
+        fileAuth={{ serverUrl: cfg.serverUrl, token: cfg.token }}
       />
     </KeyboardAvoidingView>
   );

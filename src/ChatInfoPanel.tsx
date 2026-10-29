@@ -15,6 +15,9 @@ import { useModalSafePadding } from './safe-area-runtime';
 import { colors, spacing } from './theme';
 import { ds } from './ui-scale';
 import { chatInfoDrawerWidth, type ChatInfoPresentation, type ChatInfoRow, type ChatInfoRowKey } from './chat-info-model';
+import type { HistoryFile, HistoryLink } from './chat-history-index';
+import { AttachmentFile } from './AuthedThumb';
+import { openExternal } from './open-external';
 import { elevated } from './elevation';
 
 /** 行高下限:手指目标 48 dp,界面密度调大时跟着变高。 */
@@ -32,6 +35,8 @@ export default function ChatInfoPanel({
   headerHeight,
   onClose,
   onRow,
+  history,
+  fileAuth,
 }: {
   visible: boolean;
   presentation: ChatInfoPresentation;
@@ -43,6 +48,8 @@ export default function ChatInfoPanel({
   headerHeight?: number;
   onClose: () => void;
   onRow: (row: ChatInfoRow) => void;
+  history?: { kind: 'files' | 'links'; files: HistoryFile[]; links: HistoryLink[]; onBack: () => void; onPick: (query: string) => void } | null;
+  fileAuth?: { serverUrl: string; token: string };
 }) {
   const safe = useModalSafePadding('fullScreen');
   const { t } = useTranslation();
@@ -87,7 +94,24 @@ export default function ChatInfoPanel({
     };
   }, [visible, drawer]);
 
-  const body = (
+  const historyBody = history ? (
+    <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} testID="chat-history-list">
+      <Text style={styles.note}>{t('chat.history.loadedOnly')}</Text>
+      {(history.kind === 'files' ? history.files : history.links).length === 0 ? (
+        <Text style={styles.empty} testID="chat-history-empty">{t(history.kind === 'files' ? 'chat.history.emptyFiles' : 'chat.history.emptyLinks')}</Text>
+      ) : history.kind === 'files' ? history.files.map(file => (
+        <View key={file.fileId} style={styles.historyItem} testID={`chat-history-file-${file.fileId}`}>
+          {fileAuth ? <AttachmentFile fileId={file.fileId} name={file.name} serverUrl={fileAuth.serverUrl} token={fileAuth.token} label={file.name} /> : <Text style={styles.label}>{file.name}</Text>}
+        </View>
+      )) : history.links.map(link => (
+        <Pressable key={link.url} accessibilityRole="link" style={styles.row} testID="chat-history-link" onPress={() => { void openExternal(link.url); }}>
+          <Text style={styles.label} numberOfLines={1}>{link.label}</Text>
+        </Pressable>
+      ))}
+    </ScrollView>
+  ) : null;
+
+  const body = historyBody ?? (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} testID="chat-info-list">
       {groups.map((rows, gi) => (
         <View key={rows[0]?.key ?? gi} style={styles.group}>
@@ -115,7 +139,7 @@ export default function ChatInfoPanel({
         />
         <View ref={drawerRef} style={[styles.drawer, { width: chatInfoDrawerWidth(paneWidth) }]} testID="chat-info-panel" accessibilityViewIsModal>
           <View style={[styles.header, headerHeight ? { minHeight: headerHeight } : null]} testID="chat-info-header">
-            <Text style={styles.headerTitle} testID="chat-info-title">{t('chat.info')}</Text>
+            <Text style={styles.headerTitle} testID="chat-info-title">{history ? t(history.kind === 'files' ? 'chat.info.files' : 'chat.info.links') : t('chat.info')}</Text>
           </View>
           {body}
         </View>
@@ -127,10 +151,10 @@ export default function ChatInfoPanel({
     <Modal visible={visible} animationType="slide" onRequestClose={onClose} statusBarTranslucent>
       <View style={[styles.page, safe]} testID="chat-info-panel">
         <View style={styles.header}>
-          <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} style={styles.back} testID="chat-info-back">
+          <Pressable onPress={history ? history.onBack : onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} style={styles.back} testID="chat-info-back">
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle} testID="chat-info-title">{t('chat.info')}</Text>
+          <Text style={styles.headerTitle} testID="chat-info-title">{history ? t(history.kind === 'files' ? 'chat.info.files' : 'chat.info.links') : t('chat.info')}</Text>
           {/* Balances the back button so the title sits in the true centre. */}
           <View style={styles.back} />
         </View>
@@ -223,6 +247,9 @@ const makeStyles = () => StyleSheet.create({
   headerTitle: { flex: 1, textAlign: 'center', color: colors.text, fontSize: 16, fontWeight: '600' },
   scroll: { flex: 1 },
   scrollContent: { paddingBottom: spacing.xl },
+  note: { color: colors.textMuted, fontSize: 12, lineHeight: 18, paddingHorizontal: spacing.lg, paddingTop: spacing.md },
+  empty: { color: colors.textMuted, fontSize: 14, paddingHorizontal: spacing.lg, paddingVertical: spacing.lg },
+  historyItem: { paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderBottomWidth: StyleSheet.hairlineWidth, borderBottomColor: colors.border },
   // WeChat grouped list: full-width white groups on the grey ground, a gap between groups.
   group: {
     marginTop: spacing.md,

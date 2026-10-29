@@ -42,7 +42,7 @@ export async function startServer(port = 0) {
       const entry = { method: req.method, path: p, query: u.search }; requests.push(entry);
       if (req.headers.authorization !== 'Bearer utok_local_fixture_only') return json({ error: 'fixture_token_required' }, 401);
       if (req.method === 'GET') {
-        if (p === '/api/auth/me') return json({ ok: true, user: { user_id: 'self', username: 'fixture-viewer', role: 'user' }, current_network: 'net-fixture', networks: [{ network_id: 'net-fixture', network_name: 'Local Fixture', member_role: restricted ? 'viewer' : 'owner', agent_access: 'all' }] });
+        if (p === '/api/auth/me') return json({ ok: true, user: { user_id: 'self', username: 'fixture-viewer', role: 'user' }, current_network: { network_id: 'net-fixture' }, networks: [{ network_id: 'net-fixture', network_name: 'Local Fixture', member_role: restricted ? 'viewer' : 'owner', agent_access: 'all', ...(restricted ? { managed_department_ids: [] } : {}) }] });
         if (p === '/api/networks/net-fixture/members') return json({ ok: true, members });
         if (p === '/api/networks/net-fixture/agent-teams') return json({ error: 'not_supported' }, 404);
         if (p === '/api/networks/net-fixture/departments') return refreshFail ? json({ error: 'fixture_refresh_failed' }, 500) : json({ ok: true, departments: departments.map(d => ({ ...d, viewer_can: { manage: !restricted, create_child: !restricted } })), members: [] });

@@ -12,6 +12,11 @@ on:
         required: false
         default: true
         type: boolean
+      include_windows:
+        description: Also build and verify Windows x64 (deferred by default)
+        required: false
+        default: false
+        type: boolean
       include_linux:
         description: Also build and verify Ubuntu 24.04 amd64 (deferred by default)
         required: false
@@ -66,6 +71,7 @@ jobs:
           version=$(node -p 'require("./package.json").version')
           export VERSION="$version"
           export REQUESTED_COMMIT="${{ inputs.commit }}"
+          export INCLUDE_WINDOWS="${{ inputs.include_windows }}"
           export INCLUDE_LINUX="${{ inputs.include_linux }}"
           node scripts/prepare-desktop-release.mjs
 
@@ -82,9 +88,9 @@ jobs:
       # 真正的一次写入者由 normalize-updater-manifest 收口。
       max-parallel: 1
       matrix:
-        # Linux is opt-in, not a skipped matrix job that delays the primary pair.
-        # When requested it still uses the production updater/signing/retention gates.
-        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-24.04","args":"--bundles deb"}]' || '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
+        # macOS is the only default leg. Windows and Linux are explicit opt-ins:
+        # a skipped matrix row still queues behind max-parallel:1 and delays the DMG.
+        include: ${{ fromJSON(format('[{0}{1}{2}]', '{"platform":"macos-14","args":"--bundles app,dmg"}', inputs.include_windows && ',{"platform":"windows-latest","args":"--bundles nsis,msi"}' || '', inputs.include_linux && ',{"platform":"ubuntu-24.04","args":"--bundles deb"}' || '')) }}
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -212,7 +218,7 @@ jobs:
       # visible to installed clients. Linux signs ANet_<version>_amd64.deb;
       # tauri-action merges linux-x86_64 and linux-x86_64-deb into latest.json.
       #
-      # The Android universal APK is attached by `attach-android-apk` below with
+      # The Android universal APK is attached by `finalize-release` below with
       # the updater's required file name (Agent.Network_<version>_android-universal.apk,
       # src/android-update-core.ts). It used to be a hand upload, and a wrong name
       # (ANet_<version>_android-universal.apk) silently broke the versioned path for
@@ -2314,11 +2320,15 @@ jobs:
           retention-days: 7
           if-no-files-found: error
 
-  verify-draft:
+  # One runner for the three publish gates. Splitting them queued three
+  # ubuntu-latest jobs for under a minute of work (0.2.339 spent 27m waiting).
+  # Step ids stay so an existing audit can still point at verify-draft,
+  # attach-android-apk, or normalize-updater-manifest.
+  finalize-release:
     needs: [prepare-release, build-release]
     if: inputs.publish == true
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 20
     steps:
       - uses: actions/checkout@v4
         with:
@@ -2330,70 +2340,39 @@ jobs:
       # #2064: 两个同 tag 草稿会让这件事看起来像「资产没编出来」。先点清数量。
       # 草稿身份由 prepare-release 的 release_id 唯一确定：不再按 tag 列举/计数
       # （分页下 "1\n0\n0" 那类误报），身份断言改在 verify-desktop-release-draft.mjs 里做。
-
       - name: Require selected platform draft assets, updater entries, and checksums
+        id: verify-draft
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
+          INCLUDE_WINDOWS: ${{ inputs.include_windows }}
           INCLUDE_LINUX: ${{ inputs.include_linux }}
         run: node scripts/verify-desktop-release-draft.mjs
 
-  # 0.2.265/0.2.266 的教训:`ANet_<ver>_android-universal.apk` 也能当 release 资产,但安卓更新器找的是
-  # `Agent.Network_<ver>_android-universal.apk`(src/android-update-core.ts apkCacheFileName),版本化路径
-  # 因此 404,只能靠 android 通道兜底。这里在 draft 发布前把 APK 按更新器的名字挂上去:
-  #   * 只认 head_sha == inputs.commit 且 success 的 android-build run;
-  #   * 用 aapt2 再核一次 versionName,避免「同 commit 但版本号不对」的包被挂上去;
-  #   * 找不到 android-build 就 warning 跳过,不拖住桌面发布(镜像会等 30 分钟后照常同步)。
-  attach-android-apk:
-    needs: [build-release, verify-draft]
-    if: inputs.publish == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 35
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit }}
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      # Do not wait for android-build. A still-running APK used to hold this
+      # gate for up to 20 minutes; the mirror already waits 30 minutes and
+      # reconciles a late APK. A finished successful build is attached now.
       - name: Find the successful android-build for this commit
-        id: find
+        id: attach-android-apk
         env:
           GH_TOKEN: ${{ github.token }}
           COMMIT: ${{ inputs.commit }}
         run: |
           set -euo pipefail
-          # android-build is triggered by the push that produced the bump commit and
-          # usually finishes after the desktop release starts. Wait for THIS commit's
-          # run instead of silently skipping the attach.
-          for attempt in $(seq 1 40); do
-            line=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-build.yml/runs?head_sha=$COMMIT&per_page=1" --jq '.workflow_runs[0] | "\(.id // "") \(.status // "") \(.conclusion // "")"')
-            read -r run_id status conclusion <<<"$line"
-            if [ -z "$run_id" ]; then
-              echo "::warning::no android-build run for $COMMIT; attach the APK to desktop-v<version> by hand"
-              exit 0
-            fi
-            if [ "$status" = "completed" ]; then
-              if [ "$conclusion" != "success" ]; then
-                echo "::warning::android-build $run_id for $COMMIT concluded '$conclusion'; attach the APK by hand"
-                exit 0
-              fi
-              echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
-              echo "using android-build $run_id"
-              exit 0
-            fi
-            echo "android-build $run_id is $status; waiting ($attempt/40)"
-            sleep 30
-          done
-          echo "::warning::android-build for $COMMIT did not finish in 20 minutes; attach the APK by hand"
-          exit 0
+          line=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-build.yml/runs?head_sha=$COMMIT&per_page=1" --jq '.workflow_runs[0] | "\(.id // "") \(.status // "") \(.conclusion // "")"')
+          read -r run_id status conclusion <<<"$line"
+          if [ -z "$run_id" ] || [ "$status" != "completed" ] || [ "$conclusion" != "success" ]; then
+            echo "::warning::android-build for $COMMIT is '${status:-missing}/${conclusion:-none}'; not waiting. The mirror reconciles a late APK, or attach it by hand as Agent.Network_<version>_android-universal.apk"
+            exit 0
+          fi
+          echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
+          echo "using android-build $run_id"
       - name: Attach the APK with the updater's file name
-        if: steps.find.outputs.run_id != ''
+        if: steps.attach-android-apk.outputs.run_id != ''
         env:
           GH_TOKEN: ${{ github.token }}
-          RUN_ID: ${{ steps.find.outputs.run_id }}
+          RUN_ID: ${{ steps.attach-android-apk.outputs.run_id }}
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
@@ -2416,36 +2395,21 @@ jobs:
           gh release upload "desktop-v$version" "$tmp/$name" --clobber --repo "$GITHUB_REPOSITORY"
           echo "attached $name to desktop-v$version"
 
-  # 0.2.286 的真问题:tauri-action 生成的 latest.json 里，五个 platforms.url 是
-  #   https://api.github.com/repos/<repo>/releases/assets/<id>
-  # 而站点校验和普通 updater 认的是
-  #   https://github.com/<repo>/releases/download/<tag>/<file>
-  # 于是「资产都在、manifest 也在」的发布，客户端仍然可能拿不到包。
-  # 这里在 draft 阶段（APK 挂完之后、发布之前）把它映射成本 release 真实资产的
-  # browser_download_url，上传替换后**重新下载**断言五个 URL 都是公共下载链接、
-  # 且能匿名 HEAD 到内容。缺映射/歧义/非公开链接一律 fail-closed，不静默带坏 URL 发布。
-  normalize-updater-manifest:
-    needs: [prepare-release, attach-android-apk]
-    if: inputs.publish == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit }}
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
+      # 0.2.286 的真问题:tauri-action 生成的 latest.json 里，五个 platforms.url 是
+      #   https://api.github.com/repos/<repo>/releases/assets/<id>
+      # 而站点校验和普通 updater 认的是
+      #   https://github.com/<repo>/releases/download/<tag>/<file>
+      # 于是「资产都在、manifest 也在」的发布，客户端仍然可能拿不到包。
+      # 这里在同一 runner、APK 挂完之后把它映射成本 release 真实资产的
+      # browser_download_url。缺映射/歧义/非公开链接一律 fail-closed。
       - name: Normalize latest.json platform URLs to public download links
+        id: normalize-updater-manifest
         env:
           GH_TOKEN: ${{ github.token }}
           RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
-          # 与 attach-android-apk 同一个来源：这次发布的版本号就是 package.json 的版本。
           version=$(node -p 'require("./package.json").version')
           export RELEASE_TAG="desktop-v$version"
           echo "normalizing $RELEASE_TAG"
-          # 脚本自己 fresh 回读 release assets、上传替换、再回读断言；任何一步不合预期即非零退出。
           node scripts/normalize-desktop-update-manifest.mjs

@@ -26,7 +26,7 @@ const flat = (i: ChatInfoInput) => chatInfoGroups(i).flat();
   const phone = keys({ ...base, pin: { value: false }, mute: { value: true } });
   check(JSON.stringify(phone) === JSON.stringify([
     ['node'],
-    ['search'],
+    ['search', 'files', 'links'],
     ['pin', 'mute'],
     ['section:model', 'section:secrets', 'section:rules', 'section:skills', 'section:files', 'section:tasks', 'section:schedules', 'section:logs'],
   ]), `phone: node / search / toggles / node sections, in that order (${JSON.stringify(phone)})`);
@@ -47,7 +47,7 @@ const flat = (i: ChatInfoInput) => chatInfoGroups(i).flat();
   const detached = keys({ ...base, windowPin: { value: false } });
   check(!detached.flat().includes('pin') && !detached.flat().includes('mute'), 'no pin / mute callbacks (detached window) → no such rows, nothing dead');
   const bare = keys({ ...base, canOpenNode: false });
-  check(JSON.stringify(bare) === JSON.stringify([['search']]), 'no node settings entry → only 查找聊天内容');
+  check(JSON.stringify(bare) === JSON.stringify([['search', 'files', 'links']]), 'no node settings entry → search, files, links');
   const noCaps = flat({ ...base, hasRulesTarget: false, skillsCapable: false }).map(r => r.key);
   check(!noCaps.includes('section:rules') && !noCaps.includes('section:skills') && noCaps.includes('section:files'), '规则文件 / 技能 follow the node page visibility (visibleNodeSections)');
   check(flat({ ...base, btw: true }).some(r => r.key === 'btw') && !flat(base).some(r => r.key === 'btw'), 'BTW row only when its flag is on');
