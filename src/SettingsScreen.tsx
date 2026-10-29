@@ -1,5 +1,6 @@
 import * as Clipboard from 'expo-clipboard';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
+import { diagnosticsLine } from './diagnostics-copy';
 import { maskedHubHost } from './mask-hub-address';
 import { t as tr } from './i18n';
 import './i18n-fatal';
@@ -1206,6 +1207,19 @@ export default function SettingsScreen({
               <SettingsGroup>
                 {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
                 {/* 反馈问题时经常要「你什么版本、什么平台」:一键复制,不用手打。 */}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.286')} onPress={() => {
+                    // 诊断信息（不含 token / 账号 / 完整地址）—— 反馈问题时贴这一行就够定位环境。
+                    const line = diagnosticsLine({
+                      version: APP_VERSION,
+                      platform: Platform.OS,
+                      source: (update as { source?: string }).source,
+                      updateKind: update.kind,
+                      maskedHost: maskedHubHost(cfg.serverUrl),
+                    });
+                    void Clipboard.setStringAsync(line).catch(() => undefined);
+                  }} testID="settings-copy-diagnostics" />
+                ) : null}
                 {show('about', 'version') ? (
                   <SettingsRow label={tr('settings.copy.285')} onPress={() => {
                     void Clipboard.setStringAsync(`v${APP_VERSION} · ${Platform.OS}`).catch(() => undefined);

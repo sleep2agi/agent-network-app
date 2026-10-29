@@ -291,6 +291,12 @@ const copy = [
   ['我的头像', 'My avatar'],
   // 末尾追加(编号按位置,不能插中间):关于页「复制版本号」。
   ['复制版本号', 'Copy version'],
+  ['复制诊断信息', 'Copy diagnostics'],
+  ['国内镜像', 'China mirror'],
+  ['未知', 'Unknown'],
+  ['更新渠道：', 'Update channel: '],
+  ['更新状态：', 'Update state: '],
+  ['服务器：', 'Server: '],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.356:
+            - 新增：设置 → 关于「复制诊断信息」—— 版本、平台、更新渠道、更新状态、服务器（脱敏），反馈问题时贴一行就够；**不含账号与 token**。
+
             What's new in 0.2.355:
             - 改进：下载中也会显示包来源（国内镜像 / GitHub），排查慢速或失败时不用再问。
 
