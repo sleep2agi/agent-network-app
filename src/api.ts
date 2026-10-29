@@ -292,6 +292,9 @@ export interface HubNode {
   config_revision?: number | null;
   /** RFC-041(Hub ≥ .92):节点自己的模式。旧 Hub 没有 ⇒ undefined(当作正常)。 */
   permission_mode?: 'normal' | 'readonly' | 'restricted' | null;
+  /** RFC-041 白名单:null = 不限制,[] = 一个都不允许(旧 Hub 没有 ⇒ undefined)。 */
+  peer_allowlist?: string[] | null;
+  tool_allowlist?: string[] | null;
   /** Hub ≥ .93(#2275):调用者能不能改这个节点的模式 —— 「权限」分区只在它为 true 时出现。 */
   viewer_can?: { permission_mode?: boolean } | null;
   config_snapshot?: {
@@ -590,6 +593,50 @@ export const putNodePermissionMode = async (
     const body = (await res.json().catch(() => ({}))) as any;
     if (!res.ok || body?.ok === false) return { ok: false, error: body?.error || `HTTP ${res.status}`, status: res.status };
     return { ok: true, permission_mode: String(body?.permission_mode ?? mode), previous: body?.previous };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
+/** PUT /api/nodes/:id/peer-allowlist —— null = 清空(不限制),[] = 谁都不许。
+ *  权限同 permission-mode(节点主人 / 网络 owner·admin)。 */
+export const putNodePeerAllowlist = async (
+  cfg: HubConfig,
+  nodeId: string,
+  peers: string[] | null,
+): Promise<{ ok: true; peers: string[] | null } | { ok: false; error: string; status?: number }> => {
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/peer-allowlist`, {
+        method: 'PUT', headers: headers(cfg), signal, body: JSON.stringify({ peers }),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return { ok: false, error: body?.error || `HTTP ${res.status}`, status: res.status };
+    const list = Array.isArray(body?.peers) ? body.peers.map(String) : peers;
+    return { ok: true, peers: list };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
+/** PUT /api/nodes/:id/tool-allowlist —— null = 不限制,[] = 一个都不允许。
+ *  保活类工具(ALWAYS_TOOLS)不应出现在提交里:挡掉它们会让节点变成假的活节点。 */
+export const putNodeToolAllowlist = async (
+  cfg: HubConfig,
+  nodeId: string,
+  tools: string[] | null,
+): Promise<{ ok: true; tools: string[] | null } | { ok: false; error: string; status?: number }> => {
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/tool-allowlist`, {
+        method: 'PUT', headers: headers(cfg), signal, body: JSON.stringify({ tools }),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return { ok: false, error: body?.error || `HTTP ${res.status}`, status: res.status };
+    const list = Array.isArray(body?.tools) ? body.tools.map(String) : tools;
+    return { ok: true, tools: list };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }

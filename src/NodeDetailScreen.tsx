@@ -831,7 +831,8 @@ export default function NodeDetailScreen({
     if (section === 'permissions' && node) return (
       <View>
         <SectionTitle title="权限" />
-        <NodePermissionSection cfg={cfg} node={node} compact={compact} onChanged={mode => setNode(prev => prev ? { ...prev, permission_mode: mode } : prev)} />
+        <NodePermissionSection cfg={cfg} node={node} compact={compact}
+          onChanged={mode => setNode(prev => prev ? { ...prev, permission_mode: mode } : prev)} />
       </View>
     );
     // danger
