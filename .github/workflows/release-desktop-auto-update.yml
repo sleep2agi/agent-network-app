@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.353:
+            - 改进：更新日志搜索也能按日期找（例如输入 10-29）。
+
             What's new in 0.2.352:
             - 改进：点左栏「全部项目」/「全部标签」会把过滤框一起清空（否则列表看起来像被点坏了）。
 

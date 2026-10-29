@@ -171,6 +171,8 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
     const needle = q.trim().toLowerCase().replace(/^v(?=\d)/, '');
     if (!needle) return entries;
     return entries.filter(e => e.version.toLowerCase().includes(needle)
+      // 也能按日期找(「10-29 那版改了什么」比记版本号自然)。
+      || dateOf(e).toLowerCase().includes(needle)
       || e.sections.some(sec => (sec.title ?? '').toLowerCase().includes(needle)
         || sec.items.some(item => String(item).toLowerCase().includes(needle))));
   }, [entries, q]);
@@ -284,6 +286,7 @@ export function ChangelogPhone({ entries, online }: { entries: ChangelogEntry[];
     const needle = q.trim().toLowerCase().replace(/^v(?=\d)/, '');
     if (!needle) return entries;
     return entries.filter(e => e.version.toLowerCase().includes(needle)
+      || dateOf(e).toLowerCase().includes(needle)
       || e.sections.some(sec => (sec.title ?? '').toLowerCase().includes(needle)
         || sec.items.some(item => String(item).toLowerCase().includes(needle))));
   }, [entries, q]);
