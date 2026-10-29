@@ -1080,6 +1080,18 @@ export default function AgentsScreen({
             <Ionicons name={section.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
           ) : null}
           <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: section.online === 0 ? colors.textMuted : colors.text }]}>{section.title}</Text>
+          {/* 分组未读总数:一眼看出哪一团在喊你(admin 2026-10-28 之后的分组细化)。 */}
+          {(() => {
+            const unread = section.data.reduce((n, item) => n + (floatInput.counts[item.alias] ?? 0), 0);
+            // 复用 formatUnreadBadge(阈值与空值规则统一,别手写)。
+            const badge = formatUnreadBadge(unread);
+            return badge ? (
+              <View testID={`agent-group-unread-${section.title}`} accessibilityLabel={badge.a11yLabel}
+                style={{ minWidth: 18, paddingHorizontal: 5, borderRadius: radius.pill, backgroundColor: colors.accent, alignItems: 'center' }}>
+                <Text selectable={false} style={{ color: colors.onAccent, fontSize: 11 }}>{badge.text}</Text>
+              </View>
+            ) : null;
+          })()}
           <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{section.online}/{section.total}</Text>
         </Pressable>
       )}
