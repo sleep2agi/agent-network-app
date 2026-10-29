@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.352:
+            - 改进：点左栏「全部项目」/「全部标签」会把过滤框一起清空（否则列表看起来像被点坏了）。
+
             What's new in 0.2.351:
             - 改进：左栏项目 / 标签过滤框有内容时显示清除按钮（不用删字或按 Esc）。
 

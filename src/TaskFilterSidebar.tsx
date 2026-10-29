@@ -140,7 +140,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         accessibilityRole="tab"
         accessibilityLabel={tr('tasks.copy.86', { v0: label })}
         {...a11yState({ selected: on })}
-        onPress={() => pickProject(id)}
+        onPress={() => { if (!id) setProjectQ(''); pickProject(id); }}
         // depth:Hub 一旦返回 projects.parent_id,子项目就往里缩一格(现在恒为 0,行为不变)。
         style={state => [styles.item, depth > 0 && { paddingLeft: (styles.item as any).paddingHorizontal + depth * 14 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
       >
@@ -173,6 +173,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         onPress={() => {
           setTaskSection(section === 'dispatch' ? 'board' : section);
           // #2127 F4:每次点击都**覆盖**,不合并旧项;与顶部标签筛选共用 tagFilterAfterPick。
+          if (!tag) setTagQ('');
           setTaskFilter(tagFilterAfterPick(filter, tag, tagCatalog?.parents ?? null));
           onNavigate?.();
         }}
