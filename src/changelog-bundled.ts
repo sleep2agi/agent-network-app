@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.361:",
+  "- 改进：权限白名单已设置的条目显示成可点掉的标签，打错一个不用整串重输。",
+  "",
   "What's new in 0.2.360:",
   "- 改进：工具白名单里写了保活类工具时，保存按钮会禁用并点名是哪一个（不再\"看起来存成功\"）。",
   "",

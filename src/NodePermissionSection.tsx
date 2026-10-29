@@ -13,7 +13,7 @@ import { Text } from './ui-text';
 
 import { fetchNodePermissionReport, putNodePeerAllowlist, putNodePermissionMode, putNodeToolAllowlist, type HubConfig, type HubNode } from './api';
 import { TextInput } from './ui-text';
-import { ALWAYS_TOOLS, PERMISSION_REASONS, allowlistText, isAlwaysTool, parseAllowlistInput, permissionReasonText, withoutAlwaysTools } from './node-allowlist-model';
+import { ALWAYS_TOOLS, PERMISSION_REASONS, allowlistText, isAlwaysTool, parseAllowlistInput, permissionReasonText, withoutAlwaysTools, withoutItem } from './node-allowlist-model';
 import { Ionicons } from './icons';
 import {
   NODE_PERMISSION_OPTIONS,
@@ -250,6 +250,19 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
           <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-peer-allowlist-value">
             当前：{allowlistText(peers, 'peer')}
           </Text>
+          {/* 已设置的条目做成可删的 chip:手打错一个不用整串重输。 */}
+          {peers && peers.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {peers.map(p => (
+                <Pressable key={p} accessibilityRole="button" accessibilityLabel={`移除 ${p}`} disabled={busy}
+                  testID={`node-peer-allowlist-remove-${p}`} onPress={() => void savePeers(withoutItem(peers, p))}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill }}>
+                  <Text style={{ color: colors.text, fontSize: typeScale.small }}>{p}</Text>
+                  <Ionicons name="close" size={12} color={colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
         <TextInput value={peerDraft} onChangeText={setPeerDraft} placeholder="填别名或 node_id，逗号分隔；留空 = 不限制"
           placeholderTextColor={colors.textMuted} autoCapitalize="none" testID="node-peer-allowlist-input"
@@ -274,6 +287,18 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
           <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-tool-allowlist-value">
             当前：{allowlistText(tools, 'tool')}
           </Text>
+          {tools && tools.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {tools.map(t2 => (
+                <Pressable key={t2} accessibilityRole="button" accessibilityLabel={`移除 ${t2}`} disabled={busy}
+                  testID={`node-tool-allowlist-remove-${t2}`} onPress={() => void saveTools(withoutItem(tools, t2))}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill }}>
+                  <Text style={{ color: colors.text, fontSize: typeScale.small }}>{t2}</Text>
+                  <Ionicons name="close" size={12} color={colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
           <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }} testID="node-tool-allowlist-always">
             保活类不可禁用（{ALWAYS_TOOLS.join('、')}）：挡掉它们，节点既干不了活，也报不了自己干不了。
           </Text>
