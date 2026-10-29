@@ -21,7 +21,7 @@ dependencies = [
 
 [[package]]
 name = "agent-network-desktop"
-version = "0.2.355"
+version = "0.2.356"
 dependencies = [
  "atomicwrites",
  "base64 0.22.1",
