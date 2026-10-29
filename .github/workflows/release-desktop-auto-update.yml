@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.358:
+            - 新增：节点「权限」分区可以设置**可通信节点**与**可用工具**两张白名单 —— 不填 = 不限制，清空按钮可一键解除；保活类工具不可禁用（挡掉会让节点变成"假活"）。
+
             What's new in 0.2.357:
             - 新增：军团每个分组标题显示**未读总数**（>99 显示 99+），一眼看出哪一团在喊你。
 

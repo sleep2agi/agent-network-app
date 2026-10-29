@@ -11,7 +11,9 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 
-import { fetchNodePermissionReport, putNodePermissionMode, type HubConfig, type HubNode } from './api';
+import { fetchNodePermissionReport, putNodePeerAllowlist, putNodePermissionMode, putNodeToolAllowlist, type HubConfig, type HubNode } from './api';
+import { TextInput } from './ui-text';
+import { ALWAYS_TOOLS, allowlistText, isAlwaysTool, parseAllowlistInput, withoutAlwaysTools } from './node-allowlist-model';
 import { Ionicons } from './icons';
 import {
   NODE_PERMISSION_OPTIONS,
@@ -41,8 +43,41 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   // undefined = 读取中;null = 读不到(不是 owner / admin,或旧 Hub)⇒ 不显示报表行
   const [report, setReport] = useState<ReportSummary | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
+  // 两张白名单:null = 不限制(与「空数组 = 一个都不允许」严格区分,见 node-allowlist-model)。
+  const [peers, setPeers] = useState<string[] | null>(node.peer_allowlist ?? null);
+  const [tools, setTools] = useState<string[] | null>(node.tool_allowlist ?? null);
+  const [peerDraft, setPeerDraft] = useState('');
+  const [toolDraft, setToolDraft] = useState('');
+  const [listError, setListError] = useState('');
+  const [listNote, setListNote] = useState('');
 
   useEffect(() => { setMode(normalizeMode(node.permission_mode)); }, [node.node_id, node.permission_mode]);
+  useEffect(() => {
+    setPeers(node.peer_allowlist ?? null);
+    setTools(node.tool_allowlist ?? null);
+    setPeerDraft('');
+    setToolDraft('');
+  }, [node.node_id, node.peer_allowlist, node.tool_allowlist]);
+
+  const savePeers = async (next: string[] | null) => {
+    if (busy) return;
+    setBusy(true); setListError(''); setListNote('');
+    const res = await putNodePeerAllowlist(cfg, node.node_id, next);
+    setBusy(false);
+    if (!res.ok) { setListError(`保存失败：${res.error}`); return; }
+    setPeers(res.peers ?? next);
+    setListNote('可通信节点已保存，立即生效');
+  };
+  const saveTools = async (next: string[] | null) => {
+    if (busy) return;
+    const safe = next === null ? null : withoutAlwaysTools(next);
+    setBusy(true); setListError(''); setListNote('');
+    const res = await putNodeToolAllowlist(cfg, node.node_id, safe);
+    setBusy(false);
+    if (!res.ok) { setListError(`保存失败：${res.error}`); return; }
+    setTools(res.tools ?? safe);
+    setListNote('可用工具已保存，立即生效');
+  };
   useEffect(() => {
     let alive = true;
     void fetchNodePermissionReport(cfg).then(r => { if (alive) setReport(summarizeReport(r, node.node_id)); });
@@ -179,6 +214,64 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
           ) : null}
         </View>
       ) : null}
+
+      {/* 两张白名单:值来自节点行;null = 不限制,空数组 = 一个都不允许 —— 文案必须区分开。 */}
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md }} testID="node-allowlist-card">
+        <View style={{ gap: 2 }}>
+          <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>可通信节点</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-peer-allowlist-value">
+            当前：{allowlistText(peers, 'peer')}
+          </Text>
+        </View>
+        <TextInput value={peerDraft} onChangeText={setPeerDraft} placeholder="填别名或 node_id，逗号分隔；留空 = 不限制"
+          placeholderTextColor={colors.textMuted} autoCapitalize="none" testID="node-peer-allowlist-input"
+          style={{ color: colors.text, fontSize: typeScale.small, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 6 }} />
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Pressable accessibilityRole="button" testID="node-peer-allowlist-save" disabled={busy}
+            onPress={() => void savePeers(parseAllowlistInput(peerDraft))}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent }}>
+            <Text style={{ color: colors.onAccent, fontSize: typeScale.small, fontWeight: weight.strong }}>保存</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" testID="node-peer-allowlist-clear" disabled={busy}
+            onPress={() => { setPeerDraft(''); void savePeers(null); }}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md }}>
+            <Text style={{ color: colors.accent, fontSize: typeScale.small }}>清空 = 不限制</Text>
+          </Pressable>
+        </View>
+
+        <View style={{ height: 1, backgroundColor: colors.border }} />
+
+        <View style={{ gap: 2 }}>
+          <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>可用工具</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-tool-allowlist-value">
+            当前：{allowlistText(tools, 'tool')}
+          </Text>
+          <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }} testID="node-tool-allowlist-always">
+            保活类不可禁用（{ALWAYS_TOOLS.join('、')}）：挡掉它们，节点既干不了活，也报不了自己干不了。
+          </Text>
+        </View>
+        <TextInput value={toolDraft} onChangeText={setToolDraft} placeholder="填工具名，逗号分隔；留空 = 不限制"
+          placeholderTextColor={colors.textMuted} autoCapitalize="none" testID="node-tool-allowlist-input"
+          style={{ color: colors.text, fontSize: typeScale.small, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 6 }} />
+        {toolDraft.trim() && isAlwaysTool(toolDraft.trim()) ? (
+          <Text style={{ color: colors.failed, fontSize: typeScale.small }}>这是保活类工具，不能单独禁用</Text>
+        ) : null}
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Pressable accessibilityRole="button" testID="node-tool-allowlist-save" disabled={busy}
+            onPress={() => void saveTools(parseAllowlistInput(toolDraft))}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent }}>
+            <Text style={{ color: colors.onAccent, fontSize: typeScale.small, fontWeight: weight.strong }}>保存</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" testID="node-tool-allowlist-clear" disabled={busy}
+            onPress={() => { setToolDraft(''); void saveTools(null); }}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md }}>
+            <Text style={{ color: colors.accent, fontSize: typeScale.small }}>清空 = 不限制</Text>
+          </Pressable>
+        </View>
+        {listError ? <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-allowlist-error">{listError}</Text> : null}
+        {listNote && !listError ? <Text style={{ color: colors.running, fontSize: typeScale.small }} testID="node-allowlist-saved">{listNote}</Text> : null}
+      </View>
+
     </View>
   );
 }
