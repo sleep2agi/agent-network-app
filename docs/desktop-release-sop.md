@@ -302,7 +302,7 @@ Publish only when all of these hold:
 
 - `targetCommitish` equals the 40-character SHA you triggered with;
 - macOS, Windows and every selected optional platform concluded `success`,
-  and so did `verify-draft` (which receives the same `include_linux` input);
+  and so did `finalize-release` (its `verify-draft` step receives the same `include_linux` input);
 - the eight primary assets are present: macOS `.dmg` and `.app.tar.gz`,
   Windows `x64-setup.exe` and `x64_en-US.msi`, the `.sig` for each updater
   artifact, and `latest.json`. Linux selection adds `.deb` and `.deb.sig`
@@ -317,7 +317,7 @@ Publish only when all of these hold:
   mirror copies; do not upload a release asset named `SHA256SUMS`.
 - the Android APK, when this commit has a successful `android-build` run, is
   attached as **`Agent.Network_<version>_android-universal.apk`** by the
-  `attach-android-apk` job (the name the updater computes in
+  `attach-android-apk` step (the name the updater computes in
   `src/android-update-core.ts`). The job verifies `versionName` with `aapt2`
   before uploading; if it logged `no successful android-build`, publish as
   usual and attach the APK by hand with that exact name (a wrong name silently
@@ -460,13 +460,13 @@ Each of these produced a draft or a run that looked fine and was not:
   `ref: ${{ inputs.commit }}`; `2fdbc85c` yields
   `A branch or tag with the name '2fdbc85c' could not be found`. Always pass the
   full 40-character SHA.
-- **No APK, silently.** `attach-android-apk` waits for an `android-build` of the
-  *same commit* and, when there is none, prints a warning and exits 0 — 0.2.292
-  published a draft with ten assets. `android-build.yml` now triggers on the
-  version-bump push itself (`paths: [package.json]`), and its checkout falls back
-  to `github.sha` so a push run has a commit at all. If a draft still arrives
-  without `Agent.Network_<version>_android-universal.apk`, re-run just that job:
-  `gh run rerun <release-run> --job <attach-job-id>`.
+- **No APK, silently.** `finalize-release` attaches an `android-build` of the
+  *same commit* only when that run has already succeeded. It does not wait: an
+  in-progress build used to hold the desktop release for up to 20 minutes, and
+  the mirror already reconciles a late APK. `android-build.yml` triggers on the
+  version-bump push itself (`paths: [package.json]`). If a draft arrives
+  without `Agent.Network_<version>_android-universal.apk`, re-run the finished
+  `finalize-release` job, or upload that exact name by hand.
 - **A missing Linux installer is invisible** in the draft audit unless you check
   the manifest's platform list: `include_linux=false` produces five entries and
   no `.deb`. 0.2.291 shipped that way and Linux had no update at all until 0.2.292.
@@ -538,7 +538,7 @@ publish step (section 6) dispatches the mirror by hand; the triggers below are
 the safety net, not the primary path.
 
 **When it runs.** On `release: published` it starts at once and waits up to
-30 minutes for the Android APK. The release workflow's `attach-android-apk`
+30 minutes for the Android APK. The release workflow's `finalize-release`
 job normally uploads it to the draft before publishing, so this wait is a
 fallback for a hand-attached or missing APK (GitHub fires no event for an
 asset upload). A cron run every 30 minutes reconciles the newest
