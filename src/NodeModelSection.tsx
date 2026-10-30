@@ -204,6 +204,16 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             {notOnMachine ? (
               <Text testID="model-not-on-machine" style={{ color: colors.blocked, fontSize: 12, lineHeight: 18 }}>{notOnMachine}</Text>
             ) : null}
+            {/* 当前 Provider / 模型单独一行:分组展示后,"我现在在哪个 provider 下"不该靠 chip 上的小字去找。 */}
+            <Text style={{ color: colors.textSecondary, fontSize: 12 }} testID="node-model-current">
+              当前：{(() => {
+                const cur = (currentModel ?? '').trim();
+                if (!cur) return '未设置';
+                const slash = cur.indexOf('/');
+                return slash > 0 ? `${cur.slice(0, slash)} / ${cur.slice(slash + 1)}` : cur;
+              })()}
+            </Text>
+
             {chips.length > 0 ? (
               <View style={{ gap: spacing.sm }}>
                 <Text style={{ color: colors.textMuted, fontSize: 12 }}>建议</Text>
