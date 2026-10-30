@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.373:",
+  "- 修复：OpenCode V2 共存节点上「切模型」不再被 `config_update_capable=false` 误挡（那个开关只该挡重启级变更；切模型是 hot 的）。",
+  "",
   "What's new in 0.2.372:",
   "- 改进：节点「模型」区新增一行「当前：provider / 模型」，切之前先知道自己现在在哪。",
   "",

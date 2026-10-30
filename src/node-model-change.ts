@@ -39,8 +39,18 @@ export function validateModelId(raw: string): { ok: true; model: string } | { ok
 }
 
 /** 三态:null = hub 没有这个接口(旧 hub);false = 节点不是在能重启它的启动器下跑的;true = 可改。 */
-export function modelControlAvailability(view: NodeConfigView | null | undefined): { enabled: boolean; hint: string } {
+/**
+ * 切模型能不能点 —— **与「能不能改重启级配置」是两个独立的开关**(通信欧 2026-10-31 实测):
+ *   config_update_capable=false 只表示「这个进程不在会响应 sentinel-75 的 supervisor 下」,
+ *   ⇒ 重启级变更不能下发;但纯 model 在 OpenCode V2 共存节点上是 hot 变更,不重启。
+ *   用一个开关管两件事,会把本来能切模型的节点也灰掉。
+ */
+export function modelControlAvailability(
+  view: NodeConfigView | null | undefined,
+  opts: { hotModel?: boolean } = {},
+): { enabled: boolean; hint: string } {
   if (!view) return { enabled: false, hint: '当前 Hub 未提供节点配置接口(需升级 commhub-server)' };
+  if (opts.hotModel) return { enabled: true, hint: '' };
   if (!view.config_update_capable) {
     return { enabled: false, hint: '此节点不是由 anet 启动器托管的,无法远程改模型。请在它所在机器上执行 anet node edit <name> --model <id> 后重启。' };
   }
@@ -140,3 +150,6 @@ export function groupModelsByProvider(models: readonly string[]): { provider: st
     .map(([provider, list]) => ({ provider, models: list }))
     .sort((a, b) => (a.provider === '其他' ? 1 : b.provider === '其他' ? -1 : a.provider.localeCompare(b.provider)));
 }
+
+/** 重启级变更(flags 等)单独一个开关:必须有能在 sentinel-75 之后把它拉起来的 supervisor。 */
+export const canEditRestartTier = (view: NodeConfigView | null | undefined): boolean => !!view?.config_update_capable;
