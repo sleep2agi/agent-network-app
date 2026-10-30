@@ -247,6 +247,7 @@ export const taskCopy = [
  ['显示空项目','Show empty projects'],
  ['项目（支持拼音）','Projects (pinyin ok)'],
  ['标签（支持拼音）','Tags (pinyin ok)'],
+ ['复制这行结果','Copy this result'],
  ['无匹配项目','No matching projects'],
  ['无匹配标签','No matching tags'],
  ['清空项目过滤','Clear project filter'],
