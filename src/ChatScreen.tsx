@@ -64,6 +64,7 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
+import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
@@ -2984,6 +2985,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
+      {desktop ? <ChatToolRail cfg={cfg} alias={alias} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}
