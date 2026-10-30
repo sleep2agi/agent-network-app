@@ -56,6 +56,7 @@ export const chatTranslations = {
   'chat.select': ['选中', 'Select'],
   'chat.quote': ['引用', 'Quote'],
   'chat.proactive': [' · 主动汇报', ' · Proactive update'],
+  'chat.lateReply': [' · 迟到结果', ' · Late reply'],
   'chat.sending': ['发送中…', 'Sending…'],
   'chat.notDelivered': ['未送达 · 点击重试', 'Not delivered · Tap to retry'],
   'chat.failReason.aliasNotFound': ['没有找到这个 Agent（可能已删除、改名，或你已不在它所在的网络）', 'Agent not found (it may have been deleted or renamed, or you are no longer in its network)'],

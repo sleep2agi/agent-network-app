@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.366:
+            - 新增：迟到回来的结果在聊天里标注「**· 迟到结果**」（Hub 的 `late: true`），不再和实时回复混在一起。
+
             What's new in 0.2.365:
             - 新增：右侧工具条补上**文件**与**日志**（有节点状态时可用，点了就在聊天旁边看，不用跳节点详情）。
 

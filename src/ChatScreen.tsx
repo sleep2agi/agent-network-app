@@ -2459,7 +2459,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                     <AliasAvatar alias={alias} size={36} />
                     <View style={[styles.messageContent, bubbleCap]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
-                      <ChatMetaLine name={`${alias}${item._proactive ? t('chat.proactive') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
+                      <ChatMetaLine name={`${alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
                       <Pressable
                         {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:reply`, { item, text: item.result ?? item.reply ?? '', author: alias }, 'reply')}

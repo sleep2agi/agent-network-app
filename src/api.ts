@@ -93,6 +93,8 @@ export interface HubTask {
   consumed_at?: string;
   completed_at?: string;
   expires_at?: string;
+  /** 迟到结果标记(Hub ≥ .213):只在「任务已终态后才回来的结果」上出现,平时不下发这个键。 */
+  late?: boolean;
   /** Exact runtime context exposed by SideThread-capable Hubs. */
   thread_id?: string;
   turn_id?: string;
