@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.367:
+            - 新增：任务详情显示**迟到补回的结果**（可多条），并明确标注「任务状态仍为 X」—— 迟到不等于追认成功。
+
             What's new in 0.2.366:
             - 新增：迟到回来的结果在聊天里标注「**· 迟到结果**」（Hub 的 `late: true`），不再和实时回复混在一起。
 

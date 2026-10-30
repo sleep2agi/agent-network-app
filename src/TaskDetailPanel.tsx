@@ -21,7 +21,7 @@ import RequirementAssignmentsEditor from './RequirementAssignmentsEditor';
 import { useModalSafePadding } from './safe-area-runtime';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 import type { HubConfig } from './api';
-import { REQ_COLUMN_LABEL, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
+import { lateReplyBanner, REQ_COLUMN_LABEL, type ReqColumn, type Requirement, type RequirementProject } from './requirements-model';
 import type { RequirementPerson } from './requirement-people';
 import type { RequirementAssignments } from './requirement-people-api';
 import { ownerChange, type AssignChange } from './task-assign';
@@ -470,6 +470,22 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
   const body: ReactNode = (
     <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: twoColumns ? spacing.lg : spacing.xl, gap: spacing.lg }} keyboardShouldPersistTaps="handled">
       {banners}
+      {/* 迟到补回的结果:一条任务可能有多条;🔴 任务状态仍是 failed,不在这里改写成已完成。 */}
+      {item.lateReplies && item.lateReplies.length ? (
+        <View testID="req-late-replies" style={{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, padding: spacing.md, gap: spacing.xs }}>
+          <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: '600' }}>
+            {lateReplyBanner(taskText(REQ_COLUMN_LABEL[item.column] ?? item.column))}
+          </Text>
+          {item.lateReplies.map(r => (
+            <View key={r.id} testID={`req-late-reply-${r.id}`} style={{ gap: 2 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} numberOfLines={1}>
+                {r.createdAt ? `${r.createdAt} · ` : ''}{r.status}
+              </Text>
+              <Text style={{ color: colors.text, fontSize: typeScale.small }} numberOfLines={6}>{r.result}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       {/* 只读时下面的编辑控件整块不响应(看得见、点不动),而不是让人改完再被 hub 403 退回。 */}
       <View pointerEvents={readOnly && !partial ? 'none' : 'auto'} testID="req-detail-fields" style={twoColumns ? styles.columns : { gap: spacing.xl }}>
         {twoColumns ? (
