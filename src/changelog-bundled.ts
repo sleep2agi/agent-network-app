@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.363:",
+  "- 改进：权限分区顶部新增一行摘要（模式 + 可通信节点 + 可用工具），不必展开就能看清当前限制。",
+  "",
   "What's new in 0.2.362:",
   "- 新增：可通信节点白名单可以「从节点列表选择」（点一下加、再点去掉），不用手打别名。",
   "",
