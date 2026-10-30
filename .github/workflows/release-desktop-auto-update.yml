@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.374:
+            - 修复：0.2.373 的 macOS 包没打出来（打包机偶发失败），这版补齐；功能与 0.2.373 相同（切模型不再被 config_update_capable 误挡）。
+
             What's new in 0.2.373:
             - 修复：OpenCode V2 共存节点上「切模型」不再被 `config_update_capable=false` 误挡（那个开关只该挡重启级变更；切模型是 hot 的）。
 
