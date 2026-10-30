@@ -79,7 +79,16 @@ export default function ChatToolRail({ cfg, alias, session }: { cfg: HubConfig; 
           </ScrollView>
         </View>
       ) : null}
-      <View testID="chat-tool-rail" style={{ width: 44, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
+      {/*
+        🔴 admin 2026-10-30 现场：工具条被排到输入框**下方**，撑出一条几乎全宽的空白带。
+        原因：ChatToolRail 是聊天页列布局里的最后一个兄弟，宽度 44 只约束了自己，
+        但它在列流里占了一整行高度，于是输入框下面多出一大块空白。
+
+        形态本来就该是「贴右侧边缘的常驻竖直图标条」（见文件头注释），
+        所以这里改成绝对定位：不参与列流、不占高度、永远贴右边。
+        zIndex 低于工具面板（面板是 25），面板浮在它左侧（right: 44）。
+      */}
+      <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20, width: 44, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
         {TOOLS.map(t => {
           const on = active === t.key;
           const disabled = !!t.needSession && !realSession;
