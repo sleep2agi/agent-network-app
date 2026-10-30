@@ -481,7 +481,10 @@ export default function TaskDetailPanel({ cfg, item, readOnly = false, editField
               <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} numberOfLines={1}>
                 {r.createdAt ? `${r.createdAt} · ` : ''}{r.status}
               </Text>
-              <Text style={{ color: colors.text, fontSize: typeScale.small }} numberOfLines={6}>{r.result}</Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.251')} testID={`req-late-reply-copy-${r.id}`}
+                onPress={() => { void import('expo-clipboard').then(m => m.setStringAsync(r.result)).catch(() => undefined); }}>
+                <Text style={{ color: colors.text, fontSize: typeScale.small }} numberOfLines={6}>{r.result}</Text>
+              </Pressable>
             </View>
           ))}
         </View>
