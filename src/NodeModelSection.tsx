@@ -157,7 +157,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
   }, [requested, baseRevision, cfg, node.node_id]);
 
-  const availability = modelControlAvailability(view === undefined ? null : view);
+  // V2 共存节点上纯 model 是 hot 变更:不受 config_update_capable 限制(它只挡重启级).
+  const availability = modelControlAvailability(view === undefined ? null : view, { hotModel: v2 });
   const busy = phaseIsBusy(phase);
   const suggestions = v2 ? (v2Models ?? []) : suggestedModels(node.runtime);
   const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
