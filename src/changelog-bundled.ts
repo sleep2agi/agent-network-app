@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.368:",
+  "- 修复：聊天右侧工具条暂时**隐藏**（上一版它在输入框下面留出一条空白带、还会压住气泡）；定位已修，确认不影响气泡后再放出来。",
+  "",
   "What's new in 0.2.367:",
   "- 新增：任务详情显示**迟到补回的结果**（可多条），并明确标注「任务状态仍为 X」—— 迟到不等于追认成功。",
   "",
