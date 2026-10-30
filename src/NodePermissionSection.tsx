@@ -129,6 +129,11 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
         这个节点能做什么。它不会超出你自己的权限；改了马上生效。
       </Text>
 
+      {/* 一行摘要:模式 + 两张白名单,不用展开就知道当前限制到什么程度。 */}
+      <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-perm-overview">
+        {optionFor(mode).label} · 可通信节点：{allowlistText(peers, 'peer')} · 可用工具：{allowlistText(tools, 'tool')}
+      </Text>
+
       {layout === 'segmented' ? (
         <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md }} testID="node-perm-segmented">
           <View accessibilityRole="radiogroup" style={{ flexDirection: 'row', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, overflow: 'hidden', alignSelf: 'flex-start' }}>
