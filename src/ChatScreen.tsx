@@ -106,7 +106,7 @@ import { mentionCandidates, mentionMenuOpen } from './mention-menu';
 import { ComposerSuggest } from './ComposerSuggest';
 import { parseSkillsPayload, skillsTarget, type SkillSummary } from './node-skills';
 import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
-import { SHOW_BOLT_ENTRY, SHOW_BTW_ENTRY } from './chat-entry-flags';
+import { SHOW_BOLT_ENTRY, SHOW_BTW_ENTRY, SHOW_CHAT_TOOL_RAIL } from './chat-entry-flags';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
@@ -2985,7 +2985,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
-      {desktop ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} /> : null}
+      {desktop && SHOW_CHAT_TOOL_RAIL ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}
