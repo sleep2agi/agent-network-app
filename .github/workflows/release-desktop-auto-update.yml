@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.375:
+            - 改进：迟到结果的气泡左侧加一道细色条，扫一眼就能和实时回复区分开。
+
             What's new in 0.2.374:
             - 修复：0.2.373 的 macOS 包没打出来（打包机偶发失败），这版补齐；功能与 0.2.373 相同（切模型不再被 config_update_capable 误挡）。
 
