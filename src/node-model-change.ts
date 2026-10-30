@@ -122,3 +122,21 @@ export function catalogHint(runtime: string | null | undefined): string | null {
 export function phaseIsBusy(phase: ModelChangePhase): boolean {
   return phase.kind === 'submitting' || phase.kind === 'restarting';
 }
+
+/** 把 `provider/model` 清单按 provider 分组(admin 2026-10-30:要像 OpenCode 那样按 Provider / 模型两级切换)。
+ *  没有 `/` 的 id 归到「其他」;组内保持原顺序(上游已排过),组间按 provider 名排序,order 稳定才好点。 */
+export function groupModelsByProvider(models: readonly string[]): { provider: string; models: string[] }[] {
+  const map = new Map<string, string[]>();
+  for (const id of models) {
+    const raw = (id ?? '').trim();
+    if (!raw) continue;
+    const slash = raw.indexOf('/');
+    const provider = slash > 0 ? raw.slice(0, slash) : '其他';
+    const bucket = map.get(provider);
+    if (bucket) bucket.push(raw);
+    else map.set(provider, [raw]);
+  }
+  return [...map.entries()]
+    .map(([provider, list]) => ({ provider, models: list }))
+    .sort((a, b) => (a.provider === '其他' ? 1 : b.provider === '其他' ? -1 : a.provider.localeCompare(b.provider)));
+}

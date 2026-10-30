@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.371:",
+  "- 改进：节点的「模型」区按 **Provider 分组**展示（provider/model 两级），不再是一长串平铺——朝「像 OpenCode 一样切 Provider / 模型」的第一步。",
+  "",
   "What's new in 0.2.370:",
   "- 改进：任务详情里迟到补回的结果，点一下即可复制那一行文本。",
   "",
