@@ -2985,7 +2985,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
-      {desktop ? <ChatToolRail cfg={cfg} alias={alias} /> : null}
+      {desktop ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}
