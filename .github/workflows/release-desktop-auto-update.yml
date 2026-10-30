@@ -525,6 +525,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.364:
+            - 新增：聊天右侧「工具条」（类 Codex 最右栏）：一列图标常驻，点开面板看**该节点的任务**和**技能**；面板浮在条左侧、不挤窄聊天区，展开状态与当前工具按设备记住。
+
             What's new in 0.2.363:
             - 改进：权限分区顶部新增一行摘要（模式 + 可通信节点 + 可用工具），不必展开就能看清当前限制。
 
