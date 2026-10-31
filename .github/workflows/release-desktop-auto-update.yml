@@ -71,6 +71,10 @@ jobs:
 
   build-release:
     needs: [prepare-release]
+    # 卡死自愈:2026-10-30 有一个 ubuntu deb job 在 waiting 里挂了 2.5 小时,
+    # 而 concurrency group 是固定名(release-desktop-auto-update)⇒ 它把整条发布链锁死,
+    # 新 run 全部 pending、取消也不生效。给三条腿都设上限,让 stuck 的腿自己超时退出。
+    timeout-minutes: 120
     # publish=false 是「只构建 + smoke，不建 release」的 dry run：prepare-release 会跳过，
     # 这个 job 必须照常跑，否则 Build signed bundles without uploading a release 那套永远不执行。
     if: always() && (inputs.publish == false || needs.prepare-release.result == 'success')
