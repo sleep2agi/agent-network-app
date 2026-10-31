@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.380:",
+  "- 优化：「复制节点诊断」现在也带上客户端版本与平台（如 client=0.2.380/ios），排查时能直接排除「旧版本」。",
+  "- 其他：发布流水线修复（macOS 构建机镜像、镜像同步的 iOS 派发）。",
+  "",
   "What's new in 0.2.379:",
   "- 新增：节点详情可「复制节点诊断」（别名 / node_id / 状态 / runtime），反馈节点问题时贴一行就够；不含凭据。",
   "",
