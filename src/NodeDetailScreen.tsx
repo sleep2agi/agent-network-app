@@ -537,6 +537,16 @@ export default function NodeDetailScreen({
             style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
             <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
           </Pressable>
+          {/* 节点级诊断:反馈「这个节点不对劲」时,贴这一行就够(别名/节点 id/状态),不含任何凭据。 */}
+          <Pressable accessibilityRole="button" accessibilityLabel="复制节点诊断" hitSlop={8} testID="node-detail-copy-diagnostics"
+            onPress={() => {
+              const line = [s.alias, node ? `node_id=${node.node_id}` : null, `status=${s.status}`, node?.runtime ? `runtime=${node.runtime}` : null]
+                .filter(Boolean).join(' · ');
+              void Clipboard.setStringAsync(line).catch(() => undefined);
+            }}
+            style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+          </Pressable>
           <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
             <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
