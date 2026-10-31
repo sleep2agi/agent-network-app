@@ -7,6 +7,11 @@ on:
         description: Exact commit on main to release
         required: true
         type: string
+      bypass_lock:
+        description: 'Bypass the fixed concurrency group (use only when a stuck run holds it)'
+        required: false
+        type: boolean
+        default: false
       publish:
         description: Create the draft GitHub Release. False builds and smoke-tests only; it does not upload a Release.
         required: false
@@ -23,7 +28,10 @@ permissions:
   actions: read
 
 concurrency:
-  group: release-desktop-auto-update
+  # 正常仍串行(固定组名,防两个 run 同时发同一版本)。
+  # bypass_lock=true 时把 run_id 拼进组名 ⇒ 绕开「某个 run 卡在 waiting 把组永久占住」的死锁
+  # (2026-10-31 实测:一个 ubuntu deb job 卡 2.5h+,取消请求不生效,整条发布链被锁)。
+  group: release-desktop-auto-update${{ inputs.bypass_lock && format('-{0}', github.run_id) || '' }}
   cancel-in-progress: false
 
 jobs:
@@ -528,6 +536,9 @@ jobs:
           releaseId: ${{ needs.prepare-release.outputs.release_id }}
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
+
+            What's new in 0.2.376:
+            - 汇总：迟到结果气泡左侧色条（0.375）+ 模型区按 Provider 分组（0.371）+ 「当前 provider / 模型」一行（0.372）+ 切模型不再被误挡（0.373）；并给发布流水线加了「卡死自愈」（构建腿超时 / 可绕开被占用的并发组）。
 
             What's new in 0.2.375:
             - 改进：迟到结果的气泡左侧加一道细色条，扫一眼就能和实时回复区分开。

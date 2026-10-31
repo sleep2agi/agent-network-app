@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.376:",
+  "- 汇总：迟到结果气泡左侧色条（0.375）+ 模型区按 Provider 分组（0.371）+ 「当前 provider / 模型」一行（0.372）+ 切模型不再被误挡（0.373）；并给发布流水线加了「卡死自愈」（构建腿超时 / 可绕开被占用的并发组）。",
+  "",
   "What's new in 0.2.375:",
   "- 改进：迟到结果的气泡左侧加一道细色条，扫一眼就能和实时回复区分开。",
   "",
