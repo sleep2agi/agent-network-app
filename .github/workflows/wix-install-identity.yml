@@ -64,7 +64,7 @@ jobs:
             src-tauri/target/release/wix/**/*.wixobj
           retention-days: 7
   mac-rename:
-    runs-on: macos-14
+    runs-on: macos-15
     timeout-minutes: 35
     steps:
       - uses: actions/checkout@v4

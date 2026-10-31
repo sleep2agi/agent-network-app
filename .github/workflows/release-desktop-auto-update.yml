@@ -96,7 +96,7 @@ jobs:
       matrix:
         # Linux is opt-in, not a skipped matrix job that delays the primary pair.
         # When requested it still uses the production updater/signing/retention gates.
-        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-24.04","args":"--bundles deb"}]' || '[{"platform":"macos-14","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
+        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-15","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-24.04","args":"--bundles deb"}]' || '[{"platform":"macos-15","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
@@ -237,7 +237,7 @@ jobs:
       # the draft, publish only after the smoke gates pass, sync the manifest
       # afterwards) belongs in docs/desktop-release-sop.md — never in a string
       # that ships to users. src/release-notes-hygiene.test.ts enforces this.
-      # macOS DMG bundling flakes on GitHub macos-14 after notarization is
+      # macOS DMG bundling flakes on GitHub macos-15 after notarization is
       # already Accepted and stapled. create-dmg/hdiutil exits in a few seconds
       # and leaves diskimages-helper behind; tauri hides that stderr unless
       # --verbose is set. Re-running `tauri build` would delete the stapled
@@ -257,7 +257,7 @@ jobs:
           # Retry only the macOS DMG step after the .app is already notarized and stapled.
           #
           # tauri-bundler 2.11.2 runs bundle_dmg.sh (create-dmg 1.2.1 / hdiutil) after
-          # notarization. On GitHub macos-14 that script often dies in a few seconds
+          # notarization. On GitHub macos-15 that script often dies in a few seconds
           # with "failed to run bundle_dmg.sh" and leaves diskimages-helper behind.
           # Without --verbose, tauri drops the script's stderr. Running `tauri build`
           # again deletes the stapled .app and notarizes a second time. This wrapper
