@@ -91,10 +91,10 @@ export function prepareReleaseDraft({
   run = (args) => gh(args),
   // --slurp 让分页结果是一个数组的数组；直接 JSON.parse 多页拼接会炸（gh 的手册明确要求）。
   listReleases = () => {
-    const pages = run(['api', `repos/${repository}/releases?per_page=100`, '--paginate', '--slurp']);
+    const pages = run(['api', `repos/${repository}/releases?per_page=50`, '--paginate', '--slurp']);
     return (Array.isArray(pages) ? pages : []).flat();
   },
-  listAssets = (releaseId) => run(['api', `repos/${repository}/releases/${releaseId}/assets?per_page=100`, '--paginate', '--slurp']),
+  listAssets = (releaseId) => run(['api', `repos/${repository}/releases/${releaseId}/assets?per_page=50`, '--paginate', '--slurp']),
   // 草稿上的 target_commitish 通常是分支名（tauri-action 建草稿时就是这样）：
   // 不能因为「不是 SHA」就跳过校验，而要先 resolve 成 SHA 再比对。
   resolveRef = (ref) => run(['api', `repos/${repository}/commits/${encodeURIComponent(ref)}`]),

@@ -69,7 +69,7 @@ jobs:
             [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
           fi
           if [ -z "$TAG" ]; then
-            TAG=$(gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" \
+            TAG=$(gh api --paginate "repos/${{ github.repository }}/releases?per_page=50" \
               --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
               | awk '/^desktop-v[0-9]+\.[0-9]+\.[0-9]+$/' | sort -V | tail -1)
           fi
@@ -172,7 +172,7 @@ jobs:
           #    让 run 变红等人看 —— 而不是安静地什么都不做。
           newest=''
           for attempt in 1 2 3; do
-            newest=$(gh api --paginate "repos/${{ github.repository }}/releases?per_page=100" \
+            newest=$(gh api --paginate "repos/${{ github.repository }}/releases?per_page=50" \
               --jq '.[] | select(.draft == false and .prerelease == false) | .tag_name' \
               | awk '/^desktop-v[0-9]+\.[0-9]+\.[0-9]+$/' | sort -V | tail -1)
             [ -n "$newest" ] && break
@@ -201,7 +201,7 @@ jobs:
           # 🔴 不用 --paginate：它会把 jq 的结果**每页各输出一行**，多页时
           #    `already` 就成了多行文本，`[ "$already" -gt 0 ]` 直接报语法错。
           #    一页 100 条足够覆盖最近 50 多个版本。
-          already=$(gh api "repos/${{ github.repository }}/actions/workflows/ios-build.yml/runs?per_page=100&event=workflow_dispatch" \
+          already=$(gh api "repos/${{ github.repository }}/actions/workflows/ios-build.yml/runs?per_page=50&event=workflow_dispatch" \
             --jq "[.workflow_runs[] | select(.head_sha==\"$sha\")] | length")
           if [ "${already:-0}" -gt 0 ]; then
             echo "an ios-build for $sha was already dispatched — not dispatching a second one"
