@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint, modelNotOnMachineNote } from './node-model-change';
+import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint, modelNotOnMachineNote, filterModels } from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
 let passed = 0, total = 0;
@@ -74,5 +74,15 @@ check('a model the machine does not report gets a warning', (modelNotOnMachineNo
 check('a model the machine reports gets no warning', modelNotOnMachineNote('grok-4.6', ['grok-4.6', 'grok-4.5']) === null);
 check('no catalog or no model → no warning', modelNotOnMachineNote('grok-4.7', []) === null && modelNotOnMachineNote(null, ['a/b']) === null && modelNotOnMachineNote('   ', ['a/b']) === null);
 check('section shows the not-on-machine warning', section.includes('modelNotOnMachineNote('));
+// 模型筛选(admin 2026-10-31:几十个模型一屏放不下,要能敲几个字找)
+const catalogBig = ['opencode/go-a', 'opencode/go-b', 'anthropic/claude-x', 'openai/gpt-y'];
+check('空查询返回全部模型', JSON.stringify(filterModels(catalogBig, '')) === JSON.stringify(catalogBig));
+check('只有空格也当空查询', filterModels(catalogBig, '   ').length === 4);
+check('按模型名子串筛选,大小写不敏感', JSON.stringify(filterModels(catalogBig, 'CLAUDE')) === JSON.stringify(['anthropic/claude-x']));
+check('按 provider 名也能筛选', JSON.stringify(filterModels(catalogBig, 'opencode/')) === JSON.stringify(['opencode/go-a', 'opencode/go-b']));
+check('没有匹配时返回空数组(界面给提示)', filterModels(catalogBig, 'zzz').length === 0);
+check('筛选结果保持原顺序', JSON.stringify(filterModels(catalogBig, 'o')) === JSON.stringify(['opencode/go-a', 'opencode/go-b', 'anthropic/claude-x', 'openai/gpt-y']));
+check('section 用 filterModels 渲染而不是直接摊开 chips', section.includes('filterModels(chips, filter)'));
+check('section 有清除按钮与空结果提示', section.includes('node-model-filter-clear') && section.includes('node-model-filter-empty'));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

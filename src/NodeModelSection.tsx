@@ -14,6 +14,7 @@ import {
   afterPoll,
   afterSubmit,
   catalogHint,
+  filterModels,
   modelNotOnMachineNote,
   groupModelsByProvider,
   modelChips,
@@ -164,6 +165,10 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
   const chips = modelChips(suggestions, currentModel);
+  // 目录大的时候(OpenCodeV2 常有几十个模型)一屏放不下,加一个筛选框;列表短就不出现,免得喧宾夺主。
+  const [filter, setFilter] = useState('');
+  const shownChips = filterModels(chips, filter);
+  const showFilter = chips.length >= 8;
   const hint = v2 ? v2Note : catalogHint(node.runtime);
   // 只在 V2 目录**读到了**的时候才谈「不在列表里」:目录为空/读不到 ⇒ 不知道,不乱报。
   const notOnMachine = v2 && (v2Models?.length ?? 0) > 0 ? modelNotOnMachineNote(currentModel, v2Models ?? []) : null;
@@ -218,8 +223,29 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
 
             {chips.length > 0 ? (
               <View style={{ gap: spacing.sm }}>
-                <Text style={{ color: colors.textMuted, fontSize: 12 }}>建议</Text>
-                {groupModelsByProvider(chips).map(g => (
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>建议</Text>
+                  {showFilter ? (
+                    <TextInput
+                      value={filter}
+                      onChangeText={setFilter}
+                      editable={!busy}
+                      placeholder="筛选（provider 或模型名）"
+                      placeholderTextColor={colors.textMuted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      testID="node-model-filter"
+                      style={{ flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 30, color: colors.text, fontSize: 12 }}
+                    />
+                  ) : null}
+                  {showFilter && filter.trim() ? (
+                    <Text style={{ color: colors.accent, fontSize: 12 }} onPress={() => setFilter('')} testID="node-model-filter-clear">清除</Text>
+                  ) : null}
+                </View>
+                {showFilter && shownChips.length === 0 ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="node-model-filter-empty">没有匹配「{filter.trim()}」的模型;清掉筛选,或在下面直接手输模型 id。</Text>
+                ) : null}
+                {groupModelsByProvider(shownChips).map(g => (
                   <View key={g.provider} style={{ gap: 4 }} testID={`node-model-provider-${g.provider}`}>
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{g.provider}</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>

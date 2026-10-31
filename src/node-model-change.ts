@@ -129,6 +129,17 @@ export function catalogHint(runtime: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * 模型 chip 的筛选（admin 2026-10-31:OpenCodeV2 目录可能几十个模型,按 Provider 分组后
+ * 一屏放不下,得能直接敲几个字找）。大小写不敏感的子串匹配,空白查询返回全部;
+ * provider 名和模型名都能命中,因为整条 id 就是 `provider/model`。
+ */
+export function filterModels(models: readonly string[], query: string | null | undefined): string[] {
+  const q = (query ?? '').trim().toLowerCase();
+  if (!q) return [...models];
+  return models.filter((m) => (m ?? '').toLowerCase().includes(q));
+}
+
 export function phaseIsBusy(phase: ModelChangePhase): boolean {
   return phase.kind === 'submitting' || phase.kind === 'restarting';
 }
