@@ -17,7 +17,7 @@ concurrency:
 
 jobs:
   sign-notarize-release:
-    runs-on: macos-14
+    runs-on: macos-15
     environment: macos-signing
     steps:
       - name: Check out exact commit
