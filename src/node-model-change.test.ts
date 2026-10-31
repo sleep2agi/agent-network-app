@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint, modelNotOnMachineNote, filterModels } from './node-model-change';
+import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary } from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
 let passed = 0, total = 0;
@@ -84,5 +84,10 @@ check('没有匹配时返回空数组(界面给提示)', filterModels(catalogBig
 check('筛选结果保持原顺序', JSON.stringify(filterModels(catalogBig, 'o')) === JSON.stringify(['opencode/go-a', 'opencode/go-b', 'anthropic/claude-x', 'openai/gpt-y']));
 check('section 用 filterModels 渲染而不是直接摊开 chips', section.includes('filterModels(chips, filter)'));
 check('section 有清除按钮与空结果提示', section.includes('node-model-filter-clear') && section.includes('node-model-filter-empty'));
+// 分组计数与总览(2026-10-31:开了筛选之后「有几个」看不出来)
+check('分组标题带数量', groupCountLabel({ provider: 'opencode', models: ['opencode/a', 'opencode/b'] }) === 'opencode · 2');
+check('总览给出模型数与 Provider 数', providerGroupSummary([{ provider: 'a', models: ['a/1'] }, { provider: 'b', models: ['b/1', 'b/2'] }]) === '共 3 个模型 · 2 个 Provider');
+check('没有模型时不出总览', providerGroupSummary([]) === null);
+check('section 用 groupCountLabel 与总览渲染', section.includes('groupCountLabel(g)') && section.includes('node-model-group-summary'));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

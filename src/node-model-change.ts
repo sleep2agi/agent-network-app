@@ -162,5 +162,20 @@ export function groupModelsByProvider(models: readonly string[]): { provider: st
     .sort((a, b) => (a.provider === '其他' ? 1 : b.provider === '其他' ? -1 : a.provider.localeCompare(b.provider)));
 }
 
+/**
+ * 分组标题的计数后缀与一行总览（admin 2026-10-31:按 Provider 分组后,
+ * 「这个 provider 到底给了几个模型」和「一共多少」光看 chip 数不出来,尤其开了筛选之后)。
+ * 分组标题用 `provider · N`;总览 `共 N 个模型 · M 个 Provider`,空列表不出总览。
+ */
+export function groupCountLabel(group: { provider: string; models: readonly string[] }): string {
+  return `${group.provider} · ${group.models.length}`;
+}
+
+export function providerGroupSummary(groups: readonly { provider: string; models: readonly string[] }[]): string | null {
+  if (groups.length === 0) return null;
+  const models = groups.reduce((n, g) => n + g.models.length, 0);
+  return `共 ${models} 个模型 · ${groups.length} 个 Provider`;
+}
+
 /** 重启级变更(flags 等)单独一个开关:必须有能在 sentinel-75 之后把它拉起来的 supervisor。 */
 export const canEditRestartTier = (view: NodeConfigView | null | undefined): boolean => !!view?.config_update_capable;
