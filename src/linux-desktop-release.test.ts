@@ -39,7 +39,7 @@ check('platform selection survives a Windows CRLF checkout',
   JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
 check('default release matrix contains only the exact macOS and Windows bundles',
   JSON.stringify(primaryOnly) === JSON.stringify([
-    { platform: 'macos-14', args: '--bundles app,dmg' },
+    { platform: 'macos-15', args: '--bundles app,dmg' },
     { platform: 'windows-latest', args: '--bundles nsis,msi' },
   ]));
 check('Linux selection defaults off and is passed to the draft verifier',

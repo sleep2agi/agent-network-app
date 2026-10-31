@@ -4,7 +4,7 @@
 # Retry only the macOS DMG step after the .app is already notarized and stapled.
 #
 # tauri-bundler 2.11.2 runs bundle_dmg.sh (create-dmg 1.2.1 / hdiutil) after
-# notarization. On GitHub macos-14 that script often dies in a few seconds
+# notarization. On GitHub macos-15 that script often dies in a few seconds
 # with "failed to run bundle_dmg.sh" and leaves diskimages-helper behind.
 # Without --verbose, tauri drops the script's stderr. Running `tauri build`
 # again deletes the stapled .app and notarizes a second time. This wrapper
