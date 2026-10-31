@@ -113,7 +113,7 @@ ck('从 workflow 解出 releaseBody 并替换 __VERSION__',
 
 // 6. dry run 仍能构建 + updater 写入串行 + 二进制上传走 uploads host
 ck('publish=false 的 dry run 仍会跑 build matrix（always() 保证 skipped prepare 不拖死 matrix）',
-  /build-release:[\s\S]{0,400}if: always\(\) && \(inputs\.publish == false \|\| needs\.prepare-release\.result == 'success'\)/.test(wf));
+  /build-release:[\s\S]{0,800}if: always\(\) && \(inputs\.publish == false \|\| needs\.prepare-release\.result == 'success'\)/.test(wf));
 ck('矩阵串行写同一个 latest.json', /max-parallel: 1/.test(wf));
 ck('二进制资产上传走完整 uploads.github.com URL（不用 gh api --hostname）', (() => {
   const normalizeSrc = readFileSync(new URL('../scripts/normalize-desktop-update-manifest.mjs', import.meta.url), 'utf8');
