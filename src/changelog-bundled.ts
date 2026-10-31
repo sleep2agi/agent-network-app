@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.381:",
+  "- 新增：模型列表可以**筛选**了 —— 输入几个字（provider 或模型名，不分大小写）就只留匹配的，点「清除」还原。",
+  "  模型多的机器（OpenCodeV2 常有几十个）不用再翻半天。",
+  "- 其他：发布流水线修复（GitHub releases 列表 per_page=100 返回空数组）。",
+  "",
   "What's new in 0.2.380:",
   "- 优化：「复制节点诊断」现在也带上客户端版本与平台（如 client=0.2.380/ios），排查时能直接排除「旧版本」。",
   "- 其他：发布流水线修复（macOS 构建机镜像、镜像同步的 iOS 派发）。",
