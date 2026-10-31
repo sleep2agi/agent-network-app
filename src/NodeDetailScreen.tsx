@@ -52,6 +52,7 @@ import NodeControlCard from './NodeControlCard';
 import NodeSessionControl from './NodeSessionControl';
 import { sessionControlTarget } from './node-session-control';
 import { nodeControlView } from './node-control-access';
+import { APP_VERSION } from './version';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-backend-pending';
@@ -540,7 +541,9 @@ export default function NodeDetailScreen({
           {/* 节点级诊断:反馈「这个节点不对劲」时,贴这一行就够(别名/节点 id/状态),不含任何凭据。 */}
           <Pressable accessibilityRole="button" accessibilityLabel="复制节点诊断" hitSlop={8} testID="node-detail-copy-diagnostics"
             onPress={() => {
-              const line = [s.alias, node ? `node_id=${node.node_id}` : null, `status=${s.status}`, node?.runtime ? `runtime=${node.runtime}` : null]
+              // 带上客户端版本与平台:同一个节点用不同版本/系统看到的表现可能不同,
+              // 有了这两个值就能直接排除「是不是旧版本客户端」这一类问题。
+              const line = [s.alias, node ? `node_id=${node.node_id}` : null, `status=${s.status}`, node?.runtime ? `runtime=${node.runtime}` : null, `client=${APP_VERSION}/${Platform.OS}`]
                 .filter(Boolean).join(' · ');
               void Clipboard.setStringAsync(line).catch(() => undefined);
             }}
