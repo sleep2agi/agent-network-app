@@ -262,7 +262,7 @@ async function prepare(args) {
   let releases = [];
   if (!assumeNewest) {
     for (let attempt = 0; attempt < 5; attempt += 1) {
-      releases = await githubApi(repository, 'releases?per_page=100');
+      releases = await githubApi(repository, 'releases?per_page=50');
       if (Array.isArray(releases) && releases.length > 0) break;
       console.log(`releases listing came back empty (attempt ${attempt + 1}) — retrying`);
       await sleepMs(10_000);
