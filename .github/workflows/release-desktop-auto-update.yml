@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.378:
+            - 修复：iOS 上点外部链接前先向系统确认能否打开（`canOpenURL`），把「点了直接崩」降级为「打不开/无反应」。
+
             What's new in 0.2.377:
             - 新增：节点「模型」区的「当前：provider / 模型」一行可点击复制，方便贴到别处。
 
