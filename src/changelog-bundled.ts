@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.396:",
+  "- 优化：「复制节点诊断」再带上当前模型（model=…），连同 node_id / runtime / agent 版本，一行就能把节点环境说清。",
+  "",
   "What's new in 0.2.395:",
   "- 优化：左栏搜索框提示改成「搜索 N 个 agent / node_id」—— 上一版加的 node_id 搜索，得说出来才有人知道。",
   "",
