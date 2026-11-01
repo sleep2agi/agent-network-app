@@ -9,6 +9,20 @@ import { copyLastFatal, useLastFatalReport } from './use-last-fatal';
 import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
 import { openExternal } from './open-external';
+
+/** 关于页版本行右边的平台短名:用户截图报问题时,一眼能看出装的是哪个端
+ *  (微信里只发「v0.2.391」看不出是 iOS 还是安卓)。未知平台原样返回,不猜。 */
+export function platformShortLabel(os: string): string {
+  switch (os) {
+    case 'ios': return 'iOS';
+    case 'android': return 'Android';
+    case 'macos': return 'macOS';
+    case 'windows': return 'Windows';
+    case 'linux': return 'Linux';
+    case 'web': return 'Web';
+    default: return os;
+  }
+}
 import { localizedThemeSummary } from './i18n-settings-presentation';
 import { Children, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -1206,7 +1220,7 @@ export default function SettingsScreen({
               {heading('about')}
               <BrandMark size={36} style={{ marginTop: 8, marginBottom: 12 }} />
               <SettingsGroup>
-                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
+                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION} · ${platformShortLabel(Platform.OS)}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
                 {/* 反馈问题时经常要「你什么版本、什么平台」:一键复制,不用手打。 */}
                 {show('about', 'version') ? (
                   <SettingsRow label={tr('settings.copy.286')} onPress={() => {

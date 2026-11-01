@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.391:
+            - 优化：设置 → 关于的版本行现在显示平台（如「v0.2.391 · iOS」），截图报问题时一眼看得出装的是哪个端。
+
             What's new in 0.2.390:
             - 优化：「复制节点诊断」多带一项 agent-node 版本（如 agent=2.5.0-preview.164），排查「模型清单没上报」这类问题时不用再单独问版本。
 
