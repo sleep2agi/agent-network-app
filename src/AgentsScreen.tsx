@@ -964,7 +964,7 @@ export default function AgentsScreen({
                 <Ionicons name="search" size={16} color={colors.textMuted} />
                 <TextInput
                   style={[rowStyles.searchInput, { color: colors.text }]}
-                  placeholder={`搜索 ${sessions.length} 个 agent`}
+                  placeholder={`搜索 ${sessions.length} 个 agent / node_id`}
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="none"
                   autoCorrect={false}
