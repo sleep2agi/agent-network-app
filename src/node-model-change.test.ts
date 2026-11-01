@@ -99,7 +99,7 @@ check('opencode-cli 的内置候选不是空列表', suggestedModels('opencode-c
 check('退回内置候选时给「重新读取模型列表」入口', section.includes('node-model-catalog-retry') && section.includes('重新读取模型列表'));
 check('重新读取靠计数触发 effect', section.includes('catalogAttempt') && section.includes('catalogAttempt]'));
 // 2026-11-01:本机没上报时,用同 runtime 兄弟节点的候选,而不是只有内置两个
-check('复制诊断带上 agent-node 版本（.160 门槛这类判断要用）', (() => { const d = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8'); return d.includes('agent=${node.version}'); })());
+check('复制诊断带上 agent-node 版本（.160 门槛这类判断要用）', (() => { const d = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8'); return d.includes('agent=${s.version}'); })());
 check('section 用 peerCatalogSources 兜底并记住台数', section.includes('peerCatalogSources(') && section.includes('setPeerNodes('));
 check('提示里写明有几台节点报了候选', section.includes('其他 ${peers.nodes} 台节点报过的模型'));
 check('兄弟候选要提示「本机未必装了同一个 Provider」', section.includes('本机未必装了同一个 Provider'));
