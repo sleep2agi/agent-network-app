@@ -249,8 +249,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
               改模型不经过任何大模型:Hub 下发后节点自己写配置并重启一次(约 5–45 秒),期间它不接任务。
             </Text>
+            {/* 点一下整行复制:把这句原样发给后端/别人,对方不用再问「哪个节点、什么版本」。 */}
             {v2 ? (
-              {/* 点一下整行复制:把这句原样发给后端/别人,对方不用再问「哪个节点、什么版本」。 */}
               <Text testID="node-model-catalog-status" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}
                 onPress={() => {
                   const line = `${catalogStatusLine(v2Catalog.length, runtimeVersion)} node_id=${node.node_id}${node.runtime ? ` runtime=${node.runtime}` : ''}`;
