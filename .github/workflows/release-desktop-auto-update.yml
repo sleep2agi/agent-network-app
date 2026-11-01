@@ -538,7 +538,9 @@ jobs:
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
             What's new in 0.2.382:
-            - 优化：模型列表每个 Provider 后面显示**有几个模型**，下面还有一行「共 N 个模型 · M 个 Provider」；开筛选后一眼能看出还剩多少。
+            - 新增：模型列表每个 Provider 后面显示**有几个模型**，下面还有一行「共 N 个模型 · M 个 Provider」；开筛选后一眼能看出还剩多少。
+            - 修复：机器还没上报模型清单时，「建议」不再只剩「当前」一个 —— 会退回内置候选（并注明可能滞后），切换模型有得选。
+            - 修复：点建议里的模型后，输入框会显示所选模型（以前框里是空的，看着像没反应）。
 
             What's new in 0.2.381:
             - 新增：模型列表可以**筛选**了 —— 输入几个字（provider 或模型名，不分大小写）就只留匹配的，点「清除」还原。
