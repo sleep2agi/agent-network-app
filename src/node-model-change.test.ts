@@ -102,5 +102,8 @@ check('重新读取靠计数触发 effect', section.includes('catalogAttempt') &
 check('section 用 peerCatalogModels 兜底', section.includes('peerCatalogModels('));
 check('退回兄弟候选时提示来源', section.includes('同 runtime 其他节点'));
 check('有兄弟候选时不再显示内置候选说明', section.includes('usingPeerFallback'));
+// RN 的 Text 不解析 markdown:提示文案里带 ** 会原样显示成星号(0.384 手滑过一次)
+const uiStrings = section.split('\n').filter((l) => l.includes("setV2Note(\`") || l.includes('>{hint}<'));
+check('面向用户的提示里没有 markdown 星号', !uiStrings.some((l) => l.includes('**')));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

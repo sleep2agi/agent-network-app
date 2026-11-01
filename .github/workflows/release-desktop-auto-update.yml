@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.385:
+            - 修复：模型区那句「同 runtime 其他节点报过的模型」提示原来会带出两个星号（0.384 的笔误），现在正常显示。
+
             What's new in 0.2.384:
             - 优化：这台机器还没上报模型清单时，「建议」不再只有「当前」一个 —— 会列出**同 runtime 其他节点**报过的模型，点一下就能选。
 
