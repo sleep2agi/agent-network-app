@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.387:
+            - 优化：模型候选来自兄弟节点时，提示会写明「其他 N 台节点报过的模型」，一眼知道这份清单有多可信。
+
             What's new in 0.2.386:
             - 新增：设置 → 关于里多了「隐私政策」和「官网与支持」两个入口（iOS 也用系统浏览器打开，不内嵌网页）。
 
