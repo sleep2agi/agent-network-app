@@ -16,6 +16,8 @@ import {
   catalogHint,
   filterModels,
   modelNotOnMachineNote,
+  groupCountLabel,
+  providerGroupSummary,
   groupModelsByProvider,
   modelChips,
   modelControlAvailability,
@@ -245,9 +247,14 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                 {showFilter && shownChips.length === 0 ? (
                   <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="node-model-filter-empty">没有匹配「{filter.trim()}」的模型;清掉筛选,或在下面直接手输模型 id。</Text>
                 ) : null}
+                {providerGroupSummary(groupModelsByProvider(shownChips)) ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="node-model-group-summary">
+                    {providerGroupSummary(groupModelsByProvider(shownChips))}
+                  </Text>
+                ) : null}
                 {groupModelsByProvider(shownChips).map(g => (
                   <View key={g.provider} style={{ gap: 4 }} testID={`node-model-provider-${g.provider}`}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{g.provider}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{groupCountLabel(g)}</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
                 {g.models.map(m => {
                   const active = !custom.trim() && (picked ? picked === m : m === currentModel);
