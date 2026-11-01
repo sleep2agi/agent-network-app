@@ -58,6 +58,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   const [v2Note, setV2Note] = useState('');
+  // 「重新读取模型列表」:读失败/读到空之后,人还能自己再敲一次,不用退出重进页面。
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
 
   const reload = useCallback(async () => {
     try {
@@ -116,7 +118,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       if (live) void fallback('OpenCode 服务器还没返回模型列表。');
     })();
     return () => { live = false; };
-  }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status]);
+  }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status, catalogAttempt]);
 
   const requested = phase.kind === 'restarting' ? phase.requested : null;
   const baseRevision = phase.kind === 'restarting' ? phase.baseRevision : null;
@@ -215,6 +217,12 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
               改模型不经过任何大模型:Hub 下发后节点自己写配置并重启一次(约 5–45 秒),期间它不接任务。
             </Text>
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
+            {usingBuiltinFallback ? (
+              <Text testID="node-model-catalog-retry" style={{ color: colors.accent, fontSize: 12 }}
+                onPress={() => setCatalogAttempt((n) => n + 1)}>
+                重新读取模型列表
+              </Text>
+            ) : null}
             {notOnMachine ? (
               <Text testID="model-not-on-machine" style={{ color: colors.blocked, fontSize: 12, lineHeight: 18 }}>{notOnMachine}</Text>
             ) : null}

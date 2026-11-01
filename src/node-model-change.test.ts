@@ -95,5 +95,8 @@ check('退回内置候选时给出说明', section.includes('这台机器还没�
 check('点选 chip 后输入框显示所选模型', section.includes('value={custom.trim() ? custom : picked}'));
 check('手输会清掉 chip 选中态', section.includes('setCustom(text); if (picked) setPicked(\'\')'));
 check('opencode-cli 的内置候选不是空列表', suggestedModels('opencode-cli').length > 0);
+// 读不到的目录要能手动再敲一次(2026-11-01:admin 那台机器目录一直没上报,只能退出重进)
+check('退回内置候选时给「重新读取模型列表」入口', section.includes('node-model-catalog-retry') && section.includes('重新读取模型列表'));
+check('重新读取靠计数触发 effect', section.includes('catalogAttempt') && section.includes('catalogAttempt]'));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
