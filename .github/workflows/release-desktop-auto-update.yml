@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.394:
+            - 优化：「模型清单：本机已上报 / 未上报」那一行可以点一下复制（自动带上 node_id 与 runtime），反馈问题时贴一句就够。
+
             What's new in 0.2.393:
             - 新增：左栏搜索现在也认 node_id —— 「复制节点诊断」给的那串 `n_xxx` 直接粘进搜索框就能定位到节点，不用再靠别名回忆。
 
