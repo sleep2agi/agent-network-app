@@ -8,6 +8,7 @@ import { fatalSummary } from './fatal-report';
 import { copyLastFatal, useLastFatalReport } from './use-last-fatal';
 import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
+import { openExternal } from './open-external';
 import { localizedThemeSummary } from './i18n-settings-presentation';
 import { Children, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -1224,6 +1225,14 @@ export default function SettingsScreen({
                   <SettingsRow label={tr('settings.copy.285')} onPress={() => {
                     void Clipboard.setStringAsync(`v${APP_VERSION} · ${Platform.OS}`).catch(() => undefined);
                   }} testID="settings-copy-version" />
+                ) : null}
+                {/* 关于页放两个官方链接:App Store 审核会找「隐私政策」入口,用户找客服也得有路可走。
+                    用 openExternal(iOS 上先 canOpenURL),不走内嵌 webview。 */}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.292')} onPress={() => { void openExternal('https://www.anet.sh/privacy'); }} testID="settings-privacy-link" />
+                ) : null}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.293')} onPress={() => { void openExternal('https://www.anet.sh'); }} testID="settings-support-link" />
                 ) : null}
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上

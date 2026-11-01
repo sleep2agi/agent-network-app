@@ -297,6 +297,9 @@ const copy = [
   ['更新渠道：', 'Update channel: '],
   ['更新状态：', 'Update state: '],
   ['服务器：', 'Server: '],
+  // 末尾追加(编号按位置,不能插中间):关于页的两个外部链接(App Store 审核会用).
+  ['隐私政策', 'Privacy policy'],
+  ['官网与支持', 'Website & support'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);
