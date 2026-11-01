@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary } from './node-model-change';
+import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary } from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
 let passed = 0, total = 0;
@@ -107,5 +107,7 @@ check('有兄弟候选时不再显示内置候选说明', section.includes('usin
 // RN 的 Text 不解析 markdown:提示文案里带 ** 会原样显示成星号(0.384 手滑过一次)
 const uiStrings = section.split('\n').filter((l) => l.includes("setV2Note(\`") || l.includes('>{hint}<'));
 check('面向用户的提示里没有 markdown 星号', !uiStrings.some((l) => l.includes('**')));
+// 「已检查 N 次」用户读不出意义 → 改成等了几秒 / 最长几秒
+check('重启中的提示是秒数而不是轮询计数', (() => { const t = phaseText({ kind: 'restarting', requested: 'a/b', baseRevision: 1, polls: 5 }); const waited = Math.round(5 * RESTART_POLL_MS / 1000); const limit = Math.round(RESTART_MAX_POLLS * RESTART_POLL_MS / 1000); return t.includes(`已等 ${waited}s`) && t.includes(`最长 ${limit}s`) && !t.includes('次)'); })());
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

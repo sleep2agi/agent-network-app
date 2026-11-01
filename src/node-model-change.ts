@@ -86,7 +86,12 @@ export function phaseText(phase: ModelChangePhase): string {
   switch (phase.kind) {
     case 'idle': return '';
     case 'submitting': return `正在提交模型 ${phase.requested}…`;
-    case 'restarting': return `已下发,节点正在以新模型重启…(已检查 ${phase.polls} 次)`;
+    // 「已检查 N 次」是内部轮询计数,用户读不出意义;换成人等着的那件事:已经等了几秒、最长等几秒。
+    case 'restarting': {
+      const waited = Math.round(phase.polls * RESTART_POLL_MS / 1000);
+      const limit = Math.round(RESTART_MAX_POLLS * RESTART_POLL_MS / 1000);
+      return `已下发,节点正在以新模型重启…已等 ${waited}s / 最长 ${limit}s`;
+    }
     case 'applied': return `已切换到 ${phase.model}`;
     case 'timeout': return `已下发 ${phase.requested},但 ${RESTART_MAX_POLLS * RESTART_POLL_MS / 1000}s 内节点没有以新模型回来。请到它所在机器看日志(anet node logs)。`;
     case 'conflict': return '配置在别处被改过了,已重新加载,请再选一次。';
