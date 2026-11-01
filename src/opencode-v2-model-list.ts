@@ -85,6 +85,36 @@ export function peerCatalogModels(
   return out;
 }
 
+/**
+ * 同 `peerCatalogModels`，但把「有多少台兄弟节点真的报了清单」也带出来 ——
+ * 界面上写「其他 3 台节点报过的模型」比光给一串 id 更可信。
+ */
+export function peerCatalogSources(
+  nodes: readonly { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null | undefined,
+  options: { runtime: string | null | undefined; excludeNodeId?: string; limit?: number },
+): { models: string[]; nodes: number } {
+  const runtime = options.runtime;
+  if (!runtime) return { models: [], nodes: 0 };
+  const limit = options.limit ?? 60;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let contributing = 0;
+  for (const n of nodes ?? []) {
+    if (!n || n.runtime !== runtime) continue;
+    if (options.excludeNodeId && n.node_id === options.excludeNodeId) continue;
+    const reported = reportedCatalogModels(n.opencode_catalog);
+    if (reported.length === 0) continue;
+    contributing++;
+    for (const id of reported) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      if (out.length >= limit) return { models: out, nodes: contributing };
+    }
+  }
+  return { models: out, nodes: contributing };
+}
+
 export function catalogErrorText(error: string | undefined): string {
   switch (error) {
     case 'not_opencode_v2': return '这个节点不是 OpenCode V2，不能从它的服务器拉模型列表。';

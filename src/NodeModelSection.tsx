@@ -29,7 +29,7 @@ import {
   type ModelChangePhase,
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { colors, spacing, radius } from './theme';
 
@@ -43,15 +43,15 @@ import { colors, spacing, radius } from './theme';
  * 这台机器没上报清单时，退而用**同 runtime 其他节点**报过的模型当候选
  * （2026-11-01 admin 截图那台 V2 节点：目录一直没上报，「建议」只剩「当前」一项）。
  */
-async function peerModelList(cfg: HubConfig, node: HubNode): Promise<string[]> {
+async function peerModelList(cfg: HubConfig, node: HubNode): Promise<{ models: string[]; nodes: number }> {
   try {
     const { nodes } = await fetchHubNodes(cfg);
-    return peerCatalogModels(nodes as { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null, {
+    return peerCatalogSources(nodes as { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null, {
       runtime: node.runtime,
       excludeNodeId: node.node_id,
     });
   } catch {
-    return [];
+    return { models: [], nodes: 0 };
   }
 }
 
@@ -75,6 +75,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // 同 runtime 兄弟节点报过的模型(仅在本机没上报时使用)
   const [peerModels, setPeerModels] = useState<string[]>([]);
+  // 贡献候选的兄弟节点台数(写进提示里:数字比一串 id 更可信)
+  const [peerNodes, setPeerNodes] = useState(0);
   const [v2Note, setV2Note] = useState('');
   // 「重新读取模型列表」:读失败/读到空之后,人还能自己再敲一次,不用退出重进页面。
   const [catalogAttempt, setCatalogAttempt] = useState(0);
@@ -108,9 +110,10 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       const fresh = reportsCatalogSince(runtimeVersion);
       const peers = await peerModelList(cfg, node);
       if (!live) return;
-      setPeerModels(peers);
-      if (peers.length > 0) {
-        setV2Note(`${reason}这台机器还没上报模型清单；下面是同 runtime 其他节点报过的模型，点选或用它们开头手输。`);
+      setPeerModels(peers.models);
+      setPeerNodes(peers.nodes);
+      if (peers.models.length > 0) {
+        setV2Note(`${reason}这台机器还没上报模型清单；下面是同 runtime 其他 ${peers.nodes} 台节点报过的模型，点选或用它们开头手输。`);
         return;
       }
       setV2Note(fresh === false

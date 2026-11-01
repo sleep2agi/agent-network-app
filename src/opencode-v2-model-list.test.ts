@@ -1,4 +1,4 @@
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else { console.error('❌', n); } };
@@ -14,6 +14,12 @@ ck('不排除自己时也能拿到自己的', peerCatalogModels(peers, { runtime
 ck('换了 runtime 就换一批', JSON.stringify(peerCatalogModels(peers, { runtime: 'codex-cli' })) === JSON.stringify(['openai/gpt']));
 ck('没有 runtime / 没有节点 ⇒ 空', peerCatalogModels(peers, { runtime: null }).length === 0 && peerCatalogModels(null, { runtime: 'opencode-cli' }).length === 0);
 ck('limit 生效', peerCatalogModels(peers, { runtime: 'opencode-cli', limit: 2 }).length === 2);
+
+// 带上「有几台节点贡献了候选」
+ck('peerCatalogSources 记下贡献节点数', (() => { const r = peerCatalogSources(peers, { runtime: 'opencode-cli', excludeNodeId: 'a' }); return r.nodes === 1 && r.models.length === 2; })());
+ck('peerCatalogSources 跳过没报清单的节点', peerCatalogSources([{ node_id: 'z', runtime: 'opencode-cli', opencode_catalog: [] }, ...peers], { runtime: 'opencode-cli' }).nodes === 2);
+ck('peerCatalogSources 没 runtime ⇒ 零', peerCatalogSources(peers, { runtime: null }).nodes === 0);
+
 
 ck('v2 flag is a V2 node even if runtime label differs', isOpenCodeV2Node({ runtime: 'opencode-sdk', config_snapshot: { flags: { opencodeGeneration: 'v2' } } }));
 ck('explicit v1 is not', isOpenCodeV2Node({ runtime: 'opencode-cli', config_snapshot: { flags: { opencodeGeneration: 'v1' } } }) === false);
