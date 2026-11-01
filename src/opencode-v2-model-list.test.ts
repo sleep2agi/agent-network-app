@@ -1,4 +1,4 @@
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, peerCatalogSources, reportedCatalogModels, catalogStatusLine, reportsCatalogSince } from './opencode-v2-model-list';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else { console.error('❌', n); } };
@@ -14,6 +14,12 @@ ck('不排除自己时也能拿到自己的', peerCatalogModels(peers, { runtime
 ck('换了 runtime 就换一批', JSON.stringify(peerCatalogModels(peers, { runtime: 'codex-cli' })) === JSON.stringify(['openai/gpt']));
 ck('没有 runtime / 没有节点 ⇒ 空', peerCatalogModels(peers, { runtime: null }).length === 0 && peerCatalogModels(null, { runtime: 'opencode-cli' }).length === 0);
 ck('limit 生效', peerCatalogModels(peers, { runtime: 'opencode-cli', limit: 2 }).length === 2);
+
+// 一行说清「报没报、为什么没报」
+ck('已上报时给出数量', catalogStatusLine(12, '2.5.0-preview.164') === '模型清单：本机已上报 12 个模型。');
+ck('版本低于门槛 → 明确说是版本问题', catalogStatusLine(0, '2.5.0-preview.159').includes('需 ≥ 2.5.0-preview.160'));
+ck('版本够但没报 → 说是「够但仍没报上来」', catalogStatusLine(0, '2.5.0-preview.164').includes('版本本身够但仍没报上来'));
+ck('版本看不懂时不猜「太旧」', catalogStatusLine(0, null).includes('版本未知'));
 
 // 带上「有几台节点贡献了候选」
 ck('peerCatalogSources 记下贡献节点数', (() => { const r = peerCatalogSources(peers, { runtime: 'opencode-cli', excludeNodeId: 'a' }); return r.nodes === 1 && r.models.length === 2; })());
