@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.388:",
+  "- 优化：模型候选来自别的节点时，提示里加一句「本机未必装了同一个 Provider，选错会拒绝运行」，避免选了跑不起来的模型。",
+  "",
   "What's new in 0.2.387:",
   "- 优化：模型候选来自兄弟节点时，提示会写明「其他 N 台节点报过的模型」，一眼知道这份清单有多可信。",
   "",

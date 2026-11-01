@@ -113,7 +113,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       setPeerModels(peers.models);
       setPeerNodes(peers.nodes);
       if (peers.models.length > 0) {
-        setV2Note(`${reason}这台机器还没上报模型清单；下面是同 runtime 其他 ${peers.nodes} 台节点报过的模型，点选或用它们开头手输。`);
+        setV2Note(`${reason}这台机器还没上报模型清单；下面是同 runtime 其他 ${peers.nodes} 台节点报过的模型，点选或用它们开头手输（别的节点的清单，本机未必装了同一个 Provider，选错会拒绝运行）。`);
         return;
       }
       setV2Note(fresh === false

@@ -101,6 +101,7 @@ check('重新读取靠计数触发 effect', section.includes('catalogAttempt') &
 // 2026-11-01:本机没上报时,用同 runtime 兄弟节点的候选,而不是只有内置两个
 check('section 用 peerCatalogSources 兜底并记住台数', section.includes('peerCatalogSources(') && section.includes('setPeerNodes('));
 check('提示里写明有几台节点报了候选', section.includes('其他 ${peers.nodes} 台节点报过的模型'));
+check('兄弟候选要提示「本机未必装了同一个 Provider」', section.includes('本机未必装了同一个 Provider'));
 check('退回兄弟候选时提示来源', section.includes('同 runtime 其他节点'));
 check('有兄弟候选时不再显示内置候选说明', section.includes('usingPeerFallback'));
 // RN 的 Text 不解析 markdown:提示文案里带 ** 会原样显示成星号(0.384 手滑过一次)
