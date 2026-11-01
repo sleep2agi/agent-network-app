@@ -25,5 +25,12 @@ check('文案键是末尾追加的两条(292/293)，没有插在中间打乱旧�
   && copy.indexOf("['官网与支持', 'Website & support']") > copy.indexOf("['隐私政策', 'Privacy policy']"));
 check('文案有中英两版', copy.includes("['隐私政策', 'Privacy policy']") && copy.includes("['官网与支持', 'Website & support']"));
 
+// 版本行要带平台短名(截图报问题时看得出是 iOS 还是安卓)
+check('版本行显示版本 + 平台', settings.includes('value={`v${APP_VERSION} · ${platformShortLabel(Platform.OS)}`}'));
+check('平台短名映射齐全', (() => {
+  const src = settings;
+  return ['ios', 'android', 'macos', 'windows', 'linux', 'web'].every((k) => src.includes(`case '${k}':`));
+})());
+check('未知平台原样返回，不猜', settings.includes('default: return os;'));
 console.log(`settings about links: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
