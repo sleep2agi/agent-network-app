@@ -29,7 +29,7 @@ import {
   type ModelChangePhase,
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { colors, spacing, radius } from './theme';
 
@@ -249,6 +249,11 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
               改模型不经过任何大模型:Hub 下发后节点自己写配置并重启一次(约 5–45 秒),期间它不接任务。
             </Text>
+            {v2 ? (
+              <Text testID="node-model-catalog-status" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                {catalogStatusLine(v2Catalog.length, runtimeVersion)}
+              </Text>
+            ) : null}
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
             {usingBuiltinFallback || usingPeerFallback ? (
               <Text testID="node-model-catalog-retry" style={{ color: colors.accent, fontSize: 12 }}

@@ -115,6 +115,26 @@ export function peerCatalogSources(
   return { models: out, nodes: contributing };
 }
 
+/**
+ * 「这台机器到底报没报模型清单」的一行状态（2026-11-01 admin 反复被这个问题绊住）。
+ * 三种情况分开说，避免把「版本太旧」误读成「机器坏了」：
+ *   reported  —— 本机上报了 N 个模型
+ *   tooOld    —— agent-node 版本低于 .160,根本不会上报
+ *   missing   —— 版本够但没报上来(可能是 daemon 侧问题,需要查)
+ * 版本线看不懂时只给 missing,不猜「太旧」。
+ */
+export function catalogStatusLine(
+  reported: number,
+  version: string | null | undefined,
+  threshold = 160,
+): string {
+  const n = Math.max(0, Math.trunc(reported));
+  if (n > 0) return `模型清单：本机已上报 ${n} 个模型。`;
+  const fresh = reportsCatalogSince(version);
+  if (fresh === false) return `模型清单：本机未上报（agent-node ${version} 低于能上报的版本，需 ≥ 2.5.0-preview.${threshold}）。`;
+  return `模型清单：本机未上报（agent-node ${version ?? '版本未知'}，版本本身够但仍没报上来）。`;
+}
+
 export function catalogErrorText(error: string | undefined): string {
   switch (error) {
     case 'not_opencode_v2': return '这个节点不是 OpenCode V2，不能从它的服务器拉模型列表。';
