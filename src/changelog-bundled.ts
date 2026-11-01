@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.397:",
+  "- 优化：模型清单读不到时，20 秒后会自动再试一次（只自动试一次，不无限轮询），daemon 刚重启的那段空窗不用手动点「重新读取」。",
+  "",
   "What's new in 0.2.396:",
   "- 优化：「复制节点诊断」再带上当前模型（model=…），连同 node_id / runtime / agent 版本，一行就能把节点环境说清。",
   "",
