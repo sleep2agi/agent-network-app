@@ -29,7 +29,7 @@ import {
   type ModelChangePhase,
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { colors, spacing, radius } from './theme';
 
@@ -39,6 +39,22 @@ import { colors, spacing, radius } from './theme';
  * daemon 绑定，`read_opencode_catalog` 永远拿不到列表 → admin 只能手填。
  * 读失败/旧 Hub 一律返回 []（不编内置清单，不假装有）。
  */
+/**
+ * 这台机器没上报清单时，退而用**同 runtime 其他节点**报过的模型当候选
+ * （2026-11-01 admin 截图那台 V2 节点：目录一直没上报，「建议」只剩「当前」一项）。
+ */
+async function peerModelList(cfg: HubConfig, node: HubNode): Promise<string[]> {
+  try {
+    const { nodes } = await fetchHubNodes(cfg);
+    return peerCatalogModels(nodes as { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null, {
+      runtime: node.runtime,
+      excludeNodeId: node.node_id,
+    });
+  } catch {
+    return [];
+  }
+}
+
 async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string[]> {
   try {
     const { nodes } = await fetchHubNodes(cfg);
@@ -57,6 +73,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
+  // 同 runtime 兄弟节点报过的模型(仅在本机没上报时使用)
+  const [peerModels, setPeerModels] = useState<string[]>([]);
   const [v2Note, setV2Note] = useState('');
   // 「重新读取模型列表」:读失败/读到空之后,人还能自己再敲一次,不用退出重进页面。
   const [catalogAttempt, setCatalogAttempt] = useState(0);
@@ -88,6 +106,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       // #2293 —— 空列表时区分「版本太旧不会上报」和「真的还没上报」：
       // 前者给出可执行的升级提示（TMAI欧 / TMAI文档欧 跑的就是 .146），后者仍是“等一等/手输”。
       const fresh = reportsCatalogSince(runtimeVersion);
+      const peers = await peerModelList(cfg, node);
+      if (!live) return;
+      setPeerModels(peers);
+      if (peers.length > 0) {
+        setV2Note(`${reason}这台机器还没上报模型清单；下面是**同 runtime 其他节点**报过的模型，点选或用它们开头手输。`);
+        return;
+      }
       setV2Note(fresh === false
         ? `${reason}这台节点的 agent-node ${runtimeVersion} 不会自动上报模型清单（需 ≥ 2.5.0-preview.160，升级后 3 分钟内生效）—— 现在仍可手输 provider/model。`
         : `${reason}这台机器也还没上报过模型清单 —— 仍可手输 provider/model。`);
@@ -168,8 +193,11 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 机器上报了 V2 目录就用它;没上报(常见:刚接入/还没轮询到)就退回内置候选,
   // 否则「建议」里只剩「当前」那一个 chip,用户会以为没法切换(admin 2026-11-01 截图)。
   const v2Catalog = v2Models ?? [];
-  const suggestions = v2 && v2Catalog.length > 0 ? v2Catalog : suggestedModels(node.runtime);
-  const usingBuiltinFallback = v2 && v2Catalog.length === 0;
+  const suggestions = v2 && v2Catalog.length > 0
+    ? v2Catalog
+    : (v2 && peerModels.length > 0 ? peerModels : suggestedModels(node.runtime));
+  const usingBuiltinFallback = v2 && v2Catalog.length === 0 && peerModels.length === 0;
+  const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
   const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
   const chips = modelChips(suggestions, currentModel);
@@ -178,7 +206,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const shownChips = filterModels(chips, filter);
   const showFilter = chips.length >= 8;
   const hint = v2
-    ? (usingBuiltinFallback ? '这台机器还没上报模型清单，下面是内置候选（可能滞后于实际可用模型）。' : v2Note)
+    ? (usingPeerFallback ? v2Note
+      : usingBuiltinFallback ? '这台机器还没上报模型清单，下面是内置候选（可能滞后于实际可用模型）。'
+      : v2Note)
     : catalogHint(node.runtime);
   // 只在 V2 目录**读到了**的时候才谈「不在列表里」:目录为空/读不到 ⇒ 不知道,不乱报。
   const notOnMachine = v2 && (v2Models?.length ?? 0) > 0 ? modelNotOnMachineNote(currentModel, v2Models ?? []) : null;
@@ -217,7 +247,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
               改模型不经过任何大模型:Hub 下发后节点自己写配置并重启一次(约 5–45 秒),期间它不接任务。
             </Text>
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
-            {usingBuiltinFallback ? (
+            {usingBuiltinFallback || usingPeerFallback ? (
               <Text testID="node-model-catalog-retry" style={{ color: colors.accent, fontSize: 12 }}
                 onPress={() => setCatalogAttempt((n) => n + 1)}>
                 重新读取模型列表

@@ -56,6 +56,35 @@ export function reportedCatalogModels(
   return out;
 }
 
+/**
+ * 同 runtime 的**其他节点**报过的模型（2026-11-01 admin 那台 V2 节点一直没上报清单，
+ * 「建议」里只剩「当前」一项，等于没法切换）。这台机器没报，不代表整个网络都没有：
+ * 同 runtime 的兄弟节点报过的 `provider/model` 往往就是可用的候选。
+ *
+ * 只做聚合：丢空/超长/无 `/`、去重、保序（先到先得），排序交给界面的分组函数。
+ */
+export function peerCatalogModels(
+  nodes: readonly { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null | undefined,
+  options: { runtime: string | null | undefined; excludeNodeId?: string; limit?: number },
+): string[] {
+  const runtime = options.runtime;
+  if (!runtime) return [];
+  const limit = options.limit ?? 60;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const n of nodes ?? []) {
+    if (!n || n.runtime !== runtime) continue;
+    if (options.excludeNodeId && n.node_id === options.excludeNodeId) continue;
+    for (const id of reportedCatalogModels(n.opencode_catalog)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
 export function catalogErrorText(error: string | undefined): string {
   switch (error) {
     case 'not_opencode_v2': return '这个节点不是 OpenCode V2，不能从它的服务器拉模型列表。';

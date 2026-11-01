@@ -1,7 +1,19 @@
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else { console.error('❌', n); } };
+
+// 2026-11-01:本机没上报清单时,拿同 runtime 兄弟节点报过的模型当候选
+const peers = [
+  { node_id: 'a', runtime: 'opencode-cli', opencode_catalog: ['deepseek/deepseek-flash', 'opencode/x'] },
+  { node_id: 'b', runtime: 'opencode-cli', opencode_catalog: ['deepseek/deepseek-flash', 'anthropic/claude'] },
+  { node_id: 'c', runtime: 'codex-cli', opencode_catalog: ['openai/gpt'] },
+];
+ck('兄弟节点聚合:同 runtime、去重、保序', JSON.stringify(peerCatalogModels(peers, { runtime: 'opencode-cli', excludeNodeId: 'a' })) === JSON.stringify(['deepseek/deepseek-flash', 'anthropic/claude']));
+ck('不排除自己时也能拿到自己的', peerCatalogModels(peers, { runtime: 'opencode-cli' }).length === 3);
+ck('换了 runtime 就换一批', JSON.stringify(peerCatalogModels(peers, { runtime: 'codex-cli' })) === JSON.stringify(['openai/gpt']));
+ck('没有 runtime / 没有节点 ⇒ 空', peerCatalogModels(peers, { runtime: null }).length === 0 && peerCatalogModels(null, { runtime: 'opencode-cli' }).length === 0);
+ck('limit 生效', peerCatalogModels(peers, { runtime: 'opencode-cli', limit: 2 }).length === 2);
 
 ck('v2 flag is a V2 node even if runtime label differs', isOpenCodeV2Node({ runtime: 'opencode-sdk', config_snapshot: { flags: { opencodeGeneration: 'v2' } } }));
 ck('explicit v1 is not', isOpenCodeV2Node({ runtime: 'opencode-cli', config_snapshot: { flags: { opencodeGeneration: 'v1' } } }) === false);
