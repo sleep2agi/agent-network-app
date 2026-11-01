@@ -4,7 +4,7 @@
 //
 // 样式约定同 NodeDetailScreen:`styles` 用 live binding、不解构;卡片
 // colors.card / 12 圆角 / spacing.lg;按钮沿用 retryBtn。
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
@@ -80,6 +80,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [v2Note, setV2Note] = useState('');
   // 「重新读取模型列表」:读失败/读到空之后,人还能自己再敲一次,不用退出重进页面。
   const [catalogAttempt, setCatalogAttempt] = useState(0);
+  // 自动再试一次(2026-11-02):daemon 刚重启时,第一轮 15 秒常常抓不到清单,
+  // 用户得手动点「重新读取」。这里在本机版本够、却仍读不到时,20 秒后自动再试一次(仅一次)。
+  const autoRetried = useRef(false);
 
   const reload = useCallback(async () => {
     try {
@@ -98,6 +101,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   useEffect(() => {
     if (!v2) return;
     let live = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const daemonId = nodeProviderDaemon(node);
     // 中继链失败/走不通时的兜底：改读这台机器自己上报的清单（#2293）。
     const fallback = async (reason: string) => {
@@ -118,7 +122,12 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       }
       setV2Note(fresh === false
         ? `${reason}这台节点的 agent-node ${runtimeVersion} 不会自动上报模型清单（需 ≥ 2.5.0-preview.160，升级后 3 分钟内生效）—— 现在仍可手输 provider/model。`
-        : `${reason}这台机器也还没上报过模型清单 —— 仍可手输 provider/model。`);
+        : `${reason}这台机器也还没上报过模型清单 —— 仍可手输 provider/model；20 秒后会自动再试一次。`);
+      // 只在「版本够、却仍读不到」且本轮还没自动试过时再试一次,避免无休止轮询。
+      if (fresh !== false && !autoRetried.current) {
+        autoRetried.current = true;
+        retryTimer = setTimeout(() => { if (live) setCatalogAttempt((n) => n + 1); }, 20000);
+      }
     };
     if (!daemonId) {
       setV2Note('这个节点没有所属 daemon，正在读它自己上报的模型清单…');
@@ -145,7 +154,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       }
       if (live) void fallback('OpenCode 服务器还没返回模型列表。');
     })();
-    return () => { live = false; };
+    return () => { live = false; if (retryTimer) clearTimeout(retryTimer); };
   }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status, catalogAttempt]);
 
   const requested = phase.kind === 'restarting' ? phase.requested : null;
