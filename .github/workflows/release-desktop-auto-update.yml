@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.386:
+            - 新增：设置 → 关于里多了「隐私政策」和「官网与支持」两个入口（iOS 也用系统浏览器打开，不内嵌网页）。
+
             What's new in 0.2.385:
             - 修复：模型区那句「同 runtime 其他节点报过的模型」提示原来会带出两个星号（0.384 的笔误），现在正常显示。
 
