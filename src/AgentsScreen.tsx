@@ -1148,7 +1148,7 @@ export default function AgentsScreen({
           </Text>
           <Text style={[styles.errorHint, !q && !filtering && restricted && restrictedEmptyCopy()]}>
             {q
-              ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音,如 zf → 支付助手)`
+              ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音 zf、node_id n_xxx、模型名如 deepseek)`
               : restricted && !filtering ? t('agents.restrictedHint') : '用右上角 + 新建一个'}
           </Text>
           {q ? (

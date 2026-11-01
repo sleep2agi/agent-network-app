@@ -146,5 +146,8 @@ ck('搜模型能定位节点', JSON.stringify(buildSections(withModel, 'deepseek
 ck('1-2 个字符不拿模型凑热闹', matchesModel({ model: 'deepseek/x' }, 'de', substringMatch) === false);
 ck('没有模型的会话不误命中', matchesModel({}, 'deepseek', substringMatch) === false);
 
+// 搜不到时的提示要把「能搜什么」说全（拼音 / node_id / 模型名）
+ck('搜索空状态提示写明 node_id 与模型名', screenSrc.includes('node_id n_xxx') && screenSrc.includes('模型名如 deepseek'));
+
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
