@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 // 节点列表纯逻辑断言 — run: bun src/agents-list.test.ts
 //
 // 判据纪律(通信龙 d08c56db):
@@ -131,6 +132,10 @@ ck('搜 node_id 能定位到节点', JSON.stringify(byNodeFlat) === JSON.stringi
 ck('搜别名照旧可用', buildSections(withIds, '通信A').flatMap(s2 => s2.data.map(i => i.alias)).includes('通信A'));
 ck('没有 node_id 的会话不会被误命中', matchesNodeId({ alias: 'x' }, 'n_', substringMatch) === false);
 ck('空查询不命中任何 node_id', matchesNodeId({ node_id: 'n_a' }, '   ', substringMatch) === false);
+
+// 搜索框提示要写明可以搜 node_id(否则功能存在也没人知道)
+const screenSrc = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
+ck('搜索框 placeholder 提到 node_id', screenSrc.includes('个 agent / node_id'));
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
