@@ -163,7 +163,11 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // V2 共存节点上纯 model 是 hot 变更:不受 config_update_capable 限制(它只挡重启级).
   const availability = modelControlAvailability(view === undefined ? null : view, { hotModel: v2 });
   const busy = phaseIsBusy(phase);
-  const suggestions = v2 ? (v2Models ?? []) : suggestedModels(node.runtime);
+  // 机器上报了 V2 目录就用它;没上报(常见:刚接入/还没轮询到)就退回内置候选,
+  // 否则「建议」里只剩「当前」那一个 chip,用户会以为没法切换(admin 2026-11-01 截图)。
+  const v2Catalog = v2Models ?? [];
+  const suggestions = v2 && v2Catalog.length > 0 ? v2Catalog : suggestedModels(node.runtime);
+  const usingBuiltinFallback = v2 && v2Catalog.length === 0;
   const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
   const chips = modelChips(suggestions, currentModel);
@@ -171,7 +175,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [filter, setFilter] = useState('');
   const shownChips = filterModels(chips, filter);
   const showFilter = chips.length >= 8;
-  const hint = v2 ? v2Note : catalogHint(node.runtime);
+  const hint = v2
+    ? (usingBuiltinFallback ? '这台机器还没上报模型清单，下面是内置候选（可能滞后于实际可用模型）。' : v2Note)
+    : catalogHint(node.runtime);
   // 只在 V2 目录**读到了**的时候才谈「不在列表里」:目录为空/读不到 ⇒ 不知道,不乱报。
   const notOnMachine = v2 && (v2Models?.length ?? 0) > 0 ? modelNotOnMachineNote(currentModel, v2Models ?? []) : null;
 
@@ -280,8 +286,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
               </View>
             ) : null}
             <TextInput
-              value={custom}
-              onChangeText={setCustom}
+              value={custom.trim() ? custom : picked}
+              onChangeText={(text) => { setCustom(text); if (picked) setPicked(''); }}
               editable={!busy}
               placeholder={suggestions.length > 0 ? '或手输模型 id(provider/model)' : '模型 id(provider/model)'}
               placeholderTextColor={colors.textMuted}

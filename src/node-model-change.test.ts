@@ -89,5 +89,11 @@ check('分组标题带数量', groupCountLabel({ provider: 'opencode', models: [
 check('总览给出模型数与 Provider 数', providerGroupSummary([{ provider: 'a', models: ['a/1'] }, { provider: 'b', models: ['b/1', 'b/2'] }]) === '共 3 个模型 · 2 个 Provider');
 check('没有模型时不出总览', providerGroupSummary([]) === null);
 check('section 用 groupCountLabel 与总览渲染', section.includes('groupCountLabel(g)') && section.includes('node-model-group-summary'));
+// 2026-11-01 admin 截图:机器没上报模型清单时「建议」只剩「当前」一个 chip,点下去输入框还是空的
+check('V2 目录为空时退回内置候选(而不是只剩当前模型)', section.includes('v2 && v2Catalog.length > 0 ? v2Catalog : suggestedModels(node.runtime)'));
+check('退回内置候选时给出说明', section.includes('这台机器还没上报模型清单'));
+check('点选 chip 后输入框显示所选模型', section.includes('value={custom.trim() ? custom : picked}'));
+check('手输会清掉 chip 选中态', section.includes('setCustom(text); if (picked) setPicked(\'\')'));
+check('opencode-cli 的内置候选不是空列表', suggestedModels('opencode-cli').length > 0);
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
