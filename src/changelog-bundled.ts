@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.383:",
+  "- 修复：模型列表没读出来时（机器还没上报清单），提示旁边多了「重新读取模型列表」，点一下就地重试，不用退出页面再进。",
+  "",
   "What's new in 0.2.382:",
   "- 新增：模型列表每个 Provider 后面显示**有几个模型**，下面还有一行「共 N 个模型 · M 个 Provider」；开筛选后一眼能看出还剩多少。",
   "- 修复：机器还没上报模型清单时，「建议」不再只剩「当前」一个 —— 会退回内置候选（并注明可能滞后），切换模型有得选。",
