@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.389:
+            - 优化：切换模型后那句提示不再写「已检查 N 次」（内部计数，看不出意义），改成「已等 15s / 最长 90s」，等多久心里有数。
+
             What's new in 0.2.388:
             - 优化：模型候选来自别的节点时，提示里加一句「本机未必装了同一个 Provider，选错会拒绝运行」，避免选了跑不起来的模型。
 
