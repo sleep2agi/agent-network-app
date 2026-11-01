@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 //   - 报分母:命中数要 >0 且 <总数,不能是"全命中"或"全不中"这种退化绿。
 
 import {
-  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId,
+  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId, matchesModel,
   type Matcher,
 } from './agents-list';
 import type { Session } from './api';
@@ -136,6 +136,15 @@ ck('空查询不命中任何 node_id', matchesNodeId({ node_id: 'n_a' }, '   ', 
 // 搜索框提示要写明可以搜 node_id(否则功能存在也没人知道)
 const screenSrc = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
 ck('搜索框 placeholder 提到 node_id', screenSrc.includes('个 agent / node_id'));
+
+// 2026-11-02:搜索也认当前模型("谁在跑 deepseek")
+const withModel = [
+  { alias: '通信A', node_id: 'n_a', model: 'deepseek/deepseek-flash', status: 'working' },
+  { alias: '通信B', node_id: 'n_b', model: 'opencode/x', status: 'idle' },
+] as unknown as Parameters<typeof buildSections>[0];
+ck('搜模型能定位节点', JSON.stringify(buildSections(withModel, 'deepseek').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['通信A']));
+ck('1-2 个字符不拿模型凑热闹', matchesModel({ model: 'deepseek/x' }, 'de', substringMatch) === false);
+ck('没有模型的会话不误命中', matchesModel({}, 'deepseek', substringMatch) === false);
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
