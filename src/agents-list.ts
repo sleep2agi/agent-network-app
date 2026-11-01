@@ -32,6 +32,18 @@ export type AgentSection = {
 
 /** 匹配器:默认按子串匹配;调用方可注入拼音匹配器替换它。 */
 export type Matcher = (text: string, filter: string) => boolean;
+/** 搜索命中 node_id 的判定:缺字段/空串一律不匹配,避免把「搜空」变成「全中」。 */
+export function matchesNodeId(
+  session: { node_id?: string | null },
+  query: string,
+  match: Matcher,
+): boolean {
+  const id = (session.node_id ?? '').trim();
+  const q = query.trim();
+  if (!id || !q) return false;
+  return match(id, q);
+}
+
 export const substringMatch: Matcher = (text, filter) =>
   text.toLowerCase().includes(filter.toLowerCase());
 
@@ -149,7 +161,11 @@ export function buildSections(
 ): AgentSection[] {
   const q = query.trim();
   const match = opts.match ?? substringMatch;
-  const filtered = q ? sessions.filter(s => match(s.alias, q)) : sessions.slice();
+  // 搜索除了别名,也认 node_id(2026-11-02):「复制节点诊断」给出的就是 `node_id=n_xxx`,
+  // 拿到那串只能靠别名回忆是谁。命中 node_id 也算匹配,空/缺字段不参与。
+  const filtered = q
+    ? sessions.filter(s => match(s.alias, q) || matchesNodeId(s, q, match))
+    : sessions.slice();
   // 「新消息」组:有未读的会话整体上浮到最顶(在「置顶」之上),**搬走**而不是复制;
   // 读完(未读→0)下一次计算时自然回到原来的组。搜索时不浮动,保持搜索结果原有的顺序。
   const floating = !q && opts.unread ? filtered.filter(s => opts.unread!.count(s.alias) > 0) : [];

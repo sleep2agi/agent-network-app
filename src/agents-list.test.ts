@@ -7,7 +7,7 @@
 //   - 报分母:命中数要 >0 且 <总数,不能是"全命中"或"全不中"这种退化绿。
 
 import {
-  buildSections, compareInTeam, countShown, teamOf, substringMatch,
+  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId,
   type Matcher,
 } from './agents-list';
 import type { Session } from './api';
@@ -119,6 +119,18 @@ ck('teamOf 空别名归「其他」', teamOf('') === '其他');
     countShown(buildSections(fleet, 'zf')) === 0);
   ck('substringMatch 大小写不敏感', substringMatch('Alpha', 'ALP'));
 }
+
+// 2026-11-02:搜索也能按 node_id 找到节点(诊断行里给的就是 node_id)
+const withIds = [
+  { alias: '通信A', node_id: 'n_a0a8c671', status: 'working' },
+  { alias: '通信B', node_id: 'n_deadbeef', status: 'idle' },
+] as unknown as Parameters<typeof buildSections>[0];
+const byNode = buildSections(withIds, 'n_deadbeef');
+const byNodeFlat = byNode.flatMap((sec) => sec.data.map((i) => i.alias));
+ck('搜 node_id 能定位到节点', JSON.stringify(byNodeFlat) === JSON.stringify(['通信B']));
+ck('搜别名照旧可用', buildSections(withIds, '通信A').flatMap(s2 => s2.data.map(i => i.alias)).includes('通信A'));
+ck('没有 node_id 的会话不会被误命中', matchesNodeId({ alias: 'x' }, 'n_', substringMatch) === false);
+ck('空查询不命中任何 node_id', matchesNodeId({ node_id: 'n_a' }, '   ', substringMatch) === false);
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
