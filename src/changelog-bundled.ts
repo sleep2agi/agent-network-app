@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.390:",
+  "- 优化：「复制节点诊断」多带一项 agent-node 版本（如 agent=2.5.0-preview.164），排查「模型清单没上报」这类问题时不用再单独问版本。",
+  "",
   "What's new in 0.2.389:",
   "- 优化：切换模型后那句提示不再写「已检查 N 次」（内部计数，看不出意义），改成「已等 15s / 最长 90s」，等多久心里有数。",
   "",
