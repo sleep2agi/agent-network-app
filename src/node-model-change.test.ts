@@ -112,5 +112,6 @@ check('面向用户的提示里没有 markdown 星号', !uiStrings.some((l) => l
 check('重启中的提示是秒数而不是轮询计数', (() => { const t = phaseText({ kind: 'restarting', requested: 'a/b', baseRevision: 1, polls: 5 }); const waited = Math.round(5 * RESTART_POLL_MS / 1000); const limit = Math.round(RESTART_MAX_POLLS * RESTART_POLL_MS / 1000); return t.includes(`已等 ${waited}s`) && t.includes(`最长 ${limit}s`) && !t.includes('次)'); })());
 // 一行说清「本机报没报模型清单」
 check('section 显示模型清单状态行', section.includes('node-model-catalog-status') && section.includes('catalogStatusLine(v2Catalog.length, runtimeVersion)'));
+check('点状态行会复制（含 node_id/runtime）', section.includes('setStringAsync(line)') && section.includes('node_id=${node.node_id}'));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
