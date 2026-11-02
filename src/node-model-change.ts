@@ -31,7 +31,9 @@ export const RESTART_TIMEOUT_MS = RESTART_POLL_MS * RESTART_MAX_POLLS;
 
 /** 和向导同一条校验(非空、无空白);opencode 是 provider/model 形态,不再限字符集。 */
 export function validateModelId(raw: string): { ok: true; model: string } | { ok: false; reason: string } {
-  const model = (raw ?? '').trim();
+  // 从文档/聊天里粘过来的常带空格：「deepseek / chat」「deepseek/ chat」。
+  // 只把斜杠两侧的空白吃掉再判,别的空白仍然拒绝(那是真的填错了)。
+  const model = (raw ?? '').trim().replace(/\s*\/\s*/g, '/');
   if (!model) return { ok: false, reason: '模型 id 不能为空' };
   if (/\s/.test(model)) return { ok: false, reason: '模型 id 不能含空白字符' };
   if (model.length > 200) return { ok: false, reason: '模型 id 过长(≤200)' };

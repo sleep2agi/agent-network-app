@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.419:
+            - 修复：从文档里粘「deepseek / chat」这种带空格的模型 id 不再被判错，斜杠两侧空白会自动吃掉（其他位置的空白仍会拒绝）。
+
             What's new in 0.2.418:
             - 优化：节点诊断行加上网络标识 net=，多网络环境（同一节点在不同网络看到的表现不同）排查时不用再问「这是哪个网络的节点」。
 
