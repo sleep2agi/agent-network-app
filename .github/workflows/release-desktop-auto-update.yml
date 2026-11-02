@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.415:
+            - 优化：模型建议里把「当前模型所在的 Provider」分组排到最前，换模型不用先滑过别的 Provider。
+
             What's new in 0.2.414:
             - 修复：复制别名 / 复制诊断只有在真的写进剪贴板后才提示「已复制」，失败不会再报成功。
 
