@@ -272,10 +272,14 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             ) : null}
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
             {usingBuiltinFallback || usingPeerFallback ? (
-              <Text testID="node-model-catalog-retry" style={{ color: colors.accent, fontSize: 12 }}
-                onPress={() => setCatalogAttempt((n) => n + 1)}>
-                重新读取模型列表
-              </Text>
+              <Pressable testID="node-model-catalog-retry" disabled={busy}
+                onPress={() => setCatalogAttempt((n) => n + 1)}
+                style={({ pressed }) => [
+                  { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 30, justifyContent: 'center' },
+                  pressed && { opacity: 0.7 },
+                ]}>
+                <Text style={{ color: colors.accent, fontSize: 12 }}>重新读取模型列表</Text>
+              </Pressable>
             ) : null}
             {notOnMachine ? (
               <Text testID="model-not-on-machine" style={{ color: colors.blocked, fontSize: 12, lineHeight: 18 }}>{notOnMachine}</Text>

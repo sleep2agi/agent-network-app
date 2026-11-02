@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.402:",
+  "- 优化：「重新读取模型列表」从一行小字改成**看得见的按钮**（描边、可点、处理中禁用），之前很容易被当成说明文字忽略。",
+  "",
   "What's new in 0.2.401:",
   "- 修复：从一个节点切到另一个节点时，「自动重试读取模型清单」的次数没重置，导致新节点不会再自动试 —— 现在每次切换节点都会重置。",
   "",
