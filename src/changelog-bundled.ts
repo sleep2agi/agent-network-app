@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.400:",
+  "- 新增：搜索支持**状态词** —— 输「离线 / 掉线 / 空闲 / 错误」直接筛出对应节点（也认 offline / idle / error），不再靠眼睛扫。",
+  "",
   "What's new in 0.2.399:",
   "- 优化：搜不到时的提示把「能搜什么」说全了 —— 别名 / 拼音 / node_id / 模型名，不用猜为什么搜不到。",
   "",

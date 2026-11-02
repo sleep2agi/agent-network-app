@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 //   - 报分母:命中数要 >0 且 <总数,不能是"全命中"或"全不中"这种退化绿。
 
 import {
-  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId, matchesModel,
+  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId, matchesModel, matchesStatus,
   type Matcher,
 } from './agents-list';
 import type { Session } from './api';
@@ -148,6 +148,17 @@ ck('没有模型的会话不误命中', matchesModel({}, 'deepseek', substringMa
 
 // 搜不到时的提示要把「能搜什么」说全（拼音 / node_id / 模型名）
 ck('搜索空状态提示写明 node_id 与模型名', screenSrc.includes('node_id n_xxx') && screenSrc.includes('模型名如 deepseek'));
+
+// 2026-11-03:搜索也认状态词（找掉线节点）
+const mixed = [
+  { alias: 'A', status: 'offline', node_id: 'n_a' },
+  { alias: 'B', status: 'working', node_id: 'n_b' },
+  { alias: 'C', status: 'error', node_id: 'n_c' },
+] as unknown as Parameters<typeof buildSections>[0];
+ck('搜「离线」只出离线节点', JSON.stringify(buildSections(mixed, '离线').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['A']));
+ck('搜 offline 同样命中', JSON.stringify(buildSections(mixed, 'offline').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['A']));
+ck('状态词不做模糊匹配（on 不会拉出在线列表）', matchesStatus({ status: 'working' }, 'on') === false);
+ck('未知状态不误命中', matchesStatus({ status: 'mystery' }, 'mystery') === false);
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
