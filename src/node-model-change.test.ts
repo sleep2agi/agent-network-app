@@ -117,6 +117,7 @@ check('重启中的提示是秒数而不是轮询计数', (() => { const t = pha
 check('读不到清单时自动再试一次（仅一次，20 秒）', section.includes('autoRetried.current') && section.includes('20000') && section.includes('setCatalogAttempt((n) => n + 1)'));
 check('切节点时重置自动重试标记（否则新节点永不自动重试）', section.includes('autoRetried.current = false') && section.includes('}, [node.node_id])'));
 check('卸载时清掉自动重试定时器', section.includes('if (retryTimer) clearTimeout(retryTimer)'));
+check('非 V2 节点说明「不上报清单，由本机配置决定」', section.includes('node-model-catalog-na') && section.includes('不上报模型清单'));
 check('section 显示模型清单状态行', section.includes('node-model-catalog-status') && section.includes('catalogStatusLine(v2Catalog.length, runtimeVersion)'));
 check('点状态行会复制（含 node_id/runtime）', section.includes('setStringAsync(line)') && section.includes('node_id=${node.node_id}'));
 console.log(`node model change: ${passed}/${total} checks passed`);
