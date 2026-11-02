@@ -226,6 +226,15 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     : catalogHint(node.runtime);
   // 只在 V2 目录**读到了**的时候才谈「不在列表里」:目录为空/读不到 ⇒ 不知道,不乱报。
   const notOnMachine = v2 && (v2Models?.length ?? 0) > 0 ? modelNotOnMachineNote(currentModel, v2Models ?? []) : null;
+  // 内置候选只是 OpenCode Zen 的两个免费模型;这类节点多半跑别的 Provider,
+  // 所以手输框直接把「当前 Provider」当样板,减少用户猜格式。
+  const providerPrefix = typeof currentModel === 'string' && currentModel.includes('/')
+    ? currentModel.slice(0, currentModel.indexOf('/')) : '';
+  // 注意:placeholder 前半段必须保留「模型 id(provider/model)」——
+  // tests/model-change-deadline 用这个文案定位输入框,只改后半段补充内容。
+  const inputPlaceholder = usingBuiltinFallback && providerPrefix
+    ? `模型 id(provider/model)，如 ${providerPrefix}/<模型名>`
+    : (suggestions.length > 0 ? '或手输模型 id(provider/model)' : '模型 id(provider/model)');
 
   const submit = async () => {
     if (!view || busy) return;
@@ -368,7 +377,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
               value={custom.trim() ? custom : picked}
               onChangeText={(text) => { setCustom(text); if (picked) setPicked(''); }}
               editable={!busy}
-              placeholder={suggestions.length > 0 ? '或手输模型 id(provider/model)' : '模型 id(provider/model)'}
+              placeholder={inputPlaceholder}
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}

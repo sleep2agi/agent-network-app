@@ -117,6 +117,7 @@ check('重启中的提示是秒数而不是轮询计数', (() => { const t = pha
 check('读不到清单时自动再试一次（仅一次，20 秒）', section.includes('autoRetried.current') && section.includes('20000') && section.includes('setCatalogAttempt((n) => n + 1)'));
 check('切节点时重置自动重试标记（否则新节点永不自动重试）', section.includes('autoRetried.current = false') && section.includes('}, [node.node_id])'));
 check('卸载时清掉自动重试定时器', section.includes('if (retryTimer) clearTimeout(retryTimer)'));
+check('退回内置候选时手输框 placeholder 带当前 Provider', section.includes('inputPlaceholder') && section.includes('如 ${providerPrefix}/<模型名>'));
 check('退回内置候选时提示当前 Provider 前缀', section.includes('node-model-provider-hint') && section.includes('可在下面手输'));
 check('非 V2 节点说明「不上报清单，由本机配置决定」', section.includes('node-model-catalog-na') && section.includes('不上报模型清单'));
 check('未上报时状态行指路「下方按钮可重试」', section.includes('下方按钮可立刻重试'));
