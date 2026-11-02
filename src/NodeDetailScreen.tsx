@@ -557,7 +557,7 @@ export default function NodeDetailScreen({
             onPress={async () => {
               // 带上客户端版本与平台:同一个节点用不同版本/系统看到的表现可能不同,
               // 有了这两个值就能直接排除「是不是旧版本客户端」这一类问题。
-              const line = [s.alias, node ? `node_id=${node.node_id}` : null, `status=${s.status}`, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
+              const line = [s.alias, node ? `node_id=${node.node_id}` : null, s.network_id ? `net=${s.network_id}` : null, `status=${s.status}`, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
                 // 报没报模型清单：一行里说清，交接给后端时不用再问
                 node && Array.isArray(node.opencode_catalog) && node.opencode_catalog.length > 0
                   ? `catalog=reported(${node.opencode_catalog.length})`
