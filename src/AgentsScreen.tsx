@@ -971,6 +971,12 @@ export default function AgentsScreen({
                   value={query}
                   onChangeText={setQuery}
                 />
+                {/* 一键清空:手打删半天很烦,列表里这类框都该有 */}
+                {query ? (
+                  <Pressable testID="agents-search-clear" onPress={() => setQuery('')} hitSlop={10} accessibilityLabel="清空搜索">
+                    <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                  </Pressable>
+                ) : null}
               </View>
             ) : (
               <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} agents`}</Text>
