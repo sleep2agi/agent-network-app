@@ -168,5 +168,8 @@ const byRt = [
 ck('搜 runtime 能筛出同类节点', JSON.stringify(buildSections(byRt, 'codex').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['Y']));
 ck('runtime 也要 3 字符以上', matchesRuntime({ runtime: 'codex-cli' }, 'co', substringMatch) === false);
 
+// 搜索框要有「清空」按钮(2026-11-03)
+ck('搜索框有清空按钮且会清空 query', screenSrc.includes('testID="agents-search-clear"') && screenSrc.includes("onPress={() => setQuery('')}"));
+
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
