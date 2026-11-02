@@ -83,6 +83,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 自动再试一次(2026-11-02):daemon 刚重启时,第一轮 15 秒常常抓不到清单,
   // 用户得手动点「重新读取」。这里在本机版本够、却仍读不到时,20 秒后自动再试一次(仅一次)。
   const autoRetried = useRef(false);
+  // 换节点要重置「自动重试已用过」的标记:否则从 A 节点切到 B 节点时,B 永远不会自动重试。
+  useEffect(() => { autoRetried.current = false; }, [node.node_id]);
 
   const reload = useCallback(async () => {
     try {

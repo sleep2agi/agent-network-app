@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.401:
+            - 修复：从一个节点切到另一个节点时，「自动重试读取模型清单」的次数没重置，导致新节点不会再自动试 —— 现在每次切换节点都会重置。
+
             What's new in 0.2.400:
             - 新增：搜索支持**状态词** —— 输「离线 / 掉线 / 空闲 / 错误」直接筛出对应节点（也认 offline / idle / error），不再靠眼睛扫。
 
