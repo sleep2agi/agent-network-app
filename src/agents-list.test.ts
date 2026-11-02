@@ -8,7 +8,7 @@ import { readFileSync } from 'node:fs';
 //   - 报分母:命中数要 >0 且 <总数,不能是"全命中"或"全不中"这种退化绿。
 
 import {
-  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId, matchesModel, matchesStatus,
+  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId, matchesModel, matchesRuntime, matchesStatus,
   type Matcher,
 } from './agents-list';
 import type { Session } from './api';
@@ -159,6 +159,14 @@ ck('搜「离线」只出离线节点', JSON.stringify(buildSections(mixed, '离
 ck('搜 offline 同样命中', JSON.stringify(buildSections(mixed, 'offline').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['A']));
 ck('状态词不做模糊匹配（on 不会拉出在线列表）', matchesStatus({ status: 'working' }, 'on') === false);
 ck('未知状态不误命中', matchesStatus({ status: 'mystery' }, 'mystery') === false);
+
+// 2026-11-03:搜索也认 runtime（找同类型节点）
+const byRt = [
+  { alias: 'X', runtime: 'opencode-cli', status: 'idle' },
+  { alias: 'Y', runtime: 'codex-cli', status: 'idle' },
+] as unknown as Parameters<typeof buildSections>[0];
+ck('搜 runtime 能筛出同类节点', JSON.stringify(buildSections(byRt, 'codex').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['Y']));
+ck('runtime 也要 3 字符以上', matchesRuntime({ runtime: 'codex-cli' }, 'co', substringMatch) === false);
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);

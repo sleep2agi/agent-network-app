@@ -33,6 +33,22 @@ export type AgentSection = {
 /** 匹配器:默认按子串匹配;调用方可注入拼音匹配器替换它。 */
 export type Matcher = (text: string, filter: string) => boolean;
 /**
+ * 搜索命中 runtime 的判定（2026-11-03）：运维常问「哪些是 codex、哪些是 opencode」。
+ * 与模型一致，1–2 个字符不参与（"op" 会把所有 opencode 都带出来，噪声太大）。
+ */
+export function matchesRuntime(
+  session: { runtime?: string | null },
+  query: string,
+  match: Matcher,
+): boolean {
+  const q = query.trim();
+  if (q.length < 3) return false;
+  const rt = (session.runtime ?? '').trim();
+  if (!rt) return false;
+  return match(rt, q);
+}
+
+/**
  * 搜索命中「状态」的判定（2026-11-03）：运维最常找的是「哪些节点掉线了」。
  * 只认明确的状态词（中英文都收），不做模糊匹配 —— 否则搜 "on" 会把所有在线节点都拉出来。
  */
@@ -203,7 +219,7 @@ export function buildSections(
   // 搜索除了别名,也认 node_id(2026-11-02):「复制节点诊断」给出的就是 `node_id=n_xxx`,
   // 拿到那串只能靠别名回忆是谁。命中 node_id 也算匹配,空/缺字段不参与。
   const filtered = q
-    ? sessions.filter(s => match(s.alias, q) || matchesNodeId(s, q, match) || matchesModel(s, q, match) || matchesStatus(s, q))
+    ? sessions.filter(s => match(s.alias, q) || matchesNodeId(s, q, match) || matchesModel(s, q, match) || matchesRuntime(s, q, match) || matchesStatus(s, q))
     : sessions.slice();
   // 「新消息」组:有未读的会话整体上浮到最顶(在「置顶」之上),**搬走**而不是复制;
   // 读完(未读→0)下一次计算时自然回到原来的组。搜索时不浮动,保持搜索结果原有的顺序。

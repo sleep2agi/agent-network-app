@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.403:
+            - 新增：搜索支持**运行时** —— 输 `codex` / `opencode` 直接筛出同类节点（与模型、状态搜索一致，1–2 个字符不参与）。
+
             What's new in 0.2.402:
             - 优化：「重新读取模型列表」从一行小字改成**看得见的按钮**（描边、可点、处理中禁用），之前很容易被当成说明文字忽略。
 
