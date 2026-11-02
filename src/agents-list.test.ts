@@ -166,6 +166,15 @@ const byRt = [
   { alias: 'Y', runtime: 'codex-cli', status: 'idle' },
 ] as unknown as Parameters<typeof buildSections>[0];
 ck('搜 runtime 能筛出同类节点', JSON.stringify(buildSections(byRt, 'codex').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['Y']));
+// 2026-11-03:搜索也认「上报没上报模型清单」(诊断行里的 catalog=reported/missing)
+const cat = [
+  { alias: '甲', opencode_catalog: ['a/b'], status: 'idle' },
+  { alias: '乙', status: 'idle' },
+  { alias: '丙', opencode_catalog: [], status: 'idle' },
+];
+ck('搜 missing 只留没上报清单的节点', JSON.stringify(buildSections(cat, 'missing').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['丙', '乙']));
+ck('搜「未上报」等价于 missing', JSON.stringify(buildSections(cat, '未上报').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['丙', '乙']));
+ck('搜「已上报」只留上报了清单的节点', JSON.stringify(buildSections(cat, '已上报').flatMap(x => x.data.map(r => r.alias))) === JSON.stringify(['甲']));
 ck('runtime 也要 3 字符以上', matchesRuntime({ runtime: 'codex-cli' }, 'co', substringMatch) === false);
 
 // 搜索框要有「清空」按钮(2026-11-03)
