@@ -264,6 +264,14 @@ export default function NodeDetailScreen({
   // 规则文件草稿没保存时,切分区 / 返回之前先问(草稿只活在 NodeRulesSection 里,一卸载就没了)。
   const [rulesDirty, setRulesDirty] = useState(false);
   const [pendingLeave, setPendingLeave] = useState<null | (() => void)>(null);
+  // 复制别名 / 诊断后给一眼可见的反馈:桌面端没有系统级提示,点完完全看不出有没有复制上。
+  const [copiedHint, setCopiedHint] = useState<'alias' | 'diag' | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashCopied = (what: 'alias' | 'diag') => {
+    setCopiedHint(what);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopiedHint(null), 1600);
+  };
   // 软键盘弹起(原生端):规则分区里收起头部卡片,把高度让给编辑框;web / 桌面没有这些事件,恒 false。
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   // iOS:键盘避让按窗口坐标量(#547,同 ChatScreen;RN 的 KAV 在导航壳里少算一个顶部安全区)。
@@ -534,7 +542,10 @@ export default function NodeDetailScreen({
           </Text>
           {/* 复制别名:贴到聊天里 @ 它、或写进任务卡(和左栏项目/标签/军团右键同一套)。 */}
           <Pressable accessibilityRole="button" accessibilityLabel="复制别名" hitSlop={8} testID="node-detail-copy-alias"
-            onPress={() => { void Clipboard.setStringAsync(s.alias).catch(() => undefined); }}
+            onPress={() => {
+              void Clipboard.setStringAsync(s.alias).catch(() => undefined);
+              flashCopied('alias');
+            }}
             style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
             <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
           </Pressable>
@@ -550,10 +561,16 @@ export default function NodeDetailScreen({
                   : 'catalog=missing',, `client=${APP_VERSION}/${Platform.OS}`]
                 .filter(Boolean).join(' · ');
               void Clipboard.setStringAsync(line).catch(() => undefined);
+              flashCopied('diag');
             }}
             style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
             <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
           </Pressable>
+          {copiedHint ? (
+            <Text testID="node-detail-copied" style={{ color: colors.textMuted, fontSize: typeScale.small }}>
+              {copiedHint === 'alias' ? '别名已复制' : '诊断已复制'}
+            </Text>
+          ) : null}
           <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
             <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>

@@ -39,6 +39,7 @@ check('buttons are compact desktop controls', /actionButton:\s*\{[\s\S]*?minWidt
 check('row wraps instead of overflowing narrow windows', /actionRow:\s*\{[\s\S]*?flexWrap: 'wrap'/.test(screen));
 check('hover and keyboard focus are both handled', screen.includes('onHoverIn=') && screen.includes('onHoverOut=') && screen.includes('onFocus=') && screen.includes('onBlur='));
 check('pressed state is visible without layout shift', /actionButtonPressed:\s*\{[\s\S]*?opacity: 0\.68,[\s\S]*?scale: 0\.98/.test(screen));
+check('复制别名/诊断后给出可见反馈（桌面端无系统提示）', screen.includes('node-detail-copied') && screen.includes("flashCopied('alias')") && screen.includes("flashCopied('diag')"));
 check('delete still discloses exact-alias confirmation', screen.includes("pendingAction === 'delete_node' && confirmAlias !== alias"));
 check('danger action exposes an accessibility confirmation hint', screen.includes("tone === 'danger' ? '需要输入节点别名再次确认'"));
 
