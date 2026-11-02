@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.404:",
+  "- 优化：「复制节点诊断」再带上模型清单状态（`catalog=reported(N)` / `catalog=missing`），交接「这台机器报没报清单」时一行说清。",
+  "",
   "What's new in 0.2.403:",
   "- 新增：搜索支持**运行时** —— 输 `codex` / `opencode` 直接筛出同类节点（与模型、状态搜索一致，1–2 个字符不参与）。",
   "",
