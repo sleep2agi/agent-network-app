@@ -273,6 +273,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                   void import('expo-clipboard').then(m => m.setStringAsync(line)).catch(() => undefined);
                 }}>
                 {catalogStatusLine(v2Catalog.length, runtimeVersion)}
+                {v2Catalog.length === 0 ? '（下方按钮可立刻重试）' : ''}
               </Text>
             ) : null}
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
