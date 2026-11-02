@@ -19,6 +19,7 @@ import {
   groupCountLabel,
   providerGroupSummary,
   groupModelsByProvider,
+  orderGroupsByCurrent,
   modelChips,
   modelControlAvailability,
   phaseIsBusy,
@@ -219,6 +220,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [filter, setFilter] = useState('');
   const shownChips = filterModels(chips, filter);
   const showFilter = chips.length >= 8;
+  // 当前模型所在的 Provider 组排最前:换模型多是「同 Provider 内换一个」。
+  const groups = orderGroupsByCurrent(groupModelsByProvider(shownChips), currentModel);
   const hint = v2
     ? (usingPeerFallback ? v2Note
       : usingBuiltinFallback ? '这台机器还没上报模型清单，下面是内置候选（可能滞后于实际可用模型）。'
@@ -341,12 +344,12 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                 {showFilter && shownChips.length === 0 ? (
                   <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="node-model-filter-empty">没有匹配「{filter.trim()}」的模型;清掉筛选,或在下面直接手输模型 id。</Text>
                 ) : null}
-                {providerGroupSummary(groupModelsByProvider(shownChips)) ? (
+                {providerGroupSummary(groups) ? (
                   <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="node-model-group-summary">
-                    {providerGroupSummary(groupModelsByProvider(shownChips))}
+                    {providerGroupSummary(groups)}
                   </Text>
                 ) : null}
-                {groupModelsByProvider(shownChips).map(g => (
+                {groups.map(g => (
                   <View key={g.provider} style={{ gap: 4 }} testID={`node-model-provider-${g.provider}`}>
                     <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{groupCountLabel(g)}</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>

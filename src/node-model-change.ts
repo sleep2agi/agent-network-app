@@ -168,6 +168,25 @@ export function groupModelsByProvider(models: readonly string[]): { provider: st
 }
 
 /**
+ * 把「当前模型所在 Provider」的分组提到最前（2026-11-03）。
+ * 切模型时绝大多数动作是「在同一个 Provider 里换一个」,但分组按字母排,
+ * deepseek 的用户要先滑过 anthropic/google/openai 才看到自己那一组。
+ * 只移动组、不改组内顺序;当前模型没有 provider 前缀时原样返回。
+ */
+export function orderGroupsByCurrent<T extends { provider: string }>(
+  groups: readonly T[],
+  currentModel: string | null | undefined,
+): T[] {
+  const cur = (currentModel ?? '').trim();
+  const slash = cur.indexOf('/');
+  if (slash <= 0) return [...groups];
+  const provider = cur.slice(0, slash);
+  const idx = groups.findIndex(g => g.provider === provider);
+  if (idx <= 0) return [...groups];
+  return [groups[idx], ...groups.slice(0, idx), ...groups.slice(idx + 1)];
+}
+
+/**
  * 分组标题的计数后缀与一行总览（admin 2026-10-31:按 Provider 分组后,
  * 「这个 provider 到底给了几个模型」和「一共多少」光看 chip 数不出来,尤其开了筛选之后)。
  * 分组标题用 `provider · N`;总览 `共 N 个模型 · M 个 Provider`,空列表不出总览。

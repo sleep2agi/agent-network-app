@@ -1,5 +1,7 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary } from './node-model-change';
+import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary,
+  orderGroupsByCurrent,
+} from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
 let passed = 0, total = 0;
@@ -117,6 +119,20 @@ check('重启中的提示是秒数而不是轮询计数', (() => { const t = pha
 check('读不到清单时自动再试一次（仅一次，20 秒）', section.includes('autoRetried.current') && section.includes('20000') && section.includes('setCatalogAttempt((n) => n + 1)'));
 check('切节点时重置自动重试标记（否则新节点永不自动重试）', section.includes('autoRetried.current = false') && section.includes('}, [node.node_id])'));
 check('卸载时清掉自动重试定时器', section.includes('if (retryTimer) clearTimeout(retryTimer)'));
+check('当前模型所在 Provider 组排最前', (() => {
+  const gs = [
+    { provider: 'anthropic', models: ['anthropic/a'] },
+    { provider: 'deepseek', models: ['deepseek/chat', 'deepseek/reasoner'] },
+    { provider: 'openai', models: ['openai/gpt'] },
+  ];
+  const out = orderGroupsByCurrent(gs, 'deepseek/chat');
+  return out.map(g => g.provider).join(',') === 'deepseek,anthropic,openai' && out[0].models.length === 2;
+})());
+check('当前模型没有 provider 前缀时分组顺序不变', (() => {
+  const gs = [{ provider: 'a', models: [] }, { provider: 'b', models: [] }];
+  return orderGroupsByCurrent(gs, 'plain-model').map(g => g.provider).join(',') === 'a,b'
+    && orderGroupsByCurrent(gs, null).map(g => g.provider).join(',') === 'a,b';
+})());
 check('退回内置候选时手输框 placeholder 带当前 Provider', section.includes('inputPlaceholder') && section.includes('如 ${providerPrefix}/<模型名>'));
 check('退回内置候选时提示当前 Provider 前缀', section.includes('node-model-provider-hint') && section.includes('可在下面手输'));
 check('非 V2 节点说明「不上报清单，由本机配置决定」', section.includes('node-model-catalog-na') && section.includes('不上报模型清单'));
