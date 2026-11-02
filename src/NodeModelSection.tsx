@@ -261,6 +261,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
               改模型不经过任何大模型:Hub 下发后节点自己写配置并重启一次(约 5–45 秒),期间它不接任务。
             </Text>
             {/* 点一下整行复制:把这句原样发给后端/别人,对方不用再问「哪个节点、什么版本」。 */}
+            {/* 内置候选是 OpenCode Zen 的两个免费模型;而这类节点常常跑别的 Provider,
+                直接从「当前模型」里取出 provider 前缀提示一句,省得用户不知道手输什么。 */}
+            {usingBuiltinFallback && currentModel && currentModel.includes('/') ? (
+              <Text testID="node-model-provider-hint" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                {`这台机器当前用的是 ${currentModel.slice(0, currentModel.indexOf('/'))}，可在下面手输 ${currentModel.slice(0, currentModel.indexOf('/'))}/<模型名>。`}
+              </Text>
+            ) : null}
             {!v2 ? (
               <Text testID="node-model-catalog-na" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
                 这个 runtime 不上报模型清单，模型由节点自己的配置决定（下面的候选是内置建议）。

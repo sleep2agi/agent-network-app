@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.409:",
+  "- 优化：机器没上报模型清单时，提示里直接写出「当前用的是哪个 Provider，可手输 provider/<模型名>」，不用对着两个 OpenCode Zen 免费模型发愣。",
+  "",
   "What's new in 0.2.408:",
   "- 修复：宽屏布局下节点少于 10 个时搜索框会消失，导致已有筛选清不掉 —— 现在只要输入框里有内容就一直显示。",
   "",
