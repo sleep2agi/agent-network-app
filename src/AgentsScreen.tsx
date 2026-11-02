@@ -959,7 +959,8 @@ export default function AgentsScreen({
       ) : (
         <View testID="agents-list-head" style={[rowStyles.head, { backgroundColor: colors.bg }]}>
           <View style={rowStyles.headRow}>
-            {sessions.length > 10 ? (
+            {/* 与紧凑布局保持一致：一旦有查询词就必须显示搜索框，否则清不掉筛选 */}
+            {sessions.length > 10 || query ? (
               <View style={[rowStyles.searchBox, { backgroundColor: colors.subtleFill }]}>
                 <Ionicons name="search" size={16} color={colors.textMuted} />
                 <TextInput
