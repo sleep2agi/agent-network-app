@@ -97,6 +97,7 @@ check('手输会清掉 chip 选中态', section.includes('setCustom(text); if (p
 check('opencode-cli 的内置候选不是空列表', suggestedModels('opencode-cli').length > 0);
 // 读不到的目录要能手动再敲一次(2026-11-01:admin 那台机器目录一直没上报,只能退出重进)
 check('退回内置候选时给「重新读取模型列表」入口', section.includes('node-model-catalog-retry') && section.includes('重新读取模型列表'));
+check('重试入口是可点的按钮样式（不是一行小字）', section.includes('<Pressable testID="node-model-catalog-retry"') && section.includes('borderColor: colors.accent'));
 check('重新读取靠计数触发 effect', section.includes('catalogAttempt') && section.includes('catalogAttempt]'));
 // 2026-11-01:本机没上报时,用同 runtime 兄弟节点的候选,而不是只有内置两个
 check('复制诊断带上当前模型', (() => { const d = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8'); return d.includes('model=${node.model}'); })());
