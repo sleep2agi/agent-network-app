@@ -195,6 +195,21 @@ export function groupCountLabel(group: { provider: string; models: readonly stri
   return `${group.provider} · ${group.models.length}`;
 }
 
+/**
+ * 分组标题的「当前」后缀（2026-11-03）：置顶把当前 Provider 放到最前，
+ * 但置顶是视觉顺序，用户未必知道哪一组是自己正在用的。标题上标一句就行。
+ */
+export function groupCountLabelFor(
+  group: { provider: string; models: readonly string[] },
+  currentModel: string | null | undefined,
+): string {
+  const base = groupCountLabel(group);
+  const cur = (currentModel ?? '').trim();
+  const slash = cur.indexOf('/');
+  if (slash <= 0) return base;
+  return cur.slice(0, slash) === group.provider ? `${base} · 当前` : base;
+}
+
 export function providerGroupSummary(groups: readonly { provider: string; models: readonly string[] }[]): string | null {
   if (groups.length === 0) return null;
   const models = groups.reduce((n, g) => n + g.models.length, 0);

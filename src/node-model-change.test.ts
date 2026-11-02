@@ -1,6 +1,7 @@
 import { readFileSync } from 'node:fs';
 import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary,
   orderGroupsByCurrent,
+  groupCountLabelFor,
 } from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
@@ -90,7 +91,7 @@ check('section 有清除按钮与空结果提示', section.includes('node-model-
 check('分组标题带数量', groupCountLabel({ provider: 'opencode', models: ['opencode/a', 'opencode/b'] }) === 'opencode · 2');
 check('总览给出模型数与 Provider 数', providerGroupSummary([{ provider: 'a', models: ['a/1'] }, { provider: 'b', models: ['b/1', 'b/2'] }]) === '共 3 个模型 · 2 个 Provider');
 check('没有模型时不出总览', providerGroupSummary([]) === null);
-check('section 用 groupCountLabel 与总览渲染', section.includes('groupCountLabel(g)') && section.includes('node-model-group-summary'));
+check('section 用 groupCountLabelFor 与总览渲染', section.includes('groupCountLabelFor(g, currentModel)') && section.includes('node-model-group-summary'));
 // 2026-11-01 admin 截图:机器没上报模型清单时「建议」只剩「当前」一个 chip,点下去输入框还是空的
 check('V2 目录为空时退回兄弟/内置候选(而不是只剩当前模型)', section.includes('v2 && v2Catalog.length > 0') && section.includes('suggestedModels(node.runtime)'));
 check('退回内置候选时给出说明', section.includes('这台机器还没上报模型清单'));
@@ -119,6 +120,12 @@ check('重启中的提示是秒数而不是轮询计数', (() => { const t = pha
 check('读不到清单时自动再试一次（仅一次，20 秒）', section.includes('autoRetried.current') && section.includes('20000') && section.includes('setCatalogAttempt((n) => n + 1)'));
 check('切节点时重置自动重试标记（否则新节点永不自动重试）', section.includes('autoRetried.current = false') && section.includes('}, [node.node_id])'));
 check('卸载时清掉自动重试定时器', section.includes('if (retryTimer) clearTimeout(retryTimer)'));
+check('当前 Provider 的分组标题带「当前」标记', (() => {
+  const g = { provider: 'deepseek', models: ['deepseek/a', 'deepseek/b'] };
+  return groupCountLabelFor(g, 'deepseek/a') === 'deepseek · 2 · 当前'
+    && groupCountLabelFor(g, 'openai/gpt') === 'deepseek · 2'
+    && groupCountLabelFor(g, 'no-slash') === 'deepseek · 2';
+})());
 check('当前模型所在 Provider 组排最前', (() => {
   const gs = [
     { provider: 'anthropic', models: ['anthropic/a'] },

@@ -17,6 +17,7 @@ import {
   filterModels,
   modelNotOnMachineNote,
   groupCountLabel,
+  groupCountLabelFor,
   providerGroupSummary,
   groupModelsByProvider,
   orderGroupsByCurrent,
@@ -351,7 +352,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                 ) : null}
                 {groups.map(g => (
                   <View key={g.provider} style={{ gap: 4 }} testID={`node-model-provider-${g.provider}`}>
-                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{groupCountLabel(g)}</Text>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{groupCountLabelFor(g, currentModel)}</Text>
                     <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
                 {g.models.map(m => {
                   const active = !custom.trim() && (picked ? picked === m : m === currentModel);
