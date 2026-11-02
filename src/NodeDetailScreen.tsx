@@ -456,7 +456,7 @@ export default function NodeDetailScreen({
           <Text style={styles.errorHint}>网络不稳定或 Hub 未响应</Text>
           <Pressable
             style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => {
+            onPress={async () => {
               setState({ kind: 'loading' });
               void load();
             }}
@@ -542,16 +542,19 @@ export default function NodeDetailScreen({
           </Text>
           {/* 复制别名:贴到聊天里 @ 它、或写进任务卡(和左栏项目/标签/军团右键同一套)。 */}
           <Pressable accessibilityRole="button" accessibilityLabel="复制别名" hitSlop={8} testID="node-detail-copy-alias"
-            onPress={() => {
-              void Clipboard.setStringAsync(s.alias).catch(() => undefined);
-              flashCopied('alias');
+            onPress={async () => {
+              // 只有真的写进剪贴板才提示「已复制」——失败还报成功比不提示更糟。
+              try {
+                await Clipboard.setStringAsync(s.alias);
+                flashCopied('alias');
+              } catch { /* 复制失败就保持沉默 */ }
             }}
             style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
             <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
           </Pressable>
           {/* 节点级诊断:反馈「这个节点不对劲」时,贴这一行就够(别名/节点 id/状态),不含任何凭据。 */}
           <Pressable accessibilityRole="button" accessibilityLabel="复制节点诊断" hitSlop={8} testID="node-detail-copy-diagnostics"
-            onPress={() => {
+            onPress={async () => {
               // 带上客户端版本与平台:同一个节点用不同版本/系统看到的表现可能不同,
               // 有了这两个值就能直接排除「是不是旧版本客户端」这一类问题。
               const line = [s.alias, node ? `node_id=${node.node_id}` : null, `status=${s.status}`, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
@@ -560,8 +563,10 @@ export default function NodeDetailScreen({
                   ? `catalog=reported(${node.opencode_catalog.length})`
                   : 'catalog=missing',, `client=${APP_VERSION}/${Platform.OS}`]
                 .filter(Boolean).join(' · ');
-              void Clipboard.setStringAsync(line).catch(() => undefined);
-              flashCopied('diag');
+              try {
+                await Clipboard.setStringAsync(line);
+                flashCopied('diag');
+              } catch { /* 复制失败就不提示成功 */ }
             }}
             style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
             <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
