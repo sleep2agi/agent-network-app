@@ -240,16 +240,23 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     ? `模型 id(provider/model)，如 ${providerPrefix}/<模型名>`
     : (suggestions.length > 0 ? '或手输模型 id(provider/model)' : '模型 id(provider/model)');
 
+  // 真正下发一次配置变更。抽出来是为了让「超时后再下发一次」复用同一条路径,
+  // 而不是让用户重新在列表/输入框里把同一个模型再选一遍。
+  const applyModel = async (model: string) => {
+    if (!view || busy) return;
+    setPhase({ kind: 'submitting', requested: model });
+    const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
+    const next = afterSubmit(model, view.config_revision, res);
+    if (next.kind === 'conflict') void reload();
+    setPhase(next);
+  };
+
   const submit = async () => {
     if (!view || busy) return;
     const v = validateModelId(candidate);
     if (!v.ok) { setPhase({ kind: 'error', message: v.reason }); return; }
     if (v.model === currentModel) { setPhase({ kind: 'error', message: '和当前模型相同,无需修改' }); return; }
-    setPhase({ kind: 'submitting', requested: v.model });
-    const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model: v.model } });
-    const next = afterSubmit(v.model, view.config_revision, res);
-    if (next.kind === 'conflict') void reload();
-    setPhase(next);
+    await applyModel(v.model);
   };
 
   return (
@@ -403,6 +410,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
           <Text style={{ color: phase.kind === 'applied' ? colors.running : phase.kind === 'error' || phase.kind === 'timeout' || phase.kind === 'conflict' ? colors.failed : colors.textMuted, fontSize: 12, lineHeight: 18 }}>
             {phaseText(phase)}
           </Text>
+        ) : null}
+        {/* 超时后节点可能只是还没重启完:给一个「再下发一次」,不用重新选模型。 */}
+        {phase.kind === 'timeout' && !busy ? (
+          <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.requested)} testID="node-model-retry-timeout"
+            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.accent, fontSize: 12 }}>再下发一次（{phase.requested}）</Text>
+          </Pressable>
         ) : null}
       </View>
     </View>
