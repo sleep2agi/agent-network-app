@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.414:
+            - 修复：复制别名 / 复制诊断只有在真的写进剪贴板后才提示「已复制」，失败不会再报成功。
+
             What's new in 0.2.413:
             - 优化：搜不到 agent 时的提示把能搜的东西说全（node_id、模型名、runtime、状态词、missing/未上报 查模型清单），不用再猜。
 
