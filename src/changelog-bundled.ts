@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.410:",
+  "- 优化：机器没上报模型清单时，手输框的占位提示直接写成「手输 deepseek/<模型名>」，照着填就行。",
+  "",
   "What's new in 0.2.409:",
   "- 优化：机器没上报模型清单时，提示里直接写出「当前用的是哪个 Provider，可手输 provider/<模型名>」，不用对着两个 OpenCode Zen 免费模型发愣。",
   "",
