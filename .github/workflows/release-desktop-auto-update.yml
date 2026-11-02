@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.411:
+            - 优化：节点详情里「复制别名 / 复制诊断」点完会短暂显示「已复制」，不再靠猜。
+
             What's new in 0.2.410:
             - 优化：机器没上报模型清单时，手输框的占位提示直接写成「手输 deepseek/<模型名>」，照着填就行。
 
