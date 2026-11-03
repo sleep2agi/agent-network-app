@@ -32,6 +32,7 @@ import {
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
 import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { opencodeFlagsOf } from './node-info';
 import { nodeProviderDaemon } from './node-provider-target';
 import { colors, spacing, radius } from './theme';
 
@@ -218,7 +219,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const candidate = custom.trim() ? custom : picked;
   // 只在「opencode 系 runtime 却没写代际」时提示;写了 v1/v2 或不是 opencode 都不打扰。
   const isOpenCodeRuntime = /opencode/i.test(node.runtime ?? '');
-  const generationUnset = isOpenCodeRuntime && !node.config_snapshot?.flags?.opencodeGeneration;
+  const generationUnset = isOpenCodeRuntime && !opencodeFlagsOf(node)?.opencodeGeneration;
   const chips = modelChips(suggestions, currentModel);
   // 目录大的时候(OpenCodeV2 常有几十个模型)一屏放不下,加一个筛选框;列表短就不出现,免得喧宾夺主。
   const [filter, setFilter] = useState('');

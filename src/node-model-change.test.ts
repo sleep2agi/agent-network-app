@@ -126,7 +126,7 @@ check('当前 Provider 的分组标题带「当前」标记', (() => {
     && groupCountLabelFor(g, 'openai/gpt') === 'deepseek · 2'
     && groupCountLabelFor(g, 'no-slash') === 'deepseek · 2';
 })());
-check('opencode 系但代际未声明时给出提示', section.includes('node-model-gen-unset') && section.includes('generationUnset') && section.includes('opencodeGeneration'));
+check('opencode 系但代际未声明时给出提示（用 opencodeFlagsOf 判定）', section.includes('node-model-gen-unset') && section.includes('generationUnset') && section.includes('opencodeFlagsOf(node)?.opencodeGeneration'));
 check('超时后给出「再下发一次」且复用 applyModel', section.includes('node-model-retry-timeout') && section.includes('applyModel(phase.requested)') && section.includes('const applyModel = async'));
 check('斜杠两侧的空白被吃掉（粘贴场景）', (() => {
   const a = validateModelId('deepseek / chat');
