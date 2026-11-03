@@ -18,8 +18,8 @@ export interface NodeConfigView {
 export type ModelChangePhase =
   | { kind: 'idle' }
   | { kind: 'submitting'; requested: string }
-  | { kind: 'restarting'; requested: string; baseRevision: number; polls: number }
-  | { kind: 'applied'; model: string }
+  | { kind: 'restarting'; requested: string; baseRevision: number; polls: number; previous?: string | null }
+  | { kind: 'applied'; model: string; previous?: string | null }
   | { kind: 'timeout'; requested: string }
   | { kind: 'conflict' }
   | { kind: 'error'; message: string };
@@ -64,8 +64,8 @@ export type SubmitOutcome =
   | { ok: false; conflict: true; error: string }
   | { ok: false; conflict?: false; error: string };
 
-export function afterSubmit(requested: string, baseRevision: number, outcome: SubmitOutcome): ModelChangePhase {
-  if (outcome.ok) return { kind: 'restarting', requested, baseRevision, polls: 0 };
+export function afterSubmit(requested: string, baseRevision: number, outcome: SubmitOutcome, previous?: string | null): ModelChangePhase {
+  if (outcome.ok) return { kind: 'restarting', requested, baseRevision, polls: 0, previous: previous ?? null };
   if (outcome.conflict) return { kind: 'conflict' };
   return { kind: 'error', message: outcome.error };
 }
@@ -77,7 +77,7 @@ export function afterPoll(
   maxPolls: number = RESTART_MAX_POLLS,
 ): ModelChangePhase {
   if (view && view.config_revision > phase.baseRevision && view.model === phase.requested) {
-    return { kind: 'applied', model: phase.requested };
+    return { kind: 'applied', model: phase.requested, previous: phase.previous ?? null };
   }
   const polls = phase.polls + 1;
   if (polls >= maxPolls) return { kind: 'timeout', requested: phase.requested };
