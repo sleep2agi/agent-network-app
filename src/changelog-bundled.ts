@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.434:",
+  "- 优化：模型 chip 里「刚选中、还没生效」的那个会显示 ✓，并带无障碍选中态（此前只靠边框颜色区分）。",
+  "",
   "What's new in 0.2.433:",
   "- 优化：模型切换成功后自动清空筛选框，下次进来不会因为旧筛选看不到刚切过去的模型。",
   "",

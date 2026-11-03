@@ -387,6 +387,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                     <Pressable
                       key={m}
                       disabled={busy}
+                      accessibilityState={{ selected: active }}
                       onPress={() => { setPicked(m); setCustom(''); }}
                       style={({ pressed }) => [
                         { borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 34, justifyContent: 'center', borderColor: active ? colors.accent : colors.border, backgroundColor: colors.card },
@@ -394,7 +395,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                         busy && { opacity: 0.5 },
                       ]}
                     >
-                      <Text style={{ color: active ? colors.accent : colors.text, fontSize: 13 }}>{m}{m === currentModel ? '(当前)' : ''}</Text>
+                      <Text style={{ color: active ? colors.accent : colors.text, fontSize: 13 }}>{m}{m === currentModel ? '(当前)' : active ? ' ✓' : ''}</Text>
                     </Pressable>
                   );
                 })}
