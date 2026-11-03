@@ -90,6 +90,17 @@ export function rollbackTarget(versions: readonly string[], current: string): st
   return next && next !== cur ? next : null;
 }
 
+/** 全部 release 列表（算不出回滚目标时的兜底）。 */
+export const RELEASES_URL = 'https://github.com/sleep2agi/agent-network-app/releases';
+
+/** 「下载历史版本」点进去落到哪一页（2026-11-04）：既然副标题已经告诉用户「建议回滚到 vX」,
+ *  链接就该直接是那一版的资产,别让他再在几十个 release 里翻。v 前缀/空值/非法版本都不猜,退回列表页。 */
+export function rollbackReleaseUrl(target: string | null | undefined): string {
+  const v = (target ?? '').trim().replace(/^v/i, '');
+  if (!/^\d+\.\d+\.\d+$/.test(v)) return RELEASES_URL;
+  return `${RELEASES_URL}/tag/desktop-v${v}`;
+}
+
 export function releaseDateLabel(iso: string | undefined, offsetMinutes: number = new Date().getTimezoneOffset()): string {
   const t = iso ? Date.parse(iso) : NaN;
   if (Number.isNaN(t)) return '';

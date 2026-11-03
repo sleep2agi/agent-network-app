@@ -4,6 +4,7 @@ import {
   datesFromGithubReleases, entriesFromBody, entrySummary, formatChangelog, mergeChangelog, newestGithubBody,
   parseChangelogCache, releaseDateLabel, serializeChangelogCache, XHS_TAGS, type ChangelogEntry,
   rollbackTarget,
+  rollbackReleaseUrl,
 } from './changelog-model';
 import { CHANGELOG_CACHE_KEY, loadCachedChangelog, refreshChangelog, type ChangelogStorage } from './changelog-source';
 import { BUNDLED_RELEASE_BODY } from './changelog-bundled';
@@ -181,4 +182,13 @@ if (p !== t) process.exit(1);
 ck('rollbackTarget: 新→旧列表取当前版本的下一条', rollbackTarget(['0.2.435', '0.2.434', '0.2.433'], '0.2.435') === '0.2.434');
 ck('rollbackTarget: 当前版本不在列表里 ⇒ null（不猜）', rollbackTarget(['0.2.435', '0.2.434'], '0.2.999') === null);
 ck('rollbackTarget: 已经是最旧一版 ⇒ null', rollbackTarget(['0.2.1'], '0.2.1') === null && rollbackTarget(['0.2.2', '0.2.1'], '0.2.1') === null);
+// 2026-11-04:既然说了「建议回滚到 vX」,点进去就该是那一版的资产页
+ck('rollbackReleaseUrl: 有目标 ⇒ 直接落到该 tag', rollbackReleaseUrl('0.2.436') === 'https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.436');
+ck('rollbackReleaseUrl: 容忍 v 前缀与空白', rollbackReleaseUrl(' v0.2.436 ') === 'https://github.com/sleep2agi/agent-network-app/releases/tag/desktop-v0.2.436');
+ck('rollbackReleaseUrl: 算不出目标 ⇒ releases 列表（不猜 tag）',
+  rollbackReleaseUrl(null) === 'https://github.com/sleep2agi/agent-network-app/releases'
+  && rollbackReleaseUrl(undefined) === 'https://github.com/sleep2agi/agent-network-app/releases'
+  && rollbackReleaseUrl('') === 'https://github.com/sleep2agi/agent-network-app/releases'
+  && rollbackReleaseUrl('main') === 'https://github.com/sleep2agi/agent-network-app/releases'
+  && rollbackReleaseUrl('0.2') === 'https://github.com/sleep2agi/agent-network-app/releases');
 ck('rollbackTarget: 空输入 ⇒ null', rollbackTarget([], '0.2.1') === null && rollbackTarget(['0.2.1'], '') === null);

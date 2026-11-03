@@ -37,7 +37,7 @@ import { pointerUi } from './pointer-ui';
 import './i18n-accounts';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
 import { BUNDLED_RELEASE_BODY } from './changelog-bundled';
-import { entriesFromBody, rollbackTarget } from './changelog-model';
+import { entriesFromBody, rollbackReleaseUrl, rollbackTarget } from './changelog-model';
 import { APP_VERSION } from './version';
 import { BrandMark } from './brand-mark';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
@@ -1265,7 +1265,7 @@ export default function SettingsScreen({
                   // subtitle 直接告诉他该装哪一版(从内置更新日志里算,拿不到就不写)。
                   <SettingsRow label={tr('settings.copy.294')}
                     subtitle={ROLLBACK_TARGET ? `${tr('settings.copy.295')} v${ROLLBACK_TARGET}` : undefined}
-                    onPress={() => { void openExternal('https://github.com/sleep2agi/agent-network-app/releases'); }} testID="settings-history-releases-link" />
+                    onPress={() => { void openExternal(rollbackReleaseUrl(ROLLBACK_TARGET)); }} testID="settings-history-releases-link" />
                 ) : null}
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上

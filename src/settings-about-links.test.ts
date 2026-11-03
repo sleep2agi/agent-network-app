@@ -25,8 +25,9 @@ check('文案键是末尾追加的两条(292/293)，没有插在中间打乱旧�
   && copy.indexOf("['官网与支持', 'Website & support']") > copy.indexOf("['隐私政策', 'Privacy policy']"));
 check('文案有中英两版', copy.includes("['隐私政策', 'Privacy policy']") && copy.includes("['官网与支持', 'Website & support']"));
 
-check('关于页有「历史版本/回滚」入口，指向 releases 列表',
-  settings.includes("testID=\"settings-history-releases-link\"") && settings.includes("openExternal('https://github.com/sleep2agi/agent-network-app/releases')")
+check('关于页有「历史版本/回滚」入口，指向该版本资产页（算不出来才退回列表）',
+  settings.includes("testID=\"settings-history-releases-link\"")
+  && settings.includes('openExternal(rollbackReleaseUrl(ROLLBACK_TARGET))')
   && copy.includes("['下载历史版本（回滚用）', 'Older versions (rollback)']"));
 check('「下载历史版本」行给出该装哪一版（从内置更新日志算）',
   settings.includes("tr('settings.copy.295')") && settings.includes('v${ROLLBACK_TARGET}')
