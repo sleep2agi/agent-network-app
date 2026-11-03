@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.430:",
+  "- 修复：V1 节点的诊断行不再写 `catalog=missing`（会让人以为「该报没报」），改为 `catalog=n/a(v1)`——V1 本来就不上报清单。",
+  "",
   "What's new in 0.2.429:",
   "- 内部：把「代际」收敛为唯一入口 `generationOf(node)`（顶层优先、快照兜底），诊断行与模型区提示统一走它，避免再出现「字段有两处来源、只读一处」的错。",
   "",

@@ -39,6 +39,7 @@ check('buttons are compact desktop controls', /actionButton:\s*\{[\s\S]*?minWidt
 check('row wraps instead of overflowing narrow windows', /actionRow:\s*\{[\s\S]*?flexWrap: 'wrap'/.test(screen));
 check('hover and keyboard focus are both handled', screen.includes('onHoverIn=') && screen.includes('onHoverOut=') && screen.includes('onFocus=') && screen.includes('onBlur='));
 check('pressed state is visible without layout shift', /actionButtonPressed:\s*\{[\s\S]*?opacity: 0\.68,[\s\S]*?scale: 0\.98/.test(screen));
+check('V1 节点诊断写 catalog=n/a(v1) 而不是 missing', screen.includes("'catalog=n/a(v1)'") && screen.includes("gen === 'v1'"));
 check('诊断行带代际 gen=（统一走 generationOf，真机才读得到）', screen.includes('gen=${gen}') && screen.includes('generationOf(node)'));
 check('诊断行带网络标识（多网络排查用）', screen.includes('net=${s.network_id}'));
 check('只有复制成功才提示「已复制」', screen.includes('await Clipboard.setStringAsync(s.alias)') && !/Clipboard\.setStringAsync\(s\.alias\)\.catch/.test(screen) && screen.includes('复制失败就保持沉默'));
