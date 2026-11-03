@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.427:",
+  "- 修复：诊断行的 `gen=` 与「代际未声明」提示读错了字段（真机上会恒显示 unset）。改用 `opencodeFlagsOf`（顶层 opencode_generation 与快照合并），v1/v2 现在能正确显示。",
+  "",
   "What's new in 0.2.426:",
   "- 优化：OpenCode 系节点如果没声明代际（gen=unset），模型区直接提示「模型清单可能读不到」，不用等排查才发现。",
   "",

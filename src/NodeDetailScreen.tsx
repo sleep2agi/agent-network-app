@@ -79,7 +79,9 @@ import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import NodeTasksSection from './NodeTasksSection';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
-import { nodeInfoFacts, type NodeInfoFact } from './node-info';
+import { nodeInfoFacts, type NodeInfoFact,
+  opencodeFlagsOf,
+} from './node-info';
 import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
@@ -559,7 +561,9 @@ export default function NodeDetailScreen({
               // 有了这两个值就能直接排除「是不是旧版本客户端」这一类问题。
               // 代际(opencode v1/v2)决定能不能读模型清单,是「catalog=missing」排查里的第一个岔路口,
               // 所以直接写进诊断行,省一轮来回问。
-              const rawGen = node?.config_snapshot?.flags?.opencodeGeneration;
+              // /api/nodes 不带 config_snapshot,代际在顶层 opencode_generation;
+              // opencodeFlagsOf 会把两者合并,别再直接读 flags(那样真机永远 unset)。
+              const rawGen = opencodeFlagsOf(node)?.opencodeGeneration;
               const gen = typeof rawGen === 'string' && rawGen ? rawGen : node && /opencode/i.test(node.runtime ?? '') ? 'unset' : null;
               const line = [s.alias, node ? `node_id=${node.node_id}` : null, s.network_id ? `net=${s.network_id}` : null, `status=${s.status}`, gen ? `gen=${gen}` : null, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
                 // 报没报模型清单：一行里说清，交接给后端时不用再问
