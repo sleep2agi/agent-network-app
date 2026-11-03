@@ -28,6 +28,12 @@ const dept = (alias: string) => (alias === 'A' ? 'TMWork' : undefined);
 ck('dept：有归属用归属', groupKeyOf(row({}) as any, 'dept', dept, 'A') === 'TMWork');
 ck('dept：无归属 ⇒ 未归属（不猜前缀）', groupKeyOf(row({}) as any, 'dept', dept, '通信苹果欧') === '未归属');
 
+// 「未登记」≠「未归属」：前者会话在组织架构里没有节点记录，后者登记了但没分部门
+const known = (a: string) => a !== '幽灵会话';
+ck('dept：有登记但无归属 ⇒ 未归属', groupKeyOf(row({}) as any, 'dept', () => undefined, 'B', known) === '未归属');
+ck('dept：没有登记 ⇒ 未登记（不与未归属混桶）', groupKeyOf(row({}) as any, 'dept', () => undefined, '幽灵会话', known) === '未登记');
+ck('不给 knownOf 时行为不变（向后兼容）', groupKeyOf(row({}) as any, 'dept', () => undefined, 'X') === '未归属');
+
 // 切法解析：认不出就退回默认 dept
 ck('默认 dept', parseGroupBy(null) === 'dept' && parseGroupBy('nope') === 'dept');
 for (const k of GROUP_BY_OPTIONS) ck(`合法切法 ${k} 能解析`, parseGroupBy(k) === k);

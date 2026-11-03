@@ -74,12 +74,18 @@ export function groupKeyOf(
   by: GroupBy,
   deptOf?: (alias: string) => string | undefined,
   alias?: string,
+  knownOf?: (alias: string) => boolean,
 ): string {
   if (by === 'runtime') return runtimeGroup(row);
   if (by === 'host') return hostGroup(row);
   if (by === 'status') return statusGroup(row);
-  const dept = alias && deptOf ? deptOf(alias) : undefined;
-  return dept || '未归属';
+  if (!alias) return '未归属';
+  const dept = deptOf?.(alias);
+  if (dept) return dept;
+  // 「未登记」与「未归属」必须分开：前者是会话在组织架构里根本不存在（没有节点登记），
+  // 后者是登记了但没分部门。混成一个桶会让「未归属为什么这么多」永远说不清。
+  if (knownOf && !knownOf(alias)) return '未登记';
+  return '未归属';
 }
 
 /** 切换切法时给调用方用：同一份 sessions 预先算好 alias → 组名，避免每行重算。 */
@@ -87,8 +93,9 @@ export function groupMapOf(
   sessions: Array<Session & { alias: string }>,
   by: GroupBy,
   deptOf?: (alias: string) => string | undefined,
+  knownOf?: (alias: string) => boolean,
 ): Map<string, string> {
   const map = new Map<string, string>();
-  for (const s of sessions) map.set(s.alias, groupKeyOf(s, by, deptOf, s.alias));
+  for (const s of sessions) map.set(s.alias, groupKeyOf(s, by, deptOf, s.alias, knownOf));
   return map;
 }

@@ -483,10 +483,20 @@ export default function AgentsScreen({
     { counts: liveUnread.counts, manualUnread: convFlags.manualUnread },
     [...(onOpenPerson ? people : []), ...(groups ?? [])],
   );
+  // 已登记的节点别名：用来把「未登记」（会话在组织架构里没有节点记录）与「未归属」（登记了但没分部门）分开
+  const registeredAliases = useMemo(
+    () => new Set(
+      (agentDirectory.rows || [])
+        .filter(r => r.kind === 'registered')
+        .map(r => (r.kind === 'registered' ? (r.node.alias || r.session?.alias || r.key) : ''))
+        .filter(Boolean),
+    ),
+    [agentDirectory.rows],
+  );
   // alias → 组名（换切法时整表重算一次，别让每行各算一遍）
   const groupLabels = useMemo(
-    () => groupMapOf(visibleSessions as any, groupBy, alias => deptByAlias.get(alias)),
-    [visibleSessions, groupBy, deptByAlias],
+    () => groupMapOf(visibleSessions as any, groupBy, alias => deptByAlias.get(alias), alias => registeredAliases.has(alias)),
+    [visibleSessions, groupBy, deptByAlias, registeredAliases],
   );
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
