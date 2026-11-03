@@ -68,7 +68,8 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab } from './agent-list-prefs';
+import { loadCollapsedGroups, loadConversationTab, loadGroupBy, peekConversationTab, peekGroupBy, saveCollapsedGroups, saveConversationTab, saveGroupBy } from './agent-list-prefs';
+import { GROUP_BY_LABEL, GROUP_BY_OPTIONS, groupMapOf, type GroupBy } from './agent-group-by';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
@@ -325,6 +326,19 @@ export default function AgentsScreen({
     setTabState(next);
     void saveConversationTab(next);
   }, []);
+  // 「组织架构 / 节点来分类」(admin 2026-11-03)：同一份 sessions 换一个切面分组。
+  // 默认 'dept' 保持既有观感；切法按设备记住。只影响分组标题，不影响搜索 / 未读 / 置顶。
+  const [groupBy, setGroupByState] = useState<GroupBy>(() => peekGroupBy() ?? 'dept');
+  useEffect(() => {
+    if (peekGroupBy()) return;
+    let live = true;
+    loadGroupBy().then(v => { if (live) setGroupByState(v); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const setGroupBy = useCallback((next: GroupBy) => {
+    setGroupByState(next);
+    void saveGroupBy(next);
+  }, []);
   const effectiveTab: ConversationTab = showTabs ? tab : 'all';
   const toggleGroup = useCallback((title: string) => {
     setCollapsed(prev => {
@@ -469,6 +483,11 @@ export default function AgentsScreen({
     { counts: liveUnread.counts, manualUnread: convFlags.manualUnread },
     [...(onOpenPerson ? people : []), ...(groups ?? [])],
   );
+  // alias → 组名（换切法时整表重算一次，别让每行各算一遍）
+  const groupLabels = useMemo(
+    () => groupMapOf(visibleSessions as any, groupBy, alias => deptByAlias.get(alias)),
+    [visibleSessions, groupBy, deptByAlias],
+  );
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
       match: pinyinMatch,
@@ -478,9 +497,9 @@ export default function AgentsScreen({
         activityAt: alias => activityByAlias.get(alias) ?? 0,
       },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
-      teamOf: alias => deptByAlias.get(alias),
+      teamOf: alias => (groupBy === 'dept' ? deptByAlias.get(alias) : groupLabels.get(alias)),
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, groupBy, groupLabels],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -999,6 +1018,27 @@ export default function AgentsScreen({
               );
             })}
           </View>
+        </View>
+      ) : null}
+      {showTabs ? (
+        // 「组织架构 / 节点来分类」(admin 2026-11-03)：默认「部门」= 既有观感；
+        // 换切法只改分组标题，不改搜索、未读、置顶、折叠逻辑。
+        <View testID="agent-groupby-bar" style={[rowStyles.filterBar, { backgroundColor: compact ? colors.listBg : colors.bg }]}>
+          {GROUP_BY_OPTIONS.map(k => {
+            const on = groupBy === k;
+            return (
+              <Pressable
+                key={k}
+                testID={`agent-groupby-${k}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                onPress={() => setGroupBy(k)}
+                style={[rowStyles.filterChip, { backgroundColor: on ? colors.railActiveBg : colors.subtleFill }]}
+              >
+                <Text style={[rowStyles.filterChipText, { color: on ? colors.accent : colors.textSecondary }]}>{GROUP_BY_LABEL[k]}</Text>
+              </Pressable>
+            );
+          })}
         </View>
       ) : null}
       {filtering ? (
