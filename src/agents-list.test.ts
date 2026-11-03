@@ -173,6 +173,15 @@ const cat = [
   { alias: '乙', status: 'idle' },
   { alias: '丙', opencode_catalog: [], status: 'idle' },
 ];
+// 2026-11-04:搜索认诊断行里的 net=<network_id>
+const nets = [
+  { alias: '甲', network_id: 12, status: 'idle' },
+  { alias: '乙', network_id: '12', status: 'idle' },
+  { alias: '丙', network_id: 7, status: 'idle' },
+];
+ck('net=12 只留该网络的节点（数字/字符串都认）', JSON.stringify(buildSections(nets, 'net=12').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['乙', '甲']));
+ck('不带前缀的纯数字不当网络查', buildSections(nets, '12').every(x => x.data.length === 0 || x.data.every(r => r.alias !== '丙')));
+ck('net= 空值不算匹配', buildSections(nets, 'net=').flatMap(x => x.data).length === 0);
 ck('搜 missing 只留没上报清单的节点', JSON.stringify(buildSections(cat, 'missing').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['丙', '乙']));
 ck('搜「未上报」等价于 missing', JSON.stringify(buildSections(cat, '未上报').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['丙', '乙']));
 ck('搜「已上报」只留上报了清单的节点', JSON.stringify(buildSections(cat, '已上报').flatMap(x => x.data.map(r => r.alias))) === JSON.stringify(['甲']));

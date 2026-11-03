@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.422:",
+  "- 新增：节点列表搜索支持 `net=<网络 id>`（与诊断行里的 net= 同一写法），多网络时只留某个网络的节点。",
+  "",
   "What's new in 0.2.421:",
   "- 新增：设置 → 关于 里加「下载历史版本（回滚用）」入口，新版本出问题时能直接退回上一版。",
   "",
