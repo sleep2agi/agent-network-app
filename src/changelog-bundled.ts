@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.424:",
+  "- 优化：搜索空结果提示补上 `net=12`（按网络）与 `agent=2.5`（按版本），新语法不用靠猜。",
+  "",
   "What's new in 0.2.423:",
   "- 新增：节点列表搜索支持 `agent=<版本>`（前缀匹配），发版后一眼找出还在旧版本上的节点。",
   "",

@@ -149,6 +149,7 @@ ck('没有模型的会话不误命中', matchesModel({}, 'deepseek', substringMa
 // 搜不到时的提示要把「能搜什么」说全（拼音 / node_id / 模型名）
 ck('搜索空状态提示写明 node_id 与模型名', screenSrc.includes('node_id n_xxx') && screenSrc.includes('模型名如 deepseek'));
 ck('搜索空状态提示覆盖 runtime/状态/模型清单', screenSrc.includes('runtime 如 codex') && screenSrc.includes('状态如离线') && screenSrc.includes('missing/未上报'));
+ck('搜索空状态提示也写了 net= 与 agent=', screenSrc.includes('net=12 按网络') && screenSrc.includes('agent=2.5 按版本'));
 
 // 2026-11-03:搜索也认状态词（找掉线节点）
 const mixed = [
