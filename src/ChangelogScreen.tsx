@@ -22,7 +22,7 @@ import { elevated } from './elevation';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { APP_VERSION } from './version';
-import { CHANGELOG_FORMATS, formatChangelog, isChangelogFormat, releaseDateLabel, type ChangelogEntry, type ChangelogFormat } from './changelog-model';
+import { CHANGELOG_FORMATS, formatChangelog, isChangelogFormat, releaseDateLabel, rollbackTarget, type ChangelogEntry, type ChangelogFormat } from './changelog-model';
 import { loadCachedChangelog, refreshChangelog } from './changelog-source';
 
 const FORMAT_KEY = 'anet.changelog.format';
@@ -162,7 +162,16 @@ function OfflineHint({ online, style }: { online: boolean | null; style?: any })
 
 // ── 桌面 ────────────────────────────────────────────────────────────────────────────────────
 
+// 「建议回滚」标记(2026-11-04):关于页已经会在出问题时提示该装回哪一版,更新日志是用户
+// 真正翻历史的地方,顺手把那一版标出来——省得他记住版本号再回来找。
+function useRollbackTarget(entries: ChangelogEntry[]): string | null {
+  return useMemo(() => {
+    try { return rollbackTarget(entries.map(e => e.version), APP_VERSION); } catch { return null; }
+  }, [entries]);
+}
+
 export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[]; online: boolean | null }) {
+  const rollbackTo = useRollbackTarget(entries);
   useTranslation();
   const pk = usePicker(entries);
   const [q, setQ] = useState('');
@@ -228,6 +237,7 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
               </Pressable>
               <Text style={styles.version} testID={`changelog-version-${e.version}`}>v{e.version}</Text>
               {e.version === APP_VERSION ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.current')}</Text></View> : null}
+              {rollbackTo && e.version === rollbackTo ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.rollback')}</Text></View> : null}
               <Text style={styles.date} testID={`changelog-date-${e.version}`}>{dateOf(e)}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel={tr('changelog.copyVersion', { v: e.version })} testID={`changelog-copy-${e.version}`} onPress={() => pk.setPreview({ versions: [e.version] })} style={({ pressed, hovered }: any) => [styles.copyBtn, (pressed || hovered) && styles.hover]}>
                 <Ionicons name="copy-outline" size={13} color={colors.accent} />
@@ -276,6 +286,7 @@ function Card({ selecting, on, onPress, style, testID, children }: { selecting: 
 // ── 手机 ────────────────────────────────────────────────────────────────────────────────────
 
 export function ChangelogPhone({ entries, online }: { entries: ChangelogEntry[]; online: boolean | null }) {
+  const rollbackTo = useRollbackTarget(entries);
   useTranslation();
   const pk = usePicker(entries);
   const [selecting, setSelecting] = useState(false);
@@ -326,6 +337,7 @@ export function ChangelogPhone({ entries, online }: { entries: ChangelogEntry[];
                   <View style={styles.titleLine}>
                     <Text style={styles.versionPhone} testID={`changelog-version-${e.version}`}>v{e.version}</Text>
                     {e.version === APP_VERSION ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.current')}</Text></View> : null}
+                    {rollbackTo && e.version === rollbackTo ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.rollback')}</Text></View> : null}
                   </View>
                   {dateOf(e) ? <Text style={styles.date} testID={`changelog-date-${e.version}`}>{dateOf(e)}</Text> : null}
                 </View>
