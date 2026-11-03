@@ -10,9 +10,14 @@ export type OpenCodeCatalogSnapshot = {
 
 const OPENCODE_RUNTIMES = new Set(['opencode-cli', 'opencode-sdk', 'opencode']);
 
-/** V1 明确排除。代际未知时，OpenCode runtime 仍走服务器目录，Hub 会拒绝非 V2。 */
-export function isOpenCodeV2Node(node: Pick<HubNode, 'runtime' | 'config_snapshot'>): boolean {
-  const gen = node.config_snapshot?.flags?.opencodeGeneration;
+/** V1 明确排除。代际未知时，OpenCode runtime 仍走服务器目录，Hub 会拒绝非 V2。
+ *  注意代际有两个来源：`/api/nodes` 的顶层 `opencode_generation`，和（老 Hub / 夹具的）
+ *  `config_snapshot.flags.opencodeGeneration`。只读后者会让真机上 gen=v1 的节点被当成 V2
+ *  —— 和 0.427 修的 `gen=` 是同一类错。 */
+export function isOpenCodeV2Node(
+  node: Pick<HubNode, 'runtime' | 'config_snapshot'> & { opencode_generation?: 'v1' | 'v2' | null },
+): boolean {
+  const gen = node.opencode_generation ?? node.config_snapshot?.flags?.opencodeGeneration;
   if (gen === 'v1') return false;
   if (gen === 'v2') return true;
   return OPENCODE_RUNTIMES.has(node.runtime ?? '');

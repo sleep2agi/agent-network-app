@@ -15,6 +15,12 @@ ck('换了 runtime 就换一批', JSON.stringify(peerCatalogModels(peers, { runt
 ck('没有 runtime / 没有节点 ⇒ 空', peerCatalogModels(peers, { runtime: null }).length === 0 && peerCatalogModels(null, { runtime: 'opencode-cli' }).length === 0);
 ck('limit 生效', peerCatalogModels(peers, { runtime: 'opencode-cli', limit: 2 }).length === 2);
 
+// 2026-11-04:代际有两个来源,顶层优先(与 gen= 修复同一类问题)
+ck('顶层 opencode_generation=v1 ⇒ 不是 V2', isOpenCodeV2Node({ runtime: 'opencode-cli', opencode_generation: 'v1' }) === false);
+ck('顶层 opencode_generation=v2 ⇒ 是 V2', isOpenCodeV2Node({ runtime: 'opencode-cli', opencode_generation: 'v2' }) === true);
+ck('顶层优先于快照', isOpenCodeV2Node({ runtime: 'opencode-cli', opencode_generation: 'v1', config_snapshot: { flags: { opencodeGeneration: 'v2' } } }) === false);
+ck('两处都没有时按 runtime 推断', isOpenCodeV2Node({ runtime: 'opencode-cli' }) === true && isOpenCodeV2Node({ runtime: 'codex-cli' }) === false);
+
 // 一行说清「报没报、为什么没报」
 ck('已上报时给出数量', catalogStatusLine(12, '2.5.0-preview.164') === '模型清单：本机已上报 12 个模型。');
 ck('版本低于门槛 → 明确说是版本问题', catalogStatusLine(0, '2.5.0-preview.159').includes('需 ≥ 2.5.0-preview.160'));
