@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.433:
+            - 优化：模型切换成功后自动清空筛选框，下次进来不会因为旧筛选看不到刚切过去的模型。
+
             What's new in 0.2.432:
             - 优化：切换模型失败（网络抖动等）时给「再试一次」，不用重新挑一遍。
 
