@@ -127,6 +127,12 @@ check('当前 Provider 的分组标题带「当前」标记', (() => {
     && groupCountLabelFor(g, 'no-slash') === 'deepseek · 2';
 })());
 check('超时后给出「再下发一次」且复用 applyModel', section.includes('node-model-retry-timeout') && section.includes('applyModel(phase.requested)') && section.includes('const applyModel = async'));
+check('斜杠两侧的空白被吃掉（粘贴场景）', (() => {
+  const a = validateModelId('deepseek / chat');
+  const b = validateModelId(' deepseek/ chat ');
+  const c = validateModelId('deep seek/chat');
+  return a.ok && a.model === 'deepseek/chat' && b.ok && b.model === 'deepseek/chat' && !c.ok;
+})());
 check('当前模型所在 Provider 组排最前', (() => {
   const gs = [
     { provider: 'anthropic', models: ['anthropic/a'] },
