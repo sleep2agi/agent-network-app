@@ -300,6 +300,7 @@ const copy = [
   // 末尾追加(编号按位置,不能插中间):关于页的两个外部链接(App Store 审核会用).
   ['隐私政策', 'Privacy policy'],
   ['官网与支持', 'Website & support'],
+  ['下载历史版本（回滚用）', 'Older versions (rollback)'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.421:
+            - 新增：设置 → 关于 里加「下载历史版本（回滚用）」入口，新版本出问题时能直接退回上一版。
+
             What's new in 0.2.420:
             - 优化：节点没上报模型清单、但版本其实够的时候，状态行直接说下一步——把诊断行贴给该节点的运维，不用自己猜是不是机器坏了。
 

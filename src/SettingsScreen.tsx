@@ -1248,6 +1248,10 @@ export default function SettingsScreen({
                 {show('about', 'version') ? (
                   <SettingsRow label={tr('settings.copy.293')} onPress={() => { void openExternal('https://www.anet.sh'); }} testID="settings-support-link" />
                 ) : null}
+                {show('about', 'version') ? (
+                  // 回滚入口:新版本出问题时用户得有路退回上一版,而不是只能等修。
+                  <SettingsRow label={tr('settings.copy.294')} onPress={() => { void openExternal('https://github.com/sleep2agi/agent-network-app/releases'); }} testID="settings-history-releases-link" />
+                ) : null}
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
                   // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
