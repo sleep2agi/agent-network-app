@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.438:
+            - 关于页「下载历史版本」点进去直接是建议回滚的那一版资产页，不用在几十个 release 里翻。
+
             What's new in 0.2.437:
             - 新增：模型切换成功后给「切回 v上一版」，换错了不用再翻列表找回去。
 
