@@ -568,9 +568,13 @@ export default function NodeDetailScreen({
               const gen = typeof rawGen === 'string' && rawGen ? rawGen : node && /opencode/i.test(node.runtime ?? '') ? 'unset' : null;
               const line = [s.alias, node ? `node_id=${node.node_id}` : null, s.network_id ? `net=${s.network_id}` : null, `status=${s.status}`, gen ? `gen=${gen}` : null, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
                 // 报没报模型清单：一行里说清，交接给后端时不用再问
-                node && Array.isArray(node.opencode_catalog) && node.opencode_catalog.length > 0
-                  ? `catalog=reported(${node.opencode_catalog.length})`
-                  : 'catalog=missing',, `client=${APP_VERSION}/${Platform.OS}`]
+                // V1 本来就不会上报模型清单,写 missing 会让人以为「该报没报」;
+                // 代际是 v1 时直接标 n/a,把这层歧义去掉。
+                gen === 'v1'
+                  ? 'catalog=n/a(v1)'
+                  : node && Array.isArray(node.opencode_catalog) && node.opencode_catalog.length > 0
+                    ? `catalog=reported(${node.opencode_catalog.length})`
+                    : 'catalog=missing',, `client=${APP_VERSION}/${Platform.OS}`]
                 .filter(Boolean).join(' · ');
               try {
                 await Clipboard.setStringAsync(line);
