@@ -124,6 +124,14 @@ export function opencodeFlagsOf(node: HubNode | null | undefined): Record<string
   return { ...(snapshot ?? {}), ...(generation ? { opencodeGeneration: generation } : {}), ...(mode ? { opencodeMode: mode } : {}) };
 }
 
+/** 代际的唯一读法（2026-11-04）。`/api/nodes` 给顶层 `opencode_generation`，老 Hub / 夹具只给
+ *  `config_snapshot.flags.opencodeGeneration`。UI 与判定逻辑一律走这里，别再各处自己读字段
+ *  —— 0.425~0.428 连续两处写错就是「只读了一处来源」。返回原字符串或 undefined。 */
+export function generationOf(node: HubNode | null | undefined): string | undefined {
+  const gen = opencodeFlagsOf(node)?.opencodeGeneration;
+  return typeof gen === 'string' && gen ? gen : undefined;
+}
+
 /** Runtime 值的展示：OpenCode 代际从 config_snapshot.flags.opencodeGeneration 读，读不到就只显示 runtime。 */
 export function runtimeLabel(runtime: string | null | undefined, flags: Record<string, unknown> | undefined): string | string | null | undefined {
   const base = runtime ?? '';

@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.429:
+            - 内部：把「代际」收敛为唯一入口 `generationOf(node)`（顶层优先、快照兜底），诊断行与模型区提示统一走它，避免再出现「字段有两处来源、只读一处」的错。
+
             What's new in 0.2.428:
             - 修复：V2 代际判定也只读快照字段的同类问题——顶层 `opencode_generation`（/api/nodes 实际给的）现在优先，gen=v1 的节点不会再被当成 V2 显示模型面板。
 
