@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.425:",
+  "- 优化：节点诊断行加 `gen=v1/v2`（代际），交接「模型清单读不到」时不用再来回问是哪个 OpenCode 代际。",
+  "",
   "What's new in 0.2.424:",
   "- 优化：搜索空结果提示补上 `net=12`（按网络）与 `agent=2.5`（按版本），新语法不用靠猜。",
   "",
