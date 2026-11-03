@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.435:
+            - 优化：复制诊断后的提示写明「含 gen / catalog / net」，交接时一眼知道这行带了哪些字段。
+
             What's new in 0.2.434:
             - 优化：模型 chip 里「刚选中、还没生效」的那个会显示 ✓，并带无障碍选中态（此前只靠边框颜色区分）。
 
