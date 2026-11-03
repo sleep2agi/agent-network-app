@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.431:
+            - 新增：模型区底部一行「诊断行字段」说明（gen / catalog / agent / net / client），贴出来给别人时不用每次再解释。
+
             What's new in 0.2.430:
             - 修复：V1 节点的诊断行不再写 `catalog=missing`（会让人以为「该报没报」），改为 `catalog=n/a(v1)`——V1 本来就不上报清单。
 
