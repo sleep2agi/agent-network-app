@@ -252,7 +252,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     if (!view || busy) return;
     setPhase({ kind: 'submitting', requested: model });
     const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
-    const next = afterSubmit(model, view.config_revision, res);
+    const next = afterSubmit(model, view.config_revision, res, currentModel);
     if (next.kind === 'conflict') void reload();
     // 生效后把筛选清掉:否则下次进来列表还停在旧筛选上,看不到刚切过去的模型。
     if (next.kind === 'applied') setFilter('');
@@ -431,6 +431,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
           <Text style={{ color: phase.kind === 'applied' ? colors.running : phase.kind === 'error' || phase.kind === 'timeout' || phase.kind === 'conflict' ? colors.failed : colors.textMuted, fontSize: 12, lineHeight: 18 }}>
             {phaseText(phase)}
           </Text>
+        ) : null}
+        {/* 切换成功后给「切回上一版」:换错了不用再翻列表找回去。 */}
+        {phase.kind === 'applied' && phase.previous && phase.previous !== phase.model && !busy ? (
+          <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.previous as string)} testID="node-model-revert"
+            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.accent, fontSize: 12 }}>切回 {phase.previous}</Text>
+          </Pressable>
         ) : null}
         {/* 失败(如网络抖动)后按原样再试一次:输入框里的内容没变,不该逼用户重选。 */}
         {phase.kind === 'error' && !busy && validateModelId(candidate).ok ? (
