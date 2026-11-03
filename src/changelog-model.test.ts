@@ -3,6 +3,7 @@
 import {
   datesFromGithubReleases, entriesFromBody, entrySummary, formatChangelog, mergeChangelog, newestGithubBody,
   parseChangelogCache, releaseDateLabel, serializeChangelogCache, XHS_TAGS, type ChangelogEntry,
+  rollbackTarget,
 } from './changelog-model';
 import { CHANGELOG_CACHE_KEY, loadCachedChangelog, refreshChangelog, type ChangelogStorage } from './changelog-source';
 import { BUNDLED_RELEASE_BODY } from './changelog-bundled';
@@ -175,3 +176,9 @@ const online = (calls: string[]): typeof fetch => (async (url: any) => {
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
+
+// 2026-11-04:关于页「下载历史版本」要知道该退到哪一版
+ck('rollbackTarget: 新→旧列表取当前版本的下一条', rollbackTarget(['0.2.435', '0.2.434', '0.2.433'], '0.2.435') === '0.2.434');
+ck('rollbackTarget: 当前版本不在列表里 ⇒ null（不猜）', rollbackTarget(['0.2.435', '0.2.434'], '0.2.999') === null);
+ck('rollbackTarget: 已经是最旧一版 ⇒ null', rollbackTarget(['0.2.1'], '0.2.1') === null && rollbackTarget(['0.2.2', '0.2.1'], '0.2.1') === null);
+ck('rollbackTarget: 空输入 ⇒ null', rollbackTarget([], '0.2.1') === null && rollbackTarget(['0.2.1'], '') === null);

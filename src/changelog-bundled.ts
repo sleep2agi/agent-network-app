@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.436:",
+  "- 新增：关于页的「下载历史版本」直接写明「建议回滚到 v0.2.435」（从内置更新日志算出上一版），不用自己猜该退哪一版。",
+  "",
   "What's new in 0.2.435:",
   "- 优化：复制诊断后的提示写明「含 gen / catalog / net」，交接时一眼知道这行带了哪些字段。",
   "",

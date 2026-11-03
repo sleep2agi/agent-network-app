@@ -301,6 +301,7 @@ const copy = [
   ['隐私政策', 'Privacy policy'],
   ['官网与支持', 'Website & support'],
   ['下载历史版本（回滚用）', 'Older versions (rollback)'],
+  ['建议回滚到', 'Suggested rollback:'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);
