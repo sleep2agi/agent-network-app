@@ -216,6 +216,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
   const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
+  // 只在「opencode 系 runtime 却没写代际」时提示;写了 v1/v2 或不是 opencode 都不打扰。
+  const isOpenCodeRuntime = /opencode/i.test(node.runtime ?? '');
+  const generationUnset = isOpenCodeRuntime && !node.config_snapshot?.flags?.opencodeGeneration;
   const chips = modelChips(suggestions, currentModel);
   // 目录大的时候(OpenCodeV2 常有几十个模型)一屏放不下,加一个筛选框;列表短就不出现,免得喧宾夺主。
   const [filter, setFilter] = useState('');
@@ -269,6 +272,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             {currentModel || (view === undefined && !readFailed ? '读取中…' : '—')}
           </Text>
         </View>
+        {/* 代际没声明(opencode 系 runtime 但 flags 里没有 opencodeGeneration)时,
+            模型清单很可能是读不到的——这是排查里最常见的一步,提前说一句。 */}
+        {isOpenCodeRuntime && generationUnset ? (
+          <Text testID="node-model-gen-unset" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+            这台节点没有声明 OpenCode 代际（gen=unset），模型清单可能读不到；把节点诊断行贴给它的运维就能定位。
+          </Text>
+        ) : null}
         {readFailed && view === undefined ? (
           <Text style={{ color: colors.failed, fontSize: 12 }}>读取节点配置失败。<Text style={{ color: colors.accent }} onPress={() => void reload()}>重试</Text></Text>
         ) : null}

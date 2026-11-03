@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.426:
+            - 优化：OpenCode 系节点如果没声明代际（gen=unset），模型区直接提示「模型清单可能读不到」，不用等排查才发现。
+
             What's new in 0.2.425:
             - 优化：节点诊断行加 `gen=v1/v2`（代际），交接「模型清单读不到」时不用再来回问是哪个 OpenCode 代际。
 
