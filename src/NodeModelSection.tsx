@@ -254,6 +254,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
     const next = afterSubmit(model, view.config_revision, res);
     if (next.kind === 'conflict') void reload();
+    // 生效后把筛选清掉:否则下次进来列表还停在旧筛选上,看不到刚切过去的模型。
+    if (next.kind === 'applied') setFilter('');
     setPhase(next);
   };
 

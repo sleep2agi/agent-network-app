@@ -128,6 +128,7 @@ check('当前 Provider 的分组标题带「当前」标记', (() => {
 })());
 check('模型区给诊断字段说明（gen/catalog/agent/net/client）', section.includes('node-model-diag-legend') && section.includes('gen=代际') && section.includes('net=网络'));
 check('opencode 系但代际未声明时给出提示（统一走 generationOf）', section.includes('node-model-gen-unset') && section.includes('generationUnset') && section.includes('generationOf(node)'));
+check('切换生效后清空筛选（避免下次进来看不到新模型）', section.includes("if (next.kind === 'applied') setFilter('')"));
 check('失败时给「再试一次」且先校验候选', section.includes('node-model-retry-error') && section.includes('validateModelId(candidate).ok') && section.includes('void submit()'));
 check('超时后给出「再下发一次」且复用 applyModel', section.includes('node-model-retry-timeout') && section.includes('applyModel(phase.requested)') && section.includes('const applyModel = async'));
 check('斜杠两侧的空白被吃掉（粘贴场景）', (() => {
