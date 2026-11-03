@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.423:
+            - 新增：节点列表搜索支持 `agent=<版本>`（前缀匹配），发版后一眼找出还在旧版本上的节点。
+
             What's new in 0.2.422:
             - 新增：节点列表搜索支持 `net=<网络 id>`（与诊断行里的 net= 同一写法），多网络时只留某个网络的节点。
 

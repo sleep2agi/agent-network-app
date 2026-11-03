@@ -72,6 +72,24 @@ export function matchesStatus(session: { status?: string | null }, query: string
 }
 
 /**
+ * 搜索命中「agent 版本」的判定（2026-11-04）：发版后常要问「还有谁在旧版本上」。
+ * 诊断行里报的是 `agent=<version>`，搜索认同一个写法：`agent=2.4.` 命中所有 2.4.x。
+ * 必须带前缀，且比较用前缀匹配（版本号太长，用户一般只记得前几位）。
+ */
+export function matchesAgentVersion(
+  session: { version?: string | null },
+  query: string,
+): boolean {
+  const q = (query ?? '').trim();
+  const m = /^agent=(.+)$/i.exec(q);
+  if (!m) return false;
+  const want = m[1].trim().toLowerCase();
+  if (!want) return false;
+  const ver = (session.version ?? '').trim().toLowerCase();
+  return ver.length > 0 && ver.includes(want);
+}
+
+/**
  * 搜索命中「网络」的判定（2026-11-04）：多网络用户手里同一批节点分属不同网络，
  * 诊断行里已经带 `net=`，那就让搜索也认同一个写法——`net=12` 只留那个网络的节点。
  * 必须带前缀：纯数字会误命中名称/模型里的数字。
@@ -257,7 +275,7 @@ export function buildSections(
   // 搜索除了别名,也认 node_id(2026-11-02):「复制节点诊断」给出的就是 `node_id=n_xxx`,
   // 拿到那串只能靠别名回忆是谁。命中 node_id 也算匹配,空/缺字段不参与。
   const filtered = q
-    ? sessions.filter(s => match(s.alias, q) || matchesNodeId(s, q, match) || matchesModel(s, q, match) || matchesRuntime(s, q, match) || matchesStatus(s, q) || matchesCatalog(s as { opencode_catalog?: readonly string[] | null }, q) || matchesNetwork(s, q))
+    ? sessions.filter(s => match(s.alias, q) || matchesNodeId(s, q, match) || matchesModel(s, q, match) || matchesRuntime(s, q, match) || matchesStatus(s, q) || matchesCatalog(s as { opencode_catalog?: readonly string[] | null }, q) || matchesNetwork(s, q) || matchesAgentVersion(s, q))
     : sessions.slice();
   // 「新消息」组:有未读的会话整体上浮到最顶(在「置顶」之上),**搬走**而不是复制;
   // 读完(未读→0)下一次计算时自然回到原来的组。搜索时不浮动,保持搜索结果原有的顺序。

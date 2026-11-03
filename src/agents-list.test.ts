@@ -173,6 +173,16 @@ const cat = [
   { alias: '乙', status: 'idle' },
   { alias: '丙', opencode_catalog: [], status: 'idle' },
 ];
+// 2026-11-04:搜索认诊断行里的 agent=<版本>（发版后找旧版本节点）
+const vers = [
+  { alias: '甲', version: '2.5.0-preview.164', status: 'idle' },
+  { alias: '乙', version: '2.4.9', status: 'idle' },
+  { alias: '丙', status: 'idle' },
+];
+ck('agent=2.5 只留 2.5.x 节点', JSON.stringify(buildSections(vers, 'agent=2.5').flatMap(x => x.data.map(r => r.alias))) === JSON.stringify(['甲']));
+ck('agent= 匹配前缀（2.4 命中 2.4.9）', JSON.stringify(buildSections(vers, 'agent=2.4').flatMap(x => x.data.map(r => r.alias))) === JSON.stringify(['乙']));
+ck('没版本的节点不参与 agent= 搜索', buildSections(vers, 'agent=2.').flatMap(x => x.data.map(r => r.alias)).sort().join(',') === '乙,甲');
+ck('agent= 空值不算匹配', buildSections(vers, 'agent=').flatMap(x => x.data).length === 0);
 // 2026-11-04:搜索认诊断行里的 net=<network_id>
 const nets = [
   { alias: '甲', network_id: 12, status: 'idle' },
