@@ -429,6 +429,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             {phaseText(phase)}
           </Text>
         ) : null}
+        {/* 失败(如网络抖动)后按原样再试一次:输入框里的内容没变,不该逼用户重选。 */}
+        {phase.kind === 'error' && !busy && validateModelId(candidate).ok ? (
+          <Pressable accessibilityRole="button" onPress={() => void submit()} testID="node-model-retry-error"
+            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.accent, fontSize: 12 }}>再试一次</Text>
+          </Pressable>
+        ) : null}
         {/* 超时后节点可能只是还没重启完:给一个「再下发一次」,不用重新选模型。 */}
         {phase.kind === 'timeout' && !busy ? (
           <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.requested)} testID="node-model-retry-timeout"
