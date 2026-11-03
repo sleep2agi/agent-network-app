@@ -1155,7 +1155,7 @@ export default function AgentsScreen({
           </Text>
           <Text style={[styles.errorHint, !q && !filtering && restricted && restrictedEmptyCopy()]}>
             {q
-              ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音 zf、node_id n_xxx、模型名如 deepseek、runtime 如 codex、状态如离线、以及 missing/未上报 查模型清单)`
+              ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音 zf、node_id n_xxx、模型名如 deepseek、runtime 如 codex、状态如离线、net=12 按网络、agent=2.5 按版本、以及 missing/未上报 查模型清单)`
               : restricted && !filtering ? t('agents.restrictedHint') : '用右上角 + 新建一个'}
           </Text>
           {q ? (
