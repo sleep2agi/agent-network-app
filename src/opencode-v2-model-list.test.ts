@@ -19,6 +19,7 @@ ck('limit 生效', peerCatalogModels(peers, { runtime: 'opencode-cli', limit: 2 
 ck('已上报时给出数量', catalogStatusLine(12, '2.5.0-preview.164') === '模型清单：本机已上报 12 个模型。');
 ck('版本低于门槛 → 明确说是版本问题', catalogStatusLine(0, '2.5.0-preview.159').includes('需 ≥ 2.5.0-preview.160'));
 ck('版本够但没报 → 说是「够但仍没报上来」', catalogStatusLine(0, '2.5.0-preview.164').includes('版本本身够但仍没报上来'));
+ck('版本够但没报 → 给出下一步（贴诊断行给运维）', catalogStatusLine(0, '2.5.0-preview.164').includes('诊断行'));
 ck('版本看不懂时不猜「太旧」', catalogStatusLine(0, null).includes('版本未知'));
 
 // 带上「有几台节点贡献了候选」

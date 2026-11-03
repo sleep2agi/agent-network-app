@@ -132,7 +132,8 @@ export function catalogStatusLine(
   if (n > 0) return `模型清单：本机已上报 ${n} 个模型。`;
   const fresh = reportsCatalogSince(version);
   if (fresh === false) return `模型清单：本机未上报（agent-node ${version} 低于能上报的版本，需 ≥ 2.5.0-preview.${threshold}）。`;
-  return `模型清单：本机未上报（agent-node ${version ?? '版本未知'}，版本本身够但仍没报上来）。`;
+  // 「版本够但仍没报」是 daemon 侧的事,客户端只能兜底;说清下一步怎么交接,别让人猜。
+  return `模型清单：本机未上报（agent-node ${version ?? '版本未知'}，版本本身够但仍没报上来）——这属节点侧问题：把节点详情里的诊断行贴给该节点的运维即可。`;
 }
 
 export function catalogErrorText(error: string | undefined): string {
