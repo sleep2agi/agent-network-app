@@ -1,7 +1,9 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { nodeStatusPath } from './api';
-import { nodeInfoFacts, opencodeFlagsOf, opencodeServerLabel, resumeSessionId, runtimeLabel, safeServerLabel, safeServerUrl } from './node-info';
+import { nodeInfoFacts, opencodeFlagsOf, opencodeServerLabel, resumeSessionId, runtimeLabel, safeServerLabel, safeServerUrl,
+  generationOf,
+} from './node-info';
 import { factText, headerChips } from './node-page-model';
 
 let passed = 0;
@@ -127,3 +129,21 @@ check('opencodeFlagsOf：两处都没有 → undefined（不编代际）',
   opencodeFlagsOf({ node_id: 'n_1' }) === undefined);
 
 console.log(`node info: ${passed}/${passed} checks passed`);
+
+// 2026-11-04:代际唯一读法——顶层优先、快照兜底(0.425~0.428 连错两处的护栏)
+check(
+  'generationOf: 顶层优先',
+  generationOf({ runtime: 'opencode-cli', opencode_generation: 'v1' } as any) === 'v1',
+);
+check(
+  'generationOf: 顶层压过快照',
+  generationOf({ runtime: 'opencode-cli', opencode_generation: 'v1', config_snapshot: { flags: { opencodeGeneration: 'v2' } } } as any) === 'v1',
+);
+check(
+  'generationOf: 没有顶层时用快照',
+  generationOf({ runtime: 'opencode-cli', config_snapshot: { flags: { opencodeGeneration: 'v2' } } } as any) === 'v2',
+);
+check(
+  'generationOf: 都没有 ⇒ undefined(不猜)',
+  generationOf({ runtime: 'opencode-cli' } as any) === undefined && generationOf(null) === undefined,
+);

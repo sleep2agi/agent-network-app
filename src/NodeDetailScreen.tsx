@@ -81,6 +81,7 @@ import NodeTasksSection from './NodeTasksSection';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
 import { nodeInfoFacts, type NodeInfoFact,
   opencodeFlagsOf,
+  generationOf,
 } from './node-info';
 import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
@@ -563,7 +564,7 @@ export default function NodeDetailScreen({
               // 所以直接写进诊断行,省一轮来回问。
               // /api/nodes 不带 config_snapshot,代际在顶层 opencode_generation;
               // opencodeFlagsOf 会把两者合并,别再直接读 flags(那样真机永远 unset)。
-              const rawGen = opencodeFlagsOf(node)?.opencodeGeneration;
+              const rawGen = generationOf(node);
               const gen = typeof rawGen === 'string' && rawGen ? rawGen : node && /opencode/i.test(node.runtime ?? '') ? 'unset' : null;
               const line = [s.alias, node ? `node_id=${node.node_id}` : null, s.network_id ? `net=${s.network_id}` : null, `status=${s.status}`, gen ? `gen=${gen}` : null, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
                 // 报没报模型清单：一行里说清，交接给后端时不用再问
