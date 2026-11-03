@@ -36,6 +36,8 @@ import { accountMenuItems, accountRowActions, type AccountMenuItem, type Account
 import { pointerUi } from './pointer-ui';
 import './i18n-accounts';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
+import { BUNDLED_RELEASE_BODY } from './changelog-bundled';
+import { entriesFromBody, rollbackTarget } from './changelog-model';
 import { APP_VERSION } from './version';
 import { BrandMark } from './brand-mark';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
@@ -111,6 +113,16 @@ interface Me {
   networkName?: string;
   networkId?: string;
 }
+
+// 「回滚该装哪一版」：从内置更新日志（新→旧）算出当前版本的下一条。算不出来就是 undefined。
+const ROLLBACK_TARGET = (() => {
+  try {
+    const versions = entriesFromBody(BUNDLED_RELEASE_BODY).map(e => e.version);
+    return rollbackTarget(versions, APP_VERSION);
+  } catch {
+    return null;
+  }
+})();
 
 export default function SettingsScreen({
   cfg,
@@ -1250,7 +1262,10 @@ export default function SettingsScreen({
                 ) : null}
                 {show('about', 'version') ? (
                   // 回滚入口:新版本出问题时用户得有路退回上一版,而不是只能等修。
-                  <SettingsRow label={tr('settings.copy.294')} onPress={() => { void openExternal('https://github.com/sleep2agi/agent-network-app/releases'); }} testID="settings-history-releases-link" />
+                  // subtitle 直接告诉他该装哪一版(从内置更新日志里算,拿不到就不写)。
+                  <SettingsRow label={tr('settings.copy.294')}
+                    subtitle={ROLLBACK_TARGET ? `${tr('settings.copy.295')} v${ROLLBACK_TARGET}` : undefined}
+                    onPress={() => { void openExternal('https://github.com/sleep2agi/agent-network-app/releases'); }} testID="settings-history-releases-link" />
                 ) : null}
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
