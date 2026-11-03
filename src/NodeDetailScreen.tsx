@@ -586,7 +586,7 @@ export default function NodeDetailScreen({
           </Pressable>
           {copiedHint ? (
             <Text testID="node-detail-copied" style={{ color: colors.textMuted, fontSize: typeScale.small }}>
-              {copiedHint === 'alias' ? '别名已复制' : '诊断已复制'}
+              {copiedHint === 'alias' ? '别名已复制' : '诊断已复制（含 gen / catalog / net）'}
             </Text>
           ) : null}
           <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
