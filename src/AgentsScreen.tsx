@@ -6,7 +6,8 @@
 // 主题切换时整体重新赋值,复制的那份不会跟着变(见 app-styles.ts 头注释)。
 
 import * as Clipboard from 'expo-clipboard';
-import { fetchDepartmentNodes, fetchOrg } from './org-api';
+import { fetchOrg } from './org-api';
+import { loadAgentOrg } from './agent-org-api';
 import { groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
 import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
@@ -69,7 +70,7 @@ import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACT
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
 import { loadCollapsedGroups, loadConversationTab, loadGroupBy, peekConversationTab, peekGroupBy, saveCollapsedGroups, saveConversationTab, saveGroupBy } from './agent-list-prefs';
-import { GROUP_BY_LABEL, GROUP_BY_OPTIONS, groupMapOf, type GroupBy } from './agent-group-by';
+import { departmentIndex, GROUP_BY_LABEL, GROUP_BY_OPTIONS, groupMapOf, registrationIndex, type GroupBy } from './agent-group-by';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
@@ -195,9 +196,24 @@ export default function AgentsScreen({
   // 组织架构(board #419):有部门、且有人分了部门时,「人员」按部门分小组(部门路径做小标题,未分配的最后)。
   // 旧 Hub 没有 /departments → null,照旧一个平的列表。
   const [org, setOrg] = useState<OrgData | null>(null);
-  /** alias → 部门名(Hub 的真实归属)。空 Map = 退回 alias 前缀分组,行为与以前一致。
-   *  admin 2026-10-26:「军团里面能分组吗…有明显的划分区」—— 按部门分比猜前缀可靠。 */
-  const [deptByAlias, setDeptByAlias] = useState<Map<string, string>>(new Map());
+  // 节点部门来自通讯录的显式 department_id，不是节点负责人所在部门。
+  // 用 scope 隔离异步响应：切换账号/网络后不能展示上一账号的数据。
+  const departmentScope = JSON.stringify([cfg.serverUrl, cfg.token, cfg.profileId, cfg.username, cfg.networkId]);
+  const departmentScopeRef = useRef(departmentScope);
+  departmentScopeRef.current = departmentScope;
+  const [departmentState, setDepartmentState] = useState<{ scope: string; groups: Map<string, string> } | null>(null);
+  const loadAgentDepartments = useCallback(async () => {
+    if (!cfg.networkId || preview) return;
+    try {
+      const data = await loadAgentOrg(cfg, cfg.networkId);
+      if (departmentScopeRef.current === departmentScope) {
+        setDepartmentState({ scope: departmentScope, groups: departmentIndex(cfg.networkId, data) });
+      }
+    } catch {
+      if (departmentScopeRef.current === departmentScope) setDepartmentState(null);
+    }
+  }, [departmentScope, preview]);
+  usePoll(loadAgentDepartments, 120_000, [loadAgentDepartments]);
   // 群会话(RFC-042):和私信同一次 /api/dm/threads 拿到。null = 这个 Hub 没有群(没有 group_threads 字段)→ 区块不画。
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const loadPeople = useCallback(async () => {
@@ -327,7 +343,7 @@ export default function AgentsScreen({
     void saveConversationTab(next);
   }, []);
   // 「组织架构 / 节点来分类」(admin 2026-11-03)：同一份 sessions 换一个切面分组。
-  // 默认 'dept' 保持既有观感；切法按设备记住。只影响分组标题，不影响搜索 / 未读 / 置顶。
+  // 默认 'dept'；切法按设备记住。只影响分组标题，不影响搜索 / 未读 / 置顶。
   const [groupBy, setGroupByState] = useState<GroupBy>(() => peekGroupBy() ?? 'dept');
   useEffect(() => {
     if (peekGroupBy()) return;
@@ -483,20 +499,12 @@ export default function AgentsScreen({
     { counts: liveUnread.counts, manualUnread: convFlags.manualUnread },
     [...(onOpenPerson ? people : []), ...(groups ?? [])],
   );
-  // 已登记的节点别名：用来把「未登记」（会话在组织架构里没有节点记录）与「未归属」（登记了但没分部门）分开
-  const registeredAliases = useMemo(
-    () => new Set(
-      (agentDirectory.rows || [])
-        .filter(r => r.kind === 'registered')
-        .map(r => (r.kind === 'registered' ? (r.node.alias || r.session?.alias || r.key) : ''))
-        .filter(Boolean),
-    ),
-    [agentDirectory.rows],
-  );
-  // alias → 组名（换切法时整表重算一次，别让每行各算一遍）
+  // 完整目录与 light 会话只在可证明是一条会话时关联；不拿 alias 推断节点身份。
+  const registrations = useMemo(() => registrationIndex(agentDirectory), [agentDirectory]);
   const groupLabels = useMemo(
-    () => groupMapOf(visibleSessions as any, groupBy, alias => deptByAlias.get(alias), alias => registeredAliases.has(alias)),
-    [visibleSessions, groupBy, deptByAlias, registeredAliases],
+    () => groupMapOf(visibleSessions, groupBy, registrations,
+      departmentState?.scope === departmentScope ? departmentState.groups : undefined),
+    [visibleSessions, groupBy, registrations, departmentState, departmentScope],
   );
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
@@ -507,9 +515,9 @@ export default function AgentsScreen({
         activityAt: alias => activityByAlias.get(alias) ?? 0,
       },
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
-      teamOf: alias => (groupBy === 'dept' ? deptByAlias.get(alias) : groupLabels.get(alias)),
+      teamOf: (_alias, session) => groupLabels.get(session) ?? '关联待确认',
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, groupBy, groupLabels],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, groupLabels],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -542,22 +550,6 @@ export default function AgentsScreen({
   const groupsShown = groupsCollapsed ? [] : groupsMatched;
   const groupsHeaderHRef = useRef<number | null>(null);
   const groupsSectionHRef = useRef<number | null>(null);
-  // 部门归属:每个部门一次 nodes 查询(部门通常 <20 个,并发即可;任一失败就少一组,不阻塞列表)。
-  useEffect(() => {
-    if (!org || !org.departments.length) { setDeptByAlias(new Map()); return; }
-    let alive = true;
-    void Promise.all(org.departments.map(async d => {
-      const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
-      return { name: d.name, nodes };
-    })).then(groups => {
-      if (!alive) return;
-      const map = new Map<string, string>();
-      for (const g of groups) for (const n of g.nodes) if (n.alias && !map.has(n.alias)) map.set(n.alias, g.name);
-      setDeptByAlias(map);
-    }).catch(() => { if (alive) setDeptByAlias(new Map()); });
-    return () => { alive = false; };
-  }, [org, cfg]);
-
   const peopleGroups = useMemo(() => groupPeopleByDepartment(org, peopleShown.rows), [org, peopleShown.rows]);
   const peopleGroupHeadHRef = useRef<number | null>(null);
   // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。

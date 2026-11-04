@@ -1,52 +1,135 @@
-// 「节点来分类」分组的判据（纯逻辑）。跑法同其它 *.test.ts：node scripts/run-tests.mjs
-import { groupKeyOf, groupMapOf, runtimeGroup, hostGroup, statusGroup, parseGroupBy, GROUP_BY_OPTIONS } from './agent-group-by';
+import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
+import type { Session } from './api';
+import { buildAgentDirectory, type DirectoryNode } from './agent-directory';
+import type { AgentOrgData } from './agent-org-model';
+import { buildSections, countShown } from './agents-list';
+import { departmentIndex, GROUP_BY_OPTIONS, groupMapOf, hostGroup, parseGroupBy, registrationIndex, runtimeGroup, statusGroup } from './agent-group-by';
 
-let p = 0, t = 0;
-const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
+let passed = 0;
+const check = (name: string, run: () => void) => { run(); passed++; console.log(`PASS: ${name}`); };
+const s = (alias: string, network_id: string | null, node_id?: string | null, status = 'idle'): Session =>
+  ({ alias, network_id, node_id, status });
+const n = (alias: string, network_id: string | null, node_id: string | null): DirectoryNode =>
+  ({ alias, network_id, node_id: node_id as string });
+const directory = (nodes: DirectoryNode[], sessions: Session[]) => {
+  const snap = <T>(rows: T[]) => ({ scopeKey: 'test', result: 'ok' as const, complete: true, rows });
+  return { ...buildAgentDirectory({ scopeKey: 'test', nodes: snap(nodes), sessions: snap(sessions) }), loaded: true, stale: false };
+};
+const dept = (id: string, name: string) => ({ id, name, parent_id: null, leader_user_id: null, sort: 0, member_count: 0 });
+const org: AgentOrgData = {
+  directory: true, departmentsApi: true, agentDepartmentSupported: true,
+  departments: [dept('work', 'TMWork'), dept('infra', 'TM基建')],
+  owners: [{ userId: 'owner', username: 'alice', displayName: '', departmentId: 'infra', agents: [
+    { nodeId: 'n1', alias: '通信甲', departmentId: 'work' },
+    { nodeId: 'n2', alias: '通信乙', departmentId: null },
+    { nodeId: 'n3', alias: '通信丙' },
+  ] }],
+  unowned: [{ nodeId: 'n4', alias: '通信丁', departmentId: 'infra' }],
+};
 
-const row = (o: any) => ({ runtime: null, agent: null, server: null, hostname: null, status: 'idle', ...o });
+check('four grouping options, invalid preference defaults to department', () => {
+  assert.deepEqual(GROUP_BY_OPTIONS, ['dept', 'runtime', 'host', 'status']);
+  assert.equal(parseGroupBy(null), 'dept');
+  assert.equal(parseGroupBy('not-a-group'), 'dept');
+  for (const by of GROUP_BY_OPTIONS) assert.equal(parseGroupBy(by), by);
+});
+check('runtime, host and status use reported fields and explicit unknowns', () => {
+  assert.equal(runtimeGroup({ ...s('a', 'N'), runtime: 'agent-node:opencode', agent: 'codex' }), 'OpenCode');
+  assert.equal(runtimeGroup({ ...s('a', 'N'), agent: 'agent-node:codex' }), 'Codex');
+  assert.equal(runtimeGroup(s('a', 'N')), '未上报');
+  assert.equal(runtimeGroup({ ...s('a', 'N'), runtime: 'other' }), 'other');
+  assert.equal(hostGroup({ ...s('a', 'N'), server: 'dev', hostname: 'host' }), 'dev');
+  assert.equal(hostGroup({ ...s('a', 'N'), hostname: 'host' }), 'host');
+  assert.equal(hostGroup(s('a', 'N')), '未知主机');
+  assert.equal(statusGroup(s('a', 'N', 'n', 'working')), '运行中');
+  assert.equal(statusGroup(s('a', 'N', 'n', 'running')), '运行中');
+  assert.equal(statusGroup(s('a', 'N', 'n', 'offline')), '离线');
+  assert.equal(statusGroup(s('a', 'N', 'n', '')), '未知');
+});
 
-// 运行时：优先 runtime，其次 agent，都没有才是「未上报」
-ck('runtime 优先取 runtime 字段', runtimeGroup(row({ runtime: 'agent-node:opencode', agent: 'agent-node:claude' })) === 'OpenCode');
-ck('runtime 缺失时退回 agent', runtimeGroup(row({ agent: 'agent-node:codex' })) === 'Codex');
-ck('两者都没有 ⇒ 未上报（不是「其它」）', runtimeGroup(row({})) === '未上报');
-ck('未识别运行时原样保留', runtimeGroup(row({ runtime: 'agent-node:acp' })) === 'agent-node:acp');
+const full = [s('通信甲', 'N', 'n1'), s('通信乙', 'N', 'n2'), s('通信丙', 'N', 'n3'),
+  s('通信丁', 'N', 'n4'), s('通信戊', 'N', 'missing')];
+const nodes = full.slice(0, 4).map(r => n(r.alias, r.network_id!, r.node_id!));
+// Real list rows come from the light projection, which typically omits node_id.
+const light = full.map(r => s(r.alias, r.network_id));
+const registrations = registrationIndex(directory(nodes, full));
+const departments = departmentIndex('N', org);
+const labels = groupMapOf(light, 'dept', registrations, departments);
 
-// 主机：server 优先，hostname 次之
-ck('server 优先', hostGroup(row({ server: 'dev-1', hostname: 'mac.local' })) === 'dev-1');
-ck('server 缺失用 hostname', hostGroup(row({ hostname: 'mac.local' })) === 'mac.local');
-ck('都没有 ⇒ 未知主机', hostGroup(row({})) === '未知主机');
+check('actual node department beats its owner department', () => {
+  assert.equal(labels.get(light[0]), 'TMWork');
+  assert.equal(labels.get(light[3]), 'TM基建'); // unowned nodes still have explicit departments
+});
+check('explicit null differs from missing field and unmatched node', () => {
+  assert.equal(labels.get(light[1]), '未归属');
+  assert.equal(labels.get(light[2]), '归属待确认');
+  assert.equal(labels.get(light[4]), '未匹配节点');
+});
+check('buildSections consumes every calculated department label, not alias prefixes', () => {
+  const sections = buildSections(light, '', { teamOf: (_alias, session) => labels.get(session) });
+  assert.equal(countShown(sections), light.length);
+  assert.deepEqual(new Set(sections.map(section => section.title)),
+    new Set(['TMWork', '未归属', '归属待确认', 'TM基建', '未匹配节点']));
+  assert.equal(sections.some(section => section.title === '通信'), false);
+  assert.equal(countShown(buildSections(light, '乙', { teamOf: (_a, row) => labels.get(row) })), 1);
+});
+check('pins and unread move rows instead of duplicating them when changing grouping', () => {
+  for (const by of GROUP_BY_OPTIONS) {
+    const groups = groupMapOf(light, by, registrations, departments);
+    const sections = buildSections(light, '', { teamOf: (_a, row) => groups.get(row),
+      sort: { pinned: alias => alias === '通信甲' }, unread: { count: alias => alias === '通信乙' ? 1 : 0 } });
+    assert.equal(countShown(sections), light.length);
+    assert.equal(sections.flatMap(section => section.data).filter(row => row.alias === '通信甲').length, 1);
+    assert.equal(sections.flatMap(section => section.data).filter(row => row.alias === '通信乙').length, 1);
+  }
+});
+check('loading, stale and failed directory never claim unregistered', () => {
+  for (const patch of [{ loaded: false }, { stale: true }, { nodesRead: 'unavailable' }, { sessionsRead: 'incomplete' }]) {
+    const index = registrationIndex({ ...directory(nodes, full), ...patch });
+    assert.equal(groupMapOf(light, 'dept', index, departments).get(light[4]), '关联待确认');
+  }
+});
+check('missing session identity, missing node identity and mismatched light identity are unknown', () => {
+  const unknownSession = s('甲', 'N', null);
+  const missingNode = directory([n('无身份', 'N', null)], [s('乙', 'N', 'not-seen')]);
+  const lightUnknown = s('甲', 'N');
+  assert.equal(groupMapOf([lightUnknown], 'dept', registrationIndex(directory([], [unknownSession]))).get(lightUnknown), '关联待确认');
+  const other = s('乙', 'N');
+  assert.equal(groupMapOf([other], 'dept', registrationIndex(missingNode)).get(other), '关联待确认');
+  const changed = s('通信甲', 'N', 'changed');
+  assert.equal(groupMapOf([changed], 'dept', registrations, departments).get(changed), '关联待确认');
+});
+check('same alias in different networks stays separate; same network duplicates are unknown', () => {
+  const fs = [s('same', 'N', 'n1'), s('same', 'other', 'n1')];
+  const dir = registrationIndex(directory([n('same', 'N', 'n1'), n('same', 'other', 'n1')], fs));
+  const [a, b] = [s('same', 'N'), s('same', 'other')];
+  const grouped = groupMapOf([a, b], 'dept', dir, departments);
+  assert.equal(grouped.get(a), 'TMWork');
+  assert.equal(grouped.get(b), '归属待确认');
+  const dup = s('same', 'N');
+  assert.equal(groupMapOf([a, dup], 'dept', dir, departments).get(a), '关联待确认');
+  const duplicateFull = registrationIndex(directory([n('same', 'N', 'n1')], [fs[0], fs[0]]));
+  assert.equal(groupMapOf([a], 'dept', duplicateFull, departments).get(a), '关联待确认');
+});
+check('unsupported or unavailable department data never produces a guessed department', () => {
+  for (const data of [null, { ...org, agentDepartmentSupported: false }, { ...org, departmentsApi: false }, { ...org, directory: false }]) {
+    assert.equal(groupMapOf(light, 'dept', registrations, departmentIndex('N', data)).get(light[0]), '归属待确认');
+  }
+});
+check('conflicting or incomplete duplicate directory rows remain uncertain', () => {
+  const conflict: AgentOrgData = { ...org, unowned: [{ nodeId: 'n1', alias: '通信甲', departmentId: null }] };
+  const incomplete: AgentOrgData = { ...org, unowned: [{ nodeId: 'n1', alias: '通信甲' }] };
+  for (const data of [conflict, incomplete]) {
+    assert.equal(groupMapOf(light, 'dept', registrations, departmentIndex('N', data)).get(light[0]), '归属待确认');
+  }
+});
+check('screen wires every grouping mode to session-keyed labels', () => {
+  const screen = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
+  assert.ok(screen.includes('teamOf: (_alias, session) => groupLabels.get(session)'));
+  assert.ok(!screen.includes("groupBy === 'dept' ? deptByAlias"));
+  assert.ok(screen.includes('loadAgentOrg(cfg, cfg.networkId)'));
+  assert.ok(!screen.includes('fetchDepartmentNodes('));
+});
 
-// 状态四档，running 归「运行中」
-ck('working ⇒ 运行中', statusGroup(row({ status: 'working' })) === '运行中');
-ck('running ⇒ 运行中（老 hub）', statusGroup(row({ status: 'running' })) === '运行中');
-ck('offline ⇒ 离线', statusGroup(row({ status: 'offline' })) === '离线');
-ck('未知状态不冒充空闲', statusGroup(row({ status: '' })) === '未知');
-
-// 部门切法：拿不到归属必须落「未归属」，不能退回别名前缀
-const dept = (alias: string) => (alias === 'A' ? 'TMWork' : undefined);
-ck('dept：有归属用归属', groupKeyOf(row({}) as any, 'dept', dept, 'A') === 'TMWork');
-ck('dept：无归属 ⇒ 未归属（不猜前缀）', groupKeyOf(row({}) as any, 'dept', dept, '通信苹果欧') === '未归属');
-
-// 「未登记」≠「未归属」：前者会话在组织架构里没有节点记录，后者登记了但没分部门
-const known = (a: string) => a !== '幽灵会话';
-ck('dept：有登记但无归属 ⇒ 未归属', groupKeyOf(row({}) as any, 'dept', () => undefined, 'B', known) === '未归属');
-ck('dept：没有登记 ⇒ 未登记（不与未归属混桶）', groupKeyOf(row({}) as any, 'dept', () => undefined, '幽灵会话', known) === '未登记');
-ck('不给 knownOf 时行为不变（向后兼容）', groupKeyOf(row({}) as any, 'dept', () => undefined, 'X') === '未归属');
-
-// 切法解析：认不出就退回默认 dept
-ck('默认 dept', parseGroupBy(null) === 'dept' && parseGroupBy('nope') === 'dept');
-for (const k of GROUP_BY_OPTIONS) ck(`合法切法 ${k} 能解析`, parseGroupBy(k) === k);
-
-// 预先算好的 map 与逐行算一致
-const sessions = [
-  { alias: 'A', runtime: 'agent-node:claude', status: 'working' },
-  { alias: 'B', runtime: 'agent-node:codex', status: 'offline' },
-] as any;
-const m = groupMapOf(sessions, 'runtime');
-ck('groupMapOf 与逐行一致', m.get('A') === 'Claude' && m.get('B') === 'Codex');
-const ms = groupMapOf(sessions, 'status');
-ck('groupMapOf 状态切法', ms.get('A') === '运行中' && ms.get('B') === '离线');
-
-console.log(`\n${p}/${t} passed`);
-if (p !== t) process.exit(1);
+console.log(`${passed}/${passed} passed`);

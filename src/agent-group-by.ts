@@ -1,46 +1,26 @@
-// 「节点来分类」视图的分组判据（纯逻辑，无 RN 依赖）。
-//
-// 背景（admin 2026-11-03）：侧栏只有「按部门」一种切法，而 318 个节点里 185 个没有
-// 归属 —— 于是整个目录退化成一个巨大的「未归属」。同一份数据换一个切面就能看出
-// 别的东西：谁在跑什么运行时、哪台机扛了多少节点、多少节点常年离线。
-//
-// 这里只回答「这个 session 该落在哪个组」，分组/排序/折叠仍由 agents-list 处理。
-
+// 会话列表的分组判据。注册关系和部门归属必须有 Hub 数据支持，不能按别名前缀猜。
 import type { Session } from './api';
+import type { AgentDirectoryRow } from './agent-directory';
+import type { AgentOrgData, OrgAgent } from './agent-org-model';
 
 export type GroupBy = 'dept' | 'runtime' | 'host' | 'status';
 
-/** 顺序即界面上的顺序；'dept' 是默认（= 现有行为）。 */
 export const GROUP_BY_OPTIONS: GroupBy[] = ['dept', 'runtime', 'host', 'status'];
-
 export const GROUP_BY_LABEL: Record<GroupBy, string> = {
-  dept: '部门',
-  runtime: '运行时',
-  host: '主机',
-  status: '状态',
+  dept: '部门', runtime: '运行时', host: '主机', status: '状态',
 };
 
-/** 存储里读回来的字符串 → 合法切法；认不出就退回 'dept'（默认行为，不改变现网观感）。 */
 export function parseGroupBy(raw: unknown): GroupBy {
   const s = String(raw ?? '').trim();
   return (GROUP_BY_OPTIONS as string[]).includes(s) ? (s as GroupBy) : 'dept';
 }
 
 type Row = Pick<Session, 'runtime' | 'agent' | 'server' | 'hostname' | 'status'>;
-
 const RUNTIME_RULES: Array<[RegExp, string]> = [
-  [/claude/i, 'Claude'],
-  [/codex/i, 'Codex'],
-  [/opencode|tmwork/i, 'OpenCode'],
-  [/grok/i, 'Grok'],
-  [/gemini/i, 'Gemini'],
-  [/qwen/i, 'Qwen'],
+  [/claude/i, 'Claude'], [/codex/i, 'Codex'], [/opencode|tmwork/i, 'OpenCode'],
+  [/grok/i, 'Grok'], [/gemini/i, 'Gemini'], [/qwen/i, 'Qwen'],
 ];
 
-/**
- * 运行时名：优先取节点自报的 runtime，取不到再退回 agent 标识。
- * 两者都没有 ⇒ 「未上报」而不是「其它」：这两件事在排障时含义不同。
- */
 export function runtimeGroup(row: Row): string {
   const raw = (row.runtime || row.agent || '').trim();
   if (!raw) return '未上报';
@@ -48,13 +28,10 @@ export function runtimeGroup(row: Row): string {
   return raw;
 }
 
-/** 主机：server（部署名）优先，其次 hostname；都没有才是「未知主机」。 */
 export function hostGroup(row: Row): string {
-  const raw = (row.server || row.hostname || '').trim();
-  return raw || '未知主机';
+  return (row.server || row.hostname || '').trim() || '未知主机';
 }
 
-/** 状态：四档，与列表状态点同义。running 归到「运行中」（老 hub 用 running）。 */
 export function statusGroup(row: Row): string {
   const s = (row.status || '').trim();
   if (s === 'working' || s === 'running') return '运行中';
@@ -64,38 +41,104 @@ export function statusGroup(row: Row): string {
   return '未知';
 }
 
+const valid = (v: unknown): v is string => typeof v === 'string' && !!v && v.trim() === v;
+const nodeKey = (network: string, node: string) => JSON.stringify([network, node]);
+const sessionKey = (s: Session): string | null =>
+  valid(s.network_id) && valid(s.alias) ? JSON.stringify([s.network_id, s.alias]) : null;
+
+type Registration =
+  | { kind: 'matched'; nodeKey: string }
+  | { kind: 'unmatched'; nodeKey: string }
+  | { kind: 'unknown' };
+const UNKNOWN: Registration = { kind: 'unknown' };
+
 /**
- * 给定切法返回该行的组名。
- * 'dept' 用调用方给的部门映射（Hub 的真实归属）；拿不到归属时统一落「未归属」，
- * **不**退回别名前缀 —— 那会让「没归属」看起来像「有归属」，正是这次要修的问题。
+ * 列表用 light 状态，它可能不带 node_id。只有完整目录里同网络、同 alias 的会话唯一时，
+ * 才把它关联到完整会话；节点是否匹配仍以 (network_id,node_id) 为准。
+ * 失败、过期、缺身份或重复会话都不是「未登记」的证据。
  */
-export function groupKeyOf(
-  row: Row,
-  by: GroupBy,
-  deptOf?: (alias: string) => string | undefined,
-  alias?: string,
-  knownOf?: (alias: string) => boolean,
-): string {
-  if (by === 'runtime') return runtimeGroup(row);
-  if (by === 'host') return hostGroup(row);
-  if (by === 'status') return statusGroup(row);
-  if (!alias) return '未归属';
-  const dept = deptOf?.(alias);
-  if (dept) return dept;
-  // 「未登记」与「未归属」必须分开：前者是会话在组织架构里根本不存在（没有节点登记），
-  // 后者是登记了但没分部门。混成一个桶会让「未归属为什么这么多」永远说不清。
-  if (knownOf && !knownOf(alias)) return '未登记';
-  return '未归属';
+export function registrationIndex(directory: {
+  rows: readonly AgentDirectoryRow[];
+  loaded: boolean;
+  stale: boolean;
+  nodesRead: string | null;
+  sessionsRead: string | null;
+}): Map<string, Registration> {
+  const result = new Map<string, Registration>();
+  if (!directory.loaded || directory.stale || directory.nodesRead !== 'ok' || directory.sessionsRead !== 'ok') return result;
+  const nodes = directory.rows.filter(row => row.kind === 'registered');
+  const nodeKeys = new Set<string>();
+  const incompleteNetworks = new Set<string>();
+  let unscopedNode = false;
+  for (const row of nodes) {
+    if (!valid(row.node.network_id)) unscopedNode = true;
+    else if (!valid(row.node.node_id)) incompleteNetworks.add(row.node.network_id);
+    else nodeKeys.add(nodeKey(row.node.network_id, row.node.node_id));
+  }
+  for (const row of directory.rows) {
+    const s = row.kind === 'session_only' ? row.session : row.association === 'matched' ? row.session : null;
+    if (!s) continue;
+    const key = sessionKey(s);
+    if (!key) continue;
+    let registration: Registration = UNKNOWN;
+    if (valid(s.network_id) && valid(s.node_id)) {
+      const nk = nodeKey(s.network_id, s.node_id);
+      if (row.kind === 'registered' && row.association === 'matched') registration = { kind: 'matched', nodeKey: nk };
+      else if (!nodeKeys.has(nk) && !unscopedNode && !incompleteNetworks.has(s.network_id)) registration = { kind: 'unmatched', nodeKey: nk };
+    }
+    // 同一网络内同名会话不唯一，light 行无法确定是哪一条。
+    result.set(key, result.has(key) ? UNKNOWN : registration);
+  }
+  return result;
 }
 
-/** 切换切法时给调用方用：同一份 sessions 预先算好 alias → 组名，避免每行重算。 */
+/** 只用目录里的节点显式部门；没返回该字段、旧 Hub 或部门树不全时不猜。 */
+export function departmentIndex(network: string | undefined, data: AgentOrgData | null): Map<string, string> {
+  const out = new Map<string, string>();
+  if (!valid(network) || !data?.directory || !data.departmentsApi || !data.agentDepartmentSupported) return out;
+  const names = new Map(data.departments.map(d => [d.id, d.name]));
+  const add = (agent: OrgAgent) => {
+    if (!valid(agent.nodeId)) return;
+    const label = (agent.departmentId === null ? '未归属'
+      : valid(agent.departmentId) ? names.get(agent.departmentId) : undefined) || '归属待确认';
+    const key = nodeKey(network, agent.nodeId);
+    const previous = out.get(key);
+    out.set(key, previous && previous !== label ? '归属待确认' : label);
+  };
+  for (const owner of data.owners) for (const agent of owner.agents) add(agent);
+  for (const agent of data.unowned) add(agent);
+  return out;
+}
+
+/** 用 Session 对象而非 alias 作 key：不同网络可以有同名节点。 */
 export function groupMapOf(
-  sessions: Array<Session & { alias: string }>,
+  sessions: readonly Session[],
   by: GroupBy,
-  deptOf?: (alias: string) => string | undefined,
-  knownOf?: (alias: string) => boolean,
-): Map<string, string> {
-  const map = new Map<string, string>();
-  for (const s of sessions) map.set(s.alias, groupKeyOf(s, by, deptOf, s.alias, knownOf));
-  return map;
+  registrations: ReadonlyMap<string, Registration> = new Map(),
+  departments: ReadonlyMap<string, string> = new Map(),
+): Map<Session, string> {
+  const counts = new Map<string, number>();
+  for (const s of sessions) {
+    const key = sessionKey(s);
+    if (key) counts.set(key, (counts.get(key) ?? 0) + 1);
+  }
+  const out = new Map<Session, string>();
+  for (const s of sessions) {
+    let label: string;
+    if (by === 'runtime') label = runtimeGroup(s);
+    else if (by === 'host') label = hostGroup(s);
+    else if (by === 'status') label = statusGroup(s);
+    else {
+      const key = sessionKey(s);
+      const registration = key && counts.get(key) === 1 ? registrations.get(key) : undefined;
+      // 如果 light 行有 node_id，也要与完整快照一致。
+      const sameNode = registration && registration.kind !== 'unknown' &&
+        (!valid(s.node_id) || (valid(s.network_id) && nodeKey(s.network_id, s.node_id) === registration.nodeKey));
+      if (!registration || registration.kind === 'unknown' || !sameNode) label = '关联待确认';
+      else if (registration.kind === 'unmatched') label = '未匹配节点';
+      else label = departments.get(registration.nodeKey) ?? '归属待确认';
+    }
+    out.set(s, label);
+  }
+  return out;
 }

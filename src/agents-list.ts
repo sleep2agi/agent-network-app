@@ -143,9 +143,9 @@ export function buildSections(
   sessions: Session[],
   query: string,
   opts: { match?: Matcher; sort?: SortContext; unread?: UnreadContext
-    /** 分组标题(部门):给了就按 Hub 的真实归属分,拿不到返回 undefined 则该行退回 alias 前缀。
-     *  admin 2026-10-26「军团里面能分组吗…明显的划分区」—— 部门是有数据的,不用猜前缀。 */
-    teamOf?: (alias: string) => string | undefined } = {},
+    /** 自定义分组标题；未提供标题时保留旧的别名前缀分组。
+     *  要求严格部门归属的调用方须对无法确认的行返回明确的占位标题。 */
+    teamOf?: (alias: string, session: Session) => string | undefined } = {},
 ): AgentSection[] {
   const q = query.trim();
   const match = opts.match ?? substringMatch;
@@ -163,9 +163,8 @@ export function buildSections(
 
   const groups = new Map<string, Session[]>();
   for (const s of unpinned) {
-    // teamOf 返回 '' / null / undefined 都视为「无归属」：否则 '' 会变成一个空标题分组，
-    // 看起来像有分组、其实是没分组（admin 2026-11-03 切视图时踩到）。
-    const raw = opts.teamOf?.(s.alias);
+    // 老调用方未提供标题时保留前缀回退；严格部门分组传入明确的待确认标题。
+    const raw = opts.teamOf?.(s.alias, s);
     const key = raw || teamOf(s.alias);
     const bucket = groups.get(key);
     if (bucket) bucket.push(s);

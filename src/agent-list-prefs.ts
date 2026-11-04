@@ -115,7 +115,7 @@ export const saveConversationTab = (tab: ConversationTab): Promise<void> => {
 };
 
 // 分组切法（admin 2026-11-03「组织架构 / 节点来分类」）：每台设备记住上次选的切法。
-// 默认 'dept' = 现有行为，所以老用户升级后观感不变。
+// 默认 'dept'；具体归属由列表读取 Hub 数据，不能按 alias 猜测。
 export const GROUP_BY_KEY = 'agent_list_group_by_v1';
 let groupByMemo: GroupBy | null = null;
 export const peekGroupBy = (): GroupBy | null => {
