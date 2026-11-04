@@ -16,10 +16,12 @@ export const CONVERSATION_TAB_KEY = 'agent_list_tab_v1';
 // 折叠屏 / 平板左侧导航的形态:纯图标(对齐桌面,0.296 起的默认)还是「图标 + 文字」。
 // admin 2026-10-24 问「跟桌面端不太一样」,但这是口味问题,给个开关比替他决定好。
 export const RAIL_LABELS_KEY = 'agent_list_rail_labels_v1';
+// 「军团 3D 预览」是否展开:纯口味,但每次进设置都被收起会让人以为功能没了,所以记住。
+export const LEGION3D_OPEN_KEY = 'agent_list_legion3d_open_v1';
 export type RailLabels = 'icons' | 'labels';
 const PREFS_FILE = () => `${FileSystem.documentDirectory}agent_list_prefs_v1.json`;
 
-type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string };
+type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string };
 
 const webStorage = (): Storage | null => {
   try {
@@ -69,6 +71,10 @@ export const loadRailLabels = async (): Promise<RailLabels> => {
   return v;
 };
 export const saveRailLabels = (v: RailLabels): Promise<void> => writeKey(RAIL_LABELS_KEY, parseRailLabels(v));
+
+export const parseLegion3DOpen = (v: string | null | undefined): boolean => v === '1';
+export const loadLegion3DOpen = async (): Promise<boolean> => parseLegion3DOpen(await readKey(LEGION3D_OPEN_KEY));
+export const saveLegion3DOpen = (open: boolean): Promise<void> => writeKey(LEGION3D_OPEN_KEY, open ? '1' : '0');
 
 // 进程内的小 store(与 ui-scale 同款做法):设置页改完,App 里那条 rail 立刻跟着变,不用重挂整棵树。
 let railLabelsMemo: RailLabels = 'icons';

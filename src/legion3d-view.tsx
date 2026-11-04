@@ -27,7 +27,7 @@ type Props = { cfg: HubConfig; networkId?: string; height?: number };
 const RING_DOT_STRIDE = 4;
 
 export default function Legion3DView(p: Props) {
-  const [state, setState] = useState<{ phase: 'loading' | 'ready' | 'error' | 'empty'; commands: SceneCommand[]; note?: string }>({ phase: 'loading', commands: [] });
+  const [state, setState] = useState<{ phase: 'loading' | 'ready' | 'error' | 'empty'; reason?: string; commands: SceneCommand[]; note?: string }>({ phase: 'loading', commands: [] });
   const [reloadKey, setReloadKey] = useState(0);
   // 自转:默认关(先看清静态图再决定要不要转),用户点了才转。
   const [spinning, setSpinning] = useState(false);
@@ -44,21 +44,21 @@ export default function Legion3DView(p: Props) {
     let live = true;
     const net = p.networkId;
     setLayout(null);
-    if (!net) { setState({ phase: 'empty', commands: [], note: '还没选网络' }); return; }
+    if (!net) { setState({ phase: 'empty', reason: 'no-network', commands: [], note: '还没选网络，先在上面选一个网络' }); return; }
     setState({ phase: 'loading', commands: [] });
     void loadAgentOrg(p.cfg, net).then((org) => {
       if (!live) return;
-      if (!org) { setState({ phase: 'error', commands: [], note: '读不到组织架构（Hub 没有部门/通讯录数据）' }); return; }
+      if (!org) { setState({ phase: 'error', reason: 'no-org-data', commands: [], note: 'Hub 上还没有部门与通讯录数据（不是网络问题）' }); return; }
       const built = buildLegionLayout(legionInputFromOrg(org));
       if (built.nodes.filter((n) => n.kind !== 'core').length === 0) {
-        setState({ phase: 'empty', commands: [], note: '这个网络里还没有人和 Agent' });
+        setState({ phase: 'empty', reason: 'no-people', commands: [], note: '这个网络里还没有人和 Agent' });
         return;
       }
       setLayout(built);
       setState({ phase: 'ready', commands: buildLegionScene(built, cam, { width, height }) });
     }).catch((e: unknown) => {
       if (!live) return;
-      setState({ phase: 'error', commands: [], note: `读组织架构失败：${String((e as Error)?.message ?? e)}` });
+      setState({ phase: 'error', reason: 'fetch-failed', commands: [], note: `读组织架构失败：${String((e as Error)?.message ?? e)}` });
     });
     return () => { live = false; };
   }, [p.cfg, p.networkId, reloadKey, height]);  // eslint-disable-line react-hooks/exhaustive-deps
@@ -126,7 +126,7 @@ export default function Legion3DView(p: Props) {
           <View style={{ flex: 1, alignItems: 'center', justifyContent: 'center' }}><ActivityIndicator size="small" color={colors.accent} /></View>
         ) : null}
         {state.phase !== 'ready' && state.phase !== 'loading' ? (
-          <View testID={`legion3d-${state.phase}`} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.sm }}>
+          <View testID={state.reason ? `legion3d-${state.phase}-${state.reason}` : `legion3d-${state.phase}`} style={{ flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.lg, gap: spacing.sm }}>
             <Text style={{ color: colors.textMuted, fontSize: 12, textAlign: 'center' }}>{state.note}</Text>
             <Pressable accessibilityRole="button" testID="legion3d-retry" onPress={() => setReloadKey((n) => n + 1)}
               style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 6 }, pressed && { opacity: 0.7 }]}>
