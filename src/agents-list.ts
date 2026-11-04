@@ -163,7 +163,10 @@ export function buildSections(
 
   const groups = new Map<string, Session[]>();
   for (const s of unpinned) {
-    const key = opts.teamOf?.(s.alias) ?? teamOf(s.alias);
+    // teamOf 返回 '' / null / undefined 都视为「无归属」：否则 '' 会变成一个空标题分组，
+    // 看起来像有分组、其实是没分组（admin 2026-11-03 切视图时踩到）。
+    const raw = opts.teamOf?.(s.alias);
+    const key = raw || teamOf(s.alias);
     const bucket = groups.get(key);
     if (bucket) bucket.push(s);
     else groups.set(key, [s]);
