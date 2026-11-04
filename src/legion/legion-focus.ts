@@ -53,3 +53,29 @@ export function focusLabel(layout: LegionLayout | null | undefined, rootId: stri
   const raw = id.includes(':') ? id.slice(id.indexOf(':') + 1) : id;
   return raw || null;
 }
+
+/**
+ * 聚焦范围内的名单规模(2026-11-05)。
+ * 汇总行在全图时给「军团总共多少人」,聚焦时该给**这个部门**多少人 —— 否则用户会以为
+ * 聚焦没生效(数字没变)。只数人/Agent,部门数按子树里 kind='group' 的节点数算。
+ */
+export function focusStats(
+  layout: LegionLayout,
+  rootId: string | null | undefined,
+): { people: number; agents: number; groups: number } {
+  const id = (rootId ?? '').trim();
+  if (!id || !layout.nodes.some((n) => n.id === id)) {
+    return { people: layout.stats.people, agents: layout.stats.agents, groups: layout.stats.groups };
+  }
+  const keep = subtreeIds(layout.nodes, id);
+  let people = 0;
+  let agents = 0;
+  let groups = 0;
+  for (const node of layout.nodes) {
+    if (!keep.has(node.id)) continue;
+    if (node.kind === 'person') people += 1;
+    else if (node.kind === 'agent') agents += 1;
+    else if (node.kind === 'group') groups += 1;
+  }
+  return { people, agents, groups };
+}

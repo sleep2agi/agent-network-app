@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusLabel, focusLayout } from './legion/legion-focus';
+import { focusLabel, focusLayout, focusStats } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -175,7 +175,7 @@ export default function Legion3DView(p: Props) {
         </Pressable>
       ) : null}
       {selected && selected.kind === 'group' && focusId !== selected.id ? (
-        <Pressable accessibilityRole="button" testID="legion3d-focus-dept" onPress={() => setFocusId(selected.id)}
+        <Pressable accessibilityRole="button" testID="legion3d-focus-dept" onPress={() => { setFocusId(selected.id); setSelectedId(selected.id); }}
           style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
           <Text style={{ color: colors.accent, fontSize: 11 }}>只看 {selected.label}</Text>
         </Pressable>
@@ -190,7 +190,11 @@ export default function Legion3DView(p: Props) {
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <Text testID="legion3d-stats" style={{ color: colors.textMuted, fontSize: 11 }}>
             {/* 汇总用布局层统计(全量口径),别用图元数 —— 折叠/标签预算会让图元数少于真实人数。 */}
-            {layout ? `${layout.stats.people} 人 · ${layout.stats.agents} 个 Agent · ${layout.stats.groups} 个部门` : `${bodies.length} 个节点`}
+            {layout ? (() => {
+              const stats = focusStats(layout, focusId);
+              const prefix = focusId ? `聚焦 ${focusLabel(layout, focusId)}：` : '';
+              return `${prefix}${stats.people} 人 · ${stats.agents} 个 Agent · ${stats.groups} 个部门`;
+            })() : `${bodies.length} 个节点`}
           </Text>
           <Pressable accessibilityRole="button" testID="legion3d-spin-toggle" onPress={() => setSpinning((v) => !v)}
             style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
