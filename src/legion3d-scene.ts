@@ -234,3 +234,11 @@ export function pickBody(
   }
   return best;
 }
+
+/** 从图元 id 取真正的标识(2026-11-05):图元 id 形如 `agent:<node_id>` / `person:<user_id>` /
+ *  `dept:<department_id>`。复制给同事时只该给后半截 —— 带前缀的串贴到搜索框里反而搜不到。 */
+export function nodeRefValue(id: string): string {
+  const raw = (id ?? '').trim();
+  const i = raw.indexOf(':');
+  return i >= 0 ? raw.slice(i + 1) : raw;
+}

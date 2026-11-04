@@ -11,7 +11,7 @@
 // 静态图没有 rAF,所以不存在后台空转耗电;等做自转动画时再加节流与可见性判断。
 
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
+import { ActivityIndicator, AppState, Platform, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, radius, spacing } from './theme';
 import { ds } from './ui-scale';
@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { buildLegionScene, nextYaw, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
+import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
 
@@ -35,6 +35,8 @@ export default function Legion3DView(p: Props) {
   const [speed, setSpeed] = useState<SpinSpeed>('normal');
   // 点中的节点:底部给一行「这个点是谁」,不然 3D 图对着一堆圆点没法用。
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 复制反馈:点一下选中行就把 id 复制走(3D 里看到谁之后,下一步往往就是去找他/贴给别人)。
+  const [copied, setCopied] = useState(false);
   const height = p.height ?? 360;
   const width = 520;
   // 相机(与 Dashboard 的视觉参数对齐):俯仰 ~26°、远一点让透视更平。
@@ -96,7 +98,7 @@ export default function Legion3DView(p: Props) {
   const selected = useMemo(() => {
     if (!selectedId || !layout) return null;
     const node = layout.nodes.find((n) => n.id === selectedId);
-    return node ? { label: node.label, sublabel: node.sublabel, kind: node.kind } : null;
+    return node ? { id: node.id, label: node.label, sublabel: node.sublabel, kind: node.kind } : null;
   }, [selectedId, layout]);
   const labels = useMemo(() => state.commands.filter((c) => c.kind === 'label') as Array<Extract<SceneCommand, { kind: 'label' }>>, [state.commands]);
 
@@ -110,6 +112,8 @@ export default function Legion3DView(p: Props) {
           const hit = pickBody(bodies as BodyCommand[], locationX, locationY);
           setSelectedId(hit ? hit.id : null);
         }}
+        // 长按是手机手势:桌面上按住鼠标是在拖选文字,绑上去会被当成误触(phone-only guard)。
+        onLongPress={Platform.OS === 'web' ? undefined : () => { setSelectedId(null); setCopied(false); }}
         style={{ height, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' }}>
         {/* 轨道:采样点画成一圈小点,不做描边(椭圆描边需要 svg/变换,先不引依赖)。 */}
         {dots.map((d, i) => {
@@ -153,9 +157,18 @@ export default function Legion3DView(p: Props) {
         ) : null}
       </Pressable>
       {selected ? (
-        <Text testID="legion3d-selected" style={{ color: colors.textSecondary, fontSize: 11 }}>
-          {selected.label}{selected.sublabel ? ` · ${selected.sublabel}` : ''}{selected.kind === 'agent' ? '（Agent）' : selected.kind === 'person' ? '（人）' : selected.kind === 'group' ? '（部门）' : ''}
-        </Text>
+        <Pressable testID="legion3d-selected" accessibilityRole="button" accessibilityLabel="复制这个节点的标识"
+          onPress={() => {
+            void import('expo-clipboard')
+              .then((m) => m.setStringAsync(nodeRefValue(selected.id)))
+              .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600); })
+              .catch(() => undefined);
+          }}>
+          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+            {selected.label}{selected.sublabel ? ` · ${selected.sublabel}` : ''}{selected.kind === 'agent' ? '（Agent）' : selected.kind === 'person' ? '（人）' : selected.kind === 'group' ? '（部门）' : ''}
+            {copied ? '（已复制 id）' : ' · 点这行复制 id'}
+          </Text>
+        </Pressable>
       ) : null}
       {state.phase === 'ready' ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>

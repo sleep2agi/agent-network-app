@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { buildLegionScene, sceneCounts, nextYaw, pickBody, SPIN_RAD_PER_SEC, parseSpinSpeed, spinRate } from './legion3d-scene';
+import { buildLegionScene, sceneCounts, nextYaw, nodeRefValue, pickBody, SPIN_RAD_PER_SEC, parseSpinSpeed, spinRate } from './legion3d-scene';
 
 let pass = 0;
 const names: string[] = [];
@@ -111,6 +111,22 @@ ck('pickBody：命中取最近（深度小）的那个，远处点不着', (() =
 ck('pickBody：小目标有最小命中半径（看得见就点得着）', (() => {
   const tiny = [{ kind: 'body', id: 't', nodeKind: 'agent', x: 50, y: 50, rx: 1, ry: 1, depth: 1, scale: 1, dimmed: false }] as never;
   return pickBody(tiny, 58, 50) !== null && pickBody(tiny, 80, 50) === null;
+})());
+
+ck('选中行点一下就复制标识（并给可见反馈）',
+  view.includes('nodeRefValue(selected.id)') && view.includes("'（已复制 id）'")
+  && view.includes('expo-clipboard'));
+
+ck('长按空白处取消选中（只在非 web 绑定：桌面按住鼠标是拖选文字）',
+  view.includes('onLongPress=') && view.includes("Platform.OS === 'web' ? undefined")
+  && view.includes('setSelectedId(null)'));
+
+ck('nodeRefValue 去掉图元前缀（agent:/person:/dept:）', (() => {
+  return nodeRefValue('agent:n_abc') === 'n_abc'
+    && nodeRefValue('person:u1') === 'u1'
+    && nodeRefValue('dept:d9') === 'd9'
+    && nodeRefValue('nodash') === 'nodash'
+    && nodeRefValue('  agent:n_x  ') === 'n_x';
 })());
 
 ck('不引新依赖：视图只用 RN 基础元素', (() => {
