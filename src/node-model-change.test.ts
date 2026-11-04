@@ -129,6 +129,9 @@ check('当前 Provider 的分组标题带「当前」标记', (() => {
 check('模型区给诊断字段说明（gen/mode/catalog/agent/net/client）', section.includes('node-model-diag-legend') && section.includes('gen=代际') && section.includes('mode=共存/单飞') && section.includes('net=网络'));
 check('opencode 系但代际未声明时给出提示（统一走 generationOf）', section.includes('node-model-gen-unset') && section.includes('generationUnset') && section.includes('generationOf(node)'));
 check('选中但尚未生效的 chip 有可见标记 + a11y selected', section.includes("active ? ' ✓' : ''") && section.includes('accessibilityState={{ selected: active }}'));
+check('点「当前」复制后给可见反馈（不然不知道复制没复制）',
+  section.includes('setCurrentCopied(true)') && section.includes("currentCopied ? '（已复制）' : ''")
+  && section.includes('setTimeout(() => setCurrentCopied(false), 1600)'));
 check('生效后记住上一模型并给「切回」入口', (() => {
   const submitted = afterSubmit('deepseek/next', 5, { ok: true }, 'deepseek/old');
   if (submitted.kind !== 'restarting') return false;

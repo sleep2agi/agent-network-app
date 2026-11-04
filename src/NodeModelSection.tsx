@@ -74,6 +74,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [view, setView] = useState<NodeConfigRead | null | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [picked, setPicked] = useState<string>('');
+  // 点了「当前：provider / model」会复制,但以前没有任何反馈 —— 用户不知道到底复制没复制。
+  const [currentCopied, setCurrentCopied] = useState(false);
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
   const v2 = isOpenCodeV2Node(node);
@@ -339,13 +341,20 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             ) : null}
             {/* 当前 Provider / 模型单独一行:分组展示后,"我现在在哪个 provider 下"不该靠 chip 上的小字去找。 */}
             <Text style={{ color: colors.textSecondary, fontSize: 12 }} testID="node-model-current"
-              onPress={() => { const cur = (currentModel ?? '').trim(); if (cur) void import('expo-clipboard').then(m => m.setStringAsync(cur)).catch(() => undefined); }}>
+              onPress={() => {
+                const cur = (currentModel ?? '').trim();
+                if (!cur) return;
+                void import('expo-clipboard').then(m => m.setStringAsync(cur)).then(() => {
+                  setCurrentCopied(true);
+                  setTimeout(() => setCurrentCopied(false), 1600);
+                }).catch(() => undefined);
+              }}>
               当前：{(() => {
                 const cur = (currentModel ?? '').trim();
                 if (!cur) return '未设置';
                 const slash = cur.indexOf('/');
                 return slash > 0 ? `${cur.slice(0, slash)} / ${cur.slice(slash + 1)}` : cur;
-              })()}
+              })()}{currentCopied ? '（已复制）' : ''}
             </Text>
 
             {chips.length > 0 ? (
