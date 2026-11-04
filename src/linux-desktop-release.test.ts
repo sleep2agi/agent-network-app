@@ -33,8 +33,11 @@ const matrices = (text: string) => {
   return [JSON.parse(match[1]), JSON.parse(match[2])];
 };
 const [withLinux, primaryOnly] = matrices(workflow);
-check('opt-in release matrix builds the deb on Ubuntu 24.04',
-  withLinux.some((row: any) => row.platform === 'ubuntu-24.04' && row.args === '--bundles deb'));
+// 2026-11-05:ubuntu-24.04 的 runner 镜像连续 4 次在启动 tauri-action 时报
+// `An error occurred trying to start process '/home/runner/actions-runner/cached/2.338.2/externals/node…'`
+// (换 run 也一样)⇒ 临时切到 ubuntu-22.04 绕开坏镜像。deb 产物与检查项不变。
+check('opt-in release matrix builds the deb on Ubuntu 22.04',
+  withLinux.some((row: any) => row.platform === 'ubuntu-22.04' && row.args === '--bundles deb'));
 check('platform selection survives a Windows CRLF checkout',
   JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
 check('default release matrix contains only the exact macOS and Windows bundles',
