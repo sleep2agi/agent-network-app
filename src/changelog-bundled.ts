@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.446:",
+  "- 设置 → Agent 团队里新增「军团 3D（预览）」：把真实组织架构画成 3D 轨道图（只读、静态），先看密度和观感再决定做成常驻入口。",
+  "",
   "What's new in 0.2.445:",
   "- 内部：组织架构数据接进军团 3D（人/部门/Agent/无主 Agent 一一对应，老 Hub 与空数据都有断言），10 条检查。",
   "",
