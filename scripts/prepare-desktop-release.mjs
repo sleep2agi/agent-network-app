@@ -57,8 +57,11 @@ export const parseGhOutput = (stdout) => {
   return text === '' ? null : JSON.parse(text);
 };
 
-const gh = (args, { parse = true } = {}) => {
-  const result = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024 });
+const gh = (args, { parse = true, input } = {}) => {
+  // `input` 走 stdin(`--input -`):发布说明有 7 万字符,当命令行参数传会触发
+  // execve 的 Argument list too long(2026-11-05 实测),日志里只会看到
+  // "prepare release failed: gh api -X POST … body=…" —— 真错因被正文淹掉。
+  const result = spawnSync('gh', args, { encoding: 'utf8', maxBuffer: 64 * 1024 * 1024, input });
   if (result.status !== 0) throw new Error(`gh ${args.join(' ')} failed: ${result.stderr || result.stdout}`);
   return parse ? parseGhOutput(result.stdout) : result.stdout;
 };
@@ -99,14 +102,19 @@ export function prepareReleaseDraft({
   // 不能因为「不是 SHA」就跳过校验，而要先 resolve 成 SHA 再比对。
   resolveRef = (ref) => run(['api', `repos/${repository}/commits/${encodeURIComponent(ref)}`]),
   deleteAsset = (assetId) => run(['api', '-X', 'DELETE', `repos/${repository}/releases/assets/${assetId}`]),
-  createRelease = (tag, name) => run([
-    'api', '-X', 'POST', `repos/${repository}/releases`,
-    '-f', `tag_name=${tag}`,
-    '-f', `name=${name}`,
-    '-F', 'draft=true',
-    ...(commit ? ['-f', `target_commitish=${commit}`] : []),
-    ...(body ? ['-f', `body=${body}`] : []),
-  ]),
+  // 元数据用 JSON + stdin:body 可能几万字符,不能当命令行参数。
+  createRelease = (tag, name) => run(
+    ['api', '-X', 'POST', `repos/${repository}/releases`, '--input', '-'],
+    {
+      input: JSON.stringify({
+        tag_name: tag,
+        name,
+        draft: true,
+        ...(commit ? { target_commitish: commit } : {}),
+        ...(body ? { body } : {}),
+      }),
+    },
+  ),
   log = (line) => console.log(line),
 } = {}) {
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(version ?? '')) throw new Error(`version is required (got ${JSON.stringify(version)})`);
