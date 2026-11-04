@@ -72,6 +72,7 @@ import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
 import AgentOrgScreen from './AgentOrgScreen';
 import Legion3DView from './legion3d-view';
+import { loadLegion3DOpen, saveLegion3DOpen } from './agent-list-prefs';
 import { ManageDepartmentPhone } from './ManageDepartment';
 import { managedDepartmentIds } from './org-model';
 import { canManageUsers, type AuthMe } from './user-admin';
@@ -205,7 +206,13 @@ export default function SettingsScreen({
   const [, bumpKeepAlive] = useState(0);
   const [guideVisible, setGuideVisible] = useState(!!notifyPreview?.guideOpen);
   // 军团 3D 预览:默认收起,点了才去读组织架构(不给每次进设置都加一次请求)。
+  // 展开状态持久化 —— 每次进设置都被收起,用户会以为这功能没了。
   const [showLegion3D, setShowLegion3D] = useState(false);
+  useEffect(() => {
+    let live = true;
+    void loadLegion3DOpen().then((open) => { if (live && open) setShowLegion3D(true); }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
   const [testMessage, setTestMessage] = useState('');
   const saveNotify = (next: NotifySettings) => { saveNotifySettings(next); };
   // 0.2.109「免打扰时仍然提醒」:勿扰权限的真实读数(从系统页回来要重读)。
@@ -963,7 +970,11 @@ export default function SettingsScreen({
               {/* 军团 3D(2026-11-05):先给一个只读预览,确认投影/密度在真机上看得清,
                   再决定要不要做成常驻入口与自转动画。 */}
               <Pressable accessibilityRole="button" testID="settings-legion3d-toggle"
-                onPress={() => setShowLegion3D((v) => !v)}
+                onPress={() => setShowLegion3D((v) => {
+                  const next = !v;
+                  void saveLegion3DOpen(next).catch(() => undefined);
+                  return next;
+                })}
                 style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 6, marginBottom: spacing.sm }, pressed && { opacity: 0.7 }]}>
                 <Text style={{ color: colors.accent, fontSize: 12 }}>{showLegion3D ? tr('settings.legion3d.hide') : tr('settings.legion3d.show')}</Text>
               </Pressable>

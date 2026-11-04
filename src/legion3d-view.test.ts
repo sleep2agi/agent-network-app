@@ -43,7 +43,7 @@ ck('空/错误状态各自成屏，且不被「军团没人」掩盖',
   view.includes("phase: 'empty'") && view.includes("phase: 'error'") && view.includes('legion3d-retry'));
 
 ck('没有网络时不发请求、直接说明原因',
-  view.includes("if (!net) { setState({ phase: 'empty'") && view.includes("note: '还没选网络'"));
+  view.includes("if (!net) { setState({ phase: 'empty'") && view.includes("'还没选网络，先在上面选一个网络'"));
 
 ck('设置页入口默认收起（不给每次进设置加一次组织架构请求）',
   settings.includes('const [showLegion3D, setShowLegion3D] = useState(false)')
@@ -69,6 +69,15 @@ ck('角度推进是纯函数（会转、会绕回、负时间不倒退）', (() 
     && Math.abs(nextYaw(1, -100) - 1) < 1e-12
     && nextYaw(Math.PI * 2 - 0.01, 1000) < Math.PI * 2;
 })());
+
+ck('失败原因分得开（没网络 / 没组织架构 / 请求失败 / 真没人），而不是一律「军团没人」',
+  view.includes("reason: 'no-network'") && view.includes("reason: 'no-org-data'")
+  && view.includes("reason: 'fetch-failed'") && view.includes("reason: 'no-people'")
+  && view.includes('legion3d-${state.phase}-${state.reason}'));
+
+ck('展开状态会持久化（每次进设置都被收起，用户会以为功能没了）',
+  settings.includes('loadLegion3DOpen') && settings.includes('saveLegion3DOpen')
+  && settings.includes('setShowLegion3D(true)'));
 
 ck('不引新依赖：视图只用 RN 基础元素', (() => {
   const imports = (view.match(/^import .*$/gm) ?? []).join('\n');
