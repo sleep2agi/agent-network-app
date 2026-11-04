@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.445:",
+  "- 内部：组织架构数据接进军团 3D（人/部门/Agent/无主 Agent 一一对应，老 Hub 与空数据都有断言），10 条检查。",
+  "",
   "What's new in 0.2.444:",
   "- 内部：军团 3D 的「图元层」就位——布局+相机算出可绘制的环/体/标签（深度排序、标签预算、折叠减淡），11 条断言钉住。",
   "",
