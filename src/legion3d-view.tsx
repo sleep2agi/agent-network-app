@@ -173,7 +173,8 @@ export default function Legion3DView(p: Props) {
       {state.phase === 'ready' ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <Text testID="legion3d-stats" style={{ color: colors.textMuted, fontSize: 11 }}>
-            {bodies.length} 个节点 · {labels.length} 个标签
+            {/* 汇总用布局层统计(全量口径),别用图元数 —— 折叠/标签预算会让图元数少于真实人数。 */}
+            {layout ? `${layout.stats.people} 人 · ${layout.stats.agents} 个 Agent · ${layout.stats.groups} 个部门` : `${bodies.length} 个节点`}
           </Text>
           <Pressable accessibilityRole="button" testID="legion3d-spin-toggle" onPress={() => setSpinning((v) => !v)}
             style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>

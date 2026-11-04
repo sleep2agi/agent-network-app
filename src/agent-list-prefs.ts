@@ -72,8 +72,15 @@ export const loadRailLabels = async (): Promise<RailLabels> => {
 };
 export const saveRailLabels = (v: RailLabels): Promise<void> => writeKey(RAIL_LABELS_KEY, parseRailLabels(v));
 
-export const parseLegion3DOpen = (v: string | null | undefined): boolean => v === '1';
-export const loadLegion3DOpen = async (): Promise<boolean> => parseLegion3DOpen(await readKey(LEGION3D_OPEN_KEY));
+/** 三态(2026-11-05):'1' 展开 / '0' 收起 / 没有存过 ⇒ null。
+ *  为什么不是布尔:这个功能从「预览」变成默认展开,老用户没存过时不该被当成「选过收起」。 */
+export const parseLegion3DOpen = (v: string | null | undefined): boolean | null => {
+  const raw = (v ?? '').trim();
+  if (raw === '1') return true;
+  if (raw === '0') return false;
+  return null;
+};
+export const loadLegion3DOpen = async (): Promise<boolean | null> => parseLegion3DOpen(await readKey(LEGION3D_OPEN_KEY));
 export const saveLegion3DOpen = (open: boolean): Promise<void> => writeKey(LEGION3D_OPEN_KEY, open ? '1' : '0');
 
 // 进程内的小 store(与 ui-scale 同款做法):设置页改完,App 里那条 rail 立刻跟着变,不用重挂整棵树。

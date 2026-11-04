@@ -207,10 +207,11 @@ export default function SettingsScreen({
   const [guideVisible, setGuideVisible] = useState(!!notifyPreview?.guideOpen);
   // 军团 3D 预览:默认收起,点了才去读组织架构(不给每次进设置都加一次请求)。
   // 展开状态持久化 —— 每次进设置都被收起,用户会以为这功能没了。
-  const [showLegion3D, setShowLegion3D] = useState(false);
+  // 默认展开(功能已经不只是预览);存过的选择优先 —— 老用户没存过时不会被当成「选过收起」。
+  const [showLegion3D, setShowLegion3D] = useState(true);
   useEffect(() => {
     let live = true;
-    void loadLegion3DOpen().then((open) => { if (live && open) setShowLegion3D(true); }).catch(() => undefined);
+    void loadLegion3DOpen().then((open) => { if (live && open !== null) setShowLegion3D(open); }).catch(() => undefined);
     return () => { live = false; };
   }, []);
   const [testMessage, setTestMessage] = useState('');
