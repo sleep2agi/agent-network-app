@@ -45,10 +45,8 @@ ck('空/错误状态各自成屏，且不被「军团没人」掩盖',
 ck('没有网络时不发请求、直接说明原因',
   view.includes("if (!net) { setState({ phase: 'empty'") && view.includes("'还没选网络，先在上面选一个网络'"));
 
-ck('设置页入口默认收起（不给每次进设置加一次组织架构请求）',
-  settings.includes('const [showLegion3D, setShowLegion3D] = useState(false)')
-  && settings.includes('settings-legion3d-toggle')
-  && settings.includes('{showLegion3D ? <Legion3DView'));
+ck('设置页入口可折叠，且只有展开时才挂载 3D 视图（不展开不发请求）',
+  settings.includes('settings-legion3d-toggle') && settings.includes('{showLegion3D ? <Legion3DView'));
 
 ck('自转有帧率上限（定时器 50ms，不用 rAF 60fps）',
   view.includes('SPIN_TICK_MS') && view.includes('setInterval') && !view.includes('requestAnimationFrame'));
@@ -75,9 +73,21 @@ ck('失败原因分得开（没网络 / 没组织架构 / 请求失败 / 真没�
   && view.includes("reason: 'fetch-failed'") && view.includes("reason: 'no-people'")
   && view.includes('legion3d-${state.phase}-${state.reason}'));
 
-ck('展开状态会持久化（每次进设置都被收起，用户会以为功能没了）',
-  settings.includes('loadLegion3DOpen') && settings.includes('saveLegion3DOpen')
-  && settings.includes('setShowLegion3D(true)'));
+ck('默认展开，但存过的选择优先（三态：没存过 ≠ 选过收起）',
+  settings.includes('useState(true)') && settings.includes('loadLegion3DOpen')
+  && settings.includes('saveLegion3DOpen') && settings.includes('open !== null'));
+
+ck('汇总行用布局统计的全量口径（不是图元数）',
+  view.includes('layout.stats.people') && view.includes('layout.stats.agents')
+  && view.includes('layout.stats.groups'));
+
+// 不 import agent-list-prefs:它拉 expo-file-system/react-native,在这个 runner 里会炸;
+// 用源码断言代替(该模块没有可单独测的纯逻辑依赖)。
+ck('三态解析：只有明确的 1/0 才算用户选过', (() => {
+  const prefs = readFileSync(path.join(import.meta.dir, 'agent-list-prefs.ts'), 'utf8');
+  return prefs.includes("if (raw === '1') return true;") && prefs.includes("if (raw === '0') return false;")
+    && prefs.includes('return null;') && prefs.includes('Promise<boolean | null>');
+})());
 
 ck('速度三档（慢/中/快）只改角速度，帧率上限不变',
   view.includes("testID=\"legion3d-speed\"") && view.includes('spinRate(speed)')
