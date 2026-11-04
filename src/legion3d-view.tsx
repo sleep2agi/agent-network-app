@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { buildLegionScene, nextYaw, spinRate, parseSpinSpeed, SPIN_TICK_MS, type SceneCommand, type SpinSpeed } from './legion3d-scene';
+import { buildLegionScene, nextYaw, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
 
@@ -33,6 +33,8 @@ export default function Legion3DView(p: Props) {
   const [spinning, setSpinning] = useState(false);
   const [yaw, setYaw] = useState(0.6);
   const [speed, setSpeed] = useState<SpinSpeed>('normal');
+  // 点中的节点:底部给一行「这个点是谁」,不然 3D 图对着一堆圆点没法用。
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const height = p.height ?? 360;
   const width = 520;
   // 相机(与 Dashboard 的视觉参数对齐):俯仰 ~26°、远一点让透视更平。
@@ -91,11 +93,24 @@ export default function Legion3DView(p: Props) {
     [state.commands],
   );
   const bodies = useMemo(() => state.commands.filter((c) => c.kind === 'body') as Array<Extract<SceneCommand, { kind: 'body' }>>, [state.commands]);
+  const selected = useMemo(() => {
+    if (!selectedId || !layout) return null;
+    const node = layout.nodes.find((n) => n.id === selectedId);
+    return node ? { label: node.label, sublabel: node.sublabel, kind: node.kind } : null;
+  }, [selectedId, layout]);
   const labels = useMemo(() => state.commands.filter((c) => c.kind === 'label') as Array<Extract<SceneCommand, { kind: 'label' }>>, [state.commands]);
 
   return (
     <View testID="legion3d-view" style={{ gap: spacing.sm }}>
-      <View style={{ height, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' }}>
+      <Pressable testID="legion3d-canvas" accessibilityRole="image"
+        accessibilityLabel="军团 3D 视图，点节点可看是谁"
+        onPress={(e) => {
+          const { locationX, locationY } = (e.nativeEvent ?? {}) as { locationX?: number; locationY?: number };
+          if (typeof locationX !== 'number' || typeof locationY !== 'number') return;
+          const hit = pickBody(bodies as BodyCommand[], locationX, locationY);
+          setSelectedId(hit ? hit.id : null);
+        }}
+        style={{ height, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' }}>
         {/* 轨道:采样点画成一圈小点,不做描边(椭圆描边需要 svg/变换,先不引依赖)。 */}
         {dots.map((d, i) => {
           const dot = ds(3);
@@ -116,6 +131,7 @@ export default function Legion3DView(p: Props) {
               borderRadius: Math.max(b.rx, b.ry),
               backgroundColor: bodyColor(b.nodeKind, b.dimmed),
               opacity: b.dimmed ? 0.35 : 1,
+              ...(b.id === selectedId ? { borderWidth: 2, borderColor: colors.text } : null),
             }} />
         ))}
         {labels.map((l) => (
@@ -135,7 +151,12 @@ export default function Legion3DView(p: Props) {
             </Pressable>
           </View>
         ) : null}
-      </View>
+      </Pressable>
+      {selected ? (
+        <Text testID="legion3d-selected" style={{ color: colors.textSecondary, fontSize: 11 }}>
+          {selected.label}{selected.sublabel ? ` · ${selected.sublabel}` : ''}{selected.kind === 'agent' ? '（Agent）' : selected.kind === 'person' ? '（人）' : selected.kind === 'group' ? '（部门）' : ''}
+        </Text>
+      ) : null}
       {state.phase === 'ready' ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <Text testID="legion3d-stats" style={{ color: colors.textMuted, fontSize: 11 }}>

@@ -212,3 +212,25 @@ export function nextYaw(yaw: number, elapsedMs: number, ratePerSec: number = SPI
   const next = (yaw + step) % twoPi;
   return next < 0 ? next + twoPi : next;
 }
+
+/** 点击命中(2026-11-05):从体列表里找屏幕坐标下的那个。
+ *  规则与几何层 `hitTest` 一致 —— 用椭圆的归一化距离 ≤ 1 判定,圆点太小时按 `minRadius` 兜底
+ *  (否则「看得见点不着」);重叠时取**离相机最近**的(深度最小),因为近的盖住远的。
+ *  纯函数:没有 canvas、没有事件对象,便于断言。 */
+export function pickBody(
+  bodies: readonly BodyCommand[],
+  x: number,
+  y: number,
+  minRadius = 14,
+): BodyCommand | null {
+  let best: BodyCommand | null = null;
+  for (const b of bodies) {
+    const rx = Math.max(minRadius, b.rx);
+    const ry = Math.max(minRadius, b.ry);
+    const dx = b.x - x;
+    const dy = b.y - y;
+    if ((dx / rx) ** 2 + (dy / ry) ** 2 > 1) continue;
+    if (!best || b.depth < best.depth) best = b;
+  }
+  return best;
+}

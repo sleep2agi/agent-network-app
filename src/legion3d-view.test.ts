@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { buildLegionScene, sceneCounts, nextYaw, SPIN_RAD_PER_SEC, parseSpinSpeed, spinRate } from './legion3d-scene';
+import { buildLegionScene, sceneCounts, nextYaw, pickBody, SPIN_RAD_PER_SEC, parseSpinSpeed, spinRate } from './legion3d-scene';
 
 let pass = 0;
 const names: string[] = [];
@@ -92,6 +92,25 @@ ck('速度档是纯函数解析（未知值退回 normal）', (() => {
 ck('自转转一圈的时间在 11–45 秒之间（慢/中/快都还能看）', (() => {
   const secs = (s: string) => (Math.PI * 2) / spinRate(s);
   return ['slow', 'normal', 'fast'].every((k) => secs(k) >= 11 && secs(k) <= 45);
+})());
+
+ck('点节点能查到是谁（底部一行 + 选中描边）',
+  view.includes('pickBody(') && view.includes('legion3d-selected')
+  && view.includes('selectedId') && view.includes('legion3d-canvas'));
+
+ck('pickBody：命中取最近（深度小）的那个，远处点不着', (() => {
+  const bodies = [
+    { kind: 'body', id: 'far', nodeKind: 'agent', x: 100, y: 100, rx: 10, ry: 10, depth: 9, scale: 1, dimmed: false },
+    { kind: 'body', id: 'near', nodeKind: 'person', x: 100, y: 100, rx: 10, ry: 10, depth: 2, scale: 1, dimmed: false },
+  ] as never;
+  const hit = pickBody(bodies, 102, 101);
+  const miss = pickBody(bodies, 300, 300);
+  return hit?.id === 'near' && miss === null;
+})());
+
+ck('pickBody：小目标有最小命中半径（看得见就点得着）', (() => {
+  const tiny = [{ kind: 'body', id: 't', nodeKind: 'agent', x: 50, y: 50, rx: 1, ry: 1, depth: 1, scale: 1, dimmed: false }] as never;
+  return pickBody(tiny, 58, 50) !== null && pickBody(tiny, 80, 50) === null;
 })());
 
 ck('不引新依赖：视图只用 RN 基础元素', (() => {
