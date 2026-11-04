@@ -71,6 +71,7 @@ import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
 import AgentOrgScreen from './AgentOrgScreen';
+import Legion3DView from './legion3d-view';
 import { ManageDepartmentPhone } from './ManageDepartment';
 import { managedDepartmentIds } from './org-model';
 import { canManageUsers, type AuthMe } from './user-admin';
@@ -203,6 +204,8 @@ export default function SettingsScreen({
   // 起服务是异步的(onStartCommand 稍后才跑):开关拨动后 1.5 s 再读一次真实状态。
   const [, bumpKeepAlive] = useState(0);
   const [guideVisible, setGuideVisible] = useState(!!notifyPreview?.guideOpen);
+  // 军团 3D 预览:默认收起,点了才去读组织架构(不给每次进设置都加一次请求)。
+  const [showLegion3D, setShowLegion3D] = useState(false);
   const [testMessage, setTestMessage] = useState('');
   const saveNotify = (next: NotifySettings) => { saveNotifySettings(next); };
   // 0.2.109「免打扰时仍然提醒」:勿扰权限的真实读数(从系统页回来要重读)。
@@ -957,6 +960,14 @@ export default function SettingsScreen({
           {sectionsToRender.includes('agentTeams') ? (
             <View style={sectionStyle} testID="settings-section-agent-teams">
               {heading('agentTeams')}
+              {/* 军团 3D(2026-11-05):先给一个只读预览,确认投影/密度在真机上看得清,
+                  再决定要不要做成常驻入口与自转动画。 */}
+              <Pressable accessibilityRole="button" testID="settings-legion3d-toggle"
+                onPress={() => setShowLegion3D((v) => !v)}
+                style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 6, marginBottom: spacing.sm }, pressed && { opacity: 0.7 }]}>
+                <Text style={{ color: colors.accent, fontSize: 12 }}>{showLegion3D ? tr('settings.legion3d.hide') : tr('settings.legion3d.show')}</Text>
+              </Pressable>
+              {showLegion3D ? <Legion3DView cfg={cfg} networkId={me.networkId || cfg.networkId} /> : null}
               <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />
             </View>
           ) : null}
