@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.451:
+            - 军团 3D 选中节点后点一下文字就能复制它的 node_id / user_id（不用再回列表找），长按空白处取消选中。
+
             What's new in 0.2.450:
             - 军团 3D 里可以点节点了：点中会高亮，并在图下方显示这个人/部门/Agent 是谁。
 
