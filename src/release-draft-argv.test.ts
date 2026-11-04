@@ -23,8 +23,12 @@ function ck(name: string, ok: boolean, extra = '') {
   console.log(`FAIL: ${name}${extra ? ` — ${extra}` : ''}`);
 }
 
-const script = readFileSync(path.join(import.meta.dir, '..', 'scripts', 'prepare-desktop-release.mjs'), 'utf8');
-const workflow = readFileSync(path.join(import.meta.dir, '..', '.github', 'workflows', 'release-desktop-auto-update.yml'), 'utf8');
+// Windows 检出是 CRLF：不归一化的话 `\|-\n` 这类跨行锚点永远匹配不上
+// （2026-11-05 真红过一次，和 legion3d-view.test.ts 同一类坑）。
+const read = (rel: string) =>
+  readFileSync(path.join(import.meta.dir, '..', rel), 'utf8').replace(/\r\n?/g, '\n');
+const script = read('scripts/prepare-desktop-release.mjs');
+const workflow = read('.github/workflows/release-desktop-auto-update.yml');
 
 ck('创建草稿不把 body 当命令行参数（-f body= 已消失）',
   !/-f',\s*`body=/.test(script) && !script.includes("'-f', `body=${body}`"));
