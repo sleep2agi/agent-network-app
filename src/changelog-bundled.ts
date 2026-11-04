@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.450:",
+  "- 军团 3D 里可以点节点了：点中会高亮，并在图下方显示这个人/部门/Agent 是谁。",
+  "",
   "What's new in 0.2.449:",
   "- 军团 3D 支持三档自转速度（慢/中/快），入口文案去掉「预览」。",
   "",
