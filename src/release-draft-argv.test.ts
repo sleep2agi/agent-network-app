@@ -39,6 +39,9 @@ ck('创建草稿走 --input -（stdin JSON）',
 ck('gh() 支持 stdin（spawnSync 的 input）',
   /spawnSync\('gh', args, \{[^}]*input/.test(script));
 
+ck('默认 run 会把 opts(input) 转发给 gh（漏了就被服务端当空 body，422 links/0/schema）',
+  /run = \(args, opts\) => gh\(args, opts\)/.test(script));
+
 ck('200KB body 也能构造 payload，且命令行里没有正文', (() => {
   const calls: Array<[string[], { input?: string }]> = [];
   prepareReleaseDraft({

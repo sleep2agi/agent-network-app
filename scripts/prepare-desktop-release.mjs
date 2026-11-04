@@ -91,7 +91,10 @@ export function prepareReleaseDraft({
   requireCommit = false,
   includeLinux = true,
   body = '',
-  run = (args) => gh(args),
+  // 必须把 opts(input 等)转发给 gh：漏了这层,stdin payload 会被丢掉,
+  // 服务端收到空 body 后报 `For 'links/0/schema', nil is not an object. (HTTP 422)`
+  // —— 2026-11-05 就是这么又挂了一次。
+  run = (args, opts) => gh(args, opts),
   // --slurp 让分页结果是一个数组的数组；直接 JSON.parse 多页拼接会炸（gh 的手册明确要求）。
   listReleases = () => {
     const pages = run(['api', `repos/${repository}/releases?per_page=50`, '--paginate', '--slurp']);
