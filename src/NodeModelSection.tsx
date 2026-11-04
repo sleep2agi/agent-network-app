@@ -287,7 +287,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
         {/* 贴到群里的诊断行(gen=/catalog=/agent=/net=)得有人能读:
             这里给一行字段表,省得每次再解释一遍。 */}
         <Text testID="node-model-diag-legend" style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
-          诊断行字段：gen=代际（v1 不报清单） · catalog=清单上报 · agent=agent-node 版本 · net=网络 · client=客户端版本
+          诊断行字段：gen=代际（v1 不报清单） · mode=共存/单飞 · catalog=清单上报 · agent=agent-node 版本 · net=网络 · client=客户端版本
         </Text>
         {readFailed && view === undefined ? (
           <Text style={{ color: colors.failed, fontSize: 12 }}>读取节点配置失败。<Text style={{ color: colors.accent }} onPress={() => void reload()}>重试</Text></Text>

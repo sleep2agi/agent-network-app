@@ -42,7 +42,9 @@ check('pressed state is visible without layout shift', /actionButtonPressed:\s*\
 check('V1 节点诊断写 catalog=n/a(v1) 而不是 missing', screen.includes("'catalog=n/a(v1)'") && screen.includes("gen === 'v1'"));
 check('诊断行带代际 gen=（统一走 generationOf，真机才读得到）', screen.includes('gen=${gen}') && screen.includes('generationOf(node)'));
 check('诊断行带网络标识（多网络排查用）', screen.includes('net=${s.network_id}'));
-check('诊断复制提示写明包含哪些字段', screen.includes('诊断已复制（含 gen / catalog / net）'));
+check('诊断行带共存模式 mode=（同代际下两种模式能力不同）',
+  screen.includes('mode=${node.opencode_mode}') && screen.includes('node?.opencode_mode'));
+check('诊断复制提示写明包含哪些字段', screen.includes('诊断已复制（含 gen / mode / catalog / net）'));
 check('只有复制成功才提示「已复制」', screen.includes('await Clipboard.setStringAsync(s.alias)') && !/Clipboard\.setStringAsync\(s\.alias\)\.catch/.test(screen) && screen.includes('复制失败就保持沉默'));
 check('复制别名/诊断后给出可见反馈（桌面端无系统提示）', screen.includes('node-detail-copied') && screen.includes("flashCopied('alias')") && screen.includes("flashCopied('diag')"));
 check('delete still discloses exact-alias confirmation', screen.includes("pendingAction === 'delete_node' && confirmAlias !== alias"));
