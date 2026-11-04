@@ -516,8 +516,30 @@ jobs:
 
       # #1035(0.2.287 双草稿事故) 与 #1034 的最终形态：草稿的唯一性由 prepare-release 单点保证；
       # 这里（每个 matrix job 内）不再按 tag 删除或创建 release，也不再等别的平台先建。
+      # Linux 腿不用这个 JS action:2026-11-05 起 ubuntu runner 镜像缺
+      # `/home/runner/actions-runner/cached/*/externals/node24/bin/node`,任何 JS action 都起不来
+      # (macOS / Windows 正常)。改成直接跑 tauri CLI + gh 上传,产物名与校验脚本一致。
+      - name: Build Linux deb with the tauri CLI (runners cannot start JS actions)
+        if: inputs.publish == true && runner.os == 'Linux'
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
+          TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
+        shell: bash
+        run: |
+          set -euo pipefail
+          npm ci --no-audit --no-fund
+          npx tauri build --bundles deb
+          version=$(node -p 'require("./package.json").version')
+          deb="src-tauri/target/release/bundle/deb/ANet_${version}_amd64.deb"
+          test -f "$deb"
+          test -f "$deb.sig"
+          gh release upload "desktop-v${version}" "$deb" "$deb.sig" --clobber \
+            --repo "${GITHUB_REPOSITORY}" >/dev/null
+          echo "uploaded $(basename "$deb") and its .sig"
+
       - uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
-        if: inputs.publish == true
+        if: inputs.publish == true && runner.os != 'Linux'
         env:
           GITHUB_TOKEN: ${{ github.token }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
