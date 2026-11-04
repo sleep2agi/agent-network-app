@@ -26,7 +26,7 @@ ck('数据走客户端已有的组织架构接口（不另起一套请求）',
   view.includes("import { loadAgentOrg } from './agent-org-api'") && view.includes('loadAgentOrg(p.cfg, net)'));
 
 ck('布局与图元都走已搬入的纯函数（不在这里重算投影）',
-  view.includes('buildLegionLayout(legionInputFromOrg(org))') && view.includes('buildLegionScene(layout, cam,'));
+  view.includes('buildLegionLayout(legionInputFromOrg(org))') && view.includes('buildLegionScene(shownLayout, cam,' + ' { width, height })'));
 
 ck('相机在组件内算（模块级会冻结密度；yaw 由自转状态驱动）',
   /const cam = useMemo\(\(\) => \(\{ yaw, pitch: [\d.]+, dist: [\d.]+/.test(view)
@@ -58,7 +58,8 @@ ck('App 切后台就停转（不白烧电）',
   view.includes("AppState.addEventListener('change'") && view.includes('clearInterval(timer)'));
 
 ck('自转只重算投影，不重排部门树（布局按数据算一次）',
-  view.includes('const [layout, setLayout] = useState') && /useEffect\(\(\) => \{\n    if \(!layout\) return;/.test(view));
+  view.includes('const [layout, setLayout] = useState') && view.includes('if (!shownLayout) return;')
+  && view.includes('useMemo(() => (layout ? focusLayout(layout, focusId) : null)'));
 
 ck('角度推进是纯函数（会转、会绕回、负时间不倒退）', (() => {
   const a = nextYaw(0, 1000);
@@ -138,6 +139,10 @@ ck('nodeRefValue 去掉图元前缀（agent:/person:/dept:）', (() => {
     && nodeRefValue('nodash') === 'nodash'
     && nodeRefValue('  agent:n_x  ') === 'n_x';
 })());
+
+ck('选中部门时可「只看这个部门」，聚焦后可「看全图」',
+  view.includes('legion3d-focus-dept') && view.includes('legion3d-focus-clear')
+  && view.includes('focusLayout(layout, focusId)') && view.includes('focusLabel(layout ?? null, focusId)'));
 
 ck('不引新依赖：视图只用 RN 基础元素', (() => {
   const imports = (view.match(/^import .*$/gm) ?? []).join('\n');

@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.453:",
+  "- 军团 3D 可以聚焦某个部门了：选中部门后点「只看这个部门」，只显示它和它的下级；再点「看全图」恢复。",
+  "",
   "What's new in 0.2.452:",
   "- 军团 3D 默认展开（存过的选择优先），图下汇总行改成「N 人 · M 个 Agent · K 个部门」（全量口径）。",
   "",

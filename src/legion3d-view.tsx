@@ -19,6 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
+import { focusLabel, focusLayout } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -35,6 +36,8 @@ export default function Legion3DView(p: Props) {
   const [speed, setSpeed] = useState<SpinSpeed>('normal');
   // 点中的节点:底部给一行「这个点是谁」,不然 3D 图对着一堆圆点没法用。
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  // 聚焦到某个部门(只看它和它的下级)。全图看体量,聚焦看编制。
+  const [focusId, setFocusId] = useState<string | null>(null);
   // 复制反馈:点一下选中行就把 id 复制走(3D 里看到谁之后,下一步往往就是去找他/贴给别人)。
   const [copied, setCopied] = useState(false);
   const height = p.height ?? 360;
@@ -84,11 +87,12 @@ export default function Legion3DView(p: Props) {
     return () => { alive = false; clearInterval(timer); sub.remove(); };
   }, [spinning, layout, speed]);
 
-  // 自转时只重算图元(布局不动)。
+  // 自转/聚焦时只重算图元(原始布局不动)。
+  const shownLayout = useMemo(() => (layout ? focusLayout(layout, focusId) : null), [layout, focusId]);
   useEffect(() => {
-    if (!layout) return;
-    setState((prev) => (prev.phase === 'ready' ? { ...prev, commands: buildLegionScene(layout, cam, { width, height }) } : prev));
-  }, [layout, cam, height]);
+    if (!shownLayout) return;
+    setState((prev) => (prev.phase === 'ready' ? { ...prev, commands: buildLegionScene(shownLayout, cam, { width, height }) } : prev));
+  }, [shownLayout, cam, height]);
 
   const dots = useMemo(
     () => state.commands.filter((c) => c.kind === 'ring').flatMap((r) => (r as { points: Array<{ x: number; y: number }> }).points.filter((_, i) => i % RING_DOT_STRIDE === 0)),
@@ -168,6 +172,18 @@ export default function Legion3DView(p: Props) {
             {selected.label}{selected.sublabel ? ` · ${selected.sublabel}` : ''}{selected.kind === 'agent' ? '（Agent）' : selected.kind === 'person' ? '（人）' : selected.kind === 'group' ? '（部门）' : ''}
             {copied ? '（已复制 id）' : ' · 点这行复制 id'}
           </Text>
+        </Pressable>
+      ) : null}
+      {selected && selected.kind === 'group' && focusId !== selected.id ? (
+        <Pressable accessibilityRole="button" testID="legion3d-focus-dept" onPress={() => setFocusId(selected.id)}
+          style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
+          <Text style={{ color: colors.accent, fontSize: 11 }}>只看 {selected.label}</Text>
+        </Pressable>
+      ) : null}
+      {focusId ? (
+        <Pressable accessibilityRole="button" testID="legion3d-focus-clear" onPress={() => setFocusId(null)}
+          style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
+          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>看全图（{focusLabel(layout ?? null, focusId)}）</Text>
         </Pressable>
       ) : null}
       {state.phase === 'ready' ? (
