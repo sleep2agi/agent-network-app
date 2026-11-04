@@ -38,6 +38,12 @@ const [withLinux, primaryOnly] = matrices(workflow);
 // (换 run 也一样)⇒ 临时切到 ubuntu-22.04 绕开坏镜像。deb 产物与检查项不变。
 check('opt-in release matrix builds the deb on ubuntu-latest（22.04/24.04 的 node24 都缺，改走 latest）',
   withLinux.some((row: any) => row.platform === 'ubuntu-latest' && row.args === '--bundles deb'));
+// 2026-11-05:ubuntu runner 镜像缺 node24,任何 JS action 都起不来 ⇒ Linux 腿改走 CLI + gh 上传。
+check('Linux 腿不依赖 JS action：tauri-action 明确排除 Linux',
+  workflow.includes("if: inputs.publish == true && runner.os != 'Linux'"));
+check('Linux 腿用 CLI 构建并用 gh 上传 deb 与 .sig',
+  workflow.includes('npx tauri build --bundles deb')
+  && workflow.includes('gh release upload "desktop-v${version}" "$deb" "$deb.sig"'));
 check('platform selection survives a Windows CRLF checkout',
   JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
 check('default release matrix contains only the exact macOS and Windows bundles',
