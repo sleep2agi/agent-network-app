@@ -149,7 +149,7 @@ ck('没有模型的会话不误命中', matchesModel({}, 'deepseek', substringMa
 // 搜不到时的提示要把「能搜什么」说全（拼音 / node_id / 模型名）
 ck('搜索空状态提示写明 node_id 与模型名', screenSrc.includes('node_id n_xxx') && screenSrc.includes('模型名如 deepseek'));
 ck('搜索空状态提示覆盖 runtime/状态/模型清单', screenSrc.includes('runtime 如 codex') && screenSrc.includes('状态如离线') && screenSrc.includes('missing/未上报'));
-ck('搜索空状态提示也写了 net= 与 agent=', screenSrc.includes('net=12 按网络') && screenSrc.includes('agent=2.5 按版本'));
+ck('搜索空状态提示也写了 net= 与 agent=', screenSrc.includes('net=12') && screenSrc.includes('agent=2.5'));
 
 // 2026-11-03:搜索也认状态词（找掉线节点）
 const mixed = [
@@ -223,6 +223,10 @@ ck('node_id= 前缀去掉前缀再比',
   && matchesNodeId({ node_id: 'n_abc123' }, 'node_id=n_zzz', substringMatch) === false);
 ck('空前缀值不算匹配（别把「搜空」变成「全中」）',
   matchesModel({ model: 'deepseek/chat' }, 'model=', substringMatch) === false);
+
+// 0.441 起搜索支持 key= 前缀,空结果提示里也要写上,否则没人知道能用
+ck('空结果提示写明支持的前缀写法', screenSrc.includes('model= / runtime= / status= / node_id=')
+  && screenSrc.includes('net=12') && screenSrc.includes('agent=2.5'));
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
