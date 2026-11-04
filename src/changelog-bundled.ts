@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.443:",
+  "- 内部：把「军团 3D」的几何/投影纯函数层搬进客户端（49 条几何断言全部通过），为 3D 视图接入打地基。",
+  "",
   "What's new in 0.2.442:",
   "- 模型区点「当前」复制后显示「已复制」；搜索空结果提示补上 `model=` / `runtime=` / `status=` / `node_id=` 这些前缀写法。",
   "",
