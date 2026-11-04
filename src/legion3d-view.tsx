@@ -11,7 +11,7 @@
 // 静态图没有 rAF,所以不存在后台空转耗电;等做自转动画时再加节流与可见性判断。
 
 import { useEffect, useMemo, useState } from 'react';
-import { ActivityIndicator, Pressable, View } from 'react-native';
+import { ActivityIndicator, AppState, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, radius, spacing } from './theme';
 import { ds } from './ui-scale';
@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { buildLegionScene, type SceneCommand } from './legion3d-scene';
+import { buildLegionScene, nextYaw, SPIN_TICK_MS, type SceneCommand } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
 
@@ -29,33 +29,61 @@ const RING_DOT_STRIDE = 4;
 export default function Legion3DView(p: Props) {
   const [state, setState] = useState<{ phase: 'loading' | 'ready' | 'error' | 'empty'; commands: SceneCommand[]; note?: string }>({ phase: 'loading', commands: [] });
   const [reloadKey, setReloadKey] = useState(0);
+  // 自转:默认关(先看清静态图再决定要不要转),用户点了才转。
+  const [spinning, setSpinning] = useState(false);
+  const [yaw, setYaw] = useState(0.6);
   const height = p.height ?? 360;
   const width = 520;
   // 相机(与 Dashboard 的视觉参数对齐):俯仰 ~26°、远一点让透视更平。
   // 放在组件内而不是模块级:模块级常量会在密度偏好加载前就把尺寸钉死(ui-scale 守卫会红)。
-  const cam = useMemo(() => ({ yaw: 0.6, pitch: 0.45, dist: 6.2, focal: Math.round(width * 1.5) }), [width]);
+  const cam = useMemo(() => ({ yaw, pitch: 0.45, dist: 6.2, focal: Math.round(width * 1.5) }), [width, yaw]);
 
+  // 布局只在数据变化时算一次;自转只重算投影,不重排整棵树。
+  const [layout, setLayout] = useState<ReturnType<typeof buildLegionLayout> | null>(null);
   useEffect(() => {
     let live = true;
     const net = p.networkId;
+    setLayout(null);
     if (!net) { setState({ phase: 'empty', commands: [], note: '还没选网络' }); return; }
     setState({ phase: 'loading', commands: [] });
     void loadAgentOrg(p.cfg, net).then((org) => {
       if (!live) return;
       if (!org) { setState({ phase: 'error', commands: [], note: '读不到组织架构（Hub 没有部门/通讯录数据）' }); return; }
-      const layout = buildLegionLayout(legionInputFromOrg(org));
-      if (layout.nodes.filter((n) => n.kind !== 'core').length === 0) {
+      const built = buildLegionLayout(legionInputFromOrg(org));
+      if (built.nodes.filter((n) => n.kind !== 'core').length === 0) {
         setState({ phase: 'empty', commands: [], note: '这个网络里还没有人和 Agent' });
         return;
       }
-      const commands = buildLegionScene(layout, cam, { width, height });
-      setState({ phase: 'ready', commands });
+      setLayout(built);
+      setState({ phase: 'ready', commands: buildLegionScene(built, cam, { width, height }) });
     }).catch((e: unknown) => {
       if (!live) return;
       setState({ phase: 'error', commands: [], note: `读组织架构失败：${String((e as Error)?.message ?? e)}` });
     });
     return () => { live = false; };
-  }, [p.cfg, p.networkId, reloadKey, height, cam]);
+  }, [p.cfg, p.networkId, reloadKey, height]);  // eslint-disable-line react-hooks/exhaustive-deps
+
+  // 自转:20fps 定时器(SPIN_TICK_MS),不是 rAF —— 手机上 60fps 只会多烧电。
+  // App 切到后台就停,回来再接着转;离开这个页面(卸载)自然清掉定时器。
+  useEffect(() => {
+    if (!spinning || !layout) return;
+    let alive = true;
+    const timer = setInterval(() => {
+      if (!alive) return;
+      setYaw((y) => nextYaw(y, SPIN_TICK_MS));
+    }, SPIN_TICK_MS);
+    const sub = AppState.addEventListener('change', (next) => {
+      if (next === 'active') return;
+      clearInterval(timer);   // 后台不再推进;回到前台由下面的 effect 重新接管
+    });
+    return () => { alive = false; clearInterval(timer); sub.remove(); };
+  }, [spinning, layout]);
+
+  // 自转时只重算图元(布局不动)。
+  useEffect(() => {
+    if (!layout) return;
+    setState((prev) => (prev.phase === 'ready' ? { ...prev, commands: buildLegionScene(layout, cam, { width, height }) } : prev));
+  }, [layout, cam, height]);
 
   const dots = useMemo(
     () => state.commands.filter((c) => c.kind === 'ring').flatMap((r) => (r as { points: Array<{ x: number; y: number }> }).points.filter((_, i) => i % RING_DOT_STRIDE === 0)),
@@ -108,9 +136,15 @@ export default function Legion3DView(p: Props) {
         ) : null}
       </View>
       {state.phase === 'ready' ? (
-        <Text testID="legion3d-stats" style={{ color: colors.textMuted, fontSize: 11 }}>
-          {bodies.length} 个节点 · {labels.length} 个标签 · 只读视图（还不自转）
-        </Text>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <Text testID="legion3d-stats" style={{ color: colors.textMuted, fontSize: 11 }}>
+            {bodies.length} 个节点 · {labels.length} 个标签
+          </Text>
+          <Pressable accessibilityRole="button" testID="legion3d-spin-toggle" onPress={() => setSpinning((v) => !v)}
+            style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{spinning ? '暂停自转' : '自转'}</Text>
+          </Pressable>
+        </View>
       ) : null}
     </View>
   );
