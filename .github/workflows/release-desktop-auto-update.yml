@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.447:
+            - 军团 3D 预览可以自转（20fps，默认关；切后台自动停），看编制有纵深了。
+
             What's new in 0.2.446:
             - 设置 → Agent 团队里新增「军团 3D（预览）」：把真实组织架构画成 3D 轨道图（只读、静态），先看密度和观感再决定做成常驻入口。
 

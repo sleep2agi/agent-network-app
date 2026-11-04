@@ -190,3 +190,14 @@ export function sceneCounts(commands: readonly SceneCommand[]): { rings: number;
   }
   return { rings, bodies, labels };
 }
+
+/** 自转的下一步角度(2026-11-05)。纯函数,方便断言「会转、会绕回、帧率不会失控」。 */
+export const SPIN_TICK_MS = 50;          // 20fps:再快对「看编制」没有增量,只多烧电
+export const SPIN_RAD_PER_SEC = 0.28;    // 与 Dashboard 的 0.02–0.03 rad/s 同量级,略快一点免得像卡住
+
+export function nextYaw(yaw: number, elapsedMs: number): number {
+  const step = (SPIN_RAD_PER_SEC * Math.max(0, elapsedMs)) / 1000;
+  const twoPi = Math.PI * 2;
+  const next = (yaw + step) % twoPi;
+  return next < 0 ? next + twoPi : next;
+}
