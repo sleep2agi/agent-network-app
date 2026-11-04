@@ -96,7 +96,7 @@ jobs:
       matrix:
         # Linux is opt-in, not a skipped matrix job that delays the primary pair.
         # When requested it still uses the production updater/signing/retention gates.
-        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-15","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-22.04","args":"--bundles deb"}]' || '[{"platform":"macos-15","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
+        include: ${{ fromJSON(inputs.include_linux && '[{"platform":"macos-15","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"},{"platform":"ubuntu-latest","args":"--bundles deb"}]' || '[{"platform":"macos-15","args":"--bundles app,dmg"},{"platform":"windows-latest","args":"--bundles nsis,msi"}]') }}
     runs-on: ${{ matrix.platform }}
     steps:
       - uses: actions/checkout@v4
