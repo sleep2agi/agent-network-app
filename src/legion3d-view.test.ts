@@ -6,7 +6,7 @@ import { readFileSync } from 'node:fs';
 import path from 'node:path';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { buildLegionScene, sceneCounts, nextYaw, SPIN_RAD_PER_SEC } from './legion3d-scene';
+import { buildLegionScene, sceneCounts, nextYaw, SPIN_RAD_PER_SEC, parseSpinSpeed, spinRate } from './legion3d-scene';
 
 let pass = 0;
 const names: string[] = [];
@@ -78,6 +78,21 @@ ck('失败原因分得开（没网络 / 没组织架构 / 请求失败 / 真没�
 ck('展开状态会持久化（每次进设置都被收起，用户会以为功能没了）',
   settings.includes('loadLegion3DOpen') && settings.includes('saveLegion3DOpen')
   && settings.includes('setShowLegion3D(true)'));
+
+ck('速度三档（慢/中/快）只改角速度，帧率上限不变',
+  view.includes("testID=\"legion3d-speed\"") && view.includes('spinRate(speed)')
+  && view.includes('SPIN_TICK_MS'));
+
+ck('速度档是纯函数解析（未知值退回 normal）', (() => {
+  return parseSpinSpeed('fast') === 'fast' && parseSpinSpeed('slow') === 'slow'
+    && parseSpinSpeed('turbo') === 'normal' && parseSpinSpeed(undefined) === 'normal'
+    && spinRate('fast') > spinRate('normal') && spinRate('normal') > spinRate('slow');
+})());
+
+ck('自转转一圈的时间在 11–45 秒之间（慢/中/快都还能看）', (() => {
+  const secs = (s: string) => (Math.PI * 2) / spinRate(s);
+  return ['slow', 'normal', 'fast'].every((k) => secs(k) >= 11 && secs(k) <= 45);
+})());
 
 ck('不引新依赖：视图只用 RN 基础元素', (() => {
   const imports = (view.match(/^import .*$/gm) ?? []).join('\n');

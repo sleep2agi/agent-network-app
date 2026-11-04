@@ -318,8 +318,8 @@ export function settingsPair(value: string): readonly [string, string] | undefin
 
 // Self-names. Do not reuse core language.system (跟随系统 / Follow system).
 const languageOptionCopy = {
-  'settings.legion3d.show': ['查看军团 3D（预览）', 'Show legion 3D (preview)'],
-  'settings.legion3d.hide': ['收起军团 3D（预览）', 'Hide legion 3D (preview)'],
+  'settings.legion3d.show': ['查看军团 3D', 'Show legion 3D'],
+  'settings.legion3d.hide': ['收起军团 3D', 'Hide legion 3D'],
   'settings.language.system': ['跟随系统', 'Follow system'],
   'settings.language.zh': ['中文', '中文'],
   'settings.language.en': ['English', 'English'],

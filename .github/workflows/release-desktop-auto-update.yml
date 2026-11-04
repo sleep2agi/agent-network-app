@@ -537,6 +537,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.449:
+            - 军团 3D 支持三档自转速度（慢/中/快），入口文案去掉「预览」。
+
             What's new in 0.2.448:
             - 军团 3D 预览的展开状态会被记住（重启客户端也不会又收起）；加载失败时能分清「没选网络 / Hub 没组织架构 / 请求失败 / 网络里真没人」。
 
