@@ -195,8 +195,19 @@ export function sceneCounts(commands: readonly SceneCommand[]): { rings: number;
 export const SPIN_TICK_MS = 50;          // 20fps:再快对「看编制」没有增量,只多烧电
 export const SPIN_RAD_PER_SEC = 0.28;    // 与 Dashboard 的 0.02–0.03 rad/s 同量级,略快一点免得像卡住
 
-export function nextYaw(yaw: number, elapsedMs: number): number {
-  const step = (SPIN_RAD_PER_SEC * Math.max(0, elapsedMs)) / 1000;
+/** 自转速度档位(2026-11-05):有人想慢慢看编制,有人只想快点转一圈。 */
+export type SpinSpeed = 'slow' | 'normal' | 'fast';
+export const SPIN_SPEEDS: Record<SpinSpeed, number> = {
+  slow: 0.14,
+  normal: SPIN_RAD_PER_SEC,
+  fast: 0.56,
+};
+export const parseSpinSpeed = (v: unknown): SpinSpeed =>
+  v === 'slow' || v === 'fast' ? v : 'normal';
+export const spinRate = (speed: unknown): number => SPIN_SPEEDS[parseSpinSpeed(speed)];
+
+export function nextYaw(yaw: number, elapsedMs: number, ratePerSec: number = SPIN_RAD_PER_SEC): number {
+  const step = (ratePerSec * Math.max(0, elapsedMs)) / 1000;
   const twoPi = Math.PI * 2;
   const next = (yaw + step) % twoPi;
   return next < 0 ? next + twoPi : next;

@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { buildLegionScene, nextYaw, SPIN_TICK_MS, type SceneCommand } from './legion3d-scene';
+import { buildLegionScene, nextYaw, spinRate, parseSpinSpeed, SPIN_TICK_MS, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
 
@@ -32,6 +32,7 @@ export default function Legion3DView(p: Props) {
   // 自转:默认关(先看清静态图再决定要不要转),用户点了才转。
   const [spinning, setSpinning] = useState(false);
   const [yaw, setYaw] = useState(0.6);
+  const [speed, setSpeed] = useState<SpinSpeed>('normal');
   const height = p.height ?? 360;
   const width = 520;
   // 相机(与 Dashboard 的视觉参数对齐):俯仰 ~26°、远一点让透视更平。
@@ -70,14 +71,14 @@ export default function Legion3DView(p: Props) {
     let alive = true;
     const timer = setInterval(() => {
       if (!alive) return;
-      setYaw((y) => nextYaw(y, SPIN_TICK_MS));
+      setYaw((y) => nextYaw(y, SPIN_TICK_MS, spinRate(speed)));
     }, SPIN_TICK_MS);
     const sub = AppState.addEventListener('change', (next) => {
       if (next === 'active') return;
       clearInterval(timer);   // 后台不再推进;回到前台由下面的 effect 重新接管
     });
     return () => { alive = false; clearInterval(timer); sub.remove(); };
-  }, [spinning, layout]);
+  }, [spinning, layout, speed]);
 
   // 自转时只重算图元(布局不动)。
   useEffect(() => {
@@ -142,8 +143,20 @@ export default function Legion3DView(p: Props) {
           </Text>
           <Pressable accessibilityRole="button" testID="legion3d-spin-toggle" onPress={() => setSpinning((v) => !v)}
             style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
-            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{spinning ? '暂停自转' : '自转'}</Text>
+            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{spinning ? '暂停' : '自转'}</Text>
           </Pressable>
+          {/* 速度档:慢 / 中 / 快。只改角速度,帧率上限仍是 20fps。 */}
+          {spinning ? (
+            <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }} testID="legion3d-speed">
+              {(['slow', 'normal', 'fast'] as const).map((k) => (
+                <Pressable key={k} accessibilityRole="button" testID={`legion3d-speed-${k}`}
+                  onPress={() => setSpeed(parseSpinSpeed(k))}
+                  style={({ pressed }) => [{ borderWidth: 1, borderColor: speed === k ? colors.accent : colors.border, borderRadius: radius.control, paddingHorizontal: 6, paddingVertical: 2 }, pressed && { opacity: 0.7 }]}>
+                  <Text style={{ color: speed === k ? colors.accent : colors.textMuted, fontSize: 10 }}>{k === 'slow' ? '慢' : k === 'fast' ? '快' : '中'}</Text>
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
         </View>
       ) : null}
     </View>
