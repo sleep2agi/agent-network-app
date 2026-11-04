@@ -16,8 +16,11 @@ function ck(name: string, ok: boolean) {
   console.log(`FAIL: ${name}`);
 }
 
-const view = readFileSync(path.join(import.meta.dir, 'legion3d-view.tsx'), 'utf8');
-const settings = readFileSync(path.join(import.meta.dir, 'SettingsScreen.tsx'), 'utf8');
+// Windows 检出是 CRLF:不归一化的话,所有跨行正则/多行字符串断言在 windows-latest 上必红
+// (2026-11-05 真红过一次)。
+const read = (name: string) => readFileSync(path.join(import.meta.dir, name), 'utf8').replace(/\r\n?/g, '\n');
+const view = read('legion3d-view.tsx');
+const settings = read('SettingsScreen.tsx');
 
 ck('数据走客户端已有的组织架构接口（不另起一套请求）',
   view.includes("import { loadAgentOrg } from './agent-org-api'") && view.includes('loadAgentOrg(p.cfg, net)'));
