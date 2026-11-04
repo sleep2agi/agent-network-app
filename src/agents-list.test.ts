@@ -204,5 +204,25 @@ ck('搜索框有清空按钮且会清空 query', screenSrc.includes('testID="age
 // 宽布局也要在「有查询词」时显示搜索框，否则用户清不掉筛选(2026-11-03)
 ck('宽布局搜索框在 query 非空时仍显示', screenSrc.includes('sessions.length > 10 || query ?'));
 
+// 2026-11-05:诊断行里贴出来的是 model= / runtime= / status= / node_id=,
+// 照着打回搜索框必须能搜到 —— 带前缀就按「已指定字段」处理,值短一点也算数。
+ck('model= 前缀能搜（值短也不拒绝）',
+  matchesModel({ model: 'deepseek/chat' }, 'model=dee', substringMatch) === true
+  && matchesModel({ model: 'deepseek/chat' }, 'model=deepseek/chat', substringMatch) === true);
+ck('model= 前缀仍然只比模型字段',
+  matchesModel({ model: 'openai/gpt' }, 'model=deepseek', substringMatch) === false);
+ck('runtime= 前缀能搜',
+  matchesRuntime({ runtime: 'opencode-cli' }, 'runtime=open', substringMatch) === true
+  && matchesRuntime({ runtime: 'codex-cli' }, 'runtime=open', substringMatch) === false);
+ck('status= 前缀能搜（中英混用）',
+  matchesStatus({ status: 'offline' }, 'status=offline') === true
+  && matchesStatus({ status: 'offline' }, 'status=离线') === true
+  && matchesStatus({ status: 'working' }, 'status=offline') === false);
+ck('node_id= 前缀去掉前缀再比',
+  matchesNodeId({ node_id: 'n_abc123' }, 'node_id=n_abc', substringMatch) === true
+  && matchesNodeId({ node_id: 'n_abc123' }, 'node_id=n_zzz', substringMatch) === false);
+ck('空前缀值不算匹配（别把「搜空」变成「全中」）',
+  matchesModel({ model: 'deepseek/chat' }, 'model=', substringMatch) === false);
+
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
