@@ -566,7 +566,9 @@ export default function NodeDetailScreen({
               // opencodeFlagsOf 会把两者合并,别再直接读 flags(那样真机永远 unset)。
               const rawGen = generationOf(node);
               const gen = typeof rawGen === 'string' && rawGen ? rawGen : node && /opencode/i.test(node.runtime ?? '') ? 'unset' : null;
-              const line = [s.alias, node ? `node_id=${node.node_id}` : null, s.network_id ? `net=${s.network_id}` : null, `status=${s.status}`, gen ? `gen=${gen}` : null, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
+              const line = [s.alias, node ? `node_id=${node.node_id}` : null, s.network_id ? `net=${s.network_id}` : null, `status=${s.status}`, gen ? `gen=${gen}` : null,
+                // 共存/单飞(opencodeMode):同代际下两种模式的模型能力不一样,排查时也少问一句。
+                node?.opencode_mode ? `mode=${node.opencode_mode}` : null, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
                 // 报没报模型清单：一行里说清，交接给后端时不用再问
                 // V1 本来就不会上报模型清单,写 missing 会让人以为「该报没报」;
                 // 代际是 v1 时直接标 n/a,把这层歧义去掉。
@@ -586,7 +588,7 @@ export default function NodeDetailScreen({
           </Pressable>
           {copiedHint ? (
             <Text testID="node-detail-copied" style={{ color: colors.textMuted, fontSize: typeScale.small }}>
-              {copiedHint === 'alias' ? '别名已复制' : '诊断已复制（含 gen / catalog / net）'}
+              {copiedHint === 'alias' ? '别名已复制' : '诊断已复制（含 gen / mode / catalog / net）'}
             </Text>
           ) : null}
           <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
