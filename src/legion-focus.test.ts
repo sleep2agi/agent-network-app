@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusLayout, focusLabel, subtreeIds } from './legion/legion-focus';
+import { focusLayout, focusLabel, focusStats, subtreeIds } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -74,6 +74,19 @@ ck('标签取名字；取不到时退回 id 后半截', (() => {
 
 ck('聚焦后 stats 仍是全量口径（不谎报人数）',
   focused.stats.people === layout.stats.people && focused.stats.agents === layout.stats.agents);
+
+ck('聚焦统计只数这个部门（人/Agent/部门）', (() => {
+  const st = focusStats(layout, 'dept:d1');
+  return st.people === 1 && st.agents === 1 && st.groups === 2;   // 平台(含前端)，1 人 1 Agent
+})());
+
+ck('不聚焦时统计退回全量（不误报）', (() => {
+  const all = focusStats(layout, null);
+  return all.people === layout.stats.people && all.agents === layout.stats.agents;
+})());
+
+ck('聚焦不存在的 id 也退回全量（不猜）',
+  focusStats(layout, 'dept:nope').people === layout.stats.people);
 
 console.log(`legion focus: ${pass}/${names.length} checks passed`);
 if (pass !== names.length) process.exit(1);
