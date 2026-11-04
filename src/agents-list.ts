@@ -32,6 +32,14 @@ export type AgentSection = {
 
 /** 匹配器:默认按子串匹配;调用方可注入拼音匹配器替换它。 */
 export type Matcher = (text: string, filter: string) => boolean;
+/** 取出 `key=值` 写法的值(2026-11-05):诊断行里贴出去的是 `model=` / `runtime=` / `status=` /
+ *  `node_id=`,拿回搜索框里照着打却搜不到自己那一行。带前缀时按「用户已经明确指定字段」处理:
+ *  值可以短(不做 3 字下限),但空值仍然不匹配。 */
+function prefixedValue(query: string, key: string): string | null {
+  const m = new RegExp(`^${key}=(.+)$`, 'i').exec(query.trim());
+  return m ? m[1].trim() : null;
+}
+
 /**
  * 搜索命中 runtime 的判定（2026-11-03）：运维常问「哪些是 codex、哪些是 opencode」。
  * 与模型一致，1–2 个字符不参与（"op" 会把所有 opencode 都带出来，噪声太大）。
@@ -41,8 +49,10 @@ export function matchesRuntime(
   query: string,
   match: Matcher,
 ): boolean {
-  const q = query.trim();
-  if (q.length < 3) return false;
+  const tagged = prefixedValue(query, 'runtime');
+  const q = tagged ?? query.trim();
+  if (!tagged && q.length < 3) return false;
+  if (!q) return false;
   const rt = (session.runtime ?? '').trim();
   if (!rt) return false;
   return match(rt, q);
@@ -62,7 +72,7 @@ const STATUS_TOKENS: Record<string, string[]> = {
 };
 
 export function matchesStatus(session: { status?: string | null }, query: string): boolean {
-  const q = (query ?? '').trim().toLowerCase();
+  const q = (prefixedValue(query ?? '', 'status') ?? query ?? '').trim().toLowerCase();
   if (!q) return false;
   const status = (session.status ?? '').trim().toLowerCase();
   if (!status) return false;
@@ -136,8 +146,10 @@ export function matchesModel(
   query: string,
   match: Matcher,
 ): boolean {
-  const q = query.trim();
-  if (q.length < 3) return false;
+  const tagged = prefixedValue(query, 'model');
+  const q = tagged ?? query.trim();
+  if (!tagged && q.length < 3) return false;
+  if (!q) return false;
   const model = (session.model ?? '').trim();
   if (!model) return false;
   return match(model, q);
@@ -150,7 +162,8 @@ export function matchesNodeId(
   match: Matcher,
 ): boolean {
   const id = (session.node_id ?? '').trim();
-  const q = query.trim();
+  // `node_id=n_xxx`(复制诊断行的原样写法)也要能搜:带前缀时把前缀去掉再比。
+  const q = prefixedValue(query, 'node_id') ?? query.trim();
   if (!id || !q) return false;
   return match(id, q);
 }

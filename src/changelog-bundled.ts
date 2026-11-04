@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.441:",
+  "- Agents 搜索认 `model=` / `runtime=` / `status=` / `node_id=` 前缀，诊断行里的写法可以直接粘回来搜。",
+  "",
   "What's new in 0.2.440:",
   "- 节点诊断行新增 `mode=`（共存/单飞），模型区的字段说明同步补上。",
   "",
