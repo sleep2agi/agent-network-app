@@ -251,3 +251,24 @@ export function nodeDepartmentPath(
   }
   return path.reverse();
 }
+
+/**
+ * 聚焦后范围里没有人的空态(2026-11-05,0.2.462)。
+ *
+ * 聚焦到一个空部门时,图里只剩圆心 + 暗色轮廓,什么提示都没有 —— 用户会以为「卡了」
+ * 或者「这个部门被我搞没了」。这里给一句明确的话(带退出口):
+ *   聚焦 后勤部 下没有任何人 ⇒ 「后勤部 下面还没有人 · 点面包屑返回上一级」
+ * 其余情况（有人/没聚焦/名字缺失）⇒ null,不占位。
+ */
+export function focusEmptyText(input: {
+  focusLabel?: string | null;
+  people?: number;
+  agents?: number;
+}): string | null {
+  const label = (input.focusLabel ?? '').trim();
+  if (!label) return null;
+  const people = input.people ?? 0;
+  const agents = input.agents ?? 0;
+  if (people > 0 || agents > 0) return null;
+  return `${label} 下面还没有人 · 点面包屑返回上一级`;
+}
