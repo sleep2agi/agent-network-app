@@ -57,6 +57,8 @@ export default function DesktopUpdatePrompt({ manualOnly = false }: { manualOnly
               <Text style={styles.kicker}>发现新版本</Text>
               <Text style={styles.version}>{view?.versions.next ?? ''}</Text>
               {view?.versions.current ? <Text style={styles.meta}>当前 {view.versions.current}</Text> : null}
+              {/* admin 2026-10-27：更新弹窗要有时间戳。取不到发布日期就不画这一行。 */}
+              {view?.released ? <Text style={styles.meta} testID="desktop-update-released">{view.released}</Text> : null}
             </View>
           </View>
           {groups.length ? (

@@ -10,6 +10,20 @@ export type { DesktopUpdateState } from './update-check-state';
  *   ModelScope 的 latest.json 被 modelscope-mirror 改写成 modelscope.cn/…/desktop/<ver>/… → mirror。
  * 看的是**本机平台**用到的那些地址:全是同一主机才下结论,混着或认不出 → undefined(不猜)。
  */
+/**
+ * 桌面端这一版的发布日期（admin 2026-10-27：更新弹窗要有时间戳）。
+ *
+ * 来源是 Tauri 更新对象的 `rawJson` —— 它就是镜像那份 `latest.json` 的全文
+ * （`desktop-update-manifest-normalize.test.ts` 里已经在断言它带 `pub_date`），
+ * 所以**不需要额外请求**，和 `desktopUpdateSource` 读 `platforms` 同一个对象。
+ * 取不到/解析不了就返回 undefined：宁可不显示，也不要显示一个假日期。
+ */
+export function desktopUpdatePublishedAt(rawJson: unknown): string | undefined {
+  const raw = (rawJson as { pub_date?: unknown } | null | undefined)?.pub_date;
+  if (typeof raw !== 'string' || !raw.trim()) return undefined;
+  return Number.isNaN(Date.parse(raw)) ? undefined : raw.trim();
+}
+
 export function desktopUpdateSource(rawJson: unknown): DesktopUpdateSource | undefined {
   const platforms = (rawJson as { platforms?: unknown } | null | undefined)?.platforms;
   if (!platforms || typeof platforms !== 'object') return undefined;
@@ -106,6 +120,7 @@ export async function checkDesktopUpdate(
         notes: pendingUpdate.body || '此版本包含功能改进和问题修复。',
         currentVersion: typeof pendingUpdate.currentVersion === 'string' ? pendingUpdate.currentVersion : undefined,
         source: desktopUpdateSource(pendingUpdate.rawJson),
+        publishedAt: desktopUpdatePublishedAt(pendingUpdate.rawJson),
       });
     } catch (error: any) {
       lastCheckedAt = Date.now();

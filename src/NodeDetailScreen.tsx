@@ -52,6 +52,7 @@ import NodeControlCard from './NodeControlCard';
 import NodeSessionControl from './NodeSessionControl';
 import { sessionControlTarget } from './node-session-control';
 import { nodeControlView } from './node-control-access';
+import { APP_VERSION } from './version';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import './i18n-backend-pending';
@@ -67,6 +68,8 @@ import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import { teamOf } from './agents-list';
+import * as Clipboard from 'expo-clipboard';
+import { fetchDepartmentNodes, fetchOrg } from './org-api';
 import { fetchHostSupervisors, fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
@@ -76,7 +79,10 @@ import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import NodeTasksSection from './NodeTasksSection';
 import { nodeActionVisual, type NodeActionTone } from './node-action-visual';
-import { nodeInfoFacts, type NodeInfoFact } from './node-info';
+import { nodeInfoFacts, type NodeInfoFact,
+  opencodeFlagsOf,
+  generationOf,
+} from './node-info';
 import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
@@ -232,6 +238,8 @@ export default function NodeDetailScreen({
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
+  /** 这个节点所在的 Hub 部门(空 = 没归属 / 旧 Hub 没有部门表)。逐个部门查到就停。 */
+  const [department, setDepartment] = useState<string | null>(null);
   const [nodeListState, setNodeListState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [pendingAction, setPendingAction] = useState<NodeLifecycleAction | null>(null);
   const [confirmAlias, setConfirmAlias] = useState('');
@@ -259,6 +267,14 @@ export default function NodeDetailScreen({
   // 规则文件草稿没保存时,切分区 / 返回之前先问(草稿只活在 NodeRulesSection 里,一卸载就没了)。
   const [rulesDirty, setRulesDirty] = useState(false);
   const [pendingLeave, setPendingLeave] = useState<null | (() => void)>(null);
+  // 复制别名 / 诊断后给一眼可见的反馈:桌面端没有系统级提示,点完完全看不出有没有复制上。
+  const [copiedHint, setCopiedHint] = useState<'alias' | 'diag' | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashCopied = (what: 'alias' | 'diag') => {
+    setCopiedHint(what);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopiedHint(null), 1600);
+  };
   // 软键盘弹起(原生端):规则分区里收起头部卡片,把高度让给编辑框;web / 桌面没有这些事件,恒 false。
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   // iOS:键盘避让按窗口坐标量(#547,同 ChatScreen;RN 的 KAV 在导航壳里少算一个顶部安全区)。
@@ -368,6 +384,21 @@ export default function NodeDetailScreen({
     return () => { live = false; };
   }, [cfg, handStartedNodeId, onOverviewTab]);
 
+  useEffect(() => {
+    let live = true;
+    setDepartment(null);
+    void (async () => {
+      const org = await fetchOrg(cfg, cfg.networkId ?? '').catch(() => null);
+      if (!org || !org.departments.length) return;
+      for (const d of org.departments) {
+        const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
+        if (!live) return;
+        if (nodes.some(n => n.alias === alias)) { setDepartment(d.name); return; }
+      }
+    })();
+    return () => { live = false; };
+  }, [cfg, alias]);
+
   // board #585 —— 启动请求提交后:节点上线 / daemon 报失败 / 2 分钟没动静,各说一句。
   const watchOnline = state.kind === 'ready' && state.session.status !== 'offline';
   const watchLifecycle = node?.lifecycle_state;
@@ -428,7 +459,7 @@ export default function NodeDetailScreen({
           <Text style={styles.errorHint}>网络不稳定或 Hub 未响应</Text>
           <Pressable
             style={({ pressed }) => [styles.retryBtn, pressed && { opacity: 0.7 }]}
-            onPress={() => {
+            onPress={async () => {
               setState({ kind: 'loading' });
               void load();
             }}
@@ -512,10 +543,65 @@ export default function NodeDetailScreen({
           <Text style={{ color: colors.text, fontSize: typeScale.heading, fontWeight: weight.strong }} selectable numberOfLines={1}>
             {s.alias}
           </Text>
+          {/* 复制别名:贴到聊天里 @ 它、或写进任务卡(和左栏项目/标签/军团右键同一套)。 */}
+          <Pressable accessibilityRole="button" accessibilityLabel="复制别名" hitSlop={8} testID="node-detail-copy-alias"
+            onPress={async () => {
+              // 只有真的写进剪贴板才提示「已复制」——失败还报成功比不提示更糟。
+              try {
+                await Clipboard.setStringAsync(s.alias);
+                flashCopied('alias');
+              } catch { /* 复制失败就保持沉默 */ }
+            }}
+            style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Ionicons name="copy-outline" size={14} color={colors.textMuted} />
+          </Pressable>
+          {/* 节点级诊断:反馈「这个节点不对劲」时,贴这一行就够(别名/节点 id/状态),不含任何凭据。 */}
+          <Pressable accessibilityRole="button" accessibilityLabel="复制节点诊断" hitSlop={8} testID="node-detail-copy-diagnostics"
+            onPress={async () => {
+              // 带上客户端版本与平台:同一个节点用不同版本/系统看到的表现可能不同,
+              // 有了这两个值就能直接排除「是不是旧版本客户端」这一类问题。
+              // 代际(opencode v1/v2)决定能不能读模型清单,是「catalog=missing」排查里的第一个岔路口,
+              // 所以直接写进诊断行,省一轮来回问。
+              // /api/nodes 不带 config_snapshot,代际在顶层 opencode_generation;
+              // opencodeFlagsOf 会把两者合并,别再直接读 flags(那样真机永远 unset)。
+              const rawGen = generationOf(node);
+              const gen = typeof rawGen === 'string' && rawGen ? rawGen : node && /opencode/i.test(node.runtime ?? '') ? 'unset' : null;
+              const line = [s.alias, node ? `node_id=${node.node_id}` : null, s.network_id ? `net=${s.network_id}` : null, `status=${s.status}`, gen ? `gen=${gen}` : null,
+                // 共存/单飞(opencodeMode):同代际下两种模式的模型能力不一样,排查时也少问一句。
+                node?.opencode_mode ? `mode=${node.opencode_mode}` : null, node?.runtime ? `runtime=${node.runtime}` : null, s.version ? `agent=${s.version}` : null, node?.model ? `model=${node.model}` : null,
+                // 报没报模型清单：一行里说清，交接给后端时不用再问
+                // V1 本来就不会上报模型清单,写 missing 会让人以为「该报没报」;
+                // 代际是 v1 时直接标 n/a,把这层歧义去掉。
+                gen === 'v1'
+                  ? 'catalog=n/a(v1)'
+                  : node && Array.isArray(node.opencode_catalog) && node.opencode_catalog.length > 0
+                    ? `catalog=reported(${node.opencode_catalog.length})`
+                    : 'catalog=missing',, `client=${APP_VERSION}/${Platform.OS}`]
+                .filter(Boolean).join(' · ');
+              try {
+                await Clipboard.setStringAsync(line);
+                flashCopied('diag');
+              } catch { /* 复制失败就不提示成功 */ }
+            }}
+            style={state => [{ padding: 2 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Ionicons name="information-circle-outline" size={14} color={colors.textMuted} />
+          </Pressable>
+          {copiedHint ? (
+            <Text testID="node-detail-copied" style={{ color: colors.textMuted, fontSize: typeScale.small }}>
+              {copiedHint === 'alias' ? '别名已复制' : '诊断已复制（含 gen / mode / catalog / net）'}
+            </Text>
+          ) : null}
           <View style={[localStyles.statusPill, { borderColor: colors.border }]}>
             <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
           </View>
+          {/* 所属部门:有部门表且这个节点有归属时才出现(admin 2026-10-26 按部门分区之后,
+              从军团点进来就能对上「它归谁」,不用再翻组织架构页)。 */}
+          {department ? (
+            <View testID="node-detail-department" style={[localStyles.chip, { backgroundColor: colors.subtleFill }]}>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, maxWidth: 180 }} numberOfLines={1} ellipsizeMode="tail">{department}</Text>
+            </View>
+          ) : null}
           {/* #460 降级:原因 + 修法在提示条里(悬停 / 点按)。 */}
           <DegradedBadge info={nodeDegraded(s)} testID="node-degraded" size="header" />
         </View>
@@ -799,7 +885,8 @@ export default function NodeDetailScreen({
     if (section === 'permissions' && node) return (
       <View>
         <SectionTitle title="权限" />
-        <NodePermissionSection cfg={cfg} node={node} compact={compact} onChanged={mode => setNode(prev => prev ? { ...prev, permission_mode: mode } : prev)} />
+        <NodePermissionSection cfg={cfg} node={node} compact={compact}
+          onChanged={mode => setNode(prev => prev ? { ...prev, permission_mode: mode } : prev)} />
       </View>
     );
     // danger

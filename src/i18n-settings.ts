@@ -289,6 +289,19 @@ const copy = [
   ['Agent 组织架构', 'Agent organization'],
   ['Agent 团队', 'Agent teams'],
   ['我的头像', 'My avatar'],
+  // 末尾追加(编号按位置,不能插中间):关于页「复制版本号」。
+  ['复制版本号', 'Copy version'],
+  ['复制诊断信息', 'Copy diagnostics'],
+  ['国内镜像', 'China mirror'],
+  ['未知', 'Unknown'],
+  ['更新渠道：', 'Update channel: '],
+  ['更新状态：', 'Update state: '],
+  ['服务器：', 'Server: '],
+  // 末尾追加(编号按位置,不能插中间):关于页的两个外部链接(App Store 审核会用).
+  ['隐私政策', 'Privacy policy'],
+  ['官网与支持', 'Website & support'],
+  ['下载历史版本（回滚用）', 'Older versions (rollback)'],
+  ['建议回滚到', 'Suggested rollback:'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);
@@ -305,6 +318,8 @@ export function settingsPair(value: string): readonly [string, string] | undefin
 
 // Self-names. Do not reuse core language.system (跟随系统 / Follow system).
 const languageOptionCopy = {
+  'settings.legion3d.show': ['查看军团 3D', 'Show legion 3D'],
+  'settings.legion3d.hide': ['收起军团 3D', 'Hide legion 3D'],
   'settings.language.system': ['跟随系统', 'Follow system'],
   'settings.language.zh': ['中文', '中文'],
   'settings.language.en': ['English', 'English'],

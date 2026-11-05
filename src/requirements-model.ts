@@ -17,6 +17,12 @@ export interface ChecklistItem { id: string; text: string; done: boolean }
 /** canEdit === false:「仅相关任务」的成员对这个项目只有查看授权(hub 只对 scoped 调用者给 viewer_can),不能把任务建进 / 挪进去。省略 = 能。 */
 export interface RequirementProject { id: string; name: string; color: string; sort: number; archived: boolean; canEdit?: boolean; /** 父项目(#2098);undefined = 这个 Hub 还没有层级。 */ parentId?: string | null }
 
+/** 「结果已补回（迟到）· 任务状态仍为「X」」——放在纯 .ts:UI 守卫只扫 .tsx。
+ *  🔴 有迟到结果不代表任务成功,这句必须同时说出 status。 */
+export function lateReplyBanner(statusLabel: string): string {
+  return `结果已补回（迟到）· 任务状态仍为「${statusLabel}」`;
+}
+
 export interface Requirement {
   /** Manual GitHub associations; undefined means the Hub did not expose the field. */
   issues?: import('./requirement-issues').RequirementIssue[];
@@ -35,6 +41,9 @@ export interface Requirement {
   parentId?: string | null;
   /** 子需求进度(未归档的子需求数 / 其中完成的)。 */
   children?: { total: number; done: number };
+  /** 迟到补回的结果(Hub ≥ .213,task_late_replies append-only)。
+   *  🔴 有它**不代表任务成功**:status 仍是 failed —— 迟到 = 「活后来干完了」,不等于当初没失败。 */
+  lateReplies?: { id: string; status: string; result: string; createdAt?: string }[];
   /** 同步来源(如 github:owner/repo#123)和它的链接。 */
   externalRef?: string | null;
   externalUrl?: string | null;

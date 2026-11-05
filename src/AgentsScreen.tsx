@@ -214,6 +214,8 @@ export default function AgentsScreen({
     }
   }, [departmentScope, preview]);
   usePoll(loadAgentDepartments, 120_000, [loadAgentDepartments]);
+  /** 刚被「不显示该对话」的那条 + 撤销条(误点一次就消失,用户会以为丢了)。 */
+  const [lastHidden, setLastHidden] = useState<{ alias: string; at: number } | null>(null);
   // 群会话(RFC-042):和私信同一次 /api/dm/threads 拿到。null = 这个 Hub 没有群(没有 group_threads 字段)→ 区块不画。
   const [groups, setGroups] = useState<GroupRow[] | null>(null);
   const loadPeople = useCallback(async () => {
@@ -501,14 +503,21 @@ export default function AgentsScreen({
   );
   // 完整目录与 light 会话只在可证明是一条会话时关联；不拿 alias 推断节点身份。
   const registrations = useMemo(() => registrationIndex(agentDirectory), [agentDirectory]);
-  const groupLabels = useMemo(
-    () => groupMapOf(visibleSessions, groupBy, registrations,
+  // 部门搜索不应随分组切法改变；使用同一份按会话身份计算的部门标题。
+  const departmentLabels = useMemo(
+    () => groupMapOf(visibleSessions, 'dept', registrations,
       departmentState?.scope === departmentScope ? departmentState.groups : undefined),
-    [visibleSessions, groupBy, registrations, departmentState, departmentScope],
+    [visibleSessions, registrations, departmentState, departmentScope],
+  );
+  const groupLabels = useMemo(
+    () => groupBy === 'dept' ? departmentLabels : groupMapOf(visibleSessions, groupBy),
+    [visibleSessions, groupBy, departmentLabels],
   );
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
       match: pinyinMatch,
+      // 支持按部门搜索，同时避免跨网络同名 alias 使用另一条会话的部门。
+      matchSession: (session, q) => pinyinMatch(departmentLabels.get(session) ?? '', q),
       sort: {
         pinned: alias => pinnedAliases.includes(alias),
         sortByActivity: SORT_BY_ACTIVITY,
@@ -517,7 +526,7 @@ export default function AgentsScreen({
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
       teamOf: (_alias, session) => groupLabels.get(session) ?? '关联待确认',
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, groupLabels],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, departmentLabels, groupLabels],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -664,8 +673,15 @@ export default function AgentsScreen({
         return;
       case 'detail': onOpenNodeDetail(alias); return;
       case 'hide':
-        if (isConversationHidden(convFlags, alias, liveUnread.lastAt[alias] ?? 0)) updateConversationFlags(f => restoreConversation(f, alias));
-        else updateConversationFlags(f => hideConversation(f, alias, liveUnread.lastAt[alias] ?? 0));
+        if (isConversationHidden(convFlags, alias, liveUnread.lastAt[alias] ?? 0)) {
+          updateConversationFlags(f => restoreConversation(f, alias));
+          setLastHidden(null);
+        } else {
+          updateConversationFlags(f => hideConversation(f, alias, liveUnread.lastAt[alias] ?? 0));
+          // 8 秒内可撤销:误点一下不该等于「这条没了」。
+          setLastHidden({ alias, at: Date.now() });
+          setTimeout(() => setLastHidden(cur => (cur && cur.alias === alias && Date.now() - cur.at >= 8000 ? null : cur)), 8200);
+        }
         return;
     }
   };
@@ -961,24 +977,31 @@ export default function AgentsScreen({
           </Pressable>
         </View>
         {sessions.length > 10 || searchOpen || query ? (
-          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder={t('chat.searchAgent')} placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
+          <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder={departmentState?.scope === departmentScope && departmentState.groups.size ? `${t('chat.searchAgent')} · 部门` : t('chat.searchAgent')} placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
         ) : null}
       </View>
       ) : (
         <View testID="agents-list-head" style={[rowStyles.head, { backgroundColor: colors.bg }]}>
           <View style={rowStyles.headRow}>
-            {sessions.length > 10 ? (
+            {/* 与紧凑布局保持一致：一旦有查询词就必须显示搜索框，否则清不掉筛选 */}
+            {sessions.length > 10 || query ? (
               <View style={[rowStyles.searchBox, { backgroundColor: colors.subtleFill }]}>
                 <Ionicons name="search" size={16} color={colors.textMuted} />
                 <TextInput
                   style={[rowStyles.searchInput, { color: colors.text }]}
-                  placeholder={`搜索 ${sessions.length} 个 agent`}
+                  placeholder={`搜索 ${sessions.length} 个 agent / node_id`}
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="none"
                   autoCorrect={false}
                   value={query}
                   onChangeText={setQuery}
                 />
+                {/* 一键清空:手打删半天很烦,列表里这类框都该有 */}
+                {query ? (
+                  <Pressable testID="agents-search-clear" onPress={() => setQuery('')} hitSlop={10} accessibilityLabel="清空搜索">
+                    <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+                  </Pressable>
+                ) : null}
               </View>
             ) : (
               <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} agents`}</Text>
@@ -1109,6 +1132,18 @@ export default function AgentsScreen({
             <Ionicons name={section.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
           ) : null}
           <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: section.online === 0 ? colors.textMuted : colors.text }]}>{section.title}</Text>
+          {/* 分组未读总数:一眼看出哪一团在喊你(admin 2026-10-28 之后的分组细化)。 */}
+          {(() => {
+            const unread = section.data.reduce((n, item) => n + (floatInput.counts[item.alias] ?? 0), 0);
+            // 复用 formatUnreadBadge(阈值与空值规则统一,别手写)。
+            const badge = formatUnreadBadge(unread);
+            return badge ? (
+              <View testID={`agent-group-unread-${section.title}`} accessibilityLabel={badge.a11yLabel}
+                style={{ minWidth: 18, paddingHorizontal: 5, borderRadius: radius.pill, backgroundColor: colors.accent, alignItems: 'center' }}>
+                <Text selectable={false} style={{ color: colors.onAccent, fontSize: 11 }}>{badge.text}</Text>
+              </View>
+            ) : null;
+          })()}
           <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{section.online}/{section.total}</Text>
         </Pressable>
       )}
@@ -1165,7 +1200,7 @@ export default function AgentsScreen({
           </Text>
           <Text style={[styles.errorHint, !q && !filtering && restricted && restrictedEmptyCopy()]}>
             {q
-              ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音,如 zf → 支付助手)`
+              ? `已在 ${sessions.length} 个 agent 里搜过(支持拼音 zf、node_id n_xxx、模型名如 deepseek、runtime 如 codex、状态如离线;也认 model= / runtime= / status= / node_id= / net=12 / agent=2.5 这些前缀写法,以及 missing/未上报 查模型清单)`
               : restricted && !filtering ? t('agents.restrictedHint') : '用右上角 + 新建一个'}
           </Text>
           {q ? (
@@ -1180,7 +1215,19 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      ListHeaderComponent={groupsVisible || peopleShown.visible || (compact && managedDepts.ids.length) || registeredRows.length > 0 ? (<>
+      ListHeaderComponent={lastHidden || groupsVisible || peopleShown.visible || (compact && managedDepts.ids.length) || registeredRows.length > 0 ? (<>
+        {/* 误点「不显示该对话」的 8 秒撤销条(admin 2026-10-28 转来的用户反馈:容易不小心归档了)。 */}
+        {lastHidden ? (
+          <View testID="agents-hide-undo" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.subtleFill }}>
+            <Text style={{ flex: 1, color: colors.textSecondary, fontSize: 12 }} numberOfLines={1}>已隐藏「{lastHidden.alias}」</Text>
+            <Pressable accessibilityRole="button" testID="agents-hide-undo-button" onPress={() => {
+              updateConversationFlags(f => restoreConversation(f, lastHidden.alias));
+              setLastHidden(null);
+            }} style={{ paddingHorizontal: spacing.sm, paddingVertical: 4 }}>
+              <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>撤销</Text>
+            </Pressable>
+          </View>
+        ) : null}
         <RegisteredAgentsSection
           rows={registeredRows}
           loaded={agentDirectory.loaded}

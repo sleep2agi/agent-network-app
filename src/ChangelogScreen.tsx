@@ -11,7 +11,7 @@
 import { useEffect, useMemo, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Modal, Platform, Pressable, ScrollView, Share, StyleSheet, View } from 'react-native';
 import * as Clipboard from 'expo-clipboard';
-import { Text } from './ui-text';
+import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
@@ -22,7 +22,7 @@ import { elevated } from './elevation';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { APP_VERSION } from './version';
-import { CHANGELOG_FORMATS, formatChangelog, isChangelogFormat, releaseDateLabel, type ChangelogEntry, type ChangelogFormat } from './changelog-model';
+import { CHANGELOG_FORMATS, formatChangelog, isChangelogFormat, releaseDateLabel, rollbackTarget, type ChangelogEntry, type ChangelogFormat } from './changelog-model';
 import { loadCachedChangelog, refreshChangelog } from './changelog-source';
 
 const FORMAT_KEY = 'anet.changelog.format';
@@ -162,14 +162,51 @@ function OfflineHint({ online, style }: { online: boolean | null; style?: any })
 
 // ── 桌面 ────────────────────────────────────────────────────────────────────────────────────
 
+// 「建议回滚」标记(2026-11-04):关于页已经会在出问题时提示该装回哪一版,更新日志是用户
+// 真正翻历史的地方,顺手把那一版标出来——省得他记住版本号再回来找。
+function useRollbackTarget(entries: ChangelogEntry[]): string | null {
+  return useMemo(() => {
+    try { return rollbackTarget(entries.map(e => e.version), APP_VERSION); } catch { return null; }
+  }, [entries]);
+}
+
 export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[]; online: boolean | null }) {
+  const rollbackTo = useRollbackTarget(entries);
   useTranslation();
   const pk = usePicker(entries);
+  const [q, setQ] = useState('');
+  const shown = useMemo(() => {
+    // 允许输入「v0.2.343」这种带前缀的写法(界面上版本号就是 v0.2.343,用户会照着打)。
+    const needle = q.trim().toLowerCase().replace(/^v(?=\d)/, '');
+    if (!needle) return entries;
+    return entries.filter(e => e.version.toLowerCase().includes(needle)
+      // 也能按日期找(「10-29 那版改了什么」比记版本号自然)。
+      || dateOf(e).toLowerCase().includes(needle)
+      || e.sections.some(sec => (sec.title ?? '').toLowerCase().includes(needle)
+        || sec.items.some(item => String(item).toLowerCase().includes(needle))));
+  }, [entries, q]);
   const n = pk.selected.size;
   const allOn = entries.length > 0 && n === entries.length;
   return (
     <View style={styles.desktopRoot} testID="changelog-desktop">
       <View style={styles.toolbar} testID="changelog-toolbar">
+        {/* 更新日志有 280+ 条,没有搜索就只能一路滚(admin 2026-10-28 之后的可用性改进)。 */}
+        {q ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('changelog.clearSearch')} testID="changelog-phone-search-clear"
+            onPress={() => setQ('')} hitSlop={6} style={{ position: 'absolute', right: 22, top: 26, zIndex: 2 }}>
+            <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
+        <TextInput value={q} onChangeText={setQ} placeholder={tr('changelog.search')} placeholderTextColor={colors.textMuted}
+          style={[styles.toolBtnText, { minWidth: 160, paddingHorizontal: 8, paddingVertical: 4, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control }]}
+          testID="changelog-search" autoCapitalize="none" onKeyPress={(e: { nativeEvent: { key: string } }) => { if (e.nativeEvent.key === 'Escape') setQ(''); }} />
+        {/* 鼠标用户没有 Esc 习惯:给一个明确的清除按钮。 */}
+        {q ? (
+          <Pressable accessibilityRole="button" accessibilityLabel={tr('changelog.clearSearch')} testID="changelog-search-clear"
+            onPress={() => setQ('')} hitSlop={6} style={({ pressed }) => [{ paddingHorizontal: 4 }, pressed && { opacity: 0.7 }]}>
+            <Ionicons name="close-circle" size={14} color={colors.textMuted} />
+          </Pressable>
+        ) : null}
         <Pressable accessibilityRole="button" testID="changelog-select-all" onPress={() => pk.setSelected(allOn ? new Set() : new Set(entries.map(e => e.version)))} style={({ pressed, hovered }: any) => [styles.toolBtn, (pressed || hovered) && styles.hover]}>
           <Text style={styles.toolBtnText}>{allOn ? tr('changelog.clear') : tr('changelog.selectAll')}</Text>
         </Pressable>
@@ -187,7 +224,10 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
         </Pressable>
       </View>
       <ScrollView style={styles.desktopScroll} contentContainerStyle={styles.desktopScrollContent} testID="changelog-desktop-scroll">
-      {entries.map(e => {
+      {q.trim() && !shown.length ? (
+        <Text testID="changelog-no-match" style={{ color: colors.textMuted, paddingVertical: 12 }}>{tr('changelog.noMatch')}</Text>
+      ) : null}
+      {shown.map(e => {
         const on = pk.selected.has(e.version);
         return (
           <View key={e.version} style={[styles.cardDesktop, on && styles.cardOn]} testID={`changelog-card-${e.version}`}>
@@ -197,6 +237,7 @@ export function ChangelogDesktop({ entries, online }: { entries: ChangelogEntry[
               </Pressable>
               <Text style={styles.version} testID={`changelog-version-${e.version}`}>v{e.version}</Text>
               {e.version === APP_VERSION ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.current')}</Text></View> : null}
+              {rollbackTo && e.version === rollbackTo ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.rollback')}</Text></View> : null}
               <Text style={styles.date} testID={`changelog-date-${e.version}`}>{dateOf(e)}</Text>
               <Pressable accessibilityRole="button" accessibilityLabel={tr('changelog.copyVersion', { v: e.version })} testID={`changelog-copy-${e.version}`} onPress={() => pk.setPreview({ versions: [e.version] })} style={({ pressed, hovered }: any) => [styles.copyBtn, (pressed || hovered) && styles.hover]}>
                 <Ionicons name="copy-outline" size={13} color={colors.accent} />
@@ -245,23 +286,40 @@ function Card({ selecting, on, onPress, style, testID, children }: { selecting: 
 // ── 手机 ────────────────────────────────────────────────────────────────────────────────────
 
 export function ChangelogPhone({ entries, online }: { entries: ChangelogEntry[]; online: boolean | null }) {
+  const rollbackTo = useRollbackTarget(entries);
   useTranslation();
   const pk = usePicker(entries);
   const [selecting, setSelecting] = useState(false);
   const [copied, setCopied] = useState(false);
+  // 手机上也要能搜:280+ 条一路滚更难受(桌面 0.342 起已有搜索)。
+  const [q, setQ] = useState('');
+  const shown = useMemo(() => {
+    const needle = q.trim().toLowerCase().replace(/^v(?=\d)/, '');
+    if (!needle) return entries;
+    return entries.filter(e => e.version.toLowerCase().includes(needle)
+      || dateOf(e).toLowerCase().includes(needle)
+      || e.sections.some(sec => (sec.title ?? '').toLowerCase().includes(needle)
+        || sec.items.some(item => String(item).toLowerCase().includes(needle))));
+  }, [entries, q]);
   const safe = useModalSafePadding('fullScreen');
   const n = pk.selected.size;
   const openPreview = (versions: string[]) => { setCopied(false); pk.setPreview({ versions }); };
   return (
     <View style={styles.phoneRoot} testID="changelog-phone">
       <ScrollView contentContainerStyle={[styles.phoneContent, selecting && { paddingBottom: 96 }]} testID="changelog-phone-scroll">
+        <TextInput value={q} onChangeText={setQ} placeholder={tr('changelog.search')} placeholderTextColor={colors.textMuted}
+          style={[{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 10, paddingVertical: 8 }]}
+          testID="changelog-phone-search" autoCapitalize="none" />
+        {q.trim() && !shown.length ? (
+          <Text testID="changelog-phone-no-match" style={{ color: colors.textMuted, paddingVertical: 8 }}>{tr('changelog.noMatch')}</Text>
+        ) : null}
         <View style={styles.phoneTopRow}>
           <OfflineHint online={online} style={{ flex: 1 }} />
           <Pressable accessibilityRole="button" testID="changelog-select-toggle" onPress={() => { setSelecting(s => !s); pk.setSelected(new Set()); }} hitSlop={8} style={styles.phoneTopBtn}>
             <Text style={styles.accentText}>{selecting ? tr('changelog.cancelSelect') : tr('changelog.selectMany')}</Text>
           </Pressable>
         </View>
-        {entries.map(e => {
+        {shown.map(e => {
           const on = pk.selected.has(e.version);
           return (
             // 多选时整张卡片可点(勾选);平时卡片只是容器 —— 套一层 disabled 的 Pressable 会把里面的「复制」一起禁掉。
@@ -279,6 +337,7 @@ export function ChangelogPhone({ entries, online }: { entries: ChangelogEntry[];
                   <View style={styles.titleLine}>
                     <Text style={styles.versionPhone} testID={`changelog-version-${e.version}`}>v{e.version}</Text>
                     {e.version === APP_VERSION ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.current')}</Text></View> : null}
+                    {rollbackTo && e.version === rollbackTo ? <View style={styles.badge}><Text style={styles.badgeText}>{tr('changelog.rollback')}</Text></View> : null}
                   </View>
                   {dateOf(e) ? <Text style={styles.date} testID={`changelog-date-${e.version}`}>{dateOf(e)}</Text> : null}
                 </View>

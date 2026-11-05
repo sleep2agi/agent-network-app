@@ -1,3 +1,4 @@
+import { downloadEta, formatEta } from './download-eta';
 import { describeUpdateRow, formatCheckedAt, type UpdateRowView } from './update-check-state';
 import type { UpdateRoute } from './update-route';
 
@@ -123,6 +124,8 @@ export type ReleaseJson = {
   name?: string;
   body?: string | null;
   html_url?: string;
+  /** GitHub release 的发布时间（ISO 8601）。更新弹窗显示它（admin 2026-10-27）。 */
+  published_at?: string;
   draft?: boolean;
   prerelease?: boolean;
   assets?: ReleaseAsset[];
@@ -163,6 +166,8 @@ export type DownloadProgress = {
   route?: UpdateRoute;
   percent?: number;
   written?: number;
+  /** 开始下载的时刻(ms):用来算剩余时长(admin 2026-10-26「下载显示一下剩余时长」)。 */
+  startedAt?: number;
   total?: number;
   verifying?: boolean;
   /** 首选来源失败、已自动切到当前来源时,首选那个为什么失败(内部)。 */
@@ -173,14 +178,14 @@ export type AndroidUpdateState =
   | { kind: 'idle' | 'checking' }
   | { kind: 'up-to-date'; latest: string; route?: UpdateRoute }
   | { kind: 'error'; message: string; rateLimitResetAt?: number }
-  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute }
-  | ({ kind: 'downloading'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute } & DownloadProgress)
-  | { kind: 'download-error'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; message: string; attempts?: RouteAttempt[] }
-  | { kind: 'ready'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; fileUri: string; installAttempted: boolean; route?: UpdateRoute };
+  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string }
+  | ({ kind: 'downloading'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string } & DownloadProgress)
+  | { kind: 'download-error'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string; message: string; attempts?: RouteAttempt[] }
+  | { kind: 'ready'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; checkRoute?: UpdateRoute; publishedAt?: string; fileUri: string; installAttempted: boolean; route?: UpdateRoute };
 
 export type AndroidReleaseVerdict =
   | { kind: 'up-to-date'; latest: string }
-  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string }
+  | { kind: 'available'; version: string; notes: string; apk: ApkAsset; releaseUrl: string; publishedAt?: string }
   | { kind: 'error'; message: string };
 
 export function evaluateAndroidRelease(release: ReleaseJson | null | undefined, currentVersion: string): AndroidReleaseVerdict {
@@ -197,6 +202,11 @@ export function evaluateAndroidRelease(release: ReleaseJson | null | undefined, 
     version: latest,
     notes: String(release.body ?? '').trim(),
     apk,
+    // 更新弹窗要显示「这一版是什么时候发的」（admin 2026-10-27）。GitHub release JSON 自带
+    // published_at，**不需要额外请求**；解析不出来就不显示，不猜。
+    ...(typeof release.published_at === 'string' && release.published_at.trim()
+      ? { publishedAt: release.published_at.trim() }
+      : {}),
     releaseUrl: typeof release.html_url === 'string' && release.html_url ? release.html_url : ANDROID_RELEASES_PAGE,
   };
 }
@@ -389,10 +399,15 @@ export function describeAndroidUpdateRow(
       return describeUpdateRow({ kind: 'available', version: state.version, notes: state.notes }, opts);
     case 'downloading':
       if (state.verifying) return { label: `正在校验 v${state.version} 安装包`, detail: '点击查看进度', tone: 'accent', busy: true, actionable: true };
-      return {
-        label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}`,
-        detail: '点击查看进度', tone: 'accent', busy: true, actionable: true,
-      };
+      {
+        // 剩余时长:有开始时间就能算(安卓更新是 77 MB 级,只给百分比用户没法判断还要多久)。
+        const eta = downloadEta(state.written ?? 0, state.total, state.startedAt ? Date.now() - state.startedAt : 0);
+        const left = formatEta(eta.etaSeconds);
+        return {
+          label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}${left ? ` · 剩余约 ${left}` : ''}`,
+          detail: '点击查看进度', tone: 'accent', busy: true, actionable: true,
+        };
+      }
     case 'download-error':
       return { label: `下载失败：${state.message}`, detail: '点击重试或在浏览器中下载', tone: 'danger', busy: false, actionable: true };
     case 'ready':

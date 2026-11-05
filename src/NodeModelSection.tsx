@@ -4,7 +4,7 @@
 //
 // 样式约定同 NodeDetailScreen:`styles` 用 live binding、不解构;卡片
 // colors.card / 12 圆角 / spacing.lg;按钮沿用 retryBtn。
-import { useCallback, useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
@@ -14,7 +14,13 @@ import {
   afterPoll,
   afterSubmit,
   catalogHint,
+  filterModels,
   modelNotOnMachineNote,
+  groupCountLabel,
+  groupCountLabelFor,
+  providerGroupSummary,
+  groupModelsByProvider,
+  orderGroupsByCurrent,
   modelChips,
   modelControlAvailability,
   phaseIsBusy,
@@ -25,7 +31,10 @@ import {
   type ModelChangePhase,
 } from './node-model-change';
 import { suggestedModels } from './runtime-catalog';
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { opencodeFlagsOf,
+  generationOf,
+} from './node-info';
 import { nodeProviderDaemon } from './node-provider-target';
 import { colors, spacing, radius } from './theme';
 
@@ -35,6 +44,22 @@ import { colors, spacing, radius } from './theme';
  * daemon 绑定，`read_opencode_catalog` 永远拿不到列表 → admin 只能手填。
  * 读失败/旧 Hub 一律返回 []（不编内置清单，不假装有）。
  */
+/**
+ * 这台机器没上报清单时，退而用**同 runtime 其他节点**报过的模型当候选
+ * （2026-11-01 admin 截图那台 V2 节点：目录一直没上报，「建议」只剩「当前」一项）。
+ */
+async function peerModelList(cfg: HubConfig, node: HubNode): Promise<{ models: string[]; nodes: number }> {
+  try {
+    const { nodes } = await fetchHubNodes(cfg);
+    return peerCatalogSources(nodes as { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null, {
+      runtime: node.runtime,
+      excludeNodeId: node.node_id,
+    });
+  } catch {
+    return { models: [], nodes: 0 };
+  }
+}
+
 async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string[]> {
   try {
     const { nodes } = await fetchHubNodes(cfg);
@@ -49,11 +74,24 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [view, setView] = useState<NodeConfigRead | null | undefined>(undefined);
   const [readFailed, setReadFailed] = useState(false);
   const [picked, setPicked] = useState<string>('');
+  // 点了「当前：provider / model」会复制,但以前没有任何反馈 —— 用户不知道到底复制没复制。
+  const [currentCopied, setCurrentCopied] = useState(false);
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
+  // 同 runtime 兄弟节点报过的模型(仅在本机没上报时使用)
+  const [peerModels, setPeerModels] = useState<string[]>([]);
+  // 贡献候选的兄弟节点台数(写进提示里:数字比一串 id 更可信)
+  const [peerNodes, setPeerNodes] = useState(0);
   const [v2Note, setV2Note] = useState('');
+  // 「重新读取模型列表」:读失败/读到空之后,人还能自己再敲一次,不用退出重进页面。
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
+  // 自动再试一次(2026-11-02):daemon 刚重启时,第一轮 15 秒常常抓不到清单,
+  // 用户得手动点「重新读取」。这里在本机版本够、却仍读不到时,20 秒后自动再试一次(仅一次)。
+  const autoRetried = useRef(false);
+  // 换节点要重置「自动重试已用过」的标记:否则从 A 节点切到 B 节点时,B 永远不会自动重试。
+  useEffect(() => { autoRetried.current = false; }, [node.node_id]);
 
   const reload = useCallback(async () => {
     try {
@@ -72,6 +110,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   useEffect(() => {
     if (!v2) return;
     let live = true;
+    let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const daemonId = nodeProviderDaemon(node);
     // 中继链失败/走不通时的兜底：改读这台机器自己上报的清单（#2293）。
     const fallback = async (reason: string) => {
@@ -82,9 +121,22 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       // #2293 —— 空列表时区分「版本太旧不会上报」和「真的还没上报」：
       // 前者给出可执行的升级提示（TMAI欧 / TMAI文档欧 跑的就是 .146），后者仍是“等一等/手输”。
       const fresh = reportsCatalogSince(runtimeVersion);
+      const peers = await peerModelList(cfg, node);
+      if (!live) return;
+      setPeerModels(peers.models);
+      setPeerNodes(peers.nodes);
+      if (peers.models.length > 0) {
+        setV2Note(`${reason}这台机器还没上报模型清单；下面是同 runtime 其他 ${peers.nodes} 台节点报过的模型，点选或用它们开头手输（别的节点的清单，本机未必装了同一个 Provider，选错会拒绝运行）。`);
+        return;
+      }
       setV2Note(fresh === false
         ? `${reason}这台节点的 agent-node ${runtimeVersion} 不会自动上报模型清单（需 ≥ 2.5.0-preview.160，升级后 3 分钟内生效）—— 现在仍可手输 provider/model。`
-        : `${reason}这台机器也还没上报过模型清单 —— 仍可手输 provider/model。`);
+        : `${reason}这台机器也还没上报过模型清单 —— 仍可手输 provider/model；20 秒后会自动再试一次。`);
+      // 只在「版本够、却仍读不到」且本轮还没自动试过时再试一次,避免无休止轮询。
+      if (fresh !== false && !autoRetried.current) {
+        autoRetried.current = true;
+        retryTimer = setTimeout(() => { if (live) setCatalogAttempt((n) => n + 1); }, 20000);
+      }
     };
     if (!daemonId) {
       setV2Note('这个节点没有所属 daemon，正在读它自己上报的模型清单…');
@@ -111,8 +163,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       }
       if (live) void fallback('OpenCode 服务器还没返回模型列表。');
     })();
-    return () => { live = false; };
-  }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status]);
+    return () => { live = false; if (retryTimer) clearTimeout(retryTimer); };
+  }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status, catalogAttempt]);
 
   const requested = phase.kind === 'restarting' ? phase.requested : null;
   const baseRevision = phase.kind === 'restarting' ? phase.baseRevision : null;
@@ -156,26 +208,65 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
   }, [requested, baseRevision, cfg, node.node_id]);
 
-  const availability = modelControlAvailability(view === undefined ? null : view);
+  // V2 共存节点上纯 model 是 hot 变更:不受 config_update_capable 限制(它只挡重启级).
+  const availability = modelControlAvailability(view === undefined ? null : view, { hotModel: v2 });
   const busy = phaseIsBusy(phase);
-  const suggestions = v2 ? (v2Models ?? []) : suggestedModels(node.runtime);
+  // 机器上报了 V2 目录就用它;没上报(常见:刚接入/还没轮询到)就退回内置候选,
+  // 否则「建议」里只剩「当前」那一个 chip,用户会以为没法切换(admin 2026-11-01 截图)。
+  const v2Catalog = v2Models ?? [];
+  const suggestions = v2 && v2Catalog.length > 0
+    ? v2Catalog
+    : (v2 && peerModels.length > 0 ? peerModels : suggestedModels(node.runtime));
+  const usingBuiltinFallback = v2 && v2Catalog.length === 0 && peerModels.length === 0;
+  const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
   const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
+  // 只在「opencode 系 runtime 却没写代际」时提示;写了 v1/v2 或不是 opencode 都不打扰。
+  const isOpenCodeRuntime = /opencode/i.test(node.runtime ?? '');
+  const generationUnset = isOpenCodeRuntime && !generationOf(node);
   const chips = modelChips(suggestions, currentModel);
-  const hint = v2 ? v2Note : catalogHint(node.runtime);
+  // 目录大的时候(OpenCodeV2 常有几十个模型)一屏放不下,加一个筛选框;列表短就不出现,免得喧宾夺主。
+  const [filter, setFilter] = useState('');
+  const shownChips = filterModels(chips, filter);
+  const showFilter = chips.length >= 8;
+  // 当前模型所在的 Provider 组排最前:换模型多是「同 Provider 内换一个」。
+  const groups = orderGroupsByCurrent(groupModelsByProvider(shownChips), currentModel);
+  const hint = v2
+    ? (usingPeerFallback ? v2Note
+      : usingBuiltinFallback ? '这台机器还没上报模型清单，下面是内置候选（可能滞后于实际可用模型）。'
+      : v2Note)
+    : catalogHint(node.runtime);
   // 只在 V2 目录**读到了**的时候才谈「不在列表里」:目录为空/读不到 ⇒ 不知道,不乱报。
   const notOnMachine = v2 && (v2Models?.length ?? 0) > 0 ? modelNotOnMachineNote(currentModel, v2Models ?? []) : null;
+  // 内置候选只是 OpenCode Zen 的两个免费模型;这类节点多半跑别的 Provider,
+  // 所以手输框直接把「当前 Provider」当样板,减少用户猜格式。
+  const providerPrefix = typeof currentModel === 'string' && currentModel.includes('/')
+    ? currentModel.slice(0, currentModel.indexOf('/')) : '';
+  // 注意:placeholder 前半段必须保留「模型 id(provider/model)」——
+  // tests/model-change-deadline 用这个文案定位输入框,只改后半段补充内容。
+  const inputPlaceholder = usingBuiltinFallback && providerPrefix
+    ? `模型 id(provider/model)，如 ${providerPrefix}/<模型名>`
+    : (suggestions.length > 0 ? '或手输模型 id(provider/model)' : '模型 id(provider/model)');
+
+  // 真正下发一次配置变更。抽出来是为了让「超时后再下发一次」复用同一条路径,
+  // 而不是让用户重新在列表/输入框里把同一个模型再选一遍。
+  const applyModel = async (model: string) => {
+    if (!view || busy) return;
+    setPhase({ kind: 'submitting', requested: model });
+    const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
+    const next = afterSubmit(model, view.config_revision, res, currentModel);
+    if (next.kind === 'conflict') void reload();
+    // 生效后把筛选清掉:否则下次进来列表还停在旧筛选上,看不到刚切过去的模型。
+    if (next.kind === 'applied') setFilter('');
+    setPhase(next);
+  };
 
   const submit = async () => {
     if (!view || busy) return;
     const v = validateModelId(candidate);
     if (!v.ok) { setPhase({ kind: 'error', message: v.reason }); return; }
     if (v.model === currentModel) { setPhase({ kind: 'error', message: '和当前模型相同,无需修改' }); return; }
-    setPhase({ kind: 'submitting', requested: v.model });
-    const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model: v.model } });
-    const next = afterSubmit(v.model, view.config_revision, res);
-    if (next.kind === 'conflict') void reload();
-    setPhase(next);
+    await applyModel(v.model);
   };
 
   return (
@@ -188,6 +279,18 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             {currentModel || (view === undefined && !readFailed ? '读取中…' : '—')}
           </Text>
         </View>
+        {/* 代际没声明(opencode 系 runtime 但 flags 里没有 opencodeGeneration)时,
+            模型清单很可能是读不到的——这是排查里最常见的一步,提前说一句。 */}
+        {isOpenCodeRuntime && generationUnset ? (
+          <Text testID="node-model-gen-unset" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+            这台节点没有声明 OpenCode 代际（gen=unset），模型清单可能读不到；把节点诊断行贴给它的运维就能定位。
+          </Text>
+        ) : null}
+        {/* 贴到群里的诊断行(gen=/catalog=/agent=/net=)得有人能读:
+            这里给一行字段表,省得每次再解释一遍。 */}
+        <Text testID="node-model-diag-legend" style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>
+          诊断行字段：gen=代际（v1 不报清单） · mode=共存/单飞 · catalog=清单上报 · agent=agent-node 版本 · net=网络 · client=客户端版本
+        </Text>
         {readFailed && view === undefined ? (
           <Text style={{ color: colors.failed, fontSize: 12 }}>读取节点配置失败。<Text style={{ color: colors.accent }} onPress={() => void reload()}>重试</Text></Text>
         ) : null}
@@ -199,20 +302,101 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
               改模型不经过任何大模型:Hub 下发后节点自己写配置并重启一次(约 5–45 秒),期间它不接任务。
             </Text>
+            {/* 点一下整行复制:把这句原样发给后端/别人,对方不用再问「哪个节点、什么版本」。 */}
+            {/* 内置候选是 OpenCode Zen 的两个免费模型;而这类节点常常跑别的 Provider,
+                直接从「当前模型」里取出 provider 前缀提示一句,省得用户不知道手输什么。 */}
+            {usingBuiltinFallback && currentModel && currentModel.includes('/') ? (
+              <Text testID="node-model-provider-hint" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                {`这台机器当前用的是 ${currentModel.slice(0, currentModel.indexOf('/'))}，可在下面手输 ${currentModel.slice(0, currentModel.indexOf('/'))}/<模型名>。`}
+              </Text>
+            ) : null}
+            {!v2 ? (
+              <Text testID="node-model-catalog-na" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                这个 runtime 不上报模型清单，模型由节点自己的配置决定（下面的候选是内置建议）。
+              </Text>
+            ) : null}
+            {v2 ? (
+              <Text testID="node-model-catalog-status" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}
+                onPress={() => {
+                  const line = `${catalogStatusLine(v2Catalog.length, runtimeVersion)} node_id=${node.node_id}${node.runtime ? ` runtime=${node.runtime}` : ''}`;
+                  void import('expo-clipboard').then(m => m.setStringAsync(line)).catch(() => undefined);
+                }}>
+                {catalogStatusLine(v2Catalog.length, runtimeVersion)}
+                {v2Catalog.length === 0 ? '（下方按钮可立刻重试）' : ''}
+              </Text>
+            ) : null}
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
+            {usingBuiltinFallback || usingPeerFallback ? (
+              <Pressable testID="node-model-catalog-retry" disabled={busy}
+                onPress={() => setCatalogAttempt((n) => n + 1)}
+                style={({ pressed }) => [
+                  { alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 30, justifyContent: 'center' },
+                  pressed && { opacity: 0.7 },
+                ]}>
+                <Text style={{ color: colors.accent, fontSize: 12 }}>重新读取模型列表</Text>
+              </Pressable>
+            ) : null}
             {notOnMachine ? (
               <Text testID="model-not-on-machine" style={{ color: colors.blocked, fontSize: 12, lineHeight: 18 }}>{notOnMachine}</Text>
             ) : null}
+            {/* 当前 Provider / 模型单独一行:分组展示后,"我现在在哪个 provider 下"不该靠 chip 上的小字去找。 */}
+            <Text style={{ color: colors.textSecondary, fontSize: 12 }} testID="node-model-current"
+              onPress={() => {
+                const cur = (currentModel ?? '').trim();
+                if (!cur) return;
+                void import('expo-clipboard').then(m => m.setStringAsync(cur)).then(() => {
+                  setCurrentCopied(true);
+                  setTimeout(() => setCurrentCopied(false), 1600);
+                }).catch(() => undefined);
+              }}>
+              当前：{(() => {
+                const cur = (currentModel ?? '').trim();
+                if (!cur) return '未设置';
+                const slash = cur.indexOf('/');
+                return slash > 0 ? `${cur.slice(0, slash)} / ${cur.slice(slash + 1)}` : cur;
+              })()}{currentCopied ? '（已复制）' : ''}
+            </Text>
+
             {chips.length > 0 ? (
               <View style={{ gap: spacing.sm }}>
-                <Text style={{ color: colors.textMuted, fontSize: 12 }}>建议</Text>
-                <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
-                {chips.map(m => {
+                <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }}>建议</Text>
+                  {showFilter ? (
+                    <TextInput
+                      value={filter}
+                      onChangeText={setFilter}
+                      editable={!busy}
+                      placeholder="筛选（provider 或模型名）"
+                      placeholderTextColor={colors.textMuted}
+                      autoCapitalize="none"
+                      autoCorrect={false}
+                      testID="node-model-filter"
+                      style={{ flex: 1, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 30, color: colors.text, fontSize: 12 }}
+                    />
+                  ) : null}
+                  {showFilter && filter.trim() ? (
+                    <Text style={{ color: colors.accent, fontSize: 12 }} onPress={() => setFilter('')} testID="node-model-filter-clear">清除</Text>
+                  ) : null}
+                </View>
+                {showFilter && shownChips.length === 0 ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="node-model-filter-empty">没有匹配「{filter.trim()}」的模型;清掉筛选,或在下面直接手输模型 id。</Text>
+                ) : null}
+                {providerGroupSummary(groups) ? (
+                  <Text style={{ color: colors.textMuted, fontSize: 12 }} testID="node-model-group-summary">
+                    {providerGroupSummary(groups)}
+                  </Text>
+                ) : null}
+                {groups.map(g => (
+                  <View key={g.provider} style={{ gap: 4 }} testID={`node-model-provider-${g.provider}`}>
+                    <Text style={{ color: colors.textSecondary, fontSize: 12 }}>{groupCountLabelFor(g, currentModel)}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: spacing.sm }}>
+                {g.models.map(m => {
                   const active = !custom.trim() && (picked ? picked === m : m === currentModel);
                   return (
                     <Pressable
                       key={m}
                       disabled={busy}
+                      accessibilityState={{ selected: active }}
                       onPress={() => { setPicked(m); setCustom(''); }}
                       style={({ pressed }) => [
                         { borderWidth: 1, borderRadius: radius.control, paddingHorizontal: spacing.md, height: 34, justifyContent: 'center', borderColor: active ? colors.accent : colors.border, backgroundColor: colors.card },
@@ -220,19 +404,21 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                         busy && { opacity: 0.5 },
                       ]}
                     >
-                      <Text style={{ color: active ? colors.accent : colors.text, fontSize: 13 }}>{m}{m === currentModel ? '(当前)' : ''}</Text>
+                      <Text style={{ color: active ? colors.accent : colors.text, fontSize: 13 }}>{m}{m === currentModel ? '(当前)' : active ? ' ✓' : ''}</Text>
                     </Pressable>
                   );
                 })}
-                </View>
+                    </View>
+                  </View>
+                ))}
                 {!v2 && hint ? <Text style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
               </View>
             ) : null}
             <TextInput
-              value={custom}
-              onChangeText={setCustom}
+              value={custom.trim() ? custom : picked}
+              onChangeText={(text) => { setCustom(text); if (picked) setPicked(''); }}
               editable={!busy}
-              placeholder={suggestions.length > 0 ? '或手输模型 id(provider/model)' : '模型 id(provider/model)'}
+              placeholder={inputPlaceholder}
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
@@ -254,6 +440,27 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
           <Text style={{ color: phase.kind === 'applied' ? colors.running : phase.kind === 'error' || phase.kind === 'timeout' || phase.kind === 'conflict' ? colors.failed : colors.textMuted, fontSize: 12, lineHeight: 18 }}>
             {phaseText(phase)}
           </Text>
+        ) : null}
+        {/* 切换成功后给「切回上一版」:换错了不用再翻列表找回去。 */}
+        {phase.kind === 'applied' && phase.previous && phase.previous !== phase.model && !busy ? (
+          <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.previous as string)} testID="node-model-revert"
+            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.accent, fontSize: 12 }}>切回 {phase.previous}</Text>
+          </Pressable>
+        ) : null}
+        {/* 失败(如网络抖动)后按原样再试一次:输入框里的内容没变,不该逼用户重选。 */}
+        {phase.kind === 'error' && !busy && validateModelId(candidate).ok ? (
+          <Pressable accessibilityRole="button" onPress={() => void submit()} testID="node-model-retry-error"
+            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.accent, fontSize: 12 }}>再试一次</Text>
+          </Pressable>
+        ) : null}
+        {/* 超时后节点可能只是还没重启完:给一个「再下发一次」,不用重新选模型。 */}
+        {phase.kind === 'timeout' && !busy ? (
+          <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.requested)} testID="node-model-retry-timeout"
+            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.accent, fontSize: 12 }}>再下发一次（{phase.requested}）</Text>
+          </Pressable>
         ) : null}
       </View>
     </View>

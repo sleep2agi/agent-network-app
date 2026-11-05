@@ -1,3 +1,4 @@
+import { pinyinMatch } from './lib/pinyin';
 import { ownerCounts } from './i18n-task-presentation';
 import { t as tr } from './i18n';
 import { useTranslation } from './i18n-react';
@@ -42,6 +43,10 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const manageTags = useTaskBoard(s => canManageTags(s.capabilities, s.tagCatalog));
   const [tagsCollapsed, setTagsCollapsed] = useState(readTagsCollapsed);
   const [showEmptyProjects, setShowEmptyProjects] = useState(false);
+  /** 项目多时的左栏过滤(只在项目 >8 个时出现;不影响「显示空项目」的折叠语义)。 */
+  const [projectQ, setProjectQ] = useState('');
+  /** 标签多时的左栏过滤(同上;层级缩进由 tagRows 负责,这里只筛名字)。 */
+  const [tagQ, setTagQ] = useState('');
   // #2102:树的折叠状态(只在 Hub 真的回了 parent_id 时才可能出现折叠箭头)。
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
   // #2122 F4:目录(标签父子)变了之后,旧的 tagDescendants 可能已经指向不存在的子孙,
@@ -135,7 +140,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         accessibilityRole="tab"
         accessibilityLabel={tr('tasks.copy.86', { v0: label })}
         {...a11yState({ selected: on })}
-        onPress={() => pickProject(id)}
+        onPress={() => { if (!id) setProjectQ(''); pickProject(id); }}
         // depth:Hub 一旦返回 projects.parent_id,子项目就往里缩一格(现在恒为 0,行为不变)。
         style={state => [styles.item, depth > 0 && { paddingLeft: (styles.item as any).paddingHorizontal + depth * 14 }, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }, on && { backgroundColor: colors.rowActive }]}
       >
@@ -168,6 +173,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         onPress={() => {
           setTaskSection(section === 'dispatch' ? 'board' : section);
           // #2127 F4:每次点击都**覆盖**,不合并旧项;与顶部标签筛选共用 tagFilterAfterPick。
+          if (!tag) setTagQ('');
           setTaskFilter(tagFilterAfterPick(filter, tag, tagCatalog?.parents ?? null));
           onNavigate?.();
         }}
@@ -227,7 +233,19 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
         {!tagsCollapsed ? (
           <>
             {tagRow('', tr('tags.all'), icon('pricetags-outline', !filter.tag), null)}
-            {tagRows(tagNames, tagCatalog?.parents ?? null).map(r => tagRow(
+            {tagNames.length > 8 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <TextInput value={tagQ} onChangeText={setTagQ} placeholder={tr('tasks.copy.249')} placeholderTextColor={colors.textMuted}
+                onKeyPress={e => { if (e.nativeEvent.key === 'Escape') setTagQ(''); }}
+                style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
+                testID="task-side-tag-filter" autoCapitalize="none" />
+              {tagQ ? <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.247')} testID="task-side-tag-filter-clear" onPress={() => setTagQ('')} hitSlop={6} style={{ padding: 2 }}><Ionicons name="close-circle" size={14} color={colors.textMuted} /></Pressable> : null}
+              </View>
+            ) : null}
+            {tagQ.trim() && !tagNames.some(n => pinyinMatch(n, tagQ)) ? (
+              <Text style={[styles.itemText, { color: colors.textMuted, paddingHorizontal: spacing.sm, paddingVertical: 4 }]} numberOfLines={1}>{tr('tasks.copy.245')}</Text>
+            ) : null}
+            {tagRows(tagNames.filter(n => !tagQ.trim() || pinyinMatch(n, tagQ)), tagCatalog?.parents ?? null).map(r => tagRow(
               r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
               tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
             ))}
@@ -249,6 +267,16 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
                 <Ionicons name="add" size={15} color={colors.textMuted} />
               </Pressable>} />
             {projectRow('', tr('tasks.copy.191'), icon('folder-open-outline'), Array.from(pCounts.values()).reduce((a, b) => a + b, 0))}
+            {/* 项目多(>8)时给一个过滤框:491 张卡、十几个项目时靠肉眼翻很慢。 */}
+            {activeProjects(projects).length > 8 ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: 4 }}>
+              <TextInput value={projectQ} onChangeText={setProjectQ} placeholder={tr('tasks.copy.248')} placeholderTextColor={colors.textMuted}
+                onKeyPress={e => { if (e.nativeEvent.key === 'Escape') setProjectQ(''); }}
+                style={[styles.rename, { color: colors.text, borderColor: colors.border, height: 28, paddingHorizontal: spacing.sm, marginTop: 2 }]}
+                testID="task-side-project-filter" autoCapitalize="none" />
+              {projectQ ? <Pressable accessibilityRole="button" accessibilityLabel={tr('tasks.copy.246')} testID="task-side-project-filter-clear" onPress={() => setProjectQ('')} hitSlop={6} style={{ padding: 2 }}><Ionicons name="close-circle" size={14} color={colors.textMuted} /></Pressable> : null}
+              </View>
+            ) : null}
             {/* #2102:Hub 给了 parent_id 就渲染树(缩进/折叠/祖先计数);没有就完全是旧的平铺。
                 #2106 P1:计数来自完整树 —— 折叠只改可见性,不改父项目的数字;
                 主树与空项目区共用同一批「可见行」,所以父节点不会两处各画一次,
@@ -257,8 +285,9 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
               const active = activeProjects(projects);
               const totals = aggregateCounts(projectRows(active), n => pCounts.get(n.id) ?? 0);
               const visible = projectRows(active, collapsedProjects);
-              const withTasks = visible.filter(r => (totals.get(r.node.id) ?? 0) > 0);
-              const emptyRows = visible.filter(r => (totals.get(r.node.id) ?? 0) === 0);
+              const matchQ = (r: (typeof visible)[number]) => !projectQ.trim() || pinyinMatch(r.node.name, projectQ);
+              const withTasks = visible.filter(r => (totals.get(r.node.id) ?? 0) > 0 && matchQ(r));
+              const emptyRows = visible.filter(r => (totals.get(r.node.id) ?? 0) === 0 && matchQ(r));
               const drawRow = (r: (typeof visible)[number]) => (
                 r.hasChildren
                   ? <View key={`prow:${r.node.id}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -273,6 +302,11 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
               );
               return (
                 <>
+                  {!withTasks.length && !emptyRows.length && projectQ.trim() ? (
+                    <Text style={[styles.itemText, { color: colors.textMuted, paddingHorizontal: spacing.sm, paddingVertical: 4 }]} numberOfLines={1}>
+                      {tr('tasks.copy.244')}
+                    </Text>
+                  ) : null}
                   {withTasks.map(drawRow)}
                   {emptyRows.length ? (
                     <Pressable accessibilityRole="button" {...a11yState({ expanded: showEmptyProjects })} onPress={() => setShowEmptyProjects(v => !v)}

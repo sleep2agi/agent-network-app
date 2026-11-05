@@ -85,17 +85,24 @@ ck('release 列表用 --slurp 分页再摊平', (() => {
   return calls.length === 1;
 })());
 
-ck('建草稿带 target_commitish 与用户可见说明', (() => {
+ck('建草稿带 target_commitish 与用户可见说明（走 stdin JSON，不当命令行参数）', (() => {
   let args: string[] = [];
+  let payload: Record<string, unknown> = {};
   prepareReleaseDraft({
     version: '0.2.287',
     commit: 'a'.repeat(40),
     body: 'What is new in 0.2.287:\n- x',
     listReleases: () => [],
-    run: (a: string[]) => { args = a; return { id: 99 }; },
+    // body 有 7 万字符时不能当命令行参数（execve: Argument list too long），只走 stdin。
+    run: (a: string[], o: { input?: string } = {}) => {
+      args = a;
+      payload = o.input ? JSON.parse(o.input) : {};
+      return { id: 99 };
+    },
     log: () => {},
   });
-  return args.includes('target_commitish=' + 'a'.repeat(40)) && args.some((a) => a.startsWith('body='));
+  return args.includes('--input') && !args.some((a) => a.startsWith('body='))
+    && payload.target_commitish === 'a'.repeat(40) && payload.body === 'What is new in 0.2.287:\n- x';
 })());
 
 ck('include_linux=false 时回收 .deb/.deb.sig', JSON.stringify(staleAssetsFor([
@@ -113,7 +120,7 @@ ck('从 workflow 解出 releaseBody 并替换 __VERSION__',
 
 // 6. dry run 仍能构建 + updater 写入串行 + 二进制上传走 uploads host
 ck('publish=false 的 dry run 仍会跑 build matrix（always() 保证 skipped prepare 不拖死 matrix）',
-  /build-release:[\s\S]{0,400}if: always\(\) && \(inputs\.publish == false \|\| needs\.prepare-release\.result == 'success'\)/.test(wf));
+  /build-release:[\s\S]{0,800}if: always\(\) && \(inputs\.publish == false \|\| needs\.prepare-release\.result == 'success'\)/.test(wf));
 ck('矩阵串行写同一个 latest.json', /max-parallel: 1/.test(wf));
 ck('二进制资产上传走完整 uploads.github.com URL（不用 gh api --hostname）', (() => {
   const normalizeSrc = readFileSync(new URL('../scripts/normalize-desktop-update-manifest.mjs', import.meta.url), 'utf8');
@@ -128,16 +135,16 @@ ck('REQUESTED_COMMIT 必须是 40 位小写 SHA', (() => {
 ck('prepare 在 requireCommit 时拒绝缺 commit', (() => {
   try { prepareReleaseDraft({ version: '0.2.287', requireCommit: true, commit: '', listReleases: () => [], log: () => {} }); return false; } catch { return true; }
 })());
-ck('建草稿把 target_commitish 写进请求', (() => {
-  let args: string[] = [];
+ck('建草稿把 target_commitish 写进请求（stdin JSON 里）', (() => {
+  let payload: Record<string, unknown> = {};
   prepareReleaseDraft({
     version: '0.2.287',
     commit: 'b'.repeat(40),
     listReleases: () => [],
-    run: (a: string[]) => { args = a; return { id: 5 }; },
+    run: (_a: string[], o: { input?: string } = {}) => { payload = o.input ? JSON.parse(o.input) : {}; return { id: 5 }; },
     log: () => {},
   });
-  return args.includes(`target_commitish=${'b'.repeat(40)}`);
+  return payload.target_commitish === 'b'.repeat(40);
 })());
 ck('复用指向别的 SHA 的草稿 → fail-closed', (() => {
   try {

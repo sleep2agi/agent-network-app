@@ -9,7 +9,7 @@ export type DesktopUpdateSource = 'mirror' | 'github';
 
 export type DesktopUpdateState =
   | { kind: 'idle' | 'unsupported' | 'checking' | 'up-to-date' }
-  | { kind: 'available'; version: string; notes: string; currentVersion?: string; source?: DesktopUpdateSource }
+  | { kind: 'available'; version: string; notes: string; currentVersion?: string; source?: DesktopUpdateSource; publishedAt?: string }
   | { kind: 'downloading'; version: string; percent?: number; currentVersion?: string; source?: DesktopUpdateSource; downloaded?: number; total?: number
       /** 预计剩余秒数 / 速率(由 download-eta 算,桌面更新下载也一样显示,admin 2026-10-26)。 */
       etaSeconds?: number | null; speedBps?: number | null }
@@ -63,13 +63,19 @@ export function describeUpdateRow(
       return { label: '检查中…', tone: 'muted', busy: true, actionable: false };
     case 'up-to-date':
       return { label: `已是最新版本 v${opts.currentVersion}`, detail: checked, tone: 'muted', busy: false, actionable: true };
-    case 'available':
-      return { label: `发现新版本 v${state.version}`, detail: '点击查看并安装', tone: 'accent', busy: false, actionable: true };
-    case 'downloading':
+    case 'available': {
+      // 说清这个包从哪来:镜像走不通时用户常问「你从哪下的」,提前写出来省一轮排查。
+      const from = state.source === 'mirror' ? '国内镜像' : state.source === 'github' ? 'GitHub' : null;
+      return { label: `发现新版本 v${state.version}`, detail: from ? `来源：${from} · 点击查看并安装` : '点击查看并安装', tone: 'accent', busy: false, actionable: true };
+    }
+    case 'downloading': {
+      const from = state.source === 'mirror' ? '国内镜像' : state.source === 'github' ? 'GitHub' : null;
       return {
         label: `正在下载 v${state.version}${state.percent == null ? '' : ` ${state.percent}%`}`,
+        ...(from ? { detail: `来源：${from}` } : {}),
         tone: 'accent', busy: true, actionable: false,
       };
+    }
     case 'error':
       return { label: `检查更新失败：${updateErrorReason(state.message)}`, detail: '点击重试', tone: 'danger', busy: false, actionable: true };
     case 'unsupported':

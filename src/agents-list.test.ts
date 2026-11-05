@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 // 节点列表纯逻辑断言 — run: bun src/agents-list.test.ts
 //
 // 判据纪律(通信龙 d08c56db):
@@ -7,7 +8,7 @@
 //   - 报分母:命中数要 >0 且 <总数,不能是"全命中"或"全不中"这种退化绿。
 
 import {
-  buildSections, compareInTeam, countShown, teamOf, substringMatch,
+  buildSections, compareInTeam, countShown, teamOf, substringMatch, matchesNodeId, matchesModel, matchesRuntime, matchesStatus,
   type Matcher,
 } from './agents-list';
 import type { Session } from './api';
@@ -127,6 +128,112 @@ ck('teamOf 空别名归「其他」', teamOf('') === '其他');
   const nullish = buildSections([S('A','idle')], '', { teamOf: () => undefined });
   ck('teamOf 返回 undefined 时同样退回前缀分组', nullish.every(g => g.title !== ''));
 }
+// 2026-11-02:搜索也能按 node_id 找到节点(诊断行里给的就是 node_id)
+const withIds = [
+  { alias: '通信A', node_id: 'n_a0a8c671', status: 'working' },
+  { alias: '通信B', node_id: 'n_deadbeef', status: 'idle' },
+] as unknown as Parameters<typeof buildSections>[0];
+const byNode = buildSections(withIds, 'n_deadbeef');
+const byNodeFlat = byNode.flatMap((sec) => sec.data.map((i) => i.alias));
+ck('搜 node_id 能定位到节点', JSON.stringify(byNodeFlat) === JSON.stringify(['通信B']));
+ck('搜别名照旧可用', buildSections(withIds, '通信A').flatMap(s2 => s2.data.map(i => i.alias)).includes('通信A'));
+ck('没有 node_id 的会话不会被误命中', matchesNodeId({ alias: 'x' }, 'n_', substringMatch) === false);
+ck('空查询不命中任何 node_id', matchesNodeId({ node_id: 'n_a' }, '   ', substringMatch) === false);
+
+// 搜索框提示要写明可以搜 node_id(否则功能存在也没人知道)
+const screenSrc = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
+ck('搜索框 placeholder 提到 node_id', screenSrc.includes('个 agent / node_id'));
+
+// 2026-11-02:搜索也认当前模型("谁在跑 deepseek")
+const withModel = [
+  { alias: '通信A', node_id: 'n_a', model: 'deepseek/deepseek-flash', status: 'working' },
+  { alias: '通信B', node_id: 'n_b', model: 'opencode/x', status: 'idle' },
+] as unknown as Parameters<typeof buildSections>[0];
+ck('搜模型能定位节点', JSON.stringify(buildSections(withModel, 'deepseek').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['通信A']));
+ck('1-2 个字符不拿模型凑热闹', matchesModel({ model: 'deepseek/x' }, 'de', substringMatch) === false);
+ck('没有模型的会话不误命中', matchesModel({}, 'deepseek', substringMatch) === false);
+
+// 搜不到时的提示要把「能搜什么」说全（拼音 / node_id / 模型名）
+ck('搜索空状态提示写明 node_id 与模型名', screenSrc.includes('node_id n_xxx') && screenSrc.includes('模型名如 deepseek'));
+ck('搜索空状态提示覆盖 runtime/状态/模型清单', screenSrc.includes('runtime 如 codex') && screenSrc.includes('状态如离线') && screenSrc.includes('missing/未上报'));
+ck('搜索空状态提示也写了 net= 与 agent=', screenSrc.includes('net=12') && screenSrc.includes('agent=2.5'));
+
+// 2026-11-03:搜索也认状态词（找掉线节点）
+const mixed = [
+  { alias: 'A', status: 'offline', node_id: 'n_a' },
+  { alias: 'B', status: 'working', node_id: 'n_b' },
+  { alias: 'C', status: 'error', node_id: 'n_c' },
+] as unknown as Parameters<typeof buildSections>[0];
+ck('搜「离线」只出离线节点', JSON.stringify(buildSections(mixed, '离线').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['A']));
+ck('搜 offline 同样命中', JSON.stringify(buildSections(mixed, 'offline').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['A']));
+ck('状态词不做模糊匹配（on 不会拉出在线列表）', matchesStatus({ status: 'working' }, 'on') === false);
+ck('未知状态不误命中', matchesStatus({ status: 'mystery' }, 'mystery') === false);
+
+// 2026-11-03:搜索也认 runtime（找同类型节点）
+const byRt = [
+  { alias: 'X', runtime: 'opencode-cli', status: 'idle' },
+  { alias: 'Y', runtime: 'codex-cli', status: 'idle' },
+] as unknown as Parameters<typeof buildSections>[0];
+ck('搜 runtime 能筛出同类节点', JSON.stringify(buildSections(byRt, 'codex').flatMap(s2 => s2.data.map(i => i.alias))) === JSON.stringify(['Y']));
+// 2026-11-03:搜索也认「上报没上报模型清单」(诊断行里的 catalog=reported/missing)
+const cat = [
+  { alias: '甲', opencode_catalog: ['a/b'], status: 'idle' },
+  { alias: '乙', status: 'idle' },
+  { alias: '丙', opencode_catalog: [], status: 'idle' },
+];
+// 2026-11-04:搜索认诊断行里的 agent=<版本>（发版后找旧版本节点）
+const vers = [
+  { alias: '甲', version: '2.5.0-preview.164', status: 'idle' },
+  { alias: '乙', version: '2.4.9', status: 'idle' },
+  { alias: '丙', status: 'idle' },
+];
+ck('agent=2.5 只留 2.5.x 节点', JSON.stringify(buildSections(vers, 'agent=2.5').flatMap(x => x.data.map(r => r.alias))) === JSON.stringify(['甲']));
+ck('agent= 匹配前缀（2.4 命中 2.4.9）', JSON.stringify(buildSections(vers, 'agent=2.4').flatMap(x => x.data.map(r => r.alias))) === JSON.stringify(['乙']));
+ck('没版本的节点不参与 agent= 搜索', buildSections(vers, 'agent=2.').flatMap(x => x.data.map(r => r.alias)).sort().join(',') === '乙,甲');
+ck('agent= 空值不算匹配', buildSections(vers, 'agent=').flatMap(x => x.data).length === 0);
+// 2026-11-04:搜索认诊断行里的 net=<network_id>
+const nets = [
+  { alias: '甲', network_id: 12, status: 'idle' },
+  { alias: '乙', network_id: '12', status: 'idle' },
+  { alias: '丙', network_id: 7, status: 'idle' },
+];
+ck('net=12 只留该网络的节点（数字/字符串都认）', JSON.stringify(buildSections(nets, 'net=12').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['乙', '甲']));
+ck('不带前缀的纯数字不当网络查', buildSections(nets, '12').every(x => x.data.length === 0 || x.data.every(r => r.alias !== '丙')));
+ck('net= 空值不算匹配', buildSections(nets, 'net=').flatMap(x => x.data).length === 0);
+ck('搜 missing 只留没上报清单的节点', JSON.stringify(buildSections(cat, 'missing').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['丙', '乙']));
+ck('搜「未上报」等价于 missing', JSON.stringify(buildSections(cat, '未上报').flatMap(x => x.data.map(r => r.alias)).sort()) === JSON.stringify(['丙', '乙']));
+ck('搜「已上报」只留上报了清单的节点', JSON.stringify(buildSections(cat, '已上报').flatMap(x => x.data.map(r => r.alias))) === JSON.stringify(['甲']));
+ck('runtime 也要 3 字符以上', matchesRuntime({ runtime: 'codex-cli' }, 'co', substringMatch) === false);
+
+// 搜索框要有「清空」按钮(2026-11-03)
+ck('搜索框有清空按钮且会清空 query', screenSrc.includes('testID="agents-search-clear"') && screenSrc.includes("onPress={() => setQuery('')}"));
+
+// 宽布局也要在「有查询词」时显示搜索框，否则用户清不掉筛选(2026-11-03)
+ck('宽布局搜索框在 query 非空时仍显示', screenSrc.includes('sessions.length > 10 || query ?'));
+
+// 2026-11-05:诊断行里贴出来的是 model= / runtime= / status= / node_id=,
+// 照着打回搜索框必须能搜到 —— 带前缀就按「已指定字段」处理,值短一点也算数。
+ck('model= 前缀能搜（值短也不拒绝）',
+  matchesModel({ model: 'deepseek/chat' }, 'model=dee', substringMatch) === true
+  && matchesModel({ model: 'deepseek/chat' }, 'model=deepseek/chat', substringMatch) === true);
+ck('model= 前缀仍然只比模型字段',
+  matchesModel({ model: 'openai/gpt' }, 'model=deepseek', substringMatch) === false);
+ck('runtime= 前缀能搜',
+  matchesRuntime({ runtime: 'opencode-cli' }, 'runtime=open', substringMatch) === true
+  && matchesRuntime({ runtime: 'codex-cli' }, 'runtime=open', substringMatch) === false);
+ck('status= 前缀能搜（中英混用）',
+  matchesStatus({ status: 'offline' }, 'status=offline') === true
+  && matchesStatus({ status: 'offline' }, 'status=离线') === true
+  && matchesStatus({ status: 'working' }, 'status=offline') === false);
+ck('node_id= 前缀去掉前缀再比',
+  matchesNodeId({ node_id: 'n_abc123' }, 'node_id=n_abc', substringMatch) === true
+  && matchesNodeId({ node_id: 'n_abc123' }, 'node_id=n_zzz', substringMatch) === false);
+ck('空前缀值不算匹配（别把「搜空」变成「全中」）',
+  matchesModel({ model: 'deepseek/chat' }, 'model=', substringMatch) === false);
+
+// 0.441 起搜索支持 key= 前缀,空结果提示里也要写上,否则没人知道能用
+ck('空结果提示写明支持的前缀写法', screenSrc.includes('model= / runtime= / status= / node_id=')
+  && screenSrc.includes('net=12') && screenSrc.includes('agent=2.5'));
 
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);

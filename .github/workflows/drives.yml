@@ -60,7 +60,9 @@ jobs:
   stub:
     name: stub drives (${{ matrix.shard }}/8)
     needs: export
-    runs-on: ubuntu-latest
+    # 钉 24.04:GitHub 把 ubuntu-latest 推到 26.04 后,Playwright 的 chromium 直接不支持
+    # (ERROR: Playwright does not support chromium on ubuntu26.04-x64),8 个 shard 全红。
+    runs-on: ubuntu-24.04
     timeout-minutes: 25
     strategy:
       fail-fast: false

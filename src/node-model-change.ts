@@ -18,8 +18,8 @@ export interface NodeConfigView {
 export type ModelChangePhase =
   | { kind: 'idle' }
   | { kind: 'submitting'; requested: string }
-  | { kind: 'restarting'; requested: string; baseRevision: number; polls: number }
-  | { kind: 'applied'; model: string }
+  | { kind: 'restarting'; requested: string; baseRevision: number; polls: number; previous?: string | null }
+  | { kind: 'applied'; model: string; previous?: string | null }
   | { kind: 'timeout'; requested: string }
   | { kind: 'conflict' }
   | { kind: 'error'; message: string };
@@ -31,7 +31,9 @@ export const RESTART_TIMEOUT_MS = RESTART_POLL_MS * RESTART_MAX_POLLS;
 
 /** 和向导同一条校验(非空、无空白);opencode 是 provider/model 形态,不再限字符集。 */
 export function validateModelId(raw: string): { ok: true; model: string } | { ok: false; reason: string } {
-  const model = (raw ?? '').trim();
+  // 从文档/聊天里粘过来的常带空格：「deepseek / chat」「deepseek/ chat」。
+  // 只把斜杠两侧的空白吃掉再判,别的空白仍然拒绝(那是真的填错了)。
+  const model = (raw ?? '').trim().replace(/\s*\/\s*/g, '/');
   if (!model) return { ok: false, reason: '模型 id 不能为空' };
   if (/\s/.test(model)) return { ok: false, reason: '模型 id 不能含空白字符' };
   if (model.length > 200) return { ok: false, reason: '模型 id 过长(≤200)' };
@@ -39,8 +41,18 @@ export function validateModelId(raw: string): { ok: true; model: string } | { ok
 }
 
 /** 三态:null = hub 没有这个接口(旧 hub);false = 节点不是在能重启它的启动器下跑的;true = 可改。 */
-export function modelControlAvailability(view: NodeConfigView | null | undefined): { enabled: boolean; hint: string } {
+/**
+ * 切模型能不能点 —— **与「能不能改重启级配置」是两个独立的开关**(通信欧 2026-10-31 实测):
+ *   config_update_capable=false 只表示「这个进程不在会响应 sentinel-75 的 supervisor 下」,
+ *   ⇒ 重启级变更不能下发;但纯 model 在 OpenCode V2 共存节点上是 hot 变更,不重启。
+ *   用一个开关管两件事,会把本来能切模型的节点也灰掉。
+ */
+export function modelControlAvailability(
+  view: NodeConfigView | null | undefined,
+  opts: { hotModel?: boolean } = {},
+): { enabled: boolean; hint: string } {
   if (!view) return { enabled: false, hint: '当前 Hub 未提供节点配置接口(需升级 commhub-server)' };
+  if (opts.hotModel) return { enabled: true, hint: '' };
   if (!view.config_update_capable) {
     return { enabled: false, hint: '此节点不是由 anet 启动器托管的,无法远程改模型。请在它所在机器上执行 anet node edit <name> --model <id> 后重启。' };
   }
@@ -52,8 +64,8 @@ export type SubmitOutcome =
   | { ok: false; conflict: true; error: string }
   | { ok: false; conflict?: false; error: string };
 
-export function afterSubmit(requested: string, baseRevision: number, outcome: SubmitOutcome): ModelChangePhase {
-  if (outcome.ok) return { kind: 'restarting', requested, baseRevision, polls: 0 };
+export function afterSubmit(requested: string, baseRevision: number, outcome: SubmitOutcome, previous?: string | null): ModelChangePhase {
+  if (outcome.ok) return { kind: 'restarting', requested, baseRevision, polls: 0, previous: previous ?? null };
   if (outcome.conflict) return { kind: 'conflict' };
   return { kind: 'error', message: outcome.error };
 }
@@ -65,7 +77,7 @@ export function afterPoll(
   maxPolls: number = RESTART_MAX_POLLS,
 ): ModelChangePhase {
   if (view && view.config_revision > phase.baseRevision && view.model === phase.requested) {
-    return { kind: 'applied', model: phase.requested };
+    return { kind: 'applied', model: phase.requested, previous: phase.previous ?? null };
   }
   const polls = phase.polls + 1;
   if (polls >= maxPolls) return { kind: 'timeout', requested: phase.requested };
@@ -76,7 +88,12 @@ export function phaseText(phase: ModelChangePhase): string {
   switch (phase.kind) {
     case 'idle': return '';
     case 'submitting': return `正在提交模型 ${phase.requested}…`;
-    case 'restarting': return `已下发,节点正在以新模型重启…(已检查 ${phase.polls} 次)`;
+    // 「已检查 N 次」是内部轮询计数,用户读不出意义;换成人等着的那件事:已经等了几秒、最长等几秒。
+    case 'restarting': {
+      const waited = Math.round(phase.polls * RESTART_POLL_MS / 1000);
+      const limit = Math.round(RESTART_MAX_POLLS * RESTART_POLL_MS / 1000);
+      return `已下发,节点正在以新模型重启…已等 ${waited}s / 最长 ${limit}s`;
+    }
     case 'applied': return `已切换到 ${phase.model}`;
     case 'timeout': return `已下发 ${phase.requested},但 ${RESTART_MAX_POLLS * RESTART_POLL_MS / 1000}s 内节点没有以新模型回来。请到它所在机器看日志(anet node logs)。`;
     case 'conflict': return '配置在别处被改过了,已重新加载,请再选一次。';
@@ -119,6 +136,87 @@ export function catalogHint(runtime: string | null | undefined): string | null {
   return null;
 }
 
+/**
+ * 模型 chip 的筛选（admin 2026-10-31:OpenCodeV2 目录可能几十个模型,按 Provider 分组后
+ * 一屏放不下,得能直接敲几个字找）。大小写不敏感的子串匹配,空白查询返回全部;
+ * provider 名和模型名都能命中,因为整条 id 就是 `provider/model`。
+ */
+export function filterModels(models: readonly string[], query: string | null | undefined): string[] {
+  const q = (query ?? '').trim().toLowerCase();
+  if (!q) return [...models];
+  return models.filter((m) => (m ?? '').toLowerCase().includes(q));
+}
+
 export function phaseIsBusy(phase: ModelChangePhase): boolean {
   return phase.kind === 'submitting' || phase.kind === 'restarting';
 }
+
+/** 把 `provider/model` 清单按 provider 分组(admin 2026-10-30:要像 OpenCode 那样按 Provider / 模型两级切换)。
+ *  没有 `/` 的 id 归到「其他」;组内保持原顺序(上游已排过),组间按 provider 名排序,order 稳定才好点。 */
+export function groupModelsByProvider(models: readonly string[]): { provider: string; models: string[] }[] {
+  const map = new Map<string, string[]>();
+  for (const id of models) {
+    const raw = (id ?? '').trim();
+    if (!raw) continue;
+    const slash = raw.indexOf('/');
+    const provider = slash > 0 ? raw.slice(0, slash) : '其他';
+    const bucket = map.get(provider);
+    if (bucket) bucket.push(raw);
+    else map.set(provider, [raw]);
+  }
+  return [...map.entries()]
+    .map(([provider, list]) => ({ provider, models: list }))
+    .sort((a, b) => (a.provider === '其他' ? 1 : b.provider === '其他' ? -1 : a.provider.localeCompare(b.provider)));
+}
+
+/**
+ * 把「当前模型所在 Provider」的分组提到最前（2026-11-03）。
+ * 切模型时绝大多数动作是「在同一个 Provider 里换一个」,但分组按字母排,
+ * deepseek 的用户要先滑过 anthropic/google/openai 才看到自己那一组。
+ * 只移动组、不改组内顺序;当前模型没有 provider 前缀时原样返回。
+ */
+export function orderGroupsByCurrent<T extends { provider: string }>(
+  groups: readonly T[],
+  currentModel: string | null | undefined,
+): T[] {
+  const cur = (currentModel ?? '').trim();
+  const slash = cur.indexOf('/');
+  if (slash <= 0) return [...groups];
+  const provider = cur.slice(0, slash);
+  const idx = groups.findIndex(g => g.provider === provider);
+  if (idx <= 0) return [...groups];
+  return [groups[idx], ...groups.slice(0, idx), ...groups.slice(idx + 1)];
+}
+
+/**
+ * 分组标题的计数后缀与一行总览（admin 2026-10-31:按 Provider 分组后,
+ * 「这个 provider 到底给了几个模型」和「一共多少」光看 chip 数不出来,尤其开了筛选之后)。
+ * 分组标题用 `provider · N`;总览 `共 N 个模型 · M 个 Provider`,空列表不出总览。
+ */
+export function groupCountLabel(group: { provider: string; models: readonly string[] }): string {
+  return `${group.provider} · ${group.models.length}`;
+}
+
+/**
+ * 分组标题的「当前」后缀（2026-11-03）：置顶把当前 Provider 放到最前，
+ * 但置顶是视觉顺序，用户未必知道哪一组是自己正在用的。标题上标一句就行。
+ */
+export function groupCountLabelFor(
+  group: { provider: string; models: readonly string[] },
+  currentModel: string | null | undefined,
+): string {
+  const base = groupCountLabel(group);
+  const cur = (currentModel ?? '').trim();
+  const slash = cur.indexOf('/');
+  if (slash <= 0) return base;
+  return cur.slice(0, slash) === group.provider ? `${base} · 当前` : base;
+}
+
+export function providerGroupSummary(groups: readonly { provider: string; models: readonly string[] }[]): string | null {
+  if (groups.length === 0) return null;
+  const models = groups.reduce((n, g) => n + g.models.length, 0);
+  return `共 ${models} 个模型 · ${groups.length} 个 Provider`;
+}
+
+/** 重启级变更(flags 等)单独一个开关:必须有能在 sentinel-75 之后把它拉起来的 supervisor。 */
+export const canEditRestartTier = (view: NodeConfigView | null | undefined): boolean => !!view?.config_update_capable;

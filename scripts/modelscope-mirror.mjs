@@ -225,12 +225,20 @@ const fileSha256 = (path) => new Promise((done, fail) => {
   createReadStream(path).on('error', fail).on('data', (chunk) => hash.update(chunk)).on('end', () => done(hash.digest('hex')));
 });
 
+const BOOLEAN_FLAGS = new Set(['--assume-newest', '--dry-run']);
+
 function parseArgs(argv) {
   const args = { command: argv[0] };
-  for (let index = 1; index < argv.length; index += 2) {
+  for (let index = 1; index < argv.length; index += 1) {
     const key = argv[index];
-    if (!key?.startsWith('--') || argv[index + 1] === undefined) throw new Error(`bad argument near ${key}`);
+    if (!key?.startsWith('--')) throw new Error(`bad argument near ${key}`);
+    // 布尔开关(--assume-newest / --dry-run)不带值,别把下一个 token 当值吃掉。
+    if (BOOLEAN_FLAGS.has(key) || argv[index + 1] === undefined || argv[index + 1]?.startsWith('--')) {
+      args[key.slice(2)] = true;
+      continue;
+    }
     args[key.slice(2)] = argv[index + 1];
+    index += 1;
   }
   return args;
 }
@@ -243,8 +251,24 @@ async function prepare(args) {
   const waitApkMinutes = Number(args['wait-apk-minutes'] || 0);
   if (!args.out) throw new Error('--out is required');
 
-  const releases = await githubApi(repository, 'releases?per_page=100');
-  const newest = selectNewestDesktopRelease(releases);
+  // GitHub 的分页 releases 列表偶尔返回空数组(2026-10-27 实测 3 次里 1 次 len=0)。
+  // 空响应会让 selectNewestDesktopRelease 得到 null ⇒ isNewest=false ⇒ 只传版本目录、
+  // 不动 desktop/latest/VERSION,线上就一直停在上一版。空了就重试。
+  // --assume-newest:调用方声明「这个 tag 就是最新版」,跳过 releases 列表。
+  // 为什么需要:2026-10-27 GitHub 的 releases 列表对 Actions token 连续返回空数组(5/5),
+  // 镜像因此一直判 isNewest=false,desktop/latest/VERSION 卡在上一版。发布脚本知道自己是发最新版,
+  // 这个断言比"再猜一次空列表"可靠。
+  const assumeNewest = args['assume-newest'] === true || args['assume-newest'] === 'true';
+  let releases = [];
+  if (!assumeNewest) {
+    for (let attempt = 0; attempt < 5; attempt += 1) {
+      releases = await githubApi(repository, 'releases?per_page=50');
+      if (Array.isArray(releases) && releases.length > 0) break;
+      console.log(`releases listing came back empty (attempt ${attempt + 1}) — retrying`);
+      await sleepMs(10_000);
+    }
+  }
+  const newest = assumeNewest ? null : selectNewestDesktopRelease(releases);
   const tag = args.tag || newest?.tag_name;
   if (!tag) throw new Error('no published desktop-v* release with latest.json found');
   if (!parseDesktopTag(tag)) throw new Error(`not a desktop release tag: ${tag}`);
@@ -275,7 +299,7 @@ async function prepare(args) {
   if (release.draft) throw new Error(`${tag} is a draft`);
 
   const version = parseDesktopTag(tag).text;
-  const isNewest = newest?.tag_name === tag;
+  const isNewest = assumeNewest ? true : newest?.tag_name === tag;
   const manifestAsset = release.assets.find((asset) => asset.name === 'latest.json');
   if (!manifestAsset) throw new Error(`${tag} has no latest.json`);
 

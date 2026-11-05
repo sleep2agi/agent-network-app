@@ -1,5 +1,8 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, modelChips, catalogHint, modelNotOnMachineNote } from './node-model-change';
+import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary,
+  orderGroupsByCurrent,
+  groupCountLabelFor,
+} from './node-model-change';
 import { RUNTIME_MODEL_SUGGESTIONS, suggestedModels } from './runtime-catalog';
 
 let passed = 0, total = 0;
@@ -74,5 +77,95 @@ check('a model the machine does not report gets a warning', (modelNotOnMachineNo
 check('a model the machine reports gets no warning', modelNotOnMachineNote('grok-4.6', ['grok-4.6', 'grok-4.5']) === null);
 check('no catalog or no model → no warning', modelNotOnMachineNote('grok-4.7', []) === null && modelNotOnMachineNote(null, ['a/b']) === null && modelNotOnMachineNote('   ', ['a/b']) === null);
 check('section shows the not-on-machine warning', section.includes('modelNotOnMachineNote('));
+// 模型筛选(admin 2026-10-31:几十个模型一屏放不下,要能敲几个字找)
+const catalogBig = ['opencode/go-a', 'opencode/go-b', 'anthropic/claude-x', 'openai/gpt-y'];
+check('空查询返回全部模型', JSON.stringify(filterModels(catalogBig, '')) === JSON.stringify(catalogBig));
+check('只有空格也当空查询', filterModels(catalogBig, '   ').length === 4);
+check('按模型名子串筛选,大小写不敏感', JSON.stringify(filterModels(catalogBig, 'CLAUDE')) === JSON.stringify(['anthropic/claude-x']));
+check('按 provider 名也能筛选', JSON.stringify(filterModels(catalogBig, 'opencode/')) === JSON.stringify(['opencode/go-a', 'opencode/go-b']));
+check('没有匹配时返回空数组(界面给提示)', filterModels(catalogBig, 'zzz').length === 0);
+check('筛选结果保持原顺序', JSON.stringify(filterModels(catalogBig, 'o')) === JSON.stringify(['opencode/go-a', 'opencode/go-b', 'anthropic/claude-x', 'openai/gpt-y']));
+check('section 用 filterModels 渲染而不是直接摊开 chips', section.includes('filterModels(chips, filter)'));
+check('section 有清除按钮与空结果提示', section.includes('node-model-filter-clear') && section.includes('node-model-filter-empty'));
+// 分组计数与总览(2026-10-31:开了筛选之后「有几个」看不出来)
+check('分组标题带数量', groupCountLabel({ provider: 'opencode', models: ['opencode/a', 'opencode/b'] }) === 'opencode · 2');
+check('总览给出模型数与 Provider 数', providerGroupSummary([{ provider: 'a', models: ['a/1'] }, { provider: 'b', models: ['b/1', 'b/2'] }]) === '共 3 个模型 · 2 个 Provider');
+check('没有模型时不出总览', providerGroupSummary([]) === null);
+check('section 用 groupCountLabelFor 与总览渲染', section.includes('groupCountLabelFor(g, currentModel)') && section.includes('node-model-group-summary'));
+// 2026-11-01 admin 截图:机器没上报模型清单时「建议」只剩「当前」一个 chip,点下去输入框还是空的
+check('V2 目录为空时退回兄弟/内置候选(而不是只剩当前模型)', section.includes('v2 && v2Catalog.length > 0') && section.includes('suggestedModels(node.runtime)'));
+check('退回内置候选时给出说明', section.includes('这台机器还没上报模型清单'));
+check('点选 chip 后输入框显示所选模型', section.includes('value={custom.trim() ? custom : picked}'));
+check('手输会清掉 chip 选中态', section.includes('setCustom(text); if (picked) setPicked(\'\')'));
+check('opencode-cli 的内置候选不是空列表', suggestedModels('opencode-cli').length > 0);
+// 读不到的目录要能手动再敲一次(2026-11-01:admin 那台机器目录一直没上报,只能退出重进)
+check('退回内置候选时给「重新读取模型列表」入口', section.includes('node-model-catalog-retry') && section.includes('重新读取模型列表'));
+check('重试入口是可点的按钮样式（不是一行小字）', section.includes('<Pressable testID="node-model-catalog-retry"') && section.includes('borderColor: colors.accent'));
+check('重新读取靠计数触发 effect', section.includes('catalogAttempt') && section.includes('catalogAttempt]'));
+// 2026-11-01:本机没上报时,用同 runtime 兄弟节点的候选,而不是只有内置两个
+check('复制诊断带上模型清单状态（reported/missing）', (() => { const d = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8'); return d.includes('catalog=reported(') && d.includes("'catalog=missing'"); })());
+check('复制诊断带上当前模型', (() => { const d = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8'); return d.includes('model=${node.model}'); })());
+check('复制诊断带上 agent-node 版本（.160 门槛这类判断要用）', (() => { const d = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8'); return d.includes('agent=${s.version}'); })());
+check('section 用 peerCatalogSources 兜底并记住台数', section.includes('peerCatalogSources(') && section.includes('setPeerNodes('));
+check('提示里写明有几台节点报了候选', section.includes('其他 ${peers.nodes} 台节点报过的模型'));
+check('兄弟候选要提示「本机未必装了同一个 Provider」', section.includes('本机未必装了同一个 Provider'));
+check('退回兄弟候选时提示来源', section.includes('同 runtime 其他节点'));
+check('有兄弟候选时不再显示内置候选说明', section.includes('usingPeerFallback'));
+// RN 的 Text 不解析 markdown:提示文案里带 ** 会原样显示成星号(0.384 手滑过一次)
+const uiStrings = section.split('\n').filter((l) => l.includes("setV2Note(\`") || l.includes('>{hint}<'));
+check('面向用户的提示里没有 markdown 星号', !uiStrings.some((l) => l.includes('**')));
+// 「已检查 N 次」用户读不出意义 → 改成等了几秒 / 最长几秒
+check('重启中的提示是秒数而不是轮询计数', (() => { const t = phaseText({ kind: 'restarting', requested: 'a/b', baseRevision: 1, polls: 5 }); const waited = Math.round(5 * RESTART_POLL_MS / 1000); const limit = Math.round(RESTART_MAX_POLLS * RESTART_POLL_MS / 1000); return t.includes(`已等 ${waited}s`) && t.includes(`最长 ${limit}s`) && !t.includes('次)'); })());
+// 一行说清「本机报没报模型清单」
+check('读不到清单时自动再试一次（仅一次，20 秒）', section.includes('autoRetried.current') && section.includes('20000') && section.includes('setCatalogAttempt((n) => n + 1)'));
+check('切节点时重置自动重试标记（否则新节点永不自动重试）', section.includes('autoRetried.current = false') && section.includes('}, [node.node_id])'));
+check('卸载时清掉自动重试定时器', section.includes('if (retryTimer) clearTimeout(retryTimer)'));
+check('当前 Provider 的分组标题带「当前」标记', (() => {
+  const g = { provider: 'deepseek', models: ['deepseek/a', 'deepseek/b'] };
+  return groupCountLabelFor(g, 'deepseek/a') === 'deepseek · 2 · 当前'
+    && groupCountLabelFor(g, 'openai/gpt') === 'deepseek · 2'
+    && groupCountLabelFor(g, 'no-slash') === 'deepseek · 2';
+})());
+check('模型区给诊断字段说明（gen/mode/catalog/agent/net/client）', section.includes('node-model-diag-legend') && section.includes('gen=代际') && section.includes('mode=共存/单飞') && section.includes('net=网络'));
+check('opencode 系但代际未声明时给出提示（统一走 generationOf）', section.includes('node-model-gen-unset') && section.includes('generationUnset') && section.includes('generationOf(node)'));
+check('选中但尚未生效的 chip 有可见标记 + a11y selected', section.includes("active ? ' ✓' : ''") && section.includes('accessibilityState={{ selected: active }}'));
+check('点「当前」复制后给可见反馈（不然不知道复制没复制）',
+  section.includes('setCurrentCopied(true)') && section.includes("currentCopied ? '（已复制）' : ''")
+  && section.includes('setTimeout(() => setCurrentCopied(false), 1600)'));
+check('生效后记住上一模型并给「切回」入口', (() => {
+  const submitted = afterSubmit('deepseek/next', 5, { ok: true }, 'deepseek/old');
+  if (submitted.kind !== 'restarting') return false;
+  const applied = afterPoll(submitted, { config_revision: 6, model: 'deepseek/next' } as any);
+  return applied.kind === 'applied' && applied.previous === 'deepseek/old' && section.includes('node-model-revert');
+})());
+check('切换生效后清空筛选（避免下次进来看不到新模型）', section.includes("if (next.kind === 'applied') setFilter('')"));
+check('失败时给「再试一次」且先校验候选', section.includes('node-model-retry-error') && section.includes('validateModelId(candidate).ok') && section.includes('void submit()'));
+check('超时后给出「再下发一次」且复用 applyModel', section.includes('node-model-retry-timeout') && section.includes('applyModel(phase.requested)') && section.includes('const applyModel = async'));
+check('斜杠两侧的空白被吃掉（粘贴场景）', (() => {
+  const a = validateModelId('deepseek / chat');
+  const b = validateModelId(' deepseek/ chat ');
+  const c = validateModelId('deep seek/chat');
+  return a.ok && a.model === 'deepseek/chat' && b.ok && b.model === 'deepseek/chat' && !c.ok;
+})());
+check('当前模型所在 Provider 组排最前', (() => {
+  const gs = [
+    { provider: 'anthropic', models: ['anthropic/a'] },
+    { provider: 'deepseek', models: ['deepseek/chat', 'deepseek/reasoner'] },
+    { provider: 'openai', models: ['openai/gpt'] },
+  ];
+  const out = orderGroupsByCurrent(gs, 'deepseek/chat');
+  return out.map(g => g.provider).join(',') === 'deepseek,anthropic,openai' && out[0].models.length === 2;
+})());
+check('当前模型没有 provider 前缀时分组顺序不变', (() => {
+  const gs = [{ provider: 'a', models: [] }, { provider: 'b', models: [] }];
+  return orderGroupsByCurrent(gs, 'plain-model').map(g => g.provider).join(',') === 'a,b'
+    && orderGroupsByCurrent(gs, null).map(g => g.provider).join(',') === 'a,b';
+})());
+check('退回内置候选时手输框 placeholder 带当前 Provider', section.includes('inputPlaceholder') && section.includes('如 ${providerPrefix}/<模型名>'));
+check('退回内置候选时提示当前 Provider 前缀', section.includes('node-model-provider-hint') && section.includes('可在下面手输'));
+check('非 V2 节点说明「不上报清单，由本机配置决定」', section.includes('node-model-catalog-na') && section.includes('不上报模型清单'));
+check('未上报时状态行指路「下方按钮可重试」', section.includes('下方按钮可立刻重试'));
+check('section 显示模型清单状态行', section.includes('node-model-catalog-status') && section.includes('catalogStatusLine(v2Catalog.length, runtimeVersion)'));
+check('点状态行会复制（含 node_id/runtime）', section.includes('setStringAsync(line)') && section.includes('node_id=${node.node_id}'));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

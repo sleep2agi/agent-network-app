@@ -238,9 +238,11 @@ function FilesBrowser({ cfg, target, treeMode, session }: { cfg: HubConfig; targ
         );
       })}
       {open ? (
-        <View style={{ flexDirection: 'row', alignItems: 'center' }}>
-          <Text style={{ color: colors.textMuted, fontSize: 13, marginHorizontal: 4 }}>/</Text>
-          <Text numberOfLines={1} style={{ fontSize: 13, fontFamily: MONO, color: colors.text, fontWeight: '600' }}>{open.name}</Text>
+        // 长文件名 / 长路径不能把自己顶出容器(admin 2026-10-27 截图:路径贴到右边缘只剩「AGENTS.m…」)。
+        // 行本身 minWidth:0 + 文本 flexShrink:1 → 超出时按容器截断并省略,而不是溢出。
+        <View style={{ flexDirection: 'row', alignItems: 'center', minWidth: 0, maxWidth: '100%' }}>
+          <Text style={{ color: colors.textMuted, fontSize: 13, marginHorizontal: 4, flexShrink: 0 }}>/</Text>
+          <Text numberOfLines={1} ellipsizeMode="middle" style={{ fontSize: 13, fontFamily: MONO, color: colors.text, fontWeight: '600', flexShrink: 1, minWidth: 0 }}>{open.name}</Text>
         </View>
       ) : null}
     </View>

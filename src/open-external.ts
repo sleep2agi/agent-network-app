@@ -45,7 +45,15 @@ function realDeps(): OpenExternalDeps {
     os: typeof g.document !== 'undefined' ? 'web' : 'native',
     tauriOpen: async url => { const { openUrl } = await import('@tauri-apps/plugin-opener'); return openUrl(url); },
     windowOpen: typeof g.open === 'function' ? (url, target, features) => g.open!(url, target, features) : null,
-    linkingOpen: async url => { const { Linking } = await import('react-native'); return Linking.openURL(url); },
+    linkingOpen: async url => {
+      const { Linking } = await import('react-native');
+      // iOS 上「点链接就崩」的防呆(admin 2026-10-31 截图:AI 军团已崩溃):
+      // 先问系统能不能开,再开;能用 canOpenURL 挡住的情况就别把异常甩到原生层。
+      // canOpenURL 本身失败(权限/未实现)时按「能开」处理,保持旧行为。
+      const can = await Linking.canOpenURL(url).catch(() => true);
+      if (can === false) throw new Error(`cannot open ${url.slice(0, 40)}`);
+      return Linking.openURL(url);
+    },
   };
 }
 

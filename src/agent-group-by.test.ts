@@ -5,6 +5,7 @@ import { buildAgentDirectory, type DirectoryNode } from './agent-directory';
 import type { AgentOrgData } from './agent-org-model';
 import { buildSections, countShown } from './agents-list';
 import { departmentIndex, GROUP_BY_OPTIONS, groupMapOf, hostGroup, parseGroupBy, registrationIndex, runtimeGroup, statusGroup } from './agent-group-by';
+import { pinyinMatch } from './lib/pinyin';
 
 let passed = 0;
 const check = (name: string, run: () => void) => { run(); passed++; console.log(`PASS: ${name}`); };
@@ -84,6 +85,17 @@ check('pins and unread move rows instead of duplicating them when changing group
     assert.equal(sections.flatMap(section => section.data).filter(row => row.alias === '通信乙').length, 1);
   }
 });
+check('department search survives switching views and does not match other rows', () => {
+  for (const by of GROUP_BY_OPTIONS) {
+    const groups = groupMapOf(light, by, registrations, departments);
+    const sections = buildSections(light, 'TMWork', {
+      match: pinyinMatch,
+      matchSession: (row, query) => pinyinMatch(labels.get(row) ?? '', query),
+      teamOf: (_alias, row) => groups.get(row),
+    });
+    assert.deepEqual(sections.flatMap(section => section.data.map(row => row.alias)), ['通信甲']);
+  }
+});
 check('loading, stale and failed directory never claim unregistered', () => {
   for (const patch of [{ loaded: false }, { stale: true }, { nodesRead: 'unavailable' }, { sessionsRead: 'incomplete' }]) {
     const index = registrationIndex({ ...directory(nodes, full), ...patch });
@@ -107,6 +119,11 @@ check('same alias in different networks stays separate; same network duplicates 
   const grouped = groupMapOf([a, b], 'dept', dir, departments);
   assert.equal(grouped.get(a), 'TMWork');
   assert.equal(grouped.get(b), '归属待确认');
+  const search = buildSections([a, b], 'TMWork', {
+    matchSession: (row, query) => pinyinMatch(grouped.get(row) ?? '', query),
+    teamOf: (_alias, row) => grouped.get(row),
+  });
+  assert.deepEqual(search.flatMap(section => section.data), [a]);
   const dup = s('same', 'N');
   assert.equal(groupMapOf([a, dup], 'dept', dir, departments).get(a), '关联待确认');
   const duplicateFull = registrationIndex(directory([n('same', 'N', 'n1')], [fs[0], fs[0]]));
@@ -130,6 +147,8 @@ check('screen wires every grouping mode to session-keyed labels', () => {
   assert.ok(!screen.includes("groupBy === 'dept' ? deptByAlias"));
   assert.ok(screen.includes('loadAgentOrg(cfg, cfg.networkId)'));
   assert.ok(!screen.includes('fetchDepartmentNodes('));
+  assert.ok(screen.includes("groupMapOf(visibleSessions, 'dept', registrations"));
+  assert.ok(screen.includes('matchSession: (session, q) => pinyinMatch(departmentLabels.get(session)'));
 });
 
 console.log(`${passed}/${passed} passed`);

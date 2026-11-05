@@ -78,6 +78,29 @@ export function newestGithubBody(list: unknown): { version: string; body: string
  * ISO 时间 → 「2026-09-30」。按本机时区(`offsetMinutes` 同 Date#getTimezoneOffset 的符号:东八区 = -480),
  * 测试里显式传,CI 在 UTC 也算得一样。认不出 → ''。
  */
+/** 「回滚该装哪一版」（2026-11-04）：关于页有「下载历史版本」入口，但用户不知道自己该退到哪一版。
+ *  versions 按**新→旧**排列（changelog 的来源就是这个顺序）；找到当前版本的下一条即为上一版。
+ *  找不到当前版本（本地改过版本号/夹在中间）就返回 null，不猜。 */
+export function rollbackTarget(versions: readonly string[], current: string): string | null {
+  const cur = (current ?? '').trim();
+  if (!cur) return null;
+  const idx = versions.findIndex(v => (v ?? '').trim() === cur);
+  if (idx < 0) return null;
+  const next = (versions[idx + 1] ?? '').trim();
+  return next && next !== cur ? next : null;
+}
+
+/** 全部 release 列表（算不出回滚目标时的兜底）。 */
+export const RELEASES_URL = 'https://github.com/sleep2agi/agent-network-app/releases';
+
+/** 「下载历史版本」点进去落到哪一页（2026-11-04）：既然副标题已经告诉用户「建议回滚到 vX」,
+ *  链接就该直接是那一版的资产,别让他再在几十个 release 里翻。v 前缀/空值/非法版本都不猜,退回列表页。 */
+export function rollbackReleaseUrl(target: string | null | undefined): string {
+  const v = (target ?? '').trim().replace(/^v/i, '');
+  if (!/^\d+\.\d+\.\d+$/.test(v)) return RELEASES_URL;
+  return `${RELEASES_URL}/tag/desktop-v${v}`;
+}
+
 export function releaseDateLabel(iso: string | undefined, offsetMinutes: number = new Date().getTimezoneOffset()): string {
   const t = iso ? Date.parse(iso) : NaN;
   if (Number.isNaN(t)) return '';

@@ -32,6 +32,142 @@ export type AgentSection = {
 
 /** 匹配器:默认按子串匹配;调用方可注入拼音匹配器替换它。 */
 export type Matcher = (text: string, filter: string) => boolean;
+/** 取出 `key=值` 写法的值(2026-11-05):诊断行里贴出去的是 `model=` / `runtime=` / `status=` /
+ *  `node_id=`,拿回搜索框里照着打却搜不到自己那一行。带前缀时按「用户已经明确指定字段」处理:
+ *  值可以短(不做 3 字下限),但空值仍然不匹配。 */
+function prefixedValue(query: string, key: string): string | null {
+  const m = new RegExp(`^${key}=(.+)$`, 'i').exec(query.trim());
+  return m ? m[1].trim() : null;
+}
+
+/**
+ * 搜索命中 runtime 的判定（2026-11-03）：运维常问「哪些是 codex、哪些是 opencode」。
+ * 与模型一致，1–2 个字符不参与（"op" 会把所有 opencode 都带出来，噪声太大）。
+ */
+export function matchesRuntime(
+  session: { runtime?: string | null },
+  query: string,
+  match: Matcher,
+): boolean {
+  const tagged = prefixedValue(query, 'runtime');
+  const q = tagged ?? query.trim();
+  if (!tagged && q.length < 3) return false;
+  if (!q) return false;
+  const rt = (session.runtime ?? '').trim();
+  if (!rt) return false;
+  return match(rt, q);
+}
+
+/**
+ * 搜索命中「状态」的判定（2026-11-03）：运维最常找的是「哪些节点掉线了」。
+ * 只认明确的状态词（中英文都收），不做模糊匹配 —— 否则搜 "on" 会把所有在线节点都拉出来。
+ */
+const STATUS_TOKENS: Record<string, string[]> = {
+  offline: ['offline', '离线', '掉线', '不在线'],
+  working: ['working', '工作', '在跑', '运行中'],
+  idle: ['idle', '空闲', '闲置'],
+  error: ['error', '错误', '失败', '异常'],
+  waiting: ['waiting', '等待', '待答'],
+  blocked: ['blocked', '受阻'],
+};
+
+export function matchesStatus(session: { status?: string | null }, query: string): boolean {
+  const q = (prefixedValue(query ?? '', 'status') ?? query ?? '').trim().toLowerCase();
+  if (!q) return false;
+  const status = (session.status ?? '').trim().toLowerCase();
+  if (!status) return false;
+  const words = STATUS_TOKENS[status];
+  if (!words) return false;
+  return words.some((w) => w.toLowerCase() === q);
+}
+
+/**
+ * 搜索命中「agent 版本」的判定（2026-11-04）：发版后常要问「还有谁在旧版本上」。
+ * 诊断行里报的是 `agent=<version>`，搜索认同一个写法：`agent=2.4.` 命中所有 2.4.x。
+ * 必须带前缀，且比较用前缀匹配（版本号太长，用户一般只记得前几位）。
+ */
+export function matchesAgentVersion(
+  session: { version?: string | null },
+  query: string,
+): boolean {
+  const q = (query ?? '').trim();
+  const m = /^agent=(.+)$/i.exec(q);
+  if (!m) return false;
+  const want = m[1].trim().toLowerCase();
+  if (!want) return false;
+  const ver = (session.version ?? '').trim().toLowerCase();
+  return ver.length > 0 && ver.includes(want);
+}
+
+/**
+ * 搜索命中「网络」的判定（2026-11-04）：多网络用户手里同一批节点分属不同网络，
+ * 诊断行里已经带 `net=`，那就让搜索也认同一个写法——`net=12` 只留那个网络的节点。
+ * 必须带前缀：纯数字会误命中名称/模型里的数字。
+ */
+export function matchesNetwork(
+  session: { network_id?: string | null },
+  query: string,
+): boolean {
+  const q = (query ?? '').trim();
+  const m = /^net=(.+)$/i.exec(q);
+  if (!m) return false;
+  const want = m[1].trim();
+  if (!want) return false;
+  const net = session.network_id == null ? '' : String(session.network_id);
+  return net === want;
+}
+
+/**
+ * 搜索命中「有没有上报模型清单」的判定（2026-11-03）：诊断行里会出现
+ * `catalog=reported(N)` / `catalog=missing`，运维想反过来找出「谁没上报」，
+ * 只能靠人肉逐条看。这里让 missing / 未上报 / 缺清单 这类词直接筛出它们。
+ */
+const CATALOG_MISSING_WORDS = ['missing', '未上报', '没上报', '缺清单', '没有清单'];
+const CATALOG_REPORTED_WORDS = ['reported', '已上报', '有清单'];
+
+export function matchesCatalog(
+  session: { opencode_catalog?: readonly string[] | null },
+  query: string,
+): boolean {
+  const q = (query ?? '').trim().toLowerCase();
+  if (!q) return false;
+  const reported = Array.isArray(session.opencode_catalog) && session.opencode_catalog.length > 0;
+  if (CATALOG_MISSING_WORDS.includes(q)) return !reported;
+  if (CATALOG_REPORTED_WORDS.includes(q)) return reported;
+  return false;
+}
+
+/**
+ * 搜索命中「当前模型」的判定（2026-11-02）：多节点运维时，常见需求是「谁在跑 deepseek」。
+ * 只对有意义的查询生效 —— 1-2 个字符会命中一大片模型名，反而把别名搜索搞乱。
+ */
+export function matchesModel(
+  session: { model?: string | null },
+  query: string,
+  match: Matcher,
+): boolean {
+  const tagged = prefixedValue(query, 'model');
+  const q = tagged ?? query.trim();
+  if (!tagged && q.length < 3) return false;
+  if (!q) return false;
+  const model = (session.model ?? '').trim();
+  if (!model) return false;
+  return match(model, q);
+}
+
+/** 搜索命中 node_id 的判定:缺字段/空串一律不匹配,避免把「搜空」变成「全中」。 */
+export function matchesNodeId(
+  session: { node_id?: string | null },
+  query: string,
+  match: Matcher,
+): boolean {
+  const id = (session.node_id ?? '').trim();
+  // `node_id=n_xxx`(复制诊断行的原样写法)也要能搜:带前缀时把前缀去掉再比。
+  const q = prefixedValue(query, 'node_id') ?? query.trim();
+  if (!id || !q) return false;
+  return match(id, q);
+}
+
 export const substringMatch: Matcher = (text, filter) =>
   text.toLowerCase().includes(filter.toLowerCase());
 
@@ -142,14 +278,18 @@ export function holdWhileActive<T>(prev: T | null, live: T, active: boolean): T 
 export function buildSections(
   sessions: Session[],
   query: string,
-  opts: { match?: Matcher; sort?: SortContext; unread?: UnreadContext
+  opts: { match?: Matcher; matchSession?: (session: Session, query: string) => boolean; sort?: SortContext; unread?: UnreadContext
     /** 自定义分组标题；未提供标题时保留旧的别名前缀分组。
      *  要求严格部门归属的调用方须对无法确认的行返回明确的占位标题。 */
     teamOf?: (alias: string, session: Session) => string | undefined } = {},
 ): AgentSection[] {
   const q = query.trim();
   const match = opts.match ?? substringMatch;
-  const filtered = q ? sessions.filter(s => match(s.alias, q)) : sessions.slice();
+  // 搜索除了别名,也认 node_id(2026-11-02):「复制节点诊断」给出的就是 `node_id=n_xxx`,
+  // 拿到那串只能靠别名回忆是谁。命中 node_id 也算匹配,空/缺字段不参与。
+  const filtered = q
+    ? sessions.filter(s => match(s.alias, q) || opts.matchSession?.(s, q) || matchesNodeId(s, q, match) || matchesModel(s, q, match) || matchesRuntime(s, q, match) || matchesStatus(s, q) || matchesCatalog(s as { opencode_catalog?: readonly string[] | null }, q) || matchesNetwork(s, q) || matchesAgentVersion(s, q))
+    : sessions.slice();
   // 「新消息」组:有未读的会话整体上浮到最顶(在「置顶」之上),**搬走**而不是复制;
   // 读完(未读→0)下一次计算时自然回到原来的组。搜索时不浮动,保持搜索结果原有的顺序。
   const floating = !q && opts.unread ? filtered.filter(s => opts.unread!.count(s.alias) > 0) : [];
@@ -179,6 +319,8 @@ export function buildSections(
     })
     .sort(
       (a, b) =>
+        // 「未归属」永远排最后:它不是部门,是待整理的那一堆(admin 2026-10-26 按部门分区之后)。
+        (a.title === '未归属' ? 1 : 0) - (b.title === '未归属' ? 1 : 0) ||
         (b.online > 0 ? 1 : 0) - (a.online > 0 ? 1 : 0) ||
         b.online - a.online ||
         a.title.localeCompare(b.title),

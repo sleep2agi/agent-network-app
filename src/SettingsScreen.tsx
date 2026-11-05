@@ -1,4 +1,6 @@
+import * as Clipboard from 'expo-clipboard';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
+import { diagnosticsLine } from './diagnostics-copy';
 import { maskedHubHost } from './mask-hub-address';
 import { t as tr } from './i18n';
 import './i18n-fatal';
@@ -6,6 +8,21 @@ import { fatalSummary } from './fatal-report';
 import { copyLastFatal, useLastFatalReport } from './use-last-fatal';
 import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
+import { openExternal } from './open-external';
+
+/** 关于页版本行右边的平台短名:用户截图报问题时,一眼能看出装的是哪个端
+ *  (微信里只发「v0.2.391」看不出是 iOS 还是安卓)。未知平台原样返回,不猜。 */
+export function platformShortLabel(os: string): string {
+  switch (os) {
+    case 'ios': return 'iOS';
+    case 'android': return 'Android';
+    case 'macos': return 'macOS';
+    case 'windows': return 'Windows';
+    case 'linux': return 'Linux';
+    case 'web': return 'Web';
+    default: return os;
+  }
+}
 import { localizedThemeSummary } from './i18n-settings-presentation';
 import { Children, useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
 import { ActivityIndicator, AppState, BackHandler, Linking, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
@@ -19,6 +36,8 @@ import { accountMenuItems, accountRowActions, type AccountMenuItem, type Account
 import { pointerUi } from './pointer-ui';
 import './i18n-accounts';
 import { THEME_PREFERENCES, THEME_PREFERENCE_LABEL, colors, onThemeChange, onThemePreferenceChange, setThemePreference, spacing, themeMode, themePreference, themePreferenceSummary, type ThemePreference, radius } from './theme';
+import { BUNDLED_RELEASE_BODY } from './changelog-bundled';
+import { entriesFromBody, rollbackReleaseUrl, rollbackTarget } from './changelog-model';
 import { APP_VERSION } from './version';
 import { BrandMark } from './brand-mark';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
@@ -52,6 +71,8 @@ import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
 import AgentOrgScreen from './AgentOrgScreen';
+import Legion3DView from './legion3d-view';
+import { loadLegion3DOpen, saveLegion3DOpen } from './agent-list-prefs';
 import { ManageDepartmentPhone } from './ManageDepartment';
 import { managedDepartmentIds } from './org-model';
 import { canManageUsers, type AuthMe } from './user-admin';
@@ -94,6 +115,16 @@ interface Me {
   networkName?: string;
   networkId?: string;
 }
+
+// 「回滚该装哪一版」：从内置更新日志（新→旧）算出当前版本的下一条。算不出来就是 undefined。
+const ROLLBACK_TARGET = (() => {
+  try {
+    const versions = entriesFromBody(BUNDLED_RELEASE_BODY).map(e => e.version);
+    return rollbackTarget(versions, APP_VERSION);
+  } catch {
+    return null;
+  }
+})();
 
 export default function SettingsScreen({
   cfg,
@@ -174,6 +205,15 @@ export default function SettingsScreen({
   // 起服务是异步的(onStartCommand 稍后才跑):开关拨动后 1.5 s 再读一次真实状态。
   const [, bumpKeepAlive] = useState(0);
   const [guideVisible, setGuideVisible] = useState(!!notifyPreview?.guideOpen);
+  // 军团 3D 预览:默认收起,点了才去读组织架构(不给每次进设置都加一次请求)。
+  // 展开状态持久化 —— 每次进设置都被收起,用户会以为这功能没了。
+  // 默认展开(功能已经不只是预览);存过的选择优先 —— 老用户没存过时不会被当成「选过收起」。
+  const [showLegion3D, setShowLegion3D] = useState(true);
+  useEffect(() => {
+    let live = true;
+    void loadLegion3DOpen().then((open) => { if (live && open !== null) setShowLegion3D(open); }).catch(() => undefined);
+    return () => { live = false; };
+  }, []);
   const [testMessage, setTestMessage] = useState('');
   const saveNotify = (next: NotifySettings) => { saveNotifySettings(next); };
   // 0.2.109「免打扰时仍然提醒」:勿扰权限的真实读数(从系统页回来要重读)。
@@ -928,6 +968,18 @@ export default function SettingsScreen({
           {sectionsToRender.includes('agentTeams') ? (
             <View style={sectionStyle} testID="settings-section-agent-teams">
               {heading('agentTeams')}
+              {/* 军团 3D(2026-11-05):先给一个只读预览,确认投影/密度在真机上看得清,
+                  再决定要不要做成常驻入口与自转动画。 */}
+              <Pressable accessibilityRole="button" testID="settings-legion3d-toggle"
+                onPress={() => setShowLegion3D((v) => {
+                  const next = !v;
+                  void saveLegion3DOpen(next).catch(() => undefined);
+                  return next;
+                })}
+                style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 6, marginBottom: spacing.sm }, pressed && { opacity: 0.7 }]}>
+                <Text style={{ color: colors.accent, fontSize: 12 }}>{showLegion3D ? tr('settings.legion3d.hide') : tr('settings.legion3d.show')}</Text>
+              </Pressable>
+              {showLegion3D ? <Legion3DView cfg={cfg} networkId={me.networkId || cfg.networkId} /> : null}
               <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />
             </View>
           ) : null}
@@ -1203,7 +1255,41 @@ export default function SettingsScreen({
               {heading('about')}
               <BrandMark size={36} style={{ marginTop: 8, marginBottom: 12 }} />
               <SettingsGroup>
-                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
+                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION} · ${platformShortLabel(Platform.OS)}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
+                {/* 反馈问题时经常要「你什么版本、什么平台」:一键复制,不用手打。 */}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.286')} onPress={() => {
+                    // 诊断信息（不含 token / 账号 / 完整地址）—— 反馈问题时贴这一行就够定位环境。
+                    const line = diagnosticsLine({
+                      version: APP_VERSION,
+                      platform: Platform.OS,
+                      source: (update as { source?: string }).source,
+                      updateKind: update.kind,
+                      maskedHost: maskedHubHost(cfg.serverUrl),
+                    });
+                    void Clipboard.setStringAsync(line).catch(() => undefined);
+                  }} testID="settings-copy-diagnostics" />
+                ) : null}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.285')} onPress={() => {
+                    void Clipboard.setStringAsync(`v${APP_VERSION} · ${Platform.OS}`).catch(() => undefined);
+                  }} testID="settings-copy-version" />
+                ) : null}
+                {/* 关于页放两个官方链接:App Store 审核会找「隐私政策」入口,用户找客服也得有路可走。
+                    用 openExternal(iOS 上先 canOpenURL),不走内嵌 webview。 */}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.292')} onPress={() => { void openExternal('https://www.anet.sh/privacy'); }} testID="settings-privacy-link" />
+                ) : null}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.293')} onPress={() => { void openExternal('https://www.anet.sh'); }} testID="settings-support-link" />
+                ) : null}
+                {show('about', 'version') ? (
+                  // 回滚入口:新版本出问题时用户得有路退回上一版,而不是只能等修。
+                  // subtitle 直接告诉他该装哪一版(从内置更新日志里算,拿不到就不写)。
+                  <SettingsRow label={tr('settings.copy.294')}
+                    subtitle={ROLLBACK_TARGET ? `${tr('settings.copy.295')} v${ROLLBACK_TARGET}` : undefined}
+                    onPress={() => { void openExternal(rollbackReleaseUrl(ROLLBACK_TARGET)); }} testID="settings-history-releases-link" />
+                ) : null}
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
                   // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。

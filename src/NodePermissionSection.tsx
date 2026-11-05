@@ -11,7 +11,9 @@ import { useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 
-import { fetchNodePermissionReport, putNodePermissionMode, type HubConfig, type HubNode } from './api';
+import { fetchHubNodes, fetchNodePermissionReport, putNodePeerAllowlist, putNodePermissionMode, putNodeToolAllowlist, type HubConfig, type HubNode } from './api';
+import { TextInput } from './ui-text';
+import { ALWAYS_TOOLS, PERMISSION_REASONS, allowlistText, isAlwaysTool, parseAllowlistInput, permissionReasonText, withoutAlwaysTools, withoutItem } from './node-allowlist-model';
 import { Ionicons } from './icons';
 import {
   NODE_PERMISSION_OPTIONS,
@@ -41,8 +43,57 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   // undefined = 读取中;null = 读不到(不是 owner / admin,或旧 Hub)⇒ 不显示报表行
   const [report, setReport] = useState<ReportSummary | null | undefined>(undefined);
   const [open, setOpen] = useState(false);
+  // 两张白名单:null = 不限制(与「空数组 = 一个都不允许」严格区分,见 node-allowlist-model)。
+  const [peers, setPeers] = useState<string[] | null>(node.peer_allowlist ?? null);
+  const [tools, setTools] = useState<string[] | null>(node.tool_allowlist ?? null);
+  const [peerDraft, setPeerDraft] = useState('');
+  const [toolDraft, setToolDraft] = useState('');
+  const [listError, setListError] = useState('');
+  const [listNote, setListNote] = useState('');
+  /** 「被拒绝时会看到什么」的展开状态:六个原因码指向不同排查动作,合并成「权限不足」会误导。 */
+  const [reasonOpen, setReasonOpen] = useState(false);
+  /** 可通信节点的候选(Hub 节点列表):比手打别名可靠。 */
+  const [peerChoices, setPeerChoices] = useState<string[]>([]);
+  const [peerPickOpen, setPeerPickOpen] = useState(false);
 
   useEffect(() => { setMode(normalizeMode(node.permission_mode)); }, [node.node_id, node.permission_mode]);
+  useEffect(() => {
+    let alive = true;
+    void fetchHubNodes(cfg)
+      .then(r => { if (alive) setPeerChoices((r.nodes ?? []).map(n => n.alias).filter(a => !!a && a !== node.alias).sort()); })
+      .catch(() => { if (alive) setPeerChoices([]); });
+    return () => { alive = false; };
+  }, [cfg, node.alias]);
+
+  useEffect(() => {
+    setPeers(node.peer_allowlist ?? null);
+    setTools(node.tool_allowlist ?? null);
+    setPeerDraft('');
+    setToolDraft('');
+  }, [node.node_id, node.peer_allowlist, node.tool_allowlist]);
+
+  const savePeers = async (next: string[] | null) => {
+    if (busy) return;
+    setBusy(true); setListError(''); setListNote('');
+    const res = await putNodePeerAllowlist(cfg, node.node_id, next);
+    setBusy(false);
+    if (!res.ok) { setListError(`保存失败：${res.error}`); return; }
+    setPeers(res.peers ?? next);
+    setListNote('可通信节点已保存，立即生效');
+  };
+  const saveTools = async (next: string[] | null) => {
+    if (busy) return;
+    // 只填了保活类工具时，过滤后是空数组；空数组 Hub 会拒（400 empty_allowlist_ambiguous），
+    // 而且语义上它就是「不限制」（保活类本来就不可禁用）。所以按 null 提交并说明。
+    const filtered = next === null ? null : withoutAlwaysTools(next);
+    const safe = filtered !== null && filtered.length === 0 ? null : filtered;
+    setBusy(true); setListError(''); setListNote('');
+    const res = await putNodeToolAllowlist(cfg, node.node_id, safe);
+    setBusy(false);
+    if (!res.ok) { setListError(`保存失败：${res.error}`); return; }
+    setTools(res.tools ?? safe);
+    setListNote('可用工具已保存，立即生效');
+  };
   useEffect(() => {
     let alive = true;
     void fetchNodePermissionReport(cfg).then(r => { if (alive) setReport(summarizeReport(r, node.node_id)); });
@@ -67,6 +118,8 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
     onChanged?.(next);
   };
 
+  // 草稿里出现保活类工具时:提示 + 禁用保存(而不是偷偷过滤掉,用户会以为自己设置成功了)。
+  const alwaysInDraft = parseAllowlistInput(toolDraft)?.filter(isAlwaysTool) ?? [];
   const layout = permissionLayout(compact);
   const selected = optionFor(mode);
 
@@ -74,6 +127,11 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
     <View style={{ paddingTop: spacing.xl, gap: spacing.md }} testID="node-perm-section">
       <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>
         这个节点能做什么。它不会超出你自己的权限；改了马上生效。
+      </Text>
+
+      {/* 一行摘要:模式 + 两张白名单,不用展开就知道当前限制到什么程度。 */}
+      <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-perm-overview">
+        {optionFor(mode).label} · 可通信节点：{allowlistText(peers, 'peer')} · 可用工具：{allowlistText(tools, 'tool')}
       </Text>
 
       {layout === 'segmented' ? (
@@ -140,6 +198,27 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
       {error ? <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-perm-error">{error}</Text> : null}
       {savedNote && !error ? <Text style={{ color: colors.running, fontSize: typeScale.small }} testID="node-perm-saved">{savedNote}</Text> : null}
 
+      {/* 原因码说明:六个码的排查动作完全不同,摊开写清楚,别让人以为都是「权限不足」。 */}
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' }}>
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: reasonOpen }} testID="node-perm-reasonhelp-toggle"
+          onPress={() => setReasonOpen(v => !v)}
+          style={({ pressed }) => [{ minHeight: compact ? 52 : 44, flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg }, pressed && { backgroundColor: colors.rowHover }]}>
+          <Ionicons name="help-circle-outline" size={18} color={colors.textMuted} />
+          <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body }}>被拒绝时会看到什么（按原因码）</Text>
+          <Ionicons name={reasonOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+        </Pressable>
+        {reasonOpen ? (
+          <View style={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, gap: spacing.sm }} testID="node-perm-reasonhelp">
+            {Object.keys(PERMISSION_REASONS).map(code => (
+              <View key={code} style={{ gap: 2 }} testID={`node-perm-reasonhelp-${code}`}>
+                <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, fontFamily: 'monospace' }}>{code}</Text>
+                <Text style={{ color: colors.text, fontSize: typeScale.small, lineHeight: 18 }}>{permissionReasonText(code)}</Text>
+              </View>
+            ))}
+          </View>
+        ) : null}
+      </View>
+
       {report ? (
         <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, overflow: 'hidden' }}>
           <Pressable
@@ -179,6 +258,115 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
           ) : null}
         </View>
       ) : null}
+
+      {/* 两张白名单:值来自节点行;null = 不限制,空数组 = 一个都不允许 —— 文案必须区分开。 */}
+      <View style={{ backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md }} testID="node-allowlist-card">
+        <View style={{ gap: 2 }}>
+          <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>可通信节点</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-peer-allowlist-value">
+            当前：{allowlistText(peers, 'peer')}
+          </Text>
+          {/* 已设置的条目做成可删的 chip:手打错一个不用整串重输。 */}
+          {peers && peers.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {peers.map(p => (
+                <Pressable key={p} accessibilityRole="button" accessibilityLabel={`移除 ${p}`} disabled={busy}
+                  testID={`node-peer-allowlist-remove-${p}`} onPress={() => void savePeers(withoutItem(peers, p))}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill }}>
+                  <Text style={{ color: colors.text, fontSize: typeScale.small }}>{p}</Text>
+                  <Ionicons name="close" size={12} color={colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+        </View>
+        {peerChoices.length ? (
+          <View style={{ gap: 6 }}>
+            <Pressable accessibilityRole="button" accessibilityState={{ expanded: peerPickOpen }} testID="node-peer-allowlist-pick-toggle"
+              onPress={() => setPeerPickOpen(v => !v)} style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
+              <Text style={{ color: colors.accent, fontSize: typeScale.small }}>{peerPickOpen ? '收起节点列表' : '从节点列表选择'}</Text>
+              <Ionicons name={peerPickOpen ? 'chevron-up' : 'chevron-down'} size={13} color={colors.accent} />
+            </Pressable>
+            {peerPickOpen ? (
+              <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID="node-peer-allowlist-pick">
+                {peerChoices.map(a => {
+                  const on = !!peers && peers.includes(a);
+                  return (
+                    <Pressable key={a} accessibilityRole="button" disabled={busy} testID={`node-peer-allowlist-pick-${a}`}
+                      onPress={() => void savePeers(on ? withoutItem(peers ?? [], a) : [...(peers ?? []), a])}
+                      style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: on ? colors.accent : colors.border }}>
+                      <Ionicons name={on ? 'checkmark' : 'add'} size={12} color={on ? colors.accent : colors.textMuted} />
+                      <Text style={{ color: colors.text, fontSize: typeScale.small }}>{a}</Text>
+                    </Pressable>
+                  );
+                })}
+              </View>
+            ) : null}
+          </View>
+        ) : null}
+        <TextInput value={peerDraft} onChangeText={setPeerDraft} placeholder="填别名或 node_id，逗号分隔；留空 = 不限制"
+          placeholderTextColor={colors.textMuted} autoCapitalize="none" testID="node-peer-allowlist-input"
+          style={{ color: colors.text, fontSize: typeScale.small, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 6 }} />
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Pressable accessibilityRole="button" testID="node-peer-allowlist-save" disabled={busy}
+            onPress={() => void savePeers(parseAllowlistInput(peerDraft))}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent, opacity: alwaysInDraft.length ? 0.5 : 1 }}>
+            <Text style={{ color: colors.onAccent, fontSize: typeScale.small, fontWeight: weight.strong }}>保存</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" testID="node-peer-allowlist-clear" disabled={busy}
+            onPress={() => { setPeerDraft(''); void savePeers(null); }}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md }}>
+            <Text style={{ color: colors.accent, fontSize: typeScale.small }}>清空 = 不限制</Text>
+          </Pressable>
+        </View>
+
+        <View style={{ height: 1, backgroundColor: colors.border }} />
+
+        <View style={{ gap: 2 }}>
+          <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>可用工具</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-tool-allowlist-value">
+            当前：{allowlistText(tools, 'tool')}
+          </Text>
+          {tools && tools.length ? (
+            <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
+              {tools.map(t2 => (
+                <Pressable key={t2} accessibilityRole="button" accessibilityLabel={`移除 ${t2}`} disabled={busy}
+                  testID={`node-tool-allowlist-remove-${t2}`} onPress={() => void saveTools(withoutItem(tools, t2))}
+                  style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill }}>
+                  <Text style={{ color: colors.text, fontSize: typeScale.small }}>{t2}</Text>
+                  <Ionicons name="close" size={12} color={colors.textMuted} />
+                </Pressable>
+              ))}
+            </View>
+          ) : null}
+          <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }} testID="node-tool-allowlist-always">
+            保活类不可禁用（{ALWAYS_TOOLS.join('、')}）：挡掉它们，节点既干不了活，也报不了自己干不了。
+          </Text>
+        </View>
+        <TextInput value={toolDraft} onChangeText={setToolDraft} placeholder="填工具名，逗号分隔；留空 = 不限制"
+          placeholderTextColor={colors.textMuted} autoCapitalize="none" testID="node-tool-allowlist-input"
+          style={{ color: colors.text, fontSize: typeScale.small, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 6 }} />
+        {alwaysInDraft.length ? (
+          <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-tool-allowlist-always-error">
+            {alwaysInDraft.join('、')} 是保活类工具，不能单独禁用；请先删掉再保存
+          </Text>
+        ) : null}
+        <View style={{ flexDirection: 'row', gap: spacing.sm }}>
+          <Pressable accessibilityRole="button" testID="node-tool-allowlist-save" disabled={busy || alwaysInDraft.length > 0}
+            onPress={() => void saveTools(parseAllowlistInput(toolDraft))}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.accent }}>
+            <Text style={{ color: colors.onAccent, fontSize: typeScale.small, fontWeight: weight.strong }}>保存</Text>
+          </Pressable>
+          <Pressable accessibilityRole="button" testID="node-tool-allowlist-clear" disabled={busy}
+            onPress={() => { setToolDraft(''); void saveTools(null); }}
+            style={{ minHeight: 36, justifyContent: 'center', paddingHorizontal: spacing.md }}>
+            <Text style={{ color: colors.accent, fontSize: typeScale.small }}>清空 = 不限制</Text>
+          </Pressable>
+        </View>
+        {listError ? <Text style={{ color: colors.failed, fontSize: typeScale.small }} testID="node-allowlist-error">{listError}</Text> : null}
+        {listNote && !listError ? <Text style={{ color: colors.running, fontSize: typeScale.small }} testID="node-allowlist-saved">{listNote}</Text> : null}
+      </View>
+
     </View>
   );
 }

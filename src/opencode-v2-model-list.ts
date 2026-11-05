@@ -10,9 +10,14 @@ export type OpenCodeCatalogSnapshot = {
 
 const OPENCODE_RUNTIMES = new Set(['opencode-cli', 'opencode-sdk', 'opencode']);
 
-/** V1 明确排除。代际未知时，OpenCode runtime 仍走服务器目录，Hub 会拒绝非 V2。 */
-export function isOpenCodeV2Node(node: Pick<HubNode, 'runtime' | 'config_snapshot'>): boolean {
-  const gen = node.config_snapshot?.flags?.opencodeGeneration;
+/** V1 明确排除。代际未知时，OpenCode runtime 仍走服务器目录，Hub 会拒绝非 V2。
+ *  注意代际有两个来源：`/api/nodes` 的顶层 `opencode_generation`，和（老 Hub / 夹具的）
+ *  `config_snapshot.flags.opencodeGeneration`。只读后者会让真机上 gen=v1 的节点被当成 V2
+ *  —— 和 0.427 修的 `gen=` 是同一类错。 */
+export function isOpenCodeV2Node(
+  node: Pick<HubNode, 'runtime' | 'config_snapshot'> & { opencode_generation?: 'v1' | 'v2' | null },
+): boolean {
+  const gen = node.opencode_generation ?? node.config_snapshot?.flags?.opencodeGeneration;
   if (gen === 'v1') return false;
   if (gen === 'v2') return true;
   return OPENCODE_RUNTIMES.has(node.runtime ?? '');
@@ -54,6 +59,86 @@ export function reportedCatalogModels(
     if (out.length >= 400) break;
   }
   return out;
+}
+
+/**
+ * 同 runtime 的**其他节点**报过的模型（2026-11-01 admin 那台 V2 节点一直没上报清单，
+ * 「建议」里只剩「当前」一项，等于没法切换）。这台机器没报，不代表整个网络都没有：
+ * 同 runtime 的兄弟节点报过的 `provider/model` 往往就是可用的候选。
+ *
+ * 只做聚合：丢空/超长/无 `/`、去重、保序（先到先得），排序交给界面的分组函数。
+ */
+export function peerCatalogModels(
+  nodes: readonly { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null | undefined,
+  options: { runtime: string | null | undefined; excludeNodeId?: string; limit?: number },
+): string[] {
+  const runtime = options.runtime;
+  if (!runtime) return [];
+  const limit = options.limit ?? 60;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  for (const n of nodes ?? []) {
+    if (!n || n.runtime !== runtime) continue;
+    if (options.excludeNodeId && n.node_id === options.excludeNodeId) continue;
+    for (const id of reportedCatalogModels(n.opencode_catalog)) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      if (out.length >= limit) return out;
+    }
+  }
+  return out;
+}
+
+/**
+ * 同 `peerCatalogModels`，但把「有多少台兄弟节点真的报了清单」也带出来 ——
+ * 界面上写「其他 3 台节点报过的模型」比光给一串 id 更可信。
+ */
+export function peerCatalogSources(
+  nodes: readonly { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null }[] | null | undefined,
+  options: { runtime: string | null | undefined; excludeNodeId?: string; limit?: number },
+): { models: string[]; nodes: number } {
+  const runtime = options.runtime;
+  if (!runtime) return { models: [], nodes: 0 };
+  const limit = options.limit ?? 60;
+  const out: string[] = [];
+  const seen = new Set<string>();
+  let contributing = 0;
+  for (const n of nodes ?? []) {
+    if (!n || n.runtime !== runtime) continue;
+    if (options.excludeNodeId && n.node_id === options.excludeNodeId) continue;
+    const reported = reportedCatalogModels(n.opencode_catalog);
+    if (reported.length === 0) continue;
+    contributing++;
+    for (const id of reported) {
+      if (seen.has(id)) continue;
+      seen.add(id);
+      out.push(id);
+      if (out.length >= limit) return { models: out, nodes: contributing };
+    }
+  }
+  return { models: out, nodes: contributing };
+}
+
+/**
+ * 「这台机器到底报没报模型清单」的一行状态（2026-11-01 admin 反复被这个问题绊住）。
+ * 三种情况分开说，避免把「版本太旧」误读成「机器坏了」：
+ *   reported  —— 本机上报了 N 个模型
+ *   tooOld    —— agent-node 版本低于 .160,根本不会上报
+ *   missing   —— 版本够但没报上来(可能是 daemon 侧问题,需要查)
+ * 版本线看不懂时只给 missing,不猜「太旧」。
+ */
+export function catalogStatusLine(
+  reported: number,
+  version: string | null | undefined,
+  threshold = 160,
+): string {
+  const n = Math.max(0, Math.trunc(reported));
+  if (n > 0) return `模型清单：本机已上报 ${n} 个模型。`;
+  const fresh = reportsCatalogSince(version);
+  if (fresh === false) return `模型清单：本机未上报（agent-node ${version} 低于能上报的版本，需 ≥ 2.5.0-preview.${threshold}）。`;
+  // 「版本够但仍没报」是 daemon 侧的事,客户端只能兜底;说清下一步怎么交接,别让人猜。
+  return `模型清单：本机未上报（agent-node ${version ?? '版本未知'}，版本本身够但仍没报上来）——这属节点侧问题：把节点详情里的诊断行贴给该节点的运维即可。`;
 }
 
 export function catalogErrorText(error: string | undefined): string {

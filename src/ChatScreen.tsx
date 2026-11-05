@@ -64,6 +64,7 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
+import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
@@ -105,7 +106,7 @@ import { mentionCandidates, mentionMenuOpen } from './mention-menu';
 import { ComposerSuggest } from './ComposerSuggest';
 import { parseSkillsPayload, skillsTarget, type SkillSummary } from './node-skills';
 import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
-import { SHOW_BOLT_ENTRY, SHOW_BTW_ENTRY } from './chat-entry-flags';
+import { SHOW_BOLT_ENTRY, SHOW_BTW_ENTRY, SHOW_CHAT_TOOL_RAIL } from './chat-entry-flags';
 import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handoff';
 import SideThreadDrawer, { type SideThreadLaunch } from './SideThreadDrawer';
 import { nextPlusPanel, plusPanelHeight, plusPanelItems, type PlusItemKey, type PlusPanelEvent } from './composer-plus-panel';
@@ -2456,9 +2457,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <AliasAvatar alias={alias} size={36} />
-                    <View style={[styles.messageContent, bubbleCap]}>
+                    <View style={[styles.messageContent, bubbleCap, item.late ? { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.sm } : null]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
-                      <ChatMetaLine name={`${alias}${item._proactive ? t('chat.proactive') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
+                      <ChatMetaLine name={`${alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
                       <Pressable
                         {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:reply`, { item, text: item.result ?? item.reply ?? '', author: alias }, 'reply')}
@@ -2984,6 +2985,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
+      {desktop && SHOW_CHAT_TOOL_RAIL ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}

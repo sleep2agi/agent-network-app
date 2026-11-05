@@ -62,6 +62,21 @@ export function requirementFromHub(row: unknown): Requirement | null {
     ...('external_ref' in r ? { externalRef: typeof r.external_ref === 'string' && r.external_ref ? r.external_ref : null } : {}),
     // 只收 http(s):界面会把它做成可点的链接。
     ...('external_url' in r ? { externalUrl: typeof r.external_url === 'string' && /^https?:\/\//i.test(r.external_url) ? r.external_url : null } : {}),
+    // 迟到补回的结果(Hub ≥ .213)。数组照收:一条任务可能有多条,别只取 [0];没有就不出现。
+    ...(Array.isArray((r as { late_replies?: unknown }).late_replies)
+      ? { lateReplies: ((r as { late_replies: unknown[] }).late_replies)
+          .filter(x => x && typeof x === 'object')
+          .map(x => {
+            const o = x as Record<string, unknown>;
+            return {
+              id: String(o.late_reply_id ?? ''),
+              status: String(o.status ?? ''),
+              result: String(o.result ?? ''),
+              createdAt: typeof o.created_at === 'string' ? o.created_at : undefined,
+            };
+          })
+          .filter(x => x.id) }
+      : {}),
     ...('seq' in r ? { seq: seqFromHub(r.seq) } : {}),
     // 只读(RFC-038 §9):只有 hub 显式说不能改才锁;没有这个字段(旧 Hub、全部任务的人)照旧能改。
     ...(readOnlyFromHub(r) ? { readOnly: true } : {}),
