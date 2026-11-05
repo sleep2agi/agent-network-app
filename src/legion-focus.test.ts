@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { copyA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -306,6 +306,14 @@ ck('聚焦 + 选中 + 可点提示三段同时在，且顺序稳定（选中在�
   const iSel = s2.indexOf('已选中 张三');
   const iDim = s2.indexOf('点暗色部门可切过去');
   return iFocus >= 0 && iSel > iFocus && iDim > iSel && s2.endsWith('点节点可看是谁');
+})());
+
+// 复制反馈的无障碍标签(0.2.466):读屏要能听出「复制成功没有」。
+ck('未复制时标签是「复制这个节点的标识」', (() => copyA11yLabel(false) === '复制这个节点的标识')());
+
+ck('已复制时标签明确说已复制、并说明可再点一次', (() => {
+  const t = copyA11yLabel(true);
+  return t.includes('已复制') && t.includes('再点一次');
 })());
 
 console.log(`legion-focus: ${pass} passed`);
