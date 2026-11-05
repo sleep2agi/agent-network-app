@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.465:",
+  "- 读屏现在会念出你当前选中的是谁（人 / Agent / 部门），不再只有「点节点可看是谁」。",
+  "",
   "What's new in 0.2.464:",
   "- 聚焦后不再多一个「看全图」按钮：点面包屑最左边的「军团」就能回全图，少一个重复控件。",
   "",

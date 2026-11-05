@@ -207,6 +207,8 @@ export function legionA11yLabel(input: {
   agents?: number;
   groups?: number;
   dimmedCount?: number;
+  /** 当前选中的节点名（0.2.465）。选中是视觉态，读屏过去完全听不到。 */
+  selectedLabel?: string | null;
 }): string {
   const parts = ['军团 3D 视图'];
   const label = (input.focusLabel ?? '').trim();
@@ -218,6 +220,8 @@ export function legionA11yLabel(input: {
     ].filter(Boolean).join(' · ');
     parts.push(stats ? `聚焦 ${label}：${stats}` : `聚焦 ${label}`);
   }
+  const selected = (input.selectedLabel ?? '').trim();
+  if (selected) parts.push(`已选中 ${selected}`);
   const dimmed = input.dimmedCount ?? 0;
   if (dimmed > 0) parts.push(`点暗色部门可切过去（${dimmed} 个）`);
   parts.push('点节点可看是谁');

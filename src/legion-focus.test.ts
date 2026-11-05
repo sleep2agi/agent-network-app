@@ -290,5 +290,23 @@ ck('没存过/空白串 ⇒ null', (() => focusIdFromStored('', layout) === null
 
 ck('布局还没算出来时不恢复(避免拿空布局做判断)', (() => focusIdFromStored('dept:d1', null) === null)());
 
+// 无障碍里的「选中」(0.2.465):选中是视觉态,读屏过去听不到。
+ck('有选中节点时无障碍描述会说「已选中 X」', (() => {
+  const s2 = legionA11yLabel({ selectedLabel: '张三（人）' });
+  return s2.includes('已选中 张三（人）');
+})());
+
+ck('没选中/空白时不提「已选中」（不留噪音）', (() => {
+  return !legionA11yLabel({}).includes('已选中') && !legionA11yLabel({ selectedLabel: '   ' }).includes('已选中');
+})());
+
+ck('聚焦 + 选中 + 可点提示三段同时在，且顺序稳定（选中在可点提示之前）', (() => {
+  const s2 = legionA11yLabel({ focusLabel: '平台', people: 3, agents: 1, groups: 1, selectedLabel: '张三', dimmedCount: 2 });
+  const iFocus = s2.indexOf('聚焦 平台');
+  const iSel = s2.indexOf('已选中 张三');
+  const iDim = s2.indexOf('点暗色部门可切过去');
+  return iFocus >= 0 && iSel > iFocus && iDim > iSel && s2.endsWith('点节点可看是谁');
+})());
+
 console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);
