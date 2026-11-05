@@ -44,6 +44,8 @@ check('Linux 腿不依赖 JS action：tauri-action 明确排除 Linux',
 check('Linux 腿用 CLI 构建并用 gh 上传 deb 与 .sig',
   workflow.includes('npx tauri build --bundles deb')
   && workflow.includes('gh release upload "desktop-v${version}" "$deb" "$deb.sig"'));
+check('Linux 腿补 latest.json 时能自愈 version/pub_date（下载不到也要能过 verify）',
+  workflow.includes('if (!doc.version) doc.version = v;') && workflow.includes('if (!doc.pub_date) doc.pub_date'));
 check('Linux 腿自己补 latest.json 的 linux 条目（不再靠 tauri-action）',
   workflow.includes('latest.json patched with linux entries')
   && workflow.includes('doc.platforms["linux-x86_64"] = { signature: sig, url }'));
