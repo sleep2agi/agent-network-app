@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { copyA11yLabel, refreshNotice, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { copyA11yLabel, refreshA11yLabel, refreshNotice, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -322,6 +322,14 @@ ck('刷新回执带三项规模', (() => refreshNotice({ people: 210, agents: 88
 ck('规模全 0 时只说「已更新」，不编数字', (() => refreshNotice({}) === '已更新' && refreshNotice({ people: 0, agents: 0, groups: 0 }) === '已更新')());
 
 ck('部分规模缺失按 0 处理但仍给出完整句式', (() => refreshNotice({ people: 5 }) === '已更新：5 人 · 0 个 Agent · 0 个部门')());
+
+// 刷新按钮的无障碍标签(0.2.472):加载中要能听出「正在重载」。
+ck('未加载时刷新标签是「重新加载组织架构」', (() => refreshA11yLabel(false) === '重新加载组织架构')());
+
+ck('加载中刷新标签明确说正在重载、请稍候', (() => {
+  const t = refreshA11yLabel(true);
+  return t.includes('正在重新加载') && t.includes('请稍候');
+})());
 
 console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);

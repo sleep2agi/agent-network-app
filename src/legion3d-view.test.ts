@@ -156,6 +156,8 @@ ck('选中人/Agent 时显示所属部门路径（0.2.461）',
 
 ck('无障碍描述带上选中节点（0.2.465）', view.includes('selectedLabel: selected ?'));
 
+ck('刷新的无障碍标签随加载态变化（0.2.472）', view.includes('accessibilityLabel={refreshA11yLabel(busy)}'));
+
 ck('刷新在加载中被禁用（0.2.471，避免连点并发出多次请求）',
   view.includes("const busy = state.phase === 'loading'") && view.includes('disabled={busy}')
   && view.includes('testID="legion3d-refresh"'));
@@ -171,7 +173,7 @@ ck('刷新后有回执且对读屏可见（0.2.469）',
 ck('有手动刷新入口，且刷新会清掉选中与复制态（0.2.468）',
   view.includes('testID="legion3d-refresh"')
   && view.includes('setSelectedId(null); setCopied(false); setReloadKey((n) => n + 1)')
-  && view.includes('accessibilityLabel="重新加载组织架构"'));
+  && view.includes('accessibilityLabel={refreshA11yLabel(busy)}'));
 
 ck('自转速度档记住并恢复（0.2.467）',
   view.includes('loadLegion3DSpinSpeed()') && view.includes('saveLegion3DSpinSpeed(speed)')

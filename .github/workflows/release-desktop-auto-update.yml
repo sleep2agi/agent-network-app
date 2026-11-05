@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.472:
+            - 读屏在刷新时会念「正在重新加载组织架构，请稍候」，不会再把「等结果」听成「按钮没反应」。
+
             What's new in 0.2.471:
             - 「刷新」在加载时会禁用，连点不会并发出多次请求（也不会拿到旧结果覆盖新的）。
 
