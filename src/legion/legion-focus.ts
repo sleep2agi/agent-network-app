@@ -272,3 +272,22 @@ export function focusEmptyText(input: {
   if (people > 0 || agents > 0) return null;
   return `${label} 下面还没有人 · 点面包屑返回上一级`;
 }
+
+/**
+ * 从本地偏好里恢复聚焦(2026-11-05,0.2.463)。
+ *
+ * 只认「当前布局里确实存在的节点」：组织架构改过之后,存下来的部门 id 可能已经不存在,
+ * 这时要退回全图而不是画一张空图。
+ *   · 空/空白串 ⇒ null（没存过）
+ *   · id 存在 ⇒ 原样返回
+ *   · id 不存在 ⇒ null（作废,不猜任何替代）
+ */
+export function focusIdFromStored(
+  stored: string | null | undefined,
+  layout: LegionLayout | null | undefined,
+): string | null {
+  const id = (stored ?? '').trim();
+  if (!id) return null;
+  if (!layout) return null;
+  return layout.nodes.some((n) => n.id === id) ? id : null;
+}

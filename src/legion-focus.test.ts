@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusEmptyText, focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -280,6 +280,15 @@ ck('只有 Agent 也算「有人」', (() => focusEmptyText({ focusLabel: '平�
 ck('没有聚焦名时不提示（不输出半句话）', (() => focusEmptyText({ focusLabel: null, people: 0, agents: 0 }) === null)());
 
 ck('数字缺失按 0 处理并给提示', (() => (focusEmptyText({ focusLabel: '后勤部' }) ?? '').includes('还没有人'))());
+
+// 恢复聚焦(0.2.463):存下来的部门 id 还在就用,不在就退回全图(不猜)。
+ck('存下来的部门 id 仍存在 ⇒ 恢复它', (() => focusIdFromStored('dept:d1', layout) === 'dept:d1')());
+
+ck('存下来的 id 已不存在 ⇒ 退回全图(null)', (() => focusIdFromStored('dept:gone', layout) === null)());
+
+ck('没存过/空白串 ⇒ null', (() => focusIdFromStored('', layout) === null && focusIdFromStored('  ', layout) === null && focusIdFromStored(null, layout) === null)());
+
+ck('布局还没算出来时不恢复(避免拿空布局做判断)', (() => focusIdFromStored('dept:d1', null) === null)());
 
 console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);
