@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusLabel, focusLayout, focusStats } from './legion/legion-focus';
+import { focusLabel, focusLayout, focusStats, focusTrail } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -179,6 +179,27 @@ export default function Legion3DView(p: Props) {
           style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
           <Text style={{ color: colors.accent, fontSize: 11 }}>只看 {selected.label}</Text>
         </Pressable>
+      ) : null}
+      {/* 面包屑:军团 / 平台部 / 前端组 —— 每一级都能点,退到上一级不用先回全图。 */}
+      {focusId ? (
+        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap' }} testID="legion3d-focus-trail">
+          {focusTrail(layout ?? null, focusId).map((crumb, i, all) => {
+            const last = i === all.length - 1;
+            return (
+              <View key={`crumb-${crumb.id ?? 'all'}`} style={{ flexDirection: 'row', alignItems: 'center' }}>
+                {i > 0 ? <Text style={{ color: colors.textMuted, fontSize: 11, marginHorizontal: 4 }}>/</Text> : null}
+                <Pressable accessibilityRole="button" testID={`legion3d-crumb-${i}`}
+                  disabled={last}
+                  onPress={() => { setFocusId(crumb.id); setSelectedId(crumb.id); }}
+                  style={({ pressed }) => [{ paddingVertical: 2 }, pressed && { opacity: 0.7 }]}>
+                  <Text style={{ color: last ? colors.accent : colors.textSecondary, fontSize: 11 }}>
+                    {crumb.label}{last ? '（当前）' : ''}
+                  </Text>
+                </Pressable>
+              </View>
+            );
+          })}
+        </View>
       ) : null}
       {focusId ? (
         <Pressable accessibilityRole="button" testID="legion3d-focus-clear" onPress={() => setFocusId(null)}

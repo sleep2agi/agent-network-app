@@ -587,6 +587,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.455:
+            - 聚焦到子部门时，图上方会显示「军团 / 平台部 / 前端组」面包屑，点任意一级就能退回去，不用先看全图。
+
             What's new in 0.2.454:
             - 聚焦某个部门时会自动选中它，汇总行也改成「聚焦 X：N 人 · M 个 Agent · K 个部门」，一眼看出这个部门多大。
 
