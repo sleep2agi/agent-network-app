@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.466:
+            - 点「复制标识」后，读屏会念出「已复制…」，不用再靠眼睛确认行尾那句提示。
+
             What's new in 0.2.465:
             - 读屏现在会念出你当前选中的是谁（人 / Agent / 部门），不再只有「点节点可看是谁」。
 

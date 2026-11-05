@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
+import { copyA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 import { loadLegion3DFocusId, saveLegion3DFocusId } from './agent-list-prefs';
 
@@ -197,14 +197,15 @@ export default function Legion3DView(p: Props) {
         ) : null}
       </Pressable>
       {selected ? (
-        <Pressable testID="legion3d-selected" accessibilityRole="button" accessibilityLabel="复制这个节点的标识"
+        <Pressable testID="legion3d-selected" accessibilityRole="button" accessibilityLabel={copyA11yLabel(copied)}
           onPress={() => {
             void import('expo-clipboard')
               .then((m) => m.setStringAsync(nodeRefValue(selected.id)))
               .then(() => { setCopied(true); setTimeout(() => setCopied(false), 1600); })
               .catch(() => undefined);
           }}>
-          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
+          {/* 复制结果对读屏要能听见（0.2.466）：视觉上是行尾一句「（已复制 id）」。 */}
+          <Text testID="legion3d-selected-text" accessibilityLiveRegion="polite" style={{ color: colors.textSecondary, fontSize: 11 }}>
             {selected.label}{selected.sublabel ? ` · ${selected.sublabel}` : ''}{selected.kind === 'agent' ? '（Agent）' : selected.kind === 'person' ? '（人）' : selected.kind === 'group' ? '（部门）' : ''}
             {/* 选中人/Agent 时给出所属部门路径（0.2.461），3D 里靠位置判断归属不可靠。 */}
             {(() => {

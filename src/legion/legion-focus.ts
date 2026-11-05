@@ -295,3 +295,14 @@ export function focusIdFromStored(
   if (!layout) return null;
   return layout.nodes.some((n) => n.id === id) ? id : null;
 }
+
+/**
+ * 「复制节点标识」的无障碍标签(2026-11-05,0.2.466)。
+ *
+ * 复制成功的视觉反馈是行尾多一句「（已复制 id）」，读屏用户按下去之后听不到任何变化 ——
+ * 不知道自己到底复制成功没有，往往会重复点。这里按状态给两个明确的标签，配合
+ * accessibilityLiveRegion="polite" 让读屏念出状态变化。
+ */
+export function copyA11yLabel(copied: boolean): string {
+  return copied ? '已复制这个节点的标识，再点一次可重新复制' : '复制这个节点的标识';
+}
