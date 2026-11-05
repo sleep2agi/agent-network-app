@@ -45,6 +45,8 @@ export default function Legion3DView(p: Props) {
   const [focusRestored, setFocusRestored] = useState(false);
   // 复制反馈:点一下选中行就把 id 复制走(3D 里看到谁之后,下一步往往就是去找他/贴给别人)。
   const [copied, setCopied] = useState(false);
+  // 加载中禁用刷新按钮(0.2.471):在 ready 分支里直接比较 phase 会被 TS 判定无交集。
+  const busy = state.phase === 'loading';
   const height = p.height ?? 360;
   const width = 520;
   // 相机(与 Dashboard 的视觉参数对齐):俯仰 ~26°、远一点让透视更平。
@@ -312,7 +314,9 @@ export default function Legion3DView(p: Props) {
             {layout ? focusStatsLine(layout, focusId) : `${bodies.length} 个节点`}
           </Text>
           {/* 手动刷新(0.2.468):组织架构刚变过时,不必退出去再进来才看到新的。 */}
+          {/* 加载中禁用（0.2.471）：连点会并发出多次 org 请求，最后一个返回的未必是最新的。 */}
           <Pressable accessibilityRole="button" accessibilityLabel="重新加载组织架构" testID="legion3d-refresh"
+            disabled={busy}
             onPress={() => { setSelectedId(null); setCopied(false); setReloadKey((n) => n + 1); }}
             style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
             <Text style={{ color: colors.textSecondary, fontSize: 11 }}>刷新</Text>

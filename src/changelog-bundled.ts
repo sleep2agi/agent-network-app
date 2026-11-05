@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.471:",
+  "- 「刷新」在加载时会禁用，连点不会并发出多次请求（也不会拿到旧结果覆盖新的）。",
+  "",
   "What's new in 0.2.470:",
   "- 「自转」开关也会记住：开着转的人下次打开还是在转，不用每次点一下。",
   "",
