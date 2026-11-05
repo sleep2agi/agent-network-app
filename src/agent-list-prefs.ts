@@ -18,10 +18,13 @@ export const CONVERSATION_TAB_KEY = 'agent_list_tab_v1';
 export const RAIL_LABELS_KEY = 'agent_list_rail_labels_v1';
 // 「军团 3D 预览」是否展开:纯口味,但每次进设置都被收起会让人以为功能没了,所以记住。
 export const LEGION3D_OPEN_KEY = 'agent_list_legion3d_open_v1';
+// 上次聚焦到哪个部门:只想看某个部门的人,每次进来都要重新点一遍太烦(0.2.463)。
+// 只存 id,不存布局;布局里已经不存在这个 id 时由 legion-focus.focusIdFromStored 作废。
+export const LEGION3D_FOCUS_KEY = 'agent_list_legion3d_focus_v1';
 export type RailLabels = 'icons' | 'labels';
 const PREFS_FILE = () => `${FileSystem.documentDirectory}agent_list_prefs_v1.json`;
 
-type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string };
+type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string; [LEGION3D_FOCUS_KEY]?: string };
 
 const webStorage = (): Storage | null => {
   try {
@@ -82,6 +85,11 @@ export const parseLegion3DOpen = (v: string | null | undefined): boolean | null 
 };
 export const loadLegion3DOpen = async (): Promise<boolean | null> => parseLegion3DOpen(await readKey(LEGION3D_OPEN_KEY));
 export const saveLegion3DOpen = (open: boolean): Promise<void> => writeKey(LEGION3D_OPEN_KEY, open ? '1' : '0');
+/** 上次聚焦的部门 id（原始字符串；有效性由调用方按当前布局判断）。 */
+export const loadLegion3DFocusId = (): Promise<string | null> => readKey(LEGION3D_FOCUS_KEY);
+/** 记住/忘记聚焦。传 null 表示回到全图。 */
+export const saveLegion3DFocusId = (id: string | null): Promise<void> =>
+  writeKey(LEGION3D_FOCUS_KEY, (id ?? '').trim());
 
 // 进程内的小 store(与 ui-scale 同款做法):设置页改完,App 里那条 rail 立刻跟着变,不用重挂整棵树。
 let railLabelsMemo: RailLabels = 'icons';

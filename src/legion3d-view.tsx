@@ -19,8 +19,9 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusEmptyText, focusHint, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
+import { focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
+import { loadLegion3DFocusId, saveLegion3DFocusId } from './agent-list-prefs';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
 
@@ -37,7 +38,9 @@ export default function Legion3DView(p: Props) {
   // 点中的节点:底部给一行「这个点是谁」,不然 3D 图对着一堆圆点没法用。
   const [selectedId, setSelectedId] = useState<string | null>(null);
   // 聚焦到某个部门(只看它和它的下级)。全图看体量,聚焦看编制。
+  // 0.2.463:记住上次看的是哪个部门 —— 只想看某个部门时,每次进来重新点一遍太烦。
   const [focusId, setFocusId] = useState<string | null>(null);
+  const [focusRestored, setFocusRestored] = useState(false);
   // 复制反馈:点一下选中行就把 id 复制走(3D 里看到谁之后,下一步往往就是去找他/贴给别人)。
   const [copied, setCopied] = useState(false);
   const height = p.height ?? 360;
@@ -48,6 +51,24 @@ export default function Legion3DView(p: Props) {
 
   // 布局只在数据变化时算一次;自转只重算投影,不重排整棵树。
   const [layout, setLayout] = useState<ReturnType<typeof buildLegionLayout> | null>(null);
+
+  // 恢复上次聚焦：只在布局算好后判断一次（id 不在了就作废，退回全图）。
+  useEffect(() => {
+    if (focusRestored || !layout) return;
+    let live = true;
+    loadLegion3DFocusId()
+      .then((stored) => { if (live) setFocusId((cur) => cur ?? focusIdFromStored(stored, layout)); })
+      .catch(() => {})
+      .finally(() => { if (live) setFocusRestored(true); });
+    return () => { live = false; };
+  }, [layout, focusRestored]);
+
+  // 记住/忘记聚焦（点和面包屑都会改 focusId）。
+  useEffect(() => {
+    if (!focusRestored) return;
+    saveLegion3DFocusId(focusId).catch(() => {});
+  }, [focusId, focusRestored]);
+
   useEffect(() => {
     let live = true;
     const net = p.networkId;

@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.463:",
+  "- 军团 3D 会记住你上次聚焦的部门，下次打开直接回到那里；部门已不存在时自动退回全图。",
+  "",
   "What's new in 0.2.462:",
   "- 聚焦到一个还没有人的部门时，会明确写「XX 下面还没有人 · 点面包屑返回上一级」，不再是一片空图。",
   "",

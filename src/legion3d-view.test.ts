@@ -143,6 +143,10 @@ ck('选中部门时可「只看这个部门」，聚焦后可「看全图」',
   view.includes('legion3d-focus-dept') && view.includes('legion3d-focus-clear')
   && view.includes('focusOutline(layout, focusId)') && view.includes('focusLabel(layout ?? null, focusId)'));
 
+ck('聚焦会记住并恢复上次的部门（0.2.463）',
+  view.includes('loadLegion3DFocusId') && view.includes('saveLegion3DFocusId(focusId)')
+  && view.includes('focusIdFromStored(stored, layout)'));
+
 ck('聚焦到空部门时有空态提示（0.2.462）',
   view.includes('focusEmptyText({') && view.includes('legion3d-focus-empty'));
 
