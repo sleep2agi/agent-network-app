@@ -21,7 +21,7 @@ import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
 import { copyA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, refreshNotice, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
-import { loadLegion3DFocusId, loadLegion3DSpinSpeed, saveLegion3DFocusId, saveLegion3DSpinSpeed } from './agent-list-prefs';
+import { loadLegion3DFocusId, loadLegion3DSpin, loadLegion3DSpinSpeed, saveLegion3DFocusId, saveLegion3DSpin, saveLegion3DSpinSpeed } from './agent-list-prefs';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
 
@@ -73,6 +73,19 @@ export default function Legion3DView(p: Props) {
       .catch(() => {});
     return () => { live = false; };
   }, []);
+
+  // 自转开关也记住（0.2.470）：只认明确的 1/0，其余保持默认关。
+  useEffect(() => {
+    let live = true;
+    loadLegion3DSpin()
+      .then((stored) => { if (live && stored === '1') setSpinning(true); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  useEffect(() => {
+    saveLegion3DSpin(spinning).catch(() => {});
+  }, [spinning]);
 
   // 改档即写回（写失败只影响下次默认值，不打扰用户）。
   useEffect(() => {
