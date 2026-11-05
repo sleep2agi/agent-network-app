@@ -143,6 +143,9 @@ ck('选中部门时可「只看这个部门」，聚焦后可「看全图」',
   view.includes('legion3d-focus-dept') && view.includes('legion3d-focus-clear')
   && view.includes('focusOutline(layout, focusId)') && view.includes('focusLabel(layout ?? null, focusId)'));
 
+ck('选中人/Agent 时显示所属部门路径（0.2.461）',
+  view.includes('nodeDepartmentPath(layout, selected.id)') && view.includes("path.join(' / ')"));
+
 ck('画布无障碍描述是动态的（0.2.460，读屏能听到聚焦范围与可点数量）',
   view.includes('legionA11yLabel({') && view.includes('dimmedCount: dimmedIds?.size ?? 0'));
 

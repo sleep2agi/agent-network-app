@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusHint, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, tapOutcome } from './legion/legion-focus';
+import { focusHint, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -184,6 +184,11 @@ export default function Legion3DView(p: Props) {
           }}>
           <Text style={{ color: colors.textSecondary, fontSize: 11 }}>
             {selected.label}{selected.sublabel ? ` · ${selected.sublabel}` : ''}{selected.kind === 'agent' ? '（Agent）' : selected.kind === 'person' ? '（人）' : selected.kind === 'group' ? '（部门）' : ''}
+            {/* 选中人/Agent 时给出所属部门路径（0.2.461），3D 里靠位置判断归属不可靠。 */}
+            {(() => {
+              const path = nodeDepartmentPath(layout, selected.id);
+              return path.length ? ` · ${path.join(' / ')}` : '';
+            })()}
             {copied ? '（已复制 id）' : ' · 点这行复制 id'}
           </Text>
         </Pressable>
