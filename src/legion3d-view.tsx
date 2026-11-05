@@ -285,6 +285,12 @@ export default function Legion3DView(p: Props) {
             {/* 聚焦时把全量口径也带上（0.2.458），否则看不出这块占军团多少。 */}
             {layout ? focusStatsLine(layout, focusId) : `${bodies.length} 个节点`}
           </Text>
+          {/* 手动刷新(0.2.468):组织架构刚变过时,不必退出去再进来才看到新的。 */}
+          <Pressable accessibilityRole="button" accessibilityLabel="重新加载组织架构" testID="legion3d-refresh"
+            onPress={() => { setSelectedId(null); setCopied(false); setReloadKey((n) => n + 1); }}
+            style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.textSecondary, fontSize: 11 }}>刷新</Text>
+          </Pressable>
           <Pressable accessibilityRole="button" testID="legion3d-spin-toggle" onPress={() => setSpinning((v) => !v)}
             style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
             <Text style={{ color: colors.textSecondary, fontSize: 11 }}>{spinning ? '暂停' : '自转'}</Text>

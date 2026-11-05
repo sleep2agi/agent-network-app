@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.468:",
+  "- 军团 3D 加了一个「刷新」：组织架构刚改过时，不用退出去再进来。",
+  "",
   "What's new in 0.2.467:",
   "- 自转速度（慢/中/快）会被记住，下次打开转轴按你上次选的档走。",
   "",
