@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusHint, focusLabel, focusOutline, focusStatsLine, focusTrail, tapOutcome } from './legion/legion-focus';
+import { focusHint, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -114,7 +114,13 @@ export default function Legion3DView(p: Props) {
   return (
     <View testID="legion3d-view" style={{ gap: spacing.sm }}>
       <Pressable testID="legion3d-canvas" accessibilityRole="image"
-        accessibilityLabel="军团 3D 视图，点节点可看是谁"
+        accessibilityLabel={layout ? legionA11yLabel({
+          focusLabel: focusId ? focusLabel(layout, focusId) : null,
+          people: focusStats(layout, focusId).people,
+          agents: focusStats(layout, focusId).agents,
+          groups: focusStats(layout, focusId).groups,
+          dimmedCount: dimmedIds?.size ?? 0,
+        }) : '军团 3D 视图，点节点可看是谁'}
         onPress={(e) => {
           const { locationX, locationY } = (e.nativeEvent ?? {}) as { locationX?: number; locationY?: number };
           if (typeof locationX !== 'number' || typeof locationY !== 'number') return;

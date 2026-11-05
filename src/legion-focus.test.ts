@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -217,6 +217,32 @@ ck('没聚焦时不给提示（不占一行）', (() => focusHint(3, null) === n
 ck('没有暗色部门时不给提示', (() => focusHint(0, 'dept:d1') === null)());
 
 ck('个数为负或脏值时也不给提示', (() => focusHint(-1, 'dept:d1') === null)());
+
+// 无障碍描述(0.2.460):读屏能听到聚焦范围、可点数量、能点节点。
+ck('全图时无障碍描述带「军团 3D 视图」和「点节点可看是谁」', (() => {
+  const s2 = legionA11yLabel({});
+  return s2.startsWith('军团 3D 视图') && s2.endsWith('点节点可看是谁') && !s2.includes('聚焦');
+})());
+
+ck('聚焦时无障碍描述包含部门名与三项数字', (() => {
+  const inner = focusStats(layout, 'dept:d1');
+  const s2 = legionA11yLabel({ focusLabel: '平台', people: inner.people, agents: inner.agents, groups: inner.groups });
+  return s2.includes('聚焦 平台：') && s2.includes(`${inner.people} 人`) && s2.includes(`${inner.agents} 个 Agent`) && s2.includes(`${inner.groups} 个部门`);
+})());
+
+ck('有暗色部门时无障碍描述说出可点数量', (() => {
+  const s2 = legionA11yLabel({ dimmedCount: 3 });
+  return s2.includes('点暗色部门可切过去（3 个）');
+})());
+
+ck('没有暗色部门时不提「可切过去」（不留噪音）', (() => {
+  return !legionA11yLabel({ dimmedCount: 0 }).includes('切过去');
+})());
+
+ck('聚焦名与数字缺失时降级成「聚焦 X」而不是带上空数字', (() => {
+  const s2 = legionA11yLabel({ focusLabel: '平台' });
+  return s2.includes('聚焦 平台') && !s2.includes('NaN') && !s2.includes('undefined');
+})());
 
 console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);

@@ -192,3 +192,34 @@ export function focusHint(dimmedCount: number, focusId: string | null | undefine
   if (!focused || dimmedCount <= 0) return null;
   return `点暗色部门可直接切过去（${dimmedCount} 个）`;
 }
+
+/**
+ * 画布的无障碍描述(2026-11-05,0.2.460)。
+ *
+ * 画布本身是个 image,读屏用户只能听到一句静态文案 —— 聚焦到哪个部门、这块多大、
+ * 有多少可点，全都听不到。这里把三件事拼成一句（都来自已经算好的 numbers,不再重算）：
+ *   「军团 3D 视图；聚焦 平台部：37 人 · 12 个 Agent · 5 个部门；点暗色部门可切过去（3 个）；点节点可看是谁」
+ * 纯函数,便于钉断言。
+ */
+export function legionA11yLabel(input: {
+  focusLabel?: string | null;
+  people?: number;
+  agents?: number;
+  groups?: number;
+  dimmedCount?: number;
+}): string {
+  const parts = ['军团 3D 视图'];
+  const label = (input.focusLabel ?? '').trim();
+  if (label) {
+    const stats = [
+      typeof input.people === 'number' ? `${input.people} 人` : null,
+      typeof input.agents === 'number' ? `${input.agents} 个 Agent` : null,
+      typeof input.groups === 'number' ? `${input.groups} 个部门` : null,
+    ].filter(Boolean).join(' · ');
+    parts.push(stats ? `聚焦 ${label}：${stats}` : `聚焦 ${label}`);
+  }
+  const dimmed = input.dimmedCount ?? 0;
+  if (dimmed > 0) parts.push(`点暗色部门可切过去（${dimmed} 个）`);
+  parts.push('点节点可看是谁');
+  return parts.join('；');
+}
