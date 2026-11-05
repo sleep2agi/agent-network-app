@@ -156,6 +156,10 @@ ck('选中人/Agent 时显示所属部门路径（0.2.461）',
 
 ck('无障碍描述带上选中节点（0.2.465）', view.includes('selectedLabel: selected ?'));
 
+ck('刷新后有回执且对读屏可见（0.2.469）',
+  view.includes('refreshNotice({ people: st.people') && view.includes('testID="legion3d-refresh-notice"')
+  && view.includes('accessibilityLiveRegion="polite"'));
+
 ck('有手动刷新入口，且刷新会清掉选中与复制态（0.2.468）',
   view.includes('testID="legion3d-refresh"')
   && view.includes('setSelectedId(null); setCopied(false); setReloadKey((n) => n + 1)')

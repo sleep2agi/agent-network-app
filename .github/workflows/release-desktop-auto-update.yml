@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.469:
+            - 点「刷新」后会回一句「已更新：N 人 · M 个 Agent · K 个部门」，数据没变也知道刷成功了。
+
             What's new in 0.2.468:
             - 军团 3D 加了一个「刷新」：组织架构刚改过时，不用退出去再进来。
 
