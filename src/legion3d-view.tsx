@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { copyA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, refreshNotice, tapOutcome } from './legion/legion-focus';
+import { copyA11yLabel, refreshA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, refreshNotice, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 import { loadLegion3DFocusId, loadLegion3DSpin, loadLegion3DSpinSpeed, saveLegion3DFocusId, saveLegion3DSpin, saveLegion3DSpinSpeed } from './agent-list-prefs';
 
@@ -315,7 +315,7 @@ export default function Legion3DView(p: Props) {
           </Text>
           {/* 手动刷新(0.2.468):组织架构刚变过时,不必退出去再进来才看到新的。 */}
           {/* 加载中禁用（0.2.471）：连点会并发出多次 org 请求，最后一个返回的未必是最新的。 */}
-          <Pressable accessibilityRole="button" accessibilityLabel="重新加载组织架构" testID="legion3d-refresh"
+          <Pressable accessibilityRole="button" accessibilityLabel={refreshA11yLabel(busy)} testID="legion3d-refresh"
             disabled={busy}
             onPress={() => { setSelectedId(null); setCopied(false); setReloadKey((n) => n + 1); }}
             style={({ pressed }) => [{ borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>

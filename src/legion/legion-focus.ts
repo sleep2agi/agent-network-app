@@ -321,3 +321,13 @@ export function refreshNotice(input: { people?: number; agents?: number; groups?
   if (people === 0 && agents === 0 && groups === 0) return '已更新';
   return `已更新：${people} 人 · ${agents} 个 Agent · ${groups} 个部门`;
 }
+
+/**
+ * 「刷新」按钮的无障碍标签(2026-11-05,0.2.472)。
+ *
+ * 加载中按钮被禁用，但读屏只会念「重新加载组织架构」，听不出「已经按下了、正在等」——
+ * 用户会以为按钮没反应而反复去点。这里按状态给两个标签。
+ */
+export function refreshA11yLabel(busy: boolean): string {
+  return busy ? '正在重新加载组织架构，请稍候' : '重新加载组织架构';
+}
