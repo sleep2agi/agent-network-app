@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusLabel, focusOutline, focusStats, focusTrail } from './legion/legion-focus';
+import { focusLabel, focusOutline, focusStats, focusTrail, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -119,7 +119,10 @@ export default function Legion3DView(p: Props) {
           const { locationX, locationY } = (e.nativeEvent ?? {}) as { locationX?: number; locationY?: number };
           if (typeof locationX !== 'number' || typeof locationY !== 'number') return;
           const hit = pickBody(bodies as BodyCommand[], locationX, locationY);
-          setSelectedId(hit ? hit.id : null);
+          // 点暗色部门 = 直接切到那块(0.2.457),不用再点一次「只看这个部门」。
+          const outcome = tapOutcome(hit?.id, dimmedIds);
+          if (outcome.focusId !== undefined) setFocusId(outcome.focusId);
+          setSelectedId(outcome.selectedId);
         }}
         // 长按是手机手势:桌面上按住鼠标是在拖选文字,绑上去会被当成误触(phone-only guard)。
         onLongPress={Platform.OS === 'web' ? undefined : () => { setSelectedId(null); setCopied(false); }}

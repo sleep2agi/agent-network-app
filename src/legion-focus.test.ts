@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusLabel, focusLayout, focusOutline, focusStats, focusTrail, subtreeIds } from './legion/legion-focus';
+import { focusLabel, focusLayout, focusOutline, focusStats, focusTrail, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -150,6 +150,34 @@ ck('聚焦不存在的 id 时不产生暗色节点（不猜）', (() => {
 ck('暗色部门不带来额外的边（边只保留范围内的）', (() => {
   const view = focusOutline(layout, 'dept:d1');
   return view.layout.edges.every((e) => !view.dimmedIds.has(e.from) && !view.dimmedIds.has(e.to));
+})());
+
+// 点选(0.2.457):点暗色部门直接切过去,其他情况只改选中。
+ck('点中暗色部门 ⇒ 聚焦并选中它', (() => {
+  const view = focusOutline(layout, 'dept:d1');
+  const out = tapOutcome('dept:d9', view.dimmedIds);
+  return out.focusId === 'dept:d9' && out.selectedId === 'dept:d9';
+})());
+
+ck('点中范围内节点 ⇒ 只改选中,不动聚焦', (() => {
+  const view = focusOutline(layout, 'dept:d1');
+  const out = tapOutcome('person:u1', view.dimmedIds);
+  return out.focusId === undefined && out.selectedId === 'person:u1';
+})());
+
+ck('点空白 ⇒ 清空选中,不动聚焦', (() => {
+  const out = tapOutcome(null, new Set(['dept:d9']));
+  return out.focusId === undefined && out.selectedId === null;
+})());
+
+ck('没聚焦(没有暗色节点)时点谁都只改选中', (() => {
+  const out = tapOutcome('dept:d9', new Set());
+  return out.focusId === undefined && out.selectedId === 'dept:d9';
+})());
+
+ck('空字符串 id 当成点空白（不聚焦到空节点）', (() => {
+  const out = tapOutcome('   ', new Set(['  ']));
+  return out.focusId === undefined && out.selectedId === null;
 })());
 
 console.log(`legion-focus: ${pass} passed`);
