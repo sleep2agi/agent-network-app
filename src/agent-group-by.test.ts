@@ -3,6 +3,7 @@ import { readFileSync } from 'node:fs';
 import type { Session } from './api';
 import { buildAgentDirectory, type DirectoryNode } from './agent-directory';
 import type { AgentOrgData } from './agent-org-model';
+import { parseDirectoryPage } from './agent-org-api';
 import { buildSections, countShown } from './agents-list';
 import { departmentIndex, GROUP_BY_OPTIONS, groupMapOf, hostGroup, parseGroupBy, registrationIndex, runtimeGroup, statusGroup } from './agent-group-by';
 import { pinyinMatch } from './lib/pinyin';
@@ -25,6 +26,7 @@ const org: AgentOrgData = {
     { nodeId: 'n1', alias: '通信甲', departmentId: 'work' },
     { nodeId: 'n2', alias: '通信乙', departmentId: null },
     { nodeId: 'n3', alias: '通信丙' },
+    { nodeId: 'n6', alias: '通信己', departmentId: 'missing-department' },
   ] }],
   unowned: [{ nodeId: 'n4', alias: '通信丁', departmentId: 'infra' }],
 };
@@ -50,8 +52,8 @@ check('runtime, host and status use reported fields and explicit unknowns', () =
 });
 
 const full = [s('通信甲', 'N', 'n1'), s('通信乙', 'N', 'n2'), s('通信丙', 'N', 'n3'),
-  s('通信丁', 'N', 'n4'), s('通信戊', 'N', 'missing')];
-const nodes = full.slice(0, 4).map(r => n(r.alias, r.network_id!, r.node_id!));
+  s('通信丁', 'N', 'n4'), s('通信己', 'N', 'n6'), s('通信戊', 'N', 'missing')];
+const nodes = full.slice(0, 5).map(r => n(r.alias, r.network_id!, r.node_id!));
 // Real list rows come from the light projection, which typically omits node_id.
 const light = full.map(r => s(r.alias, r.network_id));
 const registrations = registrationIndex(directory(nodes, full));
@@ -62,10 +64,35 @@ check('actual node department beats its owner department', () => {
   assert.equal(labels.get(light[0]), 'TMWork');
   assert.equal(labels.get(light[3]), 'TM基建'); // unowned nodes still have explicit departments
 });
-check('explicit null differs from missing field and unmatched node', () => {
+check('supported Hub: null or omitted department is unassigned; missing tree ID stays unknown', () => {
   assert.equal(labels.get(light[1]), '未归属');
-  assert.equal(labels.get(light[2]), '归属待确认');
-  assert.equal(labels.get(light[4]), '未匹配节点');
+  assert.equal(labels.get(light[2]), '未归属');
+  assert.equal(labels.get(light[4]), '归属待确认');
+  assert.equal(labels.get(light[5]), '未匹配节点');
+});
+check('malformed department values are not mistaken for omitted fields', () => {
+  const parsed = parseDirectoryPage({ agent_department_supported: true, people: [], agents_without_owner: [
+    { node_id: 'n1', alias: '甲', department_id: 123 },
+    { node_id: 'n2', alias: '乙', department_id: '   ' },
+    { node_id: 'n3', alias: '丙' },
+  ] });
+  const index = departmentIndex('N', { ...org, owners: [], unowned: parsed.unowned });
+  assert.equal(index.get(JSON.stringify(['N', 'n1'])), '归属待确认');
+  assert.equal(index.get(JSON.stringify(['N', 'n2'])), '归属待确认');
+  assert.equal(index.get(JSON.stringify(['N', 'n3'])), '未归属');
+});
+check('same department name under different parents has distinct grouping paths', () => {
+  const data: AgentOrgData = { ...org,
+    departments: [dept('a', '甲'), dept('b', '乙'),
+      { ...dept('a-team', '平台'), parent_id: 'a' },
+      { ...dept('b-team', '平台'), parent_id: 'b' }],
+    owners: [],
+    unowned: [{ nodeId: 'n1', alias: '一', departmentId: 'a-team' },
+      { nodeId: 'n2', alias: '二', departmentId: 'b-team' }],
+  };
+  const index = departmentIndex('N', data);
+  assert.equal(index.get(JSON.stringify(['N', 'n1'])), '甲 / 平台');
+  assert.equal(index.get(JSON.stringify(['N', 'n2'])), '乙 / 平台');
 });
 check('buildSections consumes every calculated department label, not alias prefixes', () => {
   const sections = buildSections(light, '', { teamOf: (_alias, session) => labels.get(session) });
@@ -99,7 +126,7 @@ check('department search survives switching views and does not match other rows'
 check('loading, stale and failed directory never claim unregistered', () => {
   for (const patch of [{ loaded: false }, { stale: true }, { nodesRead: 'unavailable' }, { sessionsRead: 'incomplete' }]) {
     const index = registrationIndex({ ...directory(nodes, full), ...patch });
-    assert.equal(groupMapOf(light, 'dept', index, departments).get(light[4]), '关联待确认');
+    assert.equal(groupMapOf(light, 'dept', index, departments).get(light[5]), '关联待确认');
   }
 });
 check('missing session identity, missing node identity and mismatched light identity are unknown', () => {

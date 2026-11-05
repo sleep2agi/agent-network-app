@@ -2,6 +2,7 @@
 import type { Session } from './api';
 import type { AgentDirectoryRow } from './agent-directory';
 import type { AgentOrgData, OrgAgent } from './agent-org-model';
+import { deptPathLabel } from './org-model';
 
 export type GroupBy = 'dept' | 'runtime' | 'host' | 'status';
 
@@ -92,14 +93,18 @@ export function registrationIndex(directory: {
   return result;
 }
 
-/** 只用目录里的节点显式部门；没返回该字段、旧 Hub 或部门树不全时不猜。 */
+/** 只用目录里的节点显式部门；旧 Hub、畸形字段或部门树不全时不猜。 */
 export function departmentIndex(network: string | undefined, data: AgentOrgData | null): Map<string, string> {
   const out = new Map<string, string>();
   if (!valid(network) || !data?.directory || !data.departmentsApi || !data.agentDepartmentSupported) return out;
-  const names = new Map(data.departments.map(d => [d.id, d.name]));
+  // 不同上级下允许同名部门；只用叶子名会把两组错误合并。
+  const tree = { departments: data.departments, members: [] };
+  const names = new Map(data.departments.map(d => [d.id, deptPathLabel(tree, d.id)]));
   const add = (agent: OrgAgent) => {
     if (!valid(agent.nodeId)) return;
-    const label = (agent.departmentId === null ? '未归属'
+    // Hub 声明 agent_department_supported 时，省略 department_id 就是没有显式归属。
+    const label = (agent.departmentMalformed ? '归属待确认'
+      : agent.departmentId == null ? '未归属'
       : valid(agent.departmentId) ? names.get(agent.departmentId) : undefined) || '归属待确认';
     const key = nodeKey(network, agent.nodeId);
     const previous = out.get(key);

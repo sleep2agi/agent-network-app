@@ -15,6 +15,8 @@ export type OrgAgent = {
   nodeId: string;
   alias: string;
   departmentId?: string | null;
+  /** A present but invalid API value is not the same as an omitted department. */
+  departmentMalformed?: boolean;
   updatedAt?: string | null;
   lifecycleState?: string | null;
 };
