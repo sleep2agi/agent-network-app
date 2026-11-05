@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusHint, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
+import { focusEmptyText, focusHint, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -219,6 +219,20 @@ export default function Legion3DView(p: Props) {
             );
           })}
         </View>
+      ) : null}
+      {/* 聚焦到空部门时说清楚「这里没人」，并给退出口（0.2.462）。 */}
+      {layout && focusId && focusEmptyText({
+        focusLabel: focusLabel(layout, focusId),
+        people: focusStats(layout, focusId).people,
+        agents: focusStats(layout, focusId).agents,
+      }) ? (
+        <Text testID="legion3d-focus-empty" style={{ color: colors.textMuted, fontSize: 11 }}>
+          {focusEmptyText({
+            focusLabel: focusLabel(layout, focusId),
+            people: focusStats(layout, focusId).people,
+            agents: focusStats(layout, focusId).agents,
+          })}
+        </Text>
       ) : null}
       {focusHint(dimmedIds?.size ?? 0, focusId) ? (
         <Text testID="legion3d-focus-hint" style={{ color: colors.textMuted, fontSize: 10 }}>

@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { focusEmptyText, focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -266,6 +266,20 @@ ck('圆心 / 未知 id / 空 id 一律给空数组（调用方不加这行）', 
     && nodeDepartmentPath(layout, null).length === 0
     && nodeDepartmentPath(null, 'person:u1').length === 0;
 })());
+
+// 空聚焦提示(0.2.462):聚焦到空部门时不能什么都不说。
+ck('聚焦到没人没 Agent 的部门时给空态提示（带退出口）', (() => {
+  const t = focusEmptyText({ focusLabel: '后勤部', people: 0, agents: 0 });
+  return t === '后勤部 下面还没有人 · 点面包屑返回上一级';
+})());
+
+ck('有人就不提示', (() => focusEmptyText({ focusLabel: '平台', people: 3, agents: 0 }) === null)());
+
+ck('只有 Agent 也算「有人」', (() => focusEmptyText({ focusLabel: '平台', people: 0, agents: 1 }) === null)());
+
+ck('没有聚焦名时不提示（不输出半句话）', (() => focusEmptyText({ focusLabel: null, people: 0, agents: 0 }) === null)());
+
+ck('数字缺失按 0 处理并给提示', (() => (focusEmptyText({ focusLabel: '后勤部' }) ?? '').includes('还没有人'))());
 
 console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);
