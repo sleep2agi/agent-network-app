@@ -72,6 +72,32 @@ export function focusTrail(
   return [head, ...chain.reverse()];
 }
 
+/**
+ * 聚焦 + 轮廓(2026-11-05,0.2.456):范围外的**部门**不删,而是变暗留在图上。
+ *
+ * 只看一个部门时,如果整张图只剩它自己,用户会失去「军团有多大」的参照 ——
+ * 也没法判断自己看的是不是那块该看的。这里保留范围外的 group 节点(人和 Agent 仍裁掉,
+ * 否则还是满屏),由调用方把这些 id 传给 buildLegionScene 的 dimmedIds 画成暗色。
+ * 边只保留范围内的(暗部门之间的连线没有信息量,反而挡住视线)。
+ */
+export function focusOutline(
+  layout: LegionLayout,
+  rootId: string | null | undefined,
+): { layout: LegionLayout; dimmedIds: Set<string> } {
+  const id = (rootId ?? '').trim();
+  if (!id || !layout.nodes.some((n) => n.id === id)) {
+    return { layout, dimmedIds: new Set() };
+  }
+  const keep = subtreeIds(layout.nodes, id);
+  const outsideGroups = layout.nodes.filter((n) => n.kind === 'group' && !keep.has(n.id));
+  const dimmedIds = new Set(outsideGroups.map((n) => n.id));
+  const base = focusLayout(layout, id);
+  return {
+    layout: { ...base, nodes: [...base.nodes, ...outsideGroups] },
+    dimmedIds,
+  };
+}
+
 /** 聚焦时给一行「现在看的是谁」:布局里取名字,取不到就给 id 后半截。 */
 export function focusLabel(layout: LegionLayout | null | undefined, rootId: string | null | undefined): string | null {
   const id = (rootId ?? '').trim();

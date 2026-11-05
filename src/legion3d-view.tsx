@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusLabel, focusLayout, focusStats, focusTrail } from './legion/legion-focus';
+import { focusLabel, focusOutline, focusStats, focusTrail } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -88,11 +88,16 @@ export default function Legion3DView(p: Props) {
   }, [spinning, layout, speed]);
 
   // 自转/聚焦时只重算图元(原始布局不动)。
-  const shownLayout = useMemo(() => (layout ? focusLayout(layout, focusId) : null), [layout, focusId]);
+  // 聚焦时范围外的部门保留成暗色轮廓(0.2.456):不删掉,才看得出「军团还有多大」。
+  const outline = useMemo(() => (layout ? focusOutline(layout, focusId) : null), [layout, focusId]);
+  const shownLayout = outline?.layout ?? null;
+  const dimmedIds = outline?.dimmedIds;
   useEffect(() => {
     if (!shownLayout) return;
-    setState((prev) => (prev.phase === 'ready' ? { ...prev, commands: buildLegionScene(shownLayout, cam, { width, height }) } : prev));
-  }, [shownLayout, cam, height]);
+    setState((prev) => (prev.phase === 'ready'
+      ? { ...prev, commands: buildLegionScene(shownLayout, cam, { width, height }, { dimmedIds }) }
+      : prev));
+  }, [shownLayout, dimmedIds, cam, height]);
 
   const dots = useMemo(
     () => state.commands.filter((c) => c.kind === 'ring').flatMap((r) => (r as { points: Array<{ x: number; y: number }> }).points.filter((_, i) => i % RING_DOT_STRIDE === 0)),
