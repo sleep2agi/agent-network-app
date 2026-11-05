@@ -523,6 +523,9 @@ jobs:
         if: inputs.publish == true && runner.os == 'Linux'
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # 草稿的 tag 在发布前没有 ref,`releases/tags/<tag>` 会 404(2026-11-05 0.2.455 真红过)
+          # ⇒ 这条腿一律按 prepare-release 的 release id 查。
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           TAURI_SIGNING_PRIVATE_KEY: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY }}
           TAURI_SIGNING_PRIVATE_KEY_PASSWORD: ${{ secrets.TAURI_SIGNING_PRIVATE_KEY_PASSWORD }}
         shell: bash
@@ -548,7 +551,8 @@ jobs:
           #  2) 取不到旧清单时**不允许**用空对象覆盖;宁可 fail-closed 让 verify 报一句清楚的话。
           # 合并逻辑在 scripts/patch-desktop-latest-json.mjs,有单测守着。
           release_json=/tmp/release.json
-          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/desktop-v${version}" > "$release_json"
+          test -n "${RELEASE_ID:-}"
+          gh api "repos/${GITHUB_REPOSITORY}/releases/${RELEASE_ID}" > "$release_json"
           manifest_id=$(node -e '
             const release = require("/tmp/release.json");
             const asset = (release.assets || []).find((candidate) => candidate.name === "latest.json");

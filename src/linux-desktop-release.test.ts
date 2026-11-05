@@ -4,7 +4,7 @@
 import { readFileSync } from 'node:fs';
 import { LATEST_ALIAS_SUFFIXES } from '../scripts/modelscope-mirror.mjs';
 import { assertDesktopReleaseDraft, releaseAssetNames } from '../scripts/verify-desktop-release-draft.mjs';
-import { assetDownloadUrl, withLinuxUpdaterEntries } from '../scripts/patch-desktop-latest-json.mjs';
+import { assetApiUrl, withLinuxUpdaterEntries } from '../scripts/patch-desktop-latest-json.mjs';
 
 let passed = 0;
 const check = (name: string, ok: boolean) => {
@@ -91,10 +91,15 @@ check('linux 两个条目共用 deb 的 .sig 并用资产真实下载地址',
     return linux.signature === 'deb-sig' && deb.signature === 'deb-sig' && linux.url === deb.url
       && patched.platforms['darwin-aarch64'].url === completePlatforms['darwin-aarch64'].url;
   })());
-check('草稿资产的下载地址取 browser_download_url（verify 只认这个）',
-  assetDownloadUrl({ tag_name: 'desktop-v0.2.454', assets: [{ name: 'ANet_0.2.454_amd64.deb', id: 1, url: 'https://api.test', browser_download_url: 'https://github.com/o/r/releases/download/untagged-abc/x.deb' }] }, 'ANet_0.2.454_amd64.deb')
-    === 'https://github.com/o/r/releases/download/untagged-abc/x.deb'
-  && throws(() => assetDownloadUrl({ assets: [] }, 'nope.deb'), /has no asset/));
+// 2026-11-05: 写 browser_download_url 时 verify 认、normalize 不认(untagged-…)⇒发布后归一化必失败。
+// 统一写资产 API url：verify 的 urlCandidates 含 apiUrl，normalize 也明确接受 asset API url。
+check('草稿资产的清单地址取 asset API url（verify 与 normalize 都认）',
+  assetApiUrl({ tag_name: 'desktop-v0.2.455', assets: [{ name: 'ANet_0.2.455_amd64.deb', id: 7, url: 'https://api.github.com/repos/o/r/releases/assets/7', browser_download_url: 'https://github.com/o/r/releases/download/untagged-abc/x.deb' }] }, 'ANet_0.2.455_amd64.deb')
+    === 'https://api.github.com/repos/o/r/releases/assets/7'
+  && throws(() => assetApiUrl({ assets: [] }, 'nope.deb'), /has no asset/));
+check('Linux 腿按 release id 查草稿（草稿 tag 没有 ref，按 tag 查会 404）',
+  workflow.includes('releases/${RELEASE_ID}') && !workflow.includes('releases/tags/desktop-v${version}')
+  && workflow.includes('RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}'));
 check('platform selection survives a Windows CRLF checkout',
   JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
 check('default release matrix contains only the exact macOS and Windows bundles',

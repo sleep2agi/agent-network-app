@@ -51,16 +51,27 @@ export function withLinuxUpdaterEntries({ manifest, version, debName, debUrl, si
   };
 }
 
-/** Find the download URL verify-draft will accept for `name` on a draft release. */
-export function assetDownloadUrl(release, name) {
+/**
+ * The URL to put in latest.json for asset `name` on a **draft** release.
+ *
+ * 草稿期有两个候选地址，各有一个门槛，别选错（2026-11-05 0.2.455 挨个踩过）：
+ *   · `browser_download_url` → `…/releases/download/untagged-…/…`
+ *     verify-draft 认它，但 normalize-desktop-update-manifest 不认
+ *     （"neither a public download link nor an asset API url"）⇒ 发布后归一化必失败。
+ *   · `url`（资产 API 端点 `…/releases/assets/<id>`）
+ *     两边都认：verify 的 urlCandidates 含 apiUrl，normalize 明确接受 asset API url。
+ * 所以统一写 **asset API url**。
+ */
+export function assetApiUrl(release, name) {
   const asset = (release?.assets ?? []).find((candidate) => candidate?.name === name);
   if (!asset) throw new Error(`release ${release?.tag_name ?? '?'} has no asset ${name}`);
-  // Drafts report `untagged-…` here; that is exactly what `gh release view --json assets`
-  // hands verify-desktop-release-draft.mjs, so the manifest has to agree with it.
-  const url = asset.browser_download_url || asset.url;
-  if (!url) throw new Error(`asset ${name} has no browser_download_url`);
+  const url = asset.url || asset.apiUrl;
+  if (!url) throw new Error(`asset ${name} has no api url`);
   return url;
 }
+
+/** @deprecated 保留旧名避免调用方断裂；语义已改为「写 asset API url」。 */
+export const assetDownloadUrl = assetApiUrl;
 
 function arg(name, fallback = undefined) {
   const index = process.argv.indexOf(`--${name}`);
@@ -82,7 +93,7 @@ if (process.argv[1]?.endsWith('patch-desktop-latest-json.mjs')) {
     manifest,
     version,
     debName,
-    debUrl: assetDownloadUrl(release, debName),
+    debUrl: assetApiUrl(release, debName),
     signature: readFileSync(sigPath, 'utf8').trim(),
   });
   writeFileSync(manifestPath, `${JSON.stringify(patched, null, 2)}\n`);
