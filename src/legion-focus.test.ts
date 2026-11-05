@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusLayout, focusLabel, focusStats, focusTrail, subtreeIds } from './legion/legion-focus';
+import { focusLabel, focusLayout, focusOutline, focusStats, focusTrail, subtreeIds } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -117,6 +117,39 @@ ck('聚焦不存在的 id 时只给「军团」，不猜也不清空', (() => {
 
 ck('面包屑不会把圆心写进链里（军团已是第一项）', (() => {
   return focusTrail(layout, 'dept:d2').every((crumb) => crumb.id !== 'core');
+})());
+
+
+// 聚焦轮廓(0.2.456):范围外的部门留着但变暗,人和 Agent 仍裁掉。
+ck('聚焦轮廓保留范围外部门并标记为暗色', (() => {
+  const view = focusOutline(layout, 'dept:d1');
+  const ids = new Set(view.layout.nodes.map((n) => n.id));
+  return ids.has('dept:d9') && view.dimmedIds.has('dept:d9');
+})());
+
+ck('聚焦轮廓里范围外的「人」仍然被裁掉（否则还是满屏）', (() => {
+  const ids = new Set(focusOutline(layout, 'dept:d1').layout.nodes.map((n) => n.id));
+  return !ids.has('person:u2') && !ids.has('agent:n2');
+})());
+
+ck('聚焦轮廓不把范围内的节点标成暗色', (() => {
+  const view = focusOutline(layout, 'dept:d1');
+  return !view.dimmedIds.has('dept:d1') && !view.dimmedIds.has('dept:d2') && !view.dimmedIds.has('person:u1');
+})());
+
+ck('没聚焦时没有暗色节点、布局原样', (() => {
+  const view = focusOutline(layout, null);
+  return view.dimmedIds.size === 0 && view.layout.nodes.length === layout.nodes.length;
+})());
+
+ck('聚焦不存在的 id 时不产生暗色节点（不猜）', (() => {
+  const view = focusOutline(layout, 'dept:nope');
+  return view.dimmedIds.size === 0 && view.layout.nodes.length === layout.nodes.length;
+})());
+
+ck('暗色部门不带来额外的边（边只保留范围内的）', (() => {
+  const view = focusOutline(layout, 'dept:d1');
+  return view.layout.edges.every((e) => !view.dimmedIds.has(e.from) && !view.dimmedIds.has(e.to));
 })());
 
 console.log(`legion-focus: ${pass} passed`);

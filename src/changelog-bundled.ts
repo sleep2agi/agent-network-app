@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.456:",
+  "- 聚焦某个部门时，其他部门会以暗色轮廓留在图上（人和 Agent 仍收起）——看局部时也不会失去「军团还有多大」的参照。",
+  "",
   "What's new in 0.2.455:",
   "- 聚焦到子部门时，图上方会显示「军团 / 平台部 / 前端组」面包屑，点任意一级就能退回去，不用先看全图。",
   "",
