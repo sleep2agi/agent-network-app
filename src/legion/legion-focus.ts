@@ -306,3 +306,18 @@ export function focusIdFromStored(
 export function copyA11yLabel(copied: boolean): string {
   return copied ? '已复制这个节点的标识，再点一次可重新复制' : '复制这个节点的标识';
 }
+
+/**
+ * 手动刷新后的回执(2026-11-05,0.2.469)。
+ *
+ * 点「刷新」之后如果数据没变化,画面完全一样 —— 用户无法判断是「刷新成功但没有新数据」
+ * 还是「按钮没生效」。这里给一句带规模的回执,并挂在 liveRegion 上让读屏也能听到。
+ * 规模缺失时只说「已更新」,不编数字。
+ */
+export function refreshNotice(input: { people?: number; agents?: number; groups?: number }): string {
+  const people = input.people ?? 0;
+  const agents = input.agents ?? 0;
+  const groups = input.groups ?? 0;
+  if (people === 0 && agents === 0 && groups === 0) return '已更新';
+  return `已更新：${people} 人 · ${agents} 个 Agent · ${groups} 个部门`;
+}

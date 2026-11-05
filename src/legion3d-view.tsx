@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { copyA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
+import { copyA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, refreshNotice, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 import { loadLegion3DFocusId, loadLegion3DSpinSpeed, saveLegion3DFocusId, saveLegion3DSpinSpeed } from './agent-list-prefs';
 
@@ -31,6 +31,8 @@ const RING_DOT_STRIDE = 4;
 export default function Legion3DView(p: Props) {
   const [state, setState] = useState<{ phase: 'loading' | 'ready' | 'error' | 'empty'; reason?: string; commands: SceneCommand[]; note?: string }>({ phase: 'loading', commands: [] });
   const [reloadKey, setReloadKey] = useState(0);
+  // 手动刷新的回执(0.2.469):数据没变时画面一样,必须给一句话说明「刷过了」。
+  const [notice, setNotice] = useState<string | null>(null);
   // 自转:默认关(先看清静态图再决定要不要转),用户点了才转。
   const [spinning, setSpinning] = useState(false);
   const [yaw, setYaw] = useState(0.6);
@@ -99,6 +101,11 @@ export default function Legion3DView(p: Props) {
       }
       setLayout(built);
       setState({ phase: 'ready', commands: buildLegionScene(built, cam, { width, height }) });
+      if (reloadKey > 0) {
+        const st = built.stats;
+        setNotice(refreshNotice({ people: st.people, agents: st.agents, groups: st.groups }));
+        setTimeout(() => setNotice(null), 2200);
+      }
     }).catch((e: unknown) => {
       if (!live) return;
       setState({ phase: 'error', reason: 'fetch-failed', commands: [], note: `读组织架构失败：${String((e as Error)?.message ?? e)}` });
@@ -269,6 +276,12 @@ export default function Legion3DView(p: Props) {
             people: focusStats(layout, focusId).people,
             agents: focusStats(layout, focusId).agents,
           })}
+        </Text>
+      ) : null}
+      {/* 刷新回执（0.2.469）：liveRegion 让读屏也能听到「已更新」。 */}
+      {notice ? (
+        <Text testID="legion3d-refresh-notice" accessibilityLiveRegion="polite" style={{ color: colors.textMuted, fontSize: 11 }}>
+          {notice}
         </Text>
       ) : null}
       {focusHint(dimmedIds?.size ?? 0, focusId) ? (
