@@ -154,6 +154,8 @@ ck('聚焦到空部门时有空态提示（0.2.462）',
 ck('选中人/Agent 时显示所属部门路径（0.2.461）',
   view.includes('nodeDepartmentPath(layout, selected.id)') && view.includes("path.join(' / ')"));
 
+ck('无障碍描述带上选中节点（0.2.465）', view.includes('selectedLabel: selected ?'));
+
 ck('画布无障碍描述是动态的（0.2.460，读屏能听到聚焦范围与可点数量）',
   view.includes('legionA11yLabel({') && view.includes('dimmedCount: dimmedIds?.size ?? 0'));
 

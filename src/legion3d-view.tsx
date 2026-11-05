@@ -141,6 +141,7 @@ export default function Legion3DView(p: Props) {
           agents: focusStats(layout, focusId).agents,
           groups: focusStats(layout, focusId).groups,
           dimmedCount: dimmedIds?.size ?? 0,
+          selectedLabel: selected ? `${selected.label}${selected.kind === 'agent' ? '（Agent）' : selected.kind === 'person' ? '（人）' : selected.kind === 'group' ? '（部门）' : ''}` : null,
         }) : '军团 3D 视图，点节点可看是谁'}
         onPress={(e) => {
           const { locationX, locationY } = (e.nativeEvent ?? {}) as { locationX?: number; locationY?: number };
