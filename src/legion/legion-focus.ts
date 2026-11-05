@@ -44,6 +44,34 @@ export function focusLayout(layout: LegionLayout, rootId: string | null | undefi
   return { ...layout, nodes, edges };
 }
 
+/**
+ * 聚焦面包屑(2026-11-05):军团 → … → 当前聚焦节点。
+ *
+ * 聚焦到「平台部/前端组」这种二级部门时,原来的「看全图」只有一个出口 ——
+ * 想退到上一级(平台部整体)得先看全图再点进去。这里把祖先链摊平,让每一级都能直接点。
+ * 第一项固定是 { id: null }(军团 = 全图),最后一项是当前聚焦节点。
+ * 找不到该 id ⇒ 只返回军团那一项,不猜。
+ */
+export function focusTrail(
+  layout: LegionLayout | null | undefined,
+  rootId: string | null | undefined,
+): Array<{ id: string | null; label: string }> {
+  const head = { id: null as string | null, label: '军团' };
+  const id = (rootId ?? '').trim();
+  if (!layout || !id) return [head];
+  const byId = new Map(layout.nodes.map((n) => [n.id, n] as const));
+  if (!byId.has(id)) return [head];
+  const chain: Array<{ id: string | null; label: string }> = [];
+  const seen = new Set<string>();
+  let cur = byId.get(id);
+  while (cur && cur.kind !== 'core' && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    chain.push({ id: cur.id, label: cur.label });
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+  }
+  return [head, ...chain.reverse()];
+}
+
 /** 聚焦时给一行「现在看的是谁」:布局里取名字,取不到就给 id 后半截。 */
 export function focusLabel(layout: LegionLayout | null | undefined, rootId: string | null | undefined): string | null {
   const id = (rootId ?? '').trim();

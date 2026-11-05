@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusLayout, focusLabel, focusStats, subtreeIds } from './legion/legion-focus';
+import { focusLayout, focusLabel, focusStats, focusTrail, subtreeIds } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -89,4 +89,35 @@ ck('聚焦不存在的 id 也退回全量（不猜）',
   focusStats(layout, 'dept:nope').people === layout.stats.people);
 
 console.log(`legion focus: ${pass}/${names.length} checks passed`);
+if (pass !== names.length) process.exit(1);
+
+// 面包屑(2026-11-05):二级部门聚焦时能逐级退回,不用先回全图。
+ck('面包屑给出 军团 → 父部门 → 当前部门 的完整祖先链', (() => {
+  const trail = focusTrail(layout, 'dept:d2');
+  return trail.length === 3
+    && trail[0].id === null && trail[0].label === '军团'
+    && trail[1].id === 'dept:d1'
+    && trail[2].id === 'dept:d2';
+})());
+
+ck('一级部门聚焦时面包屑是两级（军团 → 部门）', (() => {
+  const trail = focusTrail(layout, 'dept:d1');
+  return trail.length === 2 && trail[0].id === null && trail[1].id === 'dept:d1';
+})());
+
+ck('没聚焦只给「军团」一项', (() => {
+  const trail = focusTrail(layout, null);
+  return trail.length === 1 && trail[0].id === null && trail[0].label === '军团';
+})());
+
+ck('聚焦不存在的 id 时只给「军团」，不猜也不清空', (() => {
+  const trail = focusTrail(layout, 'dept:nope');
+  return trail.length === 1 && trail[0].id === null;
+})());
+
+ck('面包屑不会把圆心写进链里（军团已是第一项）', (() => {
+  return focusTrail(layout, 'dept:d2').every((crumb) => crumb.id !== 'core');
+})());
+
+console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);
