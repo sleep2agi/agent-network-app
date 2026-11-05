@@ -44,6 +44,9 @@ check('Linux 腿不依赖 JS action：tauri-action 明确排除 Linux',
 check('Linux 腿用 CLI 构建并用 gh 上传 deb 与 .sig',
   workflow.includes('npx tauri build --bundles deb')
   && workflow.includes('gh release upload "desktop-v${version}" "$deb" "$deb.sig"'));
+check('Linux 腿自己补 latest.json 的 linux 条目（不再靠 tauri-action）',
+  workflow.includes('latest.json patched with linux entries')
+  && workflow.includes('doc.platforms["linux-x86_64"] = { signature: sig, url }'));
 check('platform selection survives a Windows CRLF checkout',
   JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
 check('default release matrix contains only the exact macOS and Windows bundles',

@@ -537,6 +537,23 @@ jobs:
           gh release upload "desktop-v${version}" "$deb" "$deb.sig" --clobber \
             --repo "${GITHUB_REPOSITORY}" >/dev/null
           echo "uploaded $(basename "$deb") and its .sig"
+          # latest.json 里的 linux 条目以前是 tauri-action 顺手加的;改走 CLI 后得自己补,
+          # 否则 verify-draft 会报 `latest.json missing linux-x86_64 url`。
+          gh release download "desktop-v${version}" -p latest.json -O > /tmp/latest.json \
+            --repo "${GITHUB_REPOSITORY}" || echo '{}' > /tmp/latest.json
+          node -e '
+            const fs = require("node:fs");
+            const path = "/tmp/latest.json";
+            const v = process.argv[1], repo = process.argv[2], debName = process.argv[3], sig = process.argv[4];
+            const doc = JSON.parse(fs.readFileSync(path, "utf8") || "{}");
+            doc.platforms = doc.platforms || {};
+            const url = `https://github.com/${repo}/releases/download/desktop-v${v}/${debName}`;
+            doc.platforms["linux-x86_64"] = { signature: sig, url };
+            doc.platforms["linux-x86_64-deb"] = { signature: sig, url };
+            fs.writeFileSync(path, JSON.stringify(doc, null, 2));
+          ' "$version" "${GITHUB_REPOSITORY}" "$(basename "$deb")" "$(cat "$deb.sig")"
+          gh release upload "desktop-v${version}" /tmp/latest.json --clobber --repo "${GITHUB_REPOSITORY}" >/dev/null
+          echo "latest.json patched with linux entries"
 
       - uses: tauri-apps/tauri-action@944946e3e4cac6603d1fe8f514171e9ecd3c78aa # v1
         if: inputs.publish == true && runner.os != 'Linux'
