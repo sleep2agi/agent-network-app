@@ -21,7 +21,7 @@ import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
 import { copyA11yLabel, focusEmptyText, focusHint, focusIdFromStored, focusLabel, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
-import { loadLegion3DFocusId, saveLegion3DFocusId } from './agent-list-prefs';
+import { loadLegion3DFocusId, loadLegion3DSpinSpeed, saveLegion3DFocusId, saveLegion3DSpinSpeed } from './agent-list-prefs';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
 
@@ -62,6 +62,20 @@ export default function Legion3DView(p: Props) {
       .finally(() => { if (live) setFocusRestored(true); });
     return () => { live = false; };
   }, [layout, focusRestored]);
+
+  // 恢复上次的自转速度档（0.2.467）：慢/中/快是口味，不该每次重选。
+  useEffect(() => {
+    let live = true;
+    loadLegion3DSpinSpeed()
+      .then((stored) => { if (live && stored) setSpeed(parseSpinSpeed(stored)); })
+      .catch(() => {});
+    return () => { live = false; };
+  }, []);
+
+  // 改档即写回（写失败只影响下次默认值，不打扰用户）。
+  useEffect(() => {
+    saveLegion3DSpinSpeed(speed).catch(() => {});
+  }, [speed]);
 
   // 记住/忘记聚焦（点和面包屑都会改 focusId）。
   useEffect(() => {
