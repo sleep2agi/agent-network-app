@@ -539,24 +539,30 @@ jobs:
           echo "uploaded $(basename "$deb") and its .sig"
           # latest.json 里的 linux 条目以前是 tauri-action 顺手加的;改走 CLI 后得自己补,
           # 否则 verify-draft 会报 `latest.json missing linux-x86_64 url`。
-          gh release download "desktop-v${version}" -p latest.json -O > /tmp/latest.json \
-            --repo "${GITHUB_REPOSITORY}" || echo '{}' > /tmp/latest.json
-          node -e '
-            const fs = require("node:fs");
-            const path = "/tmp/latest.json";
-            const v = process.argv[1], repo = process.argv[2], debName = process.argv[3], sig = process.argv[4];
-            let doc = {};
-            try { doc = JSON.parse(fs.readFileSync(path, "utf8") || "{}") || {}; } catch { doc = {}; }
-            // gh release download 对草稿资产偶尔拿不到 ⇒ 这里必须能自愈成一份完整清单,
-            // 否则 verify 会报 `latest.json version undefined is not 0.2.454`(2026-11-05 真红过)。
-            if (!doc.version) doc.version = v;
-            if (!doc.pub_date) doc.pub_date = new Date().toISOString();
-            doc.platforms = doc.platforms || {};
-            const url = `https://github.com/${repo}/releases/download/desktop-v${v}/${debName}`;
-            doc.platforms["linux-x86_64"] = { signature: sig, url };
-            doc.platforms["linux-x86_64-deb"] = { signature: sig, url };
-            fs.writeFileSync(path, JSON.stringify(doc, null, 2));
-          ' "$version" "${GITHUB_REPOSITORY}" "$(basename "$deb")" "$(cat "$deb.sig")"
+          #
+          # 🔴 2026-11-05 两次真红都出在这一段,别再退回「下载不到就写一份新的」:
+          #  1) `gh release download` 对**草稿资产**拿不到 latest.json ⇒ 落到 `{}`,
+          #     写出来的清单只有 version + linux ⇒ verify 报 `version undefined`,再报
+          #     `latest.json missing darwin-aarch64 url`(macOS/Windows 条目被覆盖掉了)。
+          #     草稿资产必须走 REST: `GET /releases/assets/<id>` + `Accept: application/octet-stream`。
+          #  2) 取不到旧清单时**不允许**用空对象覆盖;宁可 fail-closed 让 verify 报一句清楚的话。
+          # 合并逻辑在 scripts/patch-desktop-latest-json.mjs,有单测守着。
+          release_json=/tmp/release.json
+          gh api "repos/${GITHUB_REPOSITORY}/releases/tags/desktop-v${version}" > "$release_json"
+          manifest_id=$(node -e '
+            const release = require("/tmp/release.json");
+            const asset = (release.assets || []).find((candidate) => candidate.name === "latest.json");
+            if (!asset) { console.error("::error::draft has no latest.json; refusing to overwrite the updater manifest"); process.exit(1); }
+            process.stdout.write(String(asset.id));
+          ')
+          gh api "repos/${GITHUB_REPOSITORY}/releases/assets/${manifest_id}" \
+            -H "Accept: application/octet-stream" > /tmp/latest.json
+          node scripts/patch-desktop-latest-json.mjs \
+            --manifest /tmp/latest.json \
+            --release-json "$release_json" \
+            --version "$version" \
+            --deb "$(basename "$deb")" \
+            --sig-file "$deb.sig"
           gh release upload "desktop-v${version}" /tmp/latest.json --clobber --repo "${GITHUB_REPOSITORY}" >/dev/null
           echo "latest.json patched with linux entries"
 

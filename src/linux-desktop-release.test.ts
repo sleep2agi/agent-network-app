@@ -4,12 +4,17 @@
 import { readFileSync } from 'node:fs';
 import { LATEST_ALIAS_SUFFIXES } from '../scripts/modelscope-mirror.mjs';
 import { assertDesktopReleaseDraft, releaseAssetNames } from '../scripts/verify-desktop-release-draft.mjs';
+import { assetDownloadUrl, withLinuxUpdaterEntries } from '../scripts/patch-desktop-latest-json.mjs';
 
 let passed = 0;
 const check = (name: string, ok: boolean) => {
   if (!ok) throw new Error(`FAIL: ${name}`);
   passed++;
   console.log(`PASS: ${name}`);
+};
+const completePlatforms = {
+  'darwin-aarch64': { signature: 'mac-sig', url: 'https://github.com/o/r/releases/download/untagged-abc/ANet_0.2.454_aarch64.app.tar.gz' },
+  'windows-x86_64': { signature: 'win-sig', url: 'https://github.com/o/r/releases/download/untagged-abc/ANet_0.2.454_x64-setup.exe' },
 };
 const throws = (fn: () => unknown, pattern: RegExp) => {
   try {
@@ -44,11 +49,52 @@ check('Linux 腿不依赖 JS action：tauri-action 明确排除 Linux',
 check('Linux 腿用 CLI 构建并用 gh 上传 deb 与 .sig',
   workflow.includes('npx tauri build --bundles deb')
   && workflow.includes('gh release upload "desktop-v${version}" "$deb" "$deb.sig"'));
-check('Linux 腿补 latest.json 时能自愈 version/pub_date（下载不到也要能过 verify）',
-  workflow.includes('if (!doc.version) doc.version = v;') && workflow.includes('if (!doc.pub_date) doc.pub_date'));
-check('Linux 腿自己补 latest.json 的 linux 条目（不再靠 tauri-action）',
-  workflow.includes('latest.json patched with linux entries')
-  && workflow.includes('doc.platforms["linux-x86_64"] = { signature: sig, url }'));
+// 2026-11-05: `gh release download` 在草稿上拿不到 latest.json,写了一份只有 linux 的清单,
+// 覆盖掉 macOS/Windows 条目 => verify 先报 version undefined、再报 missing darwin-aarch64 url。
+check('Linux 腿不再用 gh release download 取草稿清单（草稿资产必须走 REST）',
+  !workflow.includes('gh release download "desktop-v${version}" -p latest.json')
+  && workflow.includes('releases/assets/${manifest_id}')
+  && workflow.includes('Accept: application/octet-stream'));
+check('Linux 腿取不到清单就 fail-closed，不用空对象覆盖',
+  workflow.includes('refusing to overwrite the updater manifest')
+  && !workflow.includes("echo '{}' > /tmp/latest.json"));
+check('Linux 腿补 linux 条目的合并逻辑走脚本（有单测）',
+  workflow.includes('node scripts/patch-desktop-latest-json.mjs')
+  && workflow.includes('latest.json patched with linux entries'));
+check('linux 条目写入前要求清单里已有 macOS/Windows（不许产出只有 linux 的假清单）',
+  throws(() => withLinuxUpdaterEntries({
+    manifest: { version: '0.2.454', platforms: {} },
+    version: '0.2.454',
+    debName: 'ANet_0.2.454_amd64.deb',
+    debUrl: 'https://example.test/deb',
+    signature: 'sig',
+  }), /missing darwin-aarch64/));
+check('linux 条目写入要求版本号一致',
+  throws(() => withLinuxUpdaterEntries({
+    manifest: { version: '0.2.453', platforms: completePlatforms },
+    version: '0.2.454',
+    debName: 'ANet_0.2.454_amd64.deb',
+    debUrl: 'https://example.test/deb',
+    signature: 'sig',
+  }), /is not 0.2.454/));
+check('linux 两个条目共用 deb 的 .sig 并用资产真实下载地址',
+  (() => {
+    const patched = withLinuxUpdaterEntries({
+      manifest: { version: '0.2.454', platforms: completePlatforms },
+      version: '0.2.454',
+      debName: 'ANet_0.2.454_amd64.deb',
+      debUrl: 'https://github.com/o/r/releases/download/untagged-abc/ANet_0.2.454_amd64.deb',
+      signature: 'deb-sig',
+    });
+    const linux = patched.platforms['linux-x86_64'];
+    const deb = patched.platforms['linux-x86_64-deb'];
+    return linux.signature === 'deb-sig' && deb.signature === 'deb-sig' && linux.url === deb.url
+      && patched.platforms['darwin-aarch64'].url === completePlatforms['darwin-aarch64'].url;
+  })());
+check('草稿资产的下载地址取 browser_download_url（verify 只认这个）',
+  assetDownloadUrl({ tag_name: 'desktop-v0.2.454', assets: [{ name: 'ANet_0.2.454_amd64.deb', id: 1, url: 'https://api.test', browser_download_url: 'https://github.com/o/r/releases/download/untagged-abc/x.deb' }] }, 'ANet_0.2.454_amd64.deb')
+    === 'https://github.com/o/r/releases/download/untagged-abc/x.deb'
+  && throws(() => assetDownloadUrl({ assets: [] }, 'nope.deb'), /has no asset/));
 check('platform selection survives a Windows CRLF checkout',
   JSON.stringify(matrices(readWorkflow(workflow.replace(/\n/g, '\r\n')))) === JSON.stringify([withLinux, primaryOnly]));
 check('default release matrix contains only the exact macOS and Windows bundles',
