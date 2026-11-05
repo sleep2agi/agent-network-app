@@ -156,6 +156,10 @@ ck('选中人/Agent 时显示所属部门路径（0.2.461）',
 
 ck('无障碍描述带上选中节点（0.2.465）', view.includes('selectedLabel: selected ?'));
 
+ck('自转速度档记住并恢复（0.2.467）',
+  view.includes('loadLegion3DSpinSpeed()') && view.includes('saveLegion3DSpinSpeed(speed)')
+  && view.includes('setSpeed(parseSpinSpeed(stored))'));
+
 ck('复制结果对读屏可见（0.2.466：标签随状态变化 + liveRegion）',
   view.includes('accessibilityLabel={copyA11yLabel(copied)}') && view.includes('accessibilityLiveRegion="polite"'));
 
