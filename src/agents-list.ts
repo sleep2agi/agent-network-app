@@ -278,17 +278,17 @@ export function holdWhileActive<T>(prev: T | null, live: T, active: boolean): T 
 export function buildSections(
   sessions: Session[],
   query: string,
-  opts: { match?: Matcher; sort?: SortContext; unread?: UnreadContext
-    /** 分组标题(部门):给了就按 Hub 的真实归属分,拿不到返回 undefined 则该行退回 alias 前缀。
-     *  admin 2026-10-26「军团里面能分组吗…明显的划分区」—— 部门是有数据的,不用猜前缀。 */
-    teamOf?: (alias: string) => string | undefined } = {},
+  opts: { match?: Matcher; matchSession?: (session: Session, query: string) => boolean; sort?: SortContext; unread?: UnreadContext
+    /** 自定义分组标题；未提供标题时保留旧的别名前缀分组。
+     *  要求严格部门归属的调用方须对无法确认的行返回明确的占位标题。 */
+    teamOf?: (alias: string, session: Session) => string | undefined } = {},
 ): AgentSection[] {
   const q = query.trim();
   const match = opts.match ?? substringMatch;
   // 搜索除了别名,也认 node_id(2026-11-02):「复制节点诊断」给出的就是 `node_id=n_xxx`,
   // 拿到那串只能靠别名回忆是谁。命中 node_id 也算匹配,空/缺字段不参与。
   const filtered = q
-    ? sessions.filter(s => match(s.alias, q) || matchesNodeId(s, q, match) || matchesModel(s, q, match) || matchesRuntime(s, q, match) || matchesStatus(s, q) || matchesCatalog(s as { opencode_catalog?: readonly string[] | null }, q) || matchesNetwork(s, q) || matchesAgentVersion(s, q))
+    ? sessions.filter(s => match(s.alias, q) || opts.matchSession?.(s, q) || matchesNodeId(s, q, match) || matchesModel(s, q, match) || matchesRuntime(s, q, match) || matchesStatus(s, q) || matchesCatalog(s as { opencode_catalog?: readonly string[] | null }, q) || matchesNetwork(s, q) || matchesAgentVersion(s, q))
     : sessions.slice();
   // 「新消息」组:有未读的会话整体上浮到最顶(在「置顶」之上),**搬走**而不是复制;
   // 读完(未读→0)下一次计算时自然回到原来的组。搜索时不浮动,保持搜索结果原有的顺序。
@@ -303,7 +303,9 @@ export function buildSections(
 
   const groups = new Map<string, Session[]>();
   for (const s of unpinned) {
-    const key = opts.teamOf?.(s.alias) ?? teamOf(s.alias);
+    // 老调用方未提供标题时保留前缀回退；严格部门分组传入明确的待确认标题。
+    const raw = opts.teamOf?.(s.alias, s);
+    const key = raw || teamOf(s.alias);
     const bucket = groups.get(key);
     if (bucket) bucket.push(s);
     else groups.set(key, [s]);

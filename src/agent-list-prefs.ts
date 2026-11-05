@@ -9,6 +9,7 @@ import * as FileSystem from 'expo-file-system/legacy';
 import { parseCollapsed } from './agents-list';
 import { parseConversationTab, type ConversationTab } from './conversation-tab';
 import { parseStoredListWidth } from './wide-layout';
+import { parseGroupBy, type GroupBy } from './agent-group-by';
 
 export const LIST_WIDTH_KEY = 'agent_list_pane_width_v1';
 export const COLLAPSED_KEY = 'agent_list_collapsed_v1';
@@ -21,7 +22,7 @@ export const LEGION3D_OPEN_KEY = 'agent_list_legion3d_open_v1';
 export type RailLabels = 'icons' | 'labels';
 const PREFS_FILE = () => `${FileSystem.documentDirectory}agent_list_prefs_v1.json`;
 
-type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string };
+type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string; [GROUP_BY_KEY]?: string };
 
 const webStorage = (): Storage | null => {
   try {
@@ -124,4 +125,25 @@ export const loadConversationTab = async (): Promise<ConversationTab> => {
 export const saveConversationTab = (tab: ConversationTab): Promise<void> => {
   tabMemo = tab;
   return writeKey(CONVERSATION_TAB_KEY, tab);
+};
+
+// 分组切法（admin 2026-11-03「组织架构 / 节点来分类」）：每台设备记住上次选的切法。
+// 默认 'dept'；具体归属由列表读取 Hub 数据，不能按 alias 猜测。
+export const GROUP_BY_KEY = 'agent_list_group_by_v1';
+let groupByMemo: GroupBy | null = null;
+export const peekGroupBy = (): GroupBy | null => {
+  if (groupByMemo) return groupByMemo;
+  const ls = webStorage();
+  if (!ls) return null;
+  try { groupByMemo = parseGroupBy(ls.getItem(GROUP_BY_KEY)); } catch { return null; }
+  return groupByMemo;
+};
+export const loadGroupBy = async (): Promise<GroupBy> => {
+  if (groupByMemo) return groupByMemo;
+  groupByMemo = parseGroupBy(await readKey(GROUP_BY_KEY));
+  return groupByMemo;
+};
+export const saveGroupBy = (by: GroupBy): Promise<void> => {
+  groupByMemo = by;
+  return writeKey(GROUP_BY_KEY, by);
 };

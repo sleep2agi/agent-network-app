@@ -121,6 +121,13 @@ ck('teamOf 空别名归「其他」', teamOf('') === '其他');
   ck('substringMatch 大小写不敏感', substringMatch('Alpha', 'ALP'));
 }
 
+// ── teamOf 返回空串时不得生成空标题分组（admin 2026-11-03 切视图时踩到）──
+{
+  const empty = buildSections([S('A','idle'), S('B','offline')], '', { teamOf: () => '' });
+  ck('teamOf 返回空串时退回前缀分组（不出现空标题）', empty.every(g => g.title !== '') && empty.length > 0);
+  const nullish = buildSections([S('A','idle')], '', { teamOf: () => undefined });
+  ck('teamOf 返回 undefined 时同样退回前缀分组', nullish.every(g => g.title !== ''));
+}
 // 2026-11-02:搜索也能按 node_id 找到节点(诊断行里给的就是 node_id)
 const withIds = [
   { alias: '通信A', node_id: 'n_a0a8c671', status: 'working' },

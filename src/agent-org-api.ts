@@ -25,8 +25,10 @@ function agentOf(value: unknown): OrgAgent | null {
   const row = value as Record<string, unknown>;
   if (typeof row.node_id !== 'string' || !row.node_id.trim()) return null;
   const alias = typeof row.alias === 'string' && row.alias.trim() ? row.alias : row.node_id;
-  // 只在 Hub 显式给出 department_id 时带上;没有这个键 = 仍按负责人部门推断(旧 Hub 形状)。
+  // 顶层能力位为 true 时，未给 department_id 表示无显式归属；旧 Hub 的口径由调用方决定。
+  // 如果字段存在但值不合法，保留错误标记，不能把它误判成 Hub 有意省略。
   let departmentId: string | null | undefined;
+  const hasDepartment = Object.prototype.hasOwnProperty.call(row, 'department_id');
   if (row.department_id === null) departmentId = null;
   else if (typeof row.department_id === 'string' && row.department_id.trim()) departmentId = row.department_id.trim();
   // #2596 —— Hub .162 起目录行带 updated_at / lifecycle_state（同 /api/nodes 的投影）。
@@ -34,6 +36,7 @@ function agentOf(value: unknown): OrgAgent | null {
   const agent: OrgAgent = departmentId === undefined
     ? { nodeId: row.node_id, alias }
     : { nodeId: row.node_id, alias, departmentId };
+  if (hasDepartment && departmentId === undefined) agent.departmentMalformed = true;
   if (typeof row.updated_at === 'string' && row.updated_at.trim()) agent.updatedAt = row.updated_at.trim();
   else if (row.updated_at === null) agent.updatedAt = null;
   if (typeof row.lifecycle_state === 'string' && row.lifecycle_state.trim()) agent.lifecycleState = row.lifecycle_state.trim();
