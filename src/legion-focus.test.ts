@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusLabel, focusLayout, focusOutline, focusStats, focusTrail, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -179,6 +179,32 @@ ck('空字符串 id 当成点空白（不聚焦到空节点）', (() => {
   const out = tapOutcome('   ', new Set(['  ']));
   return out.focusId === undefined && out.selectedId === null;
 })());
+
+// 汇总行文案(0.2.458):聚焦时把军团全量一起给出来。
+ck('全图时汇总行只有本图口径,带前缀「聚焦」', (() => {
+  const line = focusStatsLine(layout, null);
+  return !line.startsWith('聚焦') && line === `${layout.stats.people} 人 · ${layout.stats.agents} 个 Agent · ${layout.stats.groups} 个部门`;
+})());
+
+ck('聚焦时前缀是「聚焦 <部门名>：」且带「军团共 N 人」', (() => {
+  const line = focusStatsLine(layout, 'dept:d1');
+  const inner = focusStats(layout, 'dept:d1');
+  return line.startsWith('聚焦 平台：')
+    && line.includes(`${inner.people} 人`)
+    && line.endsWith(`（军团共 ${layout.stats.people} 人）`);
+})());
+
+ck('聚焦范围的规模与全量不同时才带全量后缀', (() => {
+  const line = focusStatsLine(layout, 'dept:d1');
+  return layout.stats.people > focusStats(layout, 'dept:d1').people && line.includes('军团共');
+})());
+
+ck('聚焦未知 id 时退回全图口径(不出现「聚焦」字样)', (() => {
+  const line = focusStatsLine(layout, 'dept:nope');
+  return !line.startsWith('聚焦') && line.includes(`${layout.stats.people} 人`);
+})());
+
+ck('没有布局时给空串(视图自己兜底成节点数)', (() => focusStatsLine(null, 'dept:d1') === ''));
 
 console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);

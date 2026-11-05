@@ -78,8 +78,8 @@ ck('默认展开，但存过的选择优先（三态：没存过 ≠ 选过收�
   settings.includes('useState(true)') && settings.includes('loadLegion3DOpen')
   && settings.includes('saveLegion3DOpen') && settings.includes('open !== null'));
 
-ck('汇总行不数图元（全图用布局统计，聚焦用子树统计）',
-  view.includes('focusStats(layout, focusId)') && view.includes('`${bodies.length} 个节点`'));
+ck('汇总行不数图元（全图用布局统计，聚焦用子树统计；0.2.458 起统一走 focusStatsLine）',
+  view.includes('focusStatsLine(layout, focusId)') && view.includes('`${bodies.length} 个节点`'));
 
 // 不 import agent-list-prefs:它拉 expo-file-system/react-native,在这个 runner 里会炸;
 // 用源码断言代替(该模块没有可单独测的纯逻辑依赖)。
@@ -147,9 +147,9 @@ ck('点暗色部门直接切聚焦（0.2.457，不用再点「只看这个部门
   view.includes('tapOutcome(hit?.id, dimmedIds)')
   && view.includes("if (outcome.focusId !== undefined) setFocusId(outcome.focusId)"));
 
-ck('聚焦时进入即选中，且汇总行显示「聚焦 X：N 人 …」',
+ck('聚焦时进入即选中，且汇总行走 focusStatsLine（0.2.458 带全量口径）',
   view.includes('setFocusId(selected.id); setSelectedId(selected.id)')
-  && view.includes('focusStats(layout, focusId)') && view.includes('聚焦 ${focusLabel'));
+  && view.includes('focusStatsLine(layout, focusId)'));
 
 ck('不引新依赖：视图只用 RN 基础元素', (() => {
   const imports = (view.match(/^import .*$/gm) ?? []).join('\n');
