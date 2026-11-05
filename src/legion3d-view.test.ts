@@ -143,6 +143,10 @@ ck('选中部门时可「只看这个部门」，聚焦后可「看全图」',
   view.includes('legion3d-focus-dept') && view.includes('legion3d-focus-clear')
   && view.includes('focusOutline(layout, focusId)') && view.includes('focusLabel(layout ?? null, focusId)'));
 
+ck('点暗色部门直接切聚焦（0.2.457，不用再点「只看这个部门」）',
+  view.includes('tapOutcome(hit?.id, dimmedIds)')
+  && view.includes("if (outcome.focusId !== undefined) setFocusId(outcome.focusId)"));
+
 ck('聚焦时进入即选中，且汇总行显示「聚焦 X：N 人 …」',
   view.includes('setFocusId(selected.id); setSelectedId(selected.id)')
   && view.includes('focusStats(layout, focusId)') && view.includes('聚焦 ${focusLabel'));

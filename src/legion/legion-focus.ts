@@ -98,6 +98,25 @@ export function focusOutline(
   };
 }
 
+/**
+ * 点中一个节点后的动作(2026-11-05,0.2.457)。
+ *
+ * 0.2.456 起范围外部门以暗色轮廓留在图上 —— 那时点它只会「选中」，用户还得再点一次
+ * 「只看这个部门」。既然暗色部门的唯一用途就是「看那块」，点一下就应该直接聚焦过去。
+ * 纯函数，视图只按返回值决定「focus 到谁 / 选中谁」：
+ *   · 点中暗色部门 ⇒ 聚焦到它，并选中它(焦点与选中一致,面包屑才对得上)
+ *   · 其他任何情况(点到范围内节点 / 点空白) ⇒ 只改选中,不动聚焦
+ */
+export function tapOutcome(
+  hitId: string | null | undefined,
+  dimmedIds: ReadonlySet<string> | null | undefined,
+): { focusId: string | null | undefined; selectedId: string | null } {
+  const id = (hitId ?? '').trim();
+  if (!id) return { focusId: undefined, selectedId: null };
+  if (dimmedIds?.has(id)) return { focusId: id, selectedId: id };
+  return { focusId: undefined, selectedId: id };
+}
+
 /** 聚焦时给一行「现在看的是谁」:布局里取名字,取不到就给 id 后半截。 */
 export function focusLabel(layout: LegionLayout | null | undefined, rootId: string | null | undefined): string | null {
   const id = (rootId ?? '').trim();
