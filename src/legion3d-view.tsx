@@ -19,7 +19,7 @@ import type { HubConfig } from './api';
 import { loadAgentOrg } from './agent-org-api';
 import { buildLegionLayout } from './legion/legion-layout';
 import { legionInputFromOrg } from './legion-input-from-org';
-import { focusLabel, focusOutline, focusStatsLine, focusTrail, tapOutcome } from './legion/legion-focus';
+import { focusHint, focusLabel, focusOutline, focusStatsLine, focusTrail, tapOutcome } from './legion/legion-focus';
 import { buildLegionScene, nextYaw, nodeRefValue, pickBody, spinRate, parseSpinSpeed, SPIN_TICK_MS, type BodyCommand, type SceneCommand, type SpinSpeed } from './legion3d-scene';
 
 type Props = { cfg: HubConfig; networkId?: string; height?: number };
@@ -208,6 +208,11 @@ export default function Legion3DView(p: Props) {
             );
           })}
         </View>
+      ) : null}
+      {focusHint(dimmedIds?.size ?? 0, focusId) ? (
+        <Text testID="legion3d-focus-hint" style={{ color: colors.textMuted, fontSize: 10 }}>
+          {focusHint(dimmedIds?.size ?? 0, focusId)}
+        </Text>
       ) : null}
       {focusId ? (
         <Pressable accessibilityRole="button" testID="legion3d-focus-clear" onPress={() => setFocusId(null)}

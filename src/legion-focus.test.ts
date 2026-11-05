@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -205,6 +205,18 @@ ck('聚焦未知 id 时退回全图口径(不出现「聚焦」字样)', (() => 
 })());
 
 ck('没有布局时给空串(视图自己兜底成节点数)', (() => focusStatsLine(null, 'dept:d1') === ''));
+
+// 可点提示(0.2.459):只在确实有暗色部门时出现。
+ck('聚焦且存在暗色部门时给一句可点提示（带个数）', (() => {
+  const n = focusOutline(layout, 'dept:d1').dimmedIds.size;
+  return focusHint(n, 'dept:d1') === `点暗色部门可直接切过去（${n} 个）`;
+})());
+
+ck('没聚焦时不给提示（不占一行）', (() => focusHint(3, null) === null)());
+
+ck('没有暗色部门时不给提示', (() => focusHint(0, 'dept:d1') === null)());
+
+ck('个数为负或脏值时也不给提示', (() => focusHint(-1, 'dept:d1') === null)());
 
 console.log(`legion-focus: ${pass} passed`);
 if (pass !== names.length) process.exit(1);

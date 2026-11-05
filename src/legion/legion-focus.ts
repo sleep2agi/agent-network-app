@@ -178,3 +178,17 @@ export function focusStatsLine(
   const tail = total > stats.people ? `（军团共 ${total} 人）` : '';
   return `聚焦 ${label}：${head}${tail}`;
 }
+
+/**
+ * 暗色轮廓的可点提示(2026-11-05,0.2.459)。
+ *
+ * 0.2.457 让点暗色部门能直接切过去 —— 但没有任何视觉/文案提示，用户不知道「可以点」。
+ * 这里给一句极短的说明,只在**确实有暗色部门**时出现：
+ *   有空位 → 「点暗色部门可直接切过去（3 个）」
+ *   没聚焦/没有暗色部门 → null（不占一行）
+ */
+export function focusHint(dimmedCount: number, focusId: string | null | undefined): string | null {
+  const focused = Boolean((focusId ?? '').trim());
+  if (!focused || dimmedCount <= 0) return null;
+  return `点暗色部门可直接切过去（${dimmedCount} 个）`;
+}

@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.459:",
+  "- 聚焦时多一句提示「点暗色部门可直接切过去（N 个）」，不用自己猜哪些能点。",
+  "",
   "What's new in 0.2.458:",
   "- 聚焦某个部门时，汇总行会同时给军团总量（如「聚焦 平台部：37 人 · 12 个 Agent · 5 个部门（军团共 210 人）」），一眼看出这块占多少。",
   "",
