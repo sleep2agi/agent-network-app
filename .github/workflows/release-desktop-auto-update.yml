@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.470:
+            - 「自转」开关也会记住：开着转的人下次打开还是在转，不用每次点一下。
+
             What's new in 0.2.469:
             - 点「刷新」后会回一句「已更新：N 人 · M 个 Agent · K 个部门」，数据没变也知道刷成功了。
 

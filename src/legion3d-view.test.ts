@@ -156,6 +156,10 @@ ck('选中人/Agent 时显示所属部门路径（0.2.461）',
 
 ck('无障碍描述带上选中节点（0.2.465）', view.includes('selectedLabel: selected ?'));
 
+ck('自转开关记住并恢复（0.2.470）',
+  view.includes('loadLegion3DSpin()') && view.includes('saveLegion3DSpin(spinning)')
+  && view.includes("stored === '1'"));
+
 ck('刷新后有回执且对读屏可见（0.2.469）',
   view.includes('refreshNotice({ people: st.people') && view.includes('testID="legion3d-refresh-notice"')
   && view.includes('accessibilityLiveRegion="polite"'));

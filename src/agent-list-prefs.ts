@@ -23,10 +23,12 @@ export const LEGION3D_OPEN_KEY = 'agent_list_legion3d_open_v1';
 export const LEGION3D_FOCUS_KEY = 'agent_list_legion3d_focus_v1';
 // 自转速度档(慢/中/快):口味问题,每次进来都要重选一次太烦(0.2.467)。
 export const LEGION3D_SPEED_KEY = 'agent_list_legion3d_speed_v1';
+// 自转开关本身也记住(0.2.470):喜欢转着看的人不必每次点一下「自转」。
+export const LEGION3D_SPIN_KEY = 'agent_list_legion3d_spin_v1';
 export type RailLabels = 'icons' | 'labels';
 const PREFS_FILE = () => `${FileSystem.documentDirectory}agent_list_prefs_v1.json`;
 
-type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string; [LEGION3D_FOCUS_KEY]?: string; [LEGION3D_SPEED_KEY]?: string };
+type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string; [LEGION3D_FOCUS_KEY]?: string; [LEGION3D_SPEED_KEY]?: string; [LEGION3D_SPIN_KEY]?: string };
 
 const webStorage = (): Storage | null => {
   try {
@@ -92,6 +94,9 @@ export const loadLegion3DFocusId = (): Promise<string | null> => readKey(LEGION3
 /** 上次选的自转速度档（原始字符串；取值由 parseSpinSpeed 收口）。 */
 export const loadLegion3DSpinSpeed = (): Promise<string | null> => readKey(LEGION3D_SPEED_KEY);
 export const saveLegion3DSpinSpeed = (speed: string): Promise<void> => writeKey(LEGION3D_SPEED_KEY, speed);
+/** 上次是否开着自转（原始字符串；只有明确的 1/0 才算用户选过）。 */
+export const loadLegion3DSpin = (): Promise<string | null> => readKey(LEGION3D_SPIN_KEY);
+export const saveLegion3DSpin = (spinning: boolean): Promise<void> => writeKey(LEGION3D_SPIN_KEY, spinning ? '1' : '0');
 
 /** 记住/忘记聚焦。传 null 表示回到全图。 */
 export const saveLegion3DFocusId = (id: string | null): Promise<void> =>
