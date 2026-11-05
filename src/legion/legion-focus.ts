@@ -152,3 +152,29 @@ export function focusStats(
   }
   return { people, agents, groups };
 }
+
+/**
+ * 汇总行文案(2026-11-05,0.2.458)。
+ *
+ * 0.2.456/457 让聚焦时留着暗色部门、能点进去 —— 但汇总行只有「聚焦 X：N 人」，
+ * 用户看不出**这块占军团多少**。这里把全量口径一起给出来：
+ *   全图   → 「210 人 · 88 个 Agent · 12 个部门」
+ *   聚焦中 → 「聚焦 平台部：37 人 · 12 个 Agent · 5 个部门（军团共 210 人）」
+ * 纯函数,只在 numbers 上做字符串,便于钉断言。
+ */
+export function focusStatsLine(
+  layout: LegionLayout | null | undefined,
+  rootId: string | null | undefined,
+): string {
+  if (!layout) return '';
+  const stats = focusStats(layout, rootId);
+  const id = (rootId ?? '').trim();
+  const focused = Boolean(id) && layout.nodes.some((n) => n.id === id);
+  const head = `${stats.people} 人 · ${stats.agents} 个 Agent · ${stats.groups} 个部门`;
+  if (!focused) return head;
+  const label = focusLabel(layout, id) ?? id;
+  const total = layout.stats.people;
+  // 全量比聚焦范围小是不可能的(数据异常时也不给人更小的「共」),这种情况就不加后缀。
+  const tail = total > stats.people ? `（军团共 ${total} 人）` : '';
+  return `聚焦 ${label}：${head}${tail}`;
+}
