@@ -223,3 +223,31 @@ export function legionA11yLabel(input: {
   parts.push('点节点可看是谁');
   return parts.join('；');
 }
+
+/**
+ * 某个节点所属的部门路径(2026-11-05,0.2.461)。
+ *
+ * 选中一个人/Agent 时,只有名字和 sublabel,看不出他属于哪条线 —— 3D 图里靠位置判断不可靠。
+ * 这里沿 parentId 往上走到圆心为止,返回**从上到下**的部门名（不含圆心、不含节点自己）：
+ *   前端组 的张三 → ['平台部', '前端组']
+ * 未知 id / 圆心本身 / 数据有环 ⇒ 空数组（调用方就不加这一行）。
+ */
+export function nodeDepartmentPath(
+  layout: LegionLayout | null | undefined,
+  nodeId: string | null | undefined,
+): string[] {
+  const id = (nodeId ?? '').trim();
+  if (!layout || !id) return [];
+  const byId = new Map(layout.nodes.map((n) => [n.id, n] as const));
+  const node = byId.get(id);
+  if (!node || node.kind === 'core') return [];
+  const path: string[] = [];
+  const seen = new Set<string>([id]);
+  let cur = node.parentId ? byId.get(node.parentId) : undefined;
+  while (cur && cur.kind !== 'core' && !seen.has(cur.id)) {
+    seen.add(cur.id);
+    path.push(cur.label);
+    cur = cur.parentId ? byId.get(cur.parentId) : undefined;
+  }
+  return path.reverse();
+}

@@ -1,7 +1,7 @@
 // 「只看某个部门」的断言(2026-11-05)。
 // 过滤是集合运算,错了的表现是「人数不对但图还是画出来了」—— 所以钉住:范围、边、圆心、不猜。
 import { buildLegionLayout } from './legion/legion-layout';
-import { focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, subtreeIds, tapOutcome } from './legion/legion-focus';
+import { focusHint, focusLabel, focusLayout, focusOutline, focusStats, focusStatsLine, focusTrail, legionA11yLabel, nodeDepartmentPath, subtreeIds, tapOutcome } from './legion/legion-focus';
 import { legionInputFromOrg } from './legion-input-from-org';
 
 let pass = 0;
@@ -242,6 +242,29 @@ ck('没有暗色部门时不提「可切过去」（不留噪音）', (() => {
 ck('聚焦名与数字缺失时降级成「聚焦 X」而不是带上空数字', (() => {
   const s2 = legionA11yLabel({ focusLabel: '平台' });
   return s2.includes('聚焦 平台') && !s2.includes('NaN') && !s2.includes('undefined');
+})());
+
+// 所属部门路径(0.2.461):选中人/Agent 时看得出他属于哪条线。
+ck('二级部门里的人给出 父部门 → 子部门 的路径', (() => {
+  const p = nodeDepartmentPath(layout, 'person:u1');
+  return p.length === 2 && p[0] === '平台' && p[1] === '前端';
+})());
+
+ck('一级部门里的人路径只有一层', (() => {
+  const p = nodeDepartmentPath(layout, 'person:u2');
+  return p.length === 1 && p[0] === '别的部门';
+})());
+
+ck('部门自己给出它的上级路径（不含自己）', (() => {
+  const p = nodeDepartmentPath(layout, 'dept:d2');
+  return p.length === 1 && p[0] === '平台';
+})());
+
+ck('圆心 / 未知 id / 空 id 一律给空数组（调用方不加这行）', (() => {
+  return nodeDepartmentPath(layout, 'core').length === 0
+    && nodeDepartmentPath(layout, 'dept:nope').length === 0
+    && nodeDepartmentPath(layout, null).length === 0
+    && nodeDepartmentPath(null, 'person:u1').length === 0;
 })());
 
 console.log(`legion-focus: ${pass} passed`);
