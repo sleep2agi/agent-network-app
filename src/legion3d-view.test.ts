@@ -139,9 +139,10 @@ ck('nodeRefValue 去掉图元前缀（agent:/person:/dept:）', (() => {
     && nodeRefValue('  agent:n_x  ') === 'n_x';
 })());
 
-ck('选中部门时可「只看这个部门」，聚焦后可「看全图」',
-  view.includes('legion3d-focus-dept') && view.includes('legion3d-focus-clear')
-  && view.includes('focusOutline(layout, focusId)') && view.includes('focusLabel(layout ?? null, focusId)'));
+ck('选中部门时可「只看这个部门」，回全图走面包屑首项（0.2.464 去掉重复按钮）',
+  view.includes('legion3d-focus-dept') && view.includes('legion3d-focus-trail')
+  && !view.includes('legion3d-focus-clear')
+  && view.includes('focusOutline(layout, focusId)') && view.includes('onPress={() => { setFocusId(crumb.id); setSelectedId(crumb.id); }}'));
 
 ck('聚焦会记住并恢复上次的部门（0.2.463）',
   view.includes('loadLegion3DFocusId') && view.includes('saveLegion3DFocusId(focusId)')

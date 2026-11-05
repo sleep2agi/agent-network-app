@@ -260,12 +260,8 @@ export default function Legion3DView(p: Props) {
           {focusHint(dimmedIds?.size ?? 0, focusId)}
         </Text>
       ) : null}
-      {focusId ? (
-        <Pressable accessibilityRole="button" testID="legion3d-focus-clear" onPress={() => setFocusId(null)}
-          style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 3 }, pressed && { opacity: 0.7 }]}>
-          <Text style={{ color: colors.textSecondary, fontSize: 11 }}>看全图（{focusLabel(layout ?? null, focusId)}）</Text>
-        </Pressable>
-      ) : null}
+      {/* 0.2.464: 去掉了独立的「看全图」按钮 —— 面包屑首项「军团」就是回全图的入口，
+          同一个动作留两个控件只会让人多想一秒。 */}
       {state.phase === 'ready' ? (
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
           <Text testID="legion3d-stats" style={{ color: colors.textMuted, fontSize: 11 }}>
