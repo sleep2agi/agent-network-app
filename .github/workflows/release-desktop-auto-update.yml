@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.486:
+            - 切模型超时/报错时，界面给出一行可复制的诊断（node_id / runtime / 从哪个模型到哪个模型 / 等了多久 / 错误摘要），贴给运维不用再问五个问题。
+
             What's new in 0.2.485:
             - 分组按钮更好点：可点范围从 ~20pt 放宽到 44pt 以上，展开后的三档选项也一起变高，拇指不容易点空。
 
