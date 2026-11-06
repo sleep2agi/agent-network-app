@@ -4,7 +4,7 @@
 // 1) Session.status 的每种写法都能落到唯一分区,认不出的进「未上报」而不是「在线」;
 // 2) 分区顺序固定:正在工作 → 在线 → 异常 → 离线 → 未上报(离线必须沉底,不许浮上来);
 // 3) 存储读回 fail-safe:空/损坏/未来维度一律退回 department。
-import { groupByHint, groupByLabel, groupCountLabel, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
+import { groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
 
 const checks: [string, boolean][] = [];
 const ck = (name: string, ok: boolean) => checks.push([name, ok]);
@@ -55,6 +55,13 @@ ck('部门视图: a11y 说「在线」', groupCountLabel('department', 3, 7).a11
 ck('在线态视图: 只给总数(离线组不会是 0/N)', groupCountLabel('status', 0, 4).text === '4');
 ck('在线态视图: a11y 不说「在线」', !groupCountLabel('status', 0, 4).a11y.includes('在线'));
 ck('运行时视图: 同样只给总数', groupCountLabel('runtime', 1, 5).text === '5');
+
+// 8) 「未上报」组的解释(0.481)
+ck('在线态: 未上报组有解释', !!groupHeaderHint('status', UNKNOWN_GROUP)?.includes('在线态'));
+ck('运行时: 未上报组有解释', !!groupHeaderHint('runtime', UNKNOWN_GROUP)?.includes('运行时'));
+ck('部门视图不解释(没有「未上报」语义)', groupHeaderHint('department', UNKNOWN_GROUP) === null);
+ck('其他组不解释', groupHeaderHint('status', '离线') === null && groupHeaderHint('runtime', 'codex-cli') === null);
+ck('解释里给出原因(旧 agent-node / 无节点身份)', (groupHeaderHint('status', UNKNOWN_GROUP) ?? '').includes('agent-node'));
 
 let bad = 0;
 for (const [name, ok] of checks) {

@@ -267,6 +267,7 @@ ck('列表头有分组切换入口（两处布局）', screenSrc.includes('Toggl
 ck('分组控件给出三档选项（可直接选）', screenSrc.includes('agents-group-by-options') && screenSrc.includes('GROUP_BY_CYCLE.map'));
 ck('三个选项各自的 testID 都在', ['department', 'status', 'runtime'].every(k => screenSrc.includes('agents-group-by-option-${by}') || screenSrc.includes('agents-group-by-option-')));
 ck('选中项会写入设备偏好', screenSrc.includes('selectGroupBy') && screenSrc.includes('saveGroupBy(next)'));
+ck('「未上报」组会解释原因（0.481）', screenSrc.includes('groupHeaderHint') && screenSrc.includes('agent-group-hint-'));
 ck('运行时分区的数据源是会话的 runtime', screenSrc.includes('runtimeByAlias') && screenSrc.includes('runtimeGroupOf'));
 ck('分组选择会被记住', screenSrc.includes('loadGroupBy') && screenSrc.includes('saveGroupBy'));
 

@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.481:
+            - 「未上报」分组会解释原因：旧 agent-node 不上报清单，或这条只是别名、没有节点身份 —— 不再让人以为数据丢了。
+
             What's new in 0.2.480:
             - 按在线态/运行时分组时，组标题右边的计数不再写「0/4」这种自相矛盾的数字，改为直接显示「4」；按部门分组的「在线/总数」保持不变。
 

@@ -106,3 +106,17 @@ export function groupCountLabel(
   }
   return { text: String(total), a11y: `${total} 个` };
 }
+
+/**
+ * 「未上报」组为什么存在(0.481)。
+ *
+ * 按在线态/运行时分区时,总有一组行没有状态/运行时 —— 这不是 bug:旧 agent-node 不上报清单,
+ * 或者会话只是别名、根本没有节点身份。以前这一组只显示「未上报」,用户会以为是数据丢了。
+ * 返回 null = 这组不需要解释(部门视图、或别的组)。
+ */
+export function groupHeaderHint(by: GroupBy, title: string): string | null {
+  if (title !== UNKNOWN_GROUP) return null;
+  if (by === 'status') return '这些会话没有上报在线态（旧 agent-node 不上报，或只是别名、没有节点身份）';
+  if (by === 'runtime') return '这些会话没有上报运行时（旧 agent-node 不上报清单，或只是别名、没有节点身份）';
+  return null;
+}
