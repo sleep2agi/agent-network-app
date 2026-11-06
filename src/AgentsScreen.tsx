@@ -538,7 +538,8 @@ export default function AgentsScreen({
   const peopleGroups = useMemo(() => groupPeopleByDepartment(org, peopleShown.rows), [org, peopleShown.rows]);
   const peopleGroupHeadHRef = useRef<number | null>(null);
   // 第一行 = 列表里真正的第一行:人员展开时是第一个人,否则是第一个分组的第一行(人员折叠时要加上它的标题行高)。
-  const alignFirstRow = !compact && uiScale().listDense && (groupsShown.length > 0 || peopleExpanded || (shownSections[0]?.data?.length ?? 0) > 0);
+  // 人员区已移到列表之后(0.2.475),首行偏移不再随它变。
+  const alignFirstRow = !compact && uiScale().listDense && (groupsShown.length > 0 || (shownSections[0]?.data?.length ?? 0) > 0);
   const listYRef = useRef<number | null>(null); // bottom of head + filter bar
   const firstHeaderHRef = useRef<number | null>(null);
   const peopleHeaderHRef = useRef<number | null>(null);
@@ -554,18 +555,6 @@ export default function AgentsScreen({
     const groupsOffset = groupsVisible ? groupsSectionHRef.current : 0;
     if (groupsOffset == null) return;
     const top = listYRef.current + groupsOffset;
-    if (peopleShown.visible) {
-      if (peopleExpanded) {
-        if (peopleHeaderHRef.current == null) return;
-        // 按部门分组时第一行上面还有一个部门小标题。
-        if (peopleGroups && peopleGroupHeadHRef.current == null) return;
-        publishListFirstRowTop(top + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0));
-        return;
-      }
-      if (peopleSectionHRef.current == null || firstHeaderHRef.current == null) return;
-      publishListFirstRowTop(top + peopleSectionHRef.current + firstHeaderHRef.current);
-      return;
-    }
     if (firstHeaderHRef.current == null) return;
     publishListFirstRowTop(top + firstHeaderHRef.current);
   };
@@ -1170,7 +1159,7 @@ export default function AgentsScreen({
         </View>
       }
       renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
-      ListHeaderComponent={lastHidden || groupsVisible || peopleShown.visible || (compact && managedDepts.ids.length) || registeredRows.length > 0 ? (<>
+      ListHeaderComponent={lastHidden || groupsVisible ? (<>
         {/* 误点「不显示该对话」的 8 秒撤销条(admin 2026-10-28 转来的用户反馈:容易不小心归档了)。 */}
         {lastHidden ? (
           <View testID="agents-hide-undo" style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.subtleFill }}>
@@ -1182,23 +1171,6 @@ export default function AgentsScreen({
               <Text style={{ color: colors.accent, fontSize: 12, fontWeight: '600' }}>撤销</Text>
             </Pressable>
           </View>
-        ) : null}
-        <RegisteredAgentsSection
-          rows={registeredRows}
-          loaded={agentDirectory.loaded}
-          collapsed={registeredCollapsed}
-          onToggle={() => setRegisteredCollapsed(v => !v)}
-          query={query}
-          compact={compact}
-        />
-        {compact && managedDepts.ids.length ? (
-          // 「管理本部门」:只给部门负责人,放在「人员」上方(RFC-040 §6)。只在桌面侧栏(compact)出现 —— 手机在「设置」里。
-          <Pressable testID="manage-dept-entry" accessibilityRole="button" accessibilityLabel={t('dept.manage')} onPress={() => setManageDeptOpen(true)}
-            style={state => [{ minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: colors.listBg }, ((state as { hovered?: boolean }).hovered || state.pressed) ? { backgroundColor: colors.rowHover } : null]}>
-            <ManageDepartmentIcon size={16} />
-            <Text selectable={false} numberOfLines={1} style={{ flex: 1, color: colors.text, fontSize: 13 }}>{t('dept.manage')}</Text>
-            <Ionicons name="chevron-forward" size={12} color={colors.textMuted} />
-          </Pressable>
         ) : null}
         {groupsVisible ? (
         // 群聊(RFC-042,Hub ≥ .93):部门群等。放在「人员」上面,和私信一起是「人」的会话;可折叠(与分组同存)。
@@ -1224,6 +1196,29 @@ export default function AgentsScreen({
             </View>
           ))}
         </View>
+        ) : null}
+      </>) : null}
+      ListFooterComponent={<>
+        {/* 0.2.475(admin #4036):「已登记节点」「人员」原来压在会话列表上方,新消息反而被顶下去。
+            现在放到列表**之后**(footer),功能/搜索/展开/未读全部保留,入口不删。 */}
+        {registeredRows.length > 0 ? (
+          <RegisteredAgentsSection
+            rows={registeredRows}
+            loaded={agentDirectory.loaded}
+            collapsed={registeredCollapsed}
+            onToggle={() => setRegisteredCollapsed(v => !v)}
+            query={query}
+            compact={compact}
+          />
+        ) : null}
+        {compact && managedDepts.ids.length ? (
+          // 「管理本部门」:只给部门负责人,放在「人员」上方(RFC-040 §6)。只在桌面侧栏(compact)出现 —— 手机在「设置」里。
+          <Pressable testID="manage-dept-entry" accessibilityRole="button" accessibilityLabel={t('dept.manage')} onPress={() => setManageDeptOpen(true)}
+            style={state => [{ minHeight: 34, flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, backgroundColor: colors.listBg }, ((state as { hovered?: boolean }).hovered || state.pressed) ? { backgroundColor: colors.rowHover } : null]}>
+            <ManageDepartmentIcon size={16} />
+            <Text selectable={false} numberOfLines={1} style={{ flex: 1, color: colors.text, fontSize: 13 }}>{t('dept.manage')}</Text>
+            <Ionicons name="chevron-forward" size={12} color={colors.textMuted} />
+          </Pressable>
         ) : null}
         {peopleShown.visible ? (
         // 人员:同网络的其他人,点开是私信。放在列表**最上面**、搜索框之下、agent 分组之上(Vincent 2026-09-30
@@ -1266,8 +1261,7 @@ export default function AgentsScreen({
           ))}
         </View>
         ) : null}
-      </>) : null}
-      ListFooterComponent={<>{hiddenSessions.length && effectiveTab === 'all' ? (
+        {hiddenSessions.length && effectiveTab === 'all' ? (
         // 「不显示该对话」收在这里:列表最底下一行入口,点开就地展开,每行长按 → 恢复显示(点开会话也会恢复)。
         <View testID="agent-hidden-footer">
           <Pressable

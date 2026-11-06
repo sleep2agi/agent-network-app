@@ -137,15 +137,15 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('人员:没有人 → 整块不画', !shownPeople([], '', [], pinyinMatch).visible);
 
   const agents = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
-  // 列表头里人员前面可能还有「管理本部门」入口(#485,只给部门负责人)和群聊区块(RFC-042),条件因此是 `groupsVisible || peopleShown.visible || …`。
-  const header = agents.indexOf('ListHeaderComponent={lastHidden || groupsVisible || peopleShown.visible');
+  const header = agents.indexOf('ListHeaderComponent={lastHidden || groupsVisible');
   const footer = agents.indexOf('ListFooterComponent={');
-  // 0.339 起 ListHeaderComponent 的首个条件是 lastHidden(撤销条),header 仍指向同一个 props。
-  ck('顺序:人员在 ListHeaderComponent(列表最上面、分组之前)', header > 0 && agents.indexOf('testID="people-section"') > header && agents.indexOf('testID="people-section"') < footer);
-  ck('顺序:footer 里不再有人员', !agents.slice(footer).includes('people-section') && !agents.slice(footer).includes('renderPersonRow'));
+  // 2026-11-06 admin #4036:人员与已登记节点从列表**上方**挪到**下方**(footer) —— 新消息/会话要靠上。
+  // 功能面(搜索/折叠/未读/私信入口)不变,只是位置换了;这条断言跟位置走,别按旧位置写。
+  ck('顺序:人员在 ListFooterComponent(会话列表之后),不在列表头', header > 0 && agents.indexOf('testID="people-section"') > footer);
+  ck('顺序:列表头里不再有人员区块', !agents.slice(header, footer).includes('people-section') && !agents.slice(header, footer).includes('renderPersonRow'));
   ck('人员标题可折叠(与分组同一个 toggleGroup,键 PEOPLE_GROUP_KEY)', agents.includes('onPress={() => toggleGroup(PEOPLE_GROUP_KEY)}'));
   ck('人员随搜索框过滤(同一个 pinyinMatch)', agents.includes('shownPeople(onOpenPerson ? applyConversationTabToPeople(people, effectiveTab, selectedPerson) : [], query, collapsed, pinyinMatch)'));
-  ck('更紧凑对齐:人员展开时第一行 = 第一个人(按部门分组时加上第一个部门小标题)', agents.includes('publishListFirstRowTop(top + peopleHeaderHRef.current + (peopleGroups ? peopleGroupHeadHRef.current ?? 0 : 0))') && agents.includes('const top = listYRef.current + groupsOffset;'));
+  ck('更紧凑对齐:首行偏移只算头部(群聊/分组),人员已移出头部不再参与', agents.includes('const top = listYRef.current + groupsOffset;') && !agents.slice(header, footer).includes('peopleHeaderHRef.current'));
 }
 
 console.log(`\n${p}/${n} passed`);

@@ -145,6 +145,10 @@ async function run(vp, viewport, ua) {
     bottom: !!on && !!agentOn && near(on.bottom, agentOn.bottom),
     sameColumn: !!on && !!agentOn && near(on.x, agentOn.x),
   }, { person: on && { x: on.x, w: on.w, h: on.h, right: on.right, bottom: on.bottom, avatarW: on.avatarW }, agent: agentOn && { x: agentOn.x, w: agentOn.w, h: agentOn.h, right: agentOn.right, bottom: agentOn.bottom, avatarW: agentOn.avatarW } });
+  // 人员区已移到会话列表之后(admin #4036):不滚进视野,它会被滚动容器裁成 0×0,
+  // paintedText 就会误判成「没画出来」。
+  await page.locator(tid('people-section')).scrollIntoViewIfNeeded().catch(() => {});
+  await sleep(400);
   const text = async (username) => (await page.locator(tid(`person-row-${username}`)).innerText().catch(() => '')).replace(/\s+/g, ' ').trim();
   const tOn = await text('person-on'), tOff = await text('person-off'), tUnk = await text('person-unk');
   const subOff = await paintedText(page, tid('person-subtitle-person-off')); // painted, not only in textContent
