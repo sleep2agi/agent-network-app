@@ -935,7 +935,7 @@ export default function AgentsScreen({
         <View testID="agents-list-head" style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
-            {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} agents`}
+            {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} 个 agent`}
           </Text>
           <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
             <Ionicons name="add" size={24} color={colors.accent} />
@@ -954,7 +954,7 @@ export default function AgentsScreen({
                 <Ionicons name="search" size={16} color={colors.textMuted} />
                 <TextInput
                   style={[rowStyles.searchInput, { color: colors.text }]}
-                  placeholder={`搜索 ${sessions.length} 个 agent / node_id`}
+                  placeholder={`搜索 agent / node_id`}
                   placeholderTextColor={colors.textMuted}
                   autoCapitalize="none"
                   autoCorrect={false}
@@ -969,7 +969,7 @@ export default function AgentsScreen({
                 ) : null}
               </View>
             ) : (
-              <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} agents`}</Text>
+              <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} 个 agent`}</Text>
             )}
             <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
               <Ionicons name="add" size={24} color={colors.accent} />
