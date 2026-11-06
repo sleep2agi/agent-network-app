@@ -145,6 +145,12 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       void fallback('');
       return;
     }
+    // #3144 负控发现：同一个 section 实例里 A→B 切节点时，旧节点的候选没有被清掉 ——
+    // B 还在 pending 的时候，列表里仍然显示 A 的模型，而且可以直接提交给 B。切节点就当换了一份数据源，
+    // 先清空候选/同 runtime 兜底清单，再开始读；否则用户会把 A 的模型名发给 B。
+    setV2Models([]);
+    setPeerModels([]);
+    setPeerNodes(0);
     setV2Note('正在从 OpenCode V2 服务器读取模型列表…');
     void (async () => {
       const queued = await queueOpenCodeCatalog(cfg, { nodeId: node.node_id, daemonNodeId: daemonId });
