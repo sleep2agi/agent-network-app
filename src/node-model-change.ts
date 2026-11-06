@@ -18,7 +18,7 @@ export interface NodeConfigView {
 export type ModelChangePhase =
   | { kind: 'idle' }
   | { kind: 'submitting'; requested: string }
-  | { kind: 'restarting'; requested: string; baseRevision: number; polls: number; previous?: string | null }
+  | { kind: 'restarting'; requested: string; baseRevision: number; polls: number; previous?: string | null; hot?: boolean }
   | { kind: 'applied'; model: string; previous?: string | null }
   | { kind: 'timeout'; requested: string }
   | { kind: 'conflict' }
@@ -64,20 +64,38 @@ export type SubmitOutcome =
   | { ok: false; conflict: true; error: string }
   | { ok: false; conflict?: false; error: string };
 
-export function afterSubmit(requested: string, baseRevision: number, outcome: SubmitOutcome, previous?: string | null): ModelChangePhase {
-  if (outcome.ok) return { kind: 'restarting', requested, baseRevision, polls: 0, previous: previous ?? null };
+export function afterSubmit(
+  requested: string,
+  baseRevision: number,
+  outcome: SubmitOutcome,
+  previous?: string | null,
+  opts: { hot?: boolean } = {},
+): ModelChangePhase {
+  if (outcome.ok) return { kind: 'restarting', requested, baseRevision, polls: 0, previous: previous ?? null, hot: opts.hot };
   if (outcome.conflict) return { kind: 'conflict' };
   return { kind: 'error', message: outcome.error };
 }
 
-/** 一次轮询读回配置后的转移。view=null(读失败)算一次轮询但不改判。 */
+/**
+ * 一次轮询读回配置后的转移。view=null(读失败)算一次轮询但不改判。
+ *
+ * `hot`:OpenCode V2 共存节点上的纯 model 是**热变更**(节点在 198ms 内就换好,
+ * 不重启、不一定抬高 config_revision)。2026-11-05 通信欧2号实测:Hub 表已 applied,
+ * 客户端却因为「revision 没变」一直等到 90s 超时 —— 假超时。热变更下只要读回来的
+ * model 已经是目标值就算生效,不再要求 revision 抬高。
+ */
 export function afterPoll(
   phase: Extract<ModelChangePhase, { kind: 'restarting' }>,
   view: NodeConfigView | null,
   maxPolls: number = RESTART_MAX_POLLS,
+  opts: { hot?: boolean } = {},
 ): ModelChangePhase {
-  if (view && view.config_revision > phase.baseRevision && view.model === phase.requested) {
-    return { kind: 'applied', model: phase.requested, previous: phase.previous ?? null };
+  if (view && view.model === phase.requested) {
+    const bumped = view.config_revision > phase.baseRevision;
+    // 重启级变更仍然要 revision 抬高(否则可能读到的是旧值);热变更不要求。
+    if (bumped || opts.hot) {
+      return { kind: 'applied', model: phase.requested, previous: phase.previous ?? null };
+    }
   }
   const polls = phase.polls + 1;
   if (polls >= maxPolls) return { kind: 'timeout', requested: phase.requested };
@@ -92,6 +110,8 @@ export function phaseText(phase: ModelChangePhase): string {
     case 'restarting': {
       const waited = Math.round(phase.polls * RESTART_POLL_MS / 1000);
       const limit = Math.round(RESTART_MAX_POLLS * RESTART_POLL_MS / 1000);
+      // 热变更(OpenCode V2 纯 model)不重启,说「重启」会误导人去等节点掉线。
+      if (phase.hot) return `已下发,等节点确认新模型…已等 ${waited}s / 最长 ${limit}s`;
       return `已下发,节点正在以新模型重启…已等 ${waited}s / 最长 ${limit}s`;
     }
     case 'applied': return `已切换到 ${phase.model}`;
