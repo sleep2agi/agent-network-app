@@ -25,6 +25,7 @@ import {
   modelChips,
   modelControlAvailability,
   phaseIsBusy,
+  modelChangeDiag,
   phaseText,
   RESTART_POLL_MS,
   RESTART_TIMEOUT_MS,
@@ -443,6 +444,25 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             {phaseText(phase)}
           </Text>
         ) : null}
+        {/* 0.486:超时/报错/冲突时给一行可复制的诊断(只含 node_id/runtime/from/target,不含 token)。
+            用户贴回来这一行,运维就不用再问五个问题。 */}
+        {(() => {
+          const line = modelChangeDiag(phase, {
+            nodeId: node.node_id,
+            runtime: node.runtime ?? runtimeVersion ?? null,
+            current: currentModel ?? view?.model ?? null,
+            target: phase.kind === 'timeout' ? phase.requested : candidate,
+          });
+          if (!line) return null;
+          return (
+            <Pressable accessibilityRole="button" testID="node-model-diag-copy"
+              accessibilityLabel="复制模型切换诊断"
+              onPress={() => { void import('expo-clipboard').then(m => m.setStringAsync(line)).catch(() => undefined); }}
+              style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+              <Text selectable style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16 }}>{line}</Text>
+            </Pressable>
+          );
+        })()}
         {/* 切换成功后给「切回上一版」:换错了不用再翻列表找回去。 */}
         {phase.kind === 'applied' && phase.previous && phase.previous !== phase.model && !busy ? (
           <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.previous as string)} testID="node-model-revert"

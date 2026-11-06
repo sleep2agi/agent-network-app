@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, recheckAfterTimeout, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary,
+import { afterPoll, afterSubmit, modelChangeDiag, recheckAfterTimeout, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary,
   orderGroupsByCurrent,
   groupCountLabelFor,
 } from './node-model-change';
@@ -198,5 +198,25 @@ check('非 V2 节点说明「不上报清单，由本机配置决定」', sectio
 check('未上报时状态行指路「下方按钮可重试」', section.includes('下方按钮可立刻重试'));
 check('section 显示模型清单状态行', section.includes('node-model-catalog-status') && section.includes('catalogStatusLine(v2Catalog.length, runtimeVersion)'));
 check('点状态行会复制（含 node_id/runtime）', section.includes('setStringAsync(line)') && section.includes('node_id=${node.node_id}'));
+// 0.486 诊断行
+{
+  const ctx = { nodeId: 'n_abc', runtime: 'opencode-cli', current: 'openai/gpt', target: 'anthropic/claude' };
+  const timeout = modelChangeDiag({ kind: 'timeout', requested: 'anthropic/claude', hot: true }, ctx) ?? '';
+  check('超时会给出诊断行', timeout.startsWith('model-change timeout'));
+  check('诊断行带 node_id / runtime / from / target',
+    timeout.includes('node_id=n_abc') && timeout.includes('runtime=opencode-cli')
+    && timeout.includes('from=openai/gpt') && timeout.includes('target=anthropic/claude'));
+  check('超时写明等了多久与热模式', timeout.includes('waited=') && timeout.includes('mode=hot'));
+  const err = modelChangeDiag({ kind: 'error', message: 'boom\nsecond line' }, ctx) ?? '';
+  check('错误把换行压成一行', err.startsWith('model-change error') && !err.includes('\n'));
+  check('错误带 error= 段', err.includes('error=boom second line'));
+  check('冲突也给诊断行', (modelChangeDiag({ kind: 'conflict' }, ctx) ?? '').startsWith('model-change conflict'));
+  check('成功不需要诊断行', modelChangeDiag({ kind: 'applied', model: 'x' }, ctx) === null);
+  check('进行中不需要诊断行', modelChangeDiag({ kind: 'restarting', requested: 'x', baseRevision: 1, polls: 0 }, ctx) === null);
+  check('缺字段用 ? 占位而不是空段', (modelChangeDiag({ kind: 'conflict' }, {}) ?? '').includes('node_id=?'));
+  check('诊断行不夹带 token/密钥字样', !/token|secret|password/i.test(err + timeout));
+}
+
+check('section 渲染可复制的诊断行（0.486）', section.includes('node-model-diag-copy') && section.includes('modelChangeDiag(phase'));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

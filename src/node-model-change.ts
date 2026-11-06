@@ -258,3 +258,44 @@ export function recheckAfterTimeout(
   if (view.model === phase.requested) return { kind: 'applied', model: phase.requested, previous: phase.previous ?? null };
   return { kind: 'restarting', requested: phase.requested, baseRevision: view.config_revision, polls: 0, previous: phase.previous ?? null, hot: phase.hot };
 }
+
+/**
+ * 模型切换失败/超时/冲突时的一行诊断(0.486)。
+ *
+ * 为什么要有:用户贴回来的「切不过去」经常只有一句「失败了」,运维得反复问 node_id / runtime /
+ * 从哪个模型到哪个模型 / 是超时还是报错。把这些**一次给全**,并且只给这些(不拼 token、不拼整份配置)。
+ * 格式固定成 `k=v` 空格分隔,和侧栏的 `catalog=`/`gen=` 诊断行同一种读法,可以直接 grep。
+ */
+export type ModelChangeDiagContext = {
+  nodeId?: string | null;
+  runtime?: string | null;
+  current?: string | null;
+  target?: string | null;
+};
+
+export function modelChangeDiag(
+  phase: ModelChangePhase,
+  ctx: ModelChangeDiagContext,
+): string | null {
+  // 只有「用户需要找人帮忙」的三种状态才给诊断行;成功/进行中不用打扰。
+  if (phase.kind !== 'timeout' && phase.kind !== 'error' && phase.kind !== 'conflict') return null;
+  const parts = [
+    'model-change',
+    phase.kind === 'timeout' ? 'timeout' : phase.kind === 'error' ? 'error' : 'conflict',
+    `node_id=${(ctx.nodeId ?? '').trim() || '?'}`,
+    `runtime=${(ctx.runtime ?? '').trim() || '?'}`,
+    `from=${(ctx.current ?? '').trim() || '?'}`,
+    `target=${(ctx.target ?? '').trim() || '?'}`,
+  ];
+  if (phase.kind === 'timeout') {
+    // 「官方口径」的超时窗口,让人知道等满过多久 —— 不是「卡了不知道多久」。
+    parts.push(`waited=${Math.round(RESTART_MAX_POLLS * RESTART_POLL_MS / 1000)}s`);
+    if (phase.hot) parts.push('mode=hot');
+  }
+  if (phase.kind === 'error') {
+    // 错误消息去掉换行,保证这行能被整行复制;长度截断到 120 字符,避免把整段堆栈糊进来。
+    const msg = phase.message.replace(/\s+/g, ' ').trim().slice(0, 120);
+    parts.push(`error=${msg || '?'}`);
+  }
+  return parts.join(' ');
+}
