@@ -169,3 +169,21 @@ export function groupUnlockHint(query: string): string | null {
   if (!forced) return null;
   return `搜索里的 ${forced === 'status' ? 'status=' : 'runtime='} 会固定分组，已帮你清掉这段搜索`;
 }
+
+/**
+ * 分组控件的触控下限(0.485)。
+ *
+ * 侧栏头部很窄,按钮文字只能 11px;视觉高度约 20px、hitSlop 8。手机上拇指点它经常点空
+ * (尤其在滚动中的列表头部)。这里把「可点范围」明确成常量:
+ *   - 视觉高度不变(不挤标题),但 hitSlop 加到 12 ⇒ 有效高度约 20 + 24 = 44pt 以上
+ *   - 展开后的三个选项撑到 32 高,并按同一套 hitSlop 放宽
+ * 数字写在这里是为了让单测钉住「不小于 44 的有效高度」,而不是散落在 JSX 里靠肉眼判断。
+ */
+export const GROUP_TOGGLE_HIT_SLOP = 12;
+export const GROUP_OPTION_MIN_HEIGHT = 32;
+/** 视觉高度(样式里实际写的高度):两个 chip 都用这个,保证与标题行同一基线。 */
+export const GROUP_CHIP_VISUAL_HEIGHT = 20;
+/** 有效可点高度 = 视觉高度 + 上下 hitSlop。0.485 起要求 ≥ 44(Apple HIG 的触控底线)。 */
+export function groupChipEffectiveHeight(): number {
+  return GROUP_CHIP_VISUAL_HEIGHT + GROUP_TOGGLE_HIT_SLOP * 2;
+}

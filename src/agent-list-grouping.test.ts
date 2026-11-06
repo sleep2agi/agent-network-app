@@ -4,7 +4,7 @@
 // 1) Session.status 的每种写法都能落到唯一分区,认不出的进「未上报」而不是「在线」;
 // 2) 分区顺序固定:正在工作 → 在线 → 异常 → 离线 → 未上报(离线必须沉底,不许浮上来);
 // 3) 存储读回 fail-safe:空/损坏/未来维度一律退回 department。
-import { effectiveGroupBy, groupByHint, groupUnlockHint, headerViewSuffix, groupByLabel, groupCountLabel, groupForQuery, groupHeaderHint, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
+import { effectiveGroupBy, groupByHint, groupUnlockHint, headerViewSuffix, GROUP_CHIP_VISUAL_HEIGHT, GROUP_OPTION_MIN_HEIGHT, GROUP_TOGGLE_HIT_SLOP, groupChipEffectiveHeight, groupByLabel, groupCountLabel, groupForQuery, groupHeaderHint, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
 
 const checks: [string, boolean][] = [];
 const ck = (name: string, ok: boolean) => checks.push([name, ok]);
@@ -81,6 +81,12 @@ ck('status= 查询会给出解锁说明', (groupUnlockHint('status=offline') ?? 
 ck('runtime= 查询会给出解锁说明', (groupUnlockHint('runtime=codex') ?? '').includes('runtime='));
 ck('普通搜索没有解锁说明', groupUnlockHint('苏猫') === null);
 ck('说明里讲明「已清掉搜索」', (groupUnlockHint('status=offline') ?? '').includes('清掉'));
+
+// 12) 触控范围(0.485)
+ck('分组按钮有效高度 ≥ 44', groupChipEffectiveHeight() >= 44);
+ck('hitSlop 至少 12', GROUP_TOGGLE_HIT_SLOP >= 12);
+ck('视觉高度不撑大标题行(≤ 24)', GROUP_CHIP_VISUAL_HEIGHT <= 24);
+ck('展开选项高度 ≥ 32', GROUP_OPTION_MIN_HEIGHT >= 32);
 
 let bad = 0;
 for (const [name, ok] of checks) {
