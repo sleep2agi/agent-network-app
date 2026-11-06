@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { afterPoll, afterSubmit, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary,
+import { afterPoll, afterSubmit, recheckAfterTimeout, modelControlAvailability, phaseText, validateModelId, RESTART_MAX_POLLS, RESTART_POLL_MS, modelChips, catalogHint, modelNotOnMachineNote, filterModels, groupCountLabel, providerGroupSummary,
   orderGroupsByCurrent,
   groupCountLabelFor,
 } from './node-model-change';
@@ -47,6 +47,24 @@ check(`timeout after ${RESTART_MAX_POLLS} polls`, (() => {
   for (let i = 0; i < RESTART_MAX_POLLS; i++) { if (p.kind !== 'restarting') break; p = afterPoll(p, null); }
   return p.kind === 'timeout';
 })());
+// 超时后的「再检查一次」按钮(0.2.474):界面必须同时给「再检查一次」和「再下发一次」。
+check('section 的 timeout 态同时给「再检查一次」与「再下发一次」',
+  (() => {
+    const src = readFileSync(new URL('./NodeModelSection.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+    return src.includes('testID="node-model-recheck"') && src.includes('testID="node-model-retry-timeout"')
+      && src.includes('recheckAfterTimeout(before, v)');
+  })());
+
+// 超时后的「再检查一次」(0.2.474):读一次配置就能定论,不该逼用户重选。
+check('recheck: node already on the requested model → applied (no re-submit)',
+  recheckAfterTimeout({ kind: 'timeout', requested: 'm2', previous: 'm1', hot: true }, { config_revision: 3, model: 'm2', config_update_capable: true }).kind === 'applied');
+check('recheck: still on the old model → back to restarting with a fresh window',
+  (() => { const p = recheckAfterTimeout({ kind: 'timeout', requested: 'm2', hot: true }, { config_revision: 7, model: 'm1', config_update_capable: true }); return p.kind === 'restarting' && p.polls === 0 && p.baseRevision === 7 && p.hot === true; })());
+check('recheck: unreadable config keeps the timeout state (never fakes success)',
+  recheckAfterTimeout({ kind: 'timeout', requested: 'm2' }, null).kind === 'timeout');
+check('timeout keeps previous/hot so a recheck can still show them',
+  (() => { const p = afterPoll({ kind: 'restarting', requested: 'm2', baseRevision: 3, polls: RESTART_MAX_POLLS - 1, previous: 'm1', hot: true }, null); return p.kind === 'timeout' && p.previous === 'm1' && p.hot === true; })());
+
 check('timeout text tells the user to check the node, not that it succeeded', phaseText({ kind: 'timeout', requested: 'm2' }).includes('没有以新模型回来'));
 check('applied text names the model', phaseText({ kind: 'applied', model: 'm2' }).includes('m2'));
 
