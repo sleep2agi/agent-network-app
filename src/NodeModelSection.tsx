@@ -13,6 +13,7 @@ import { styles } from './app-styles';
 import {
   afterPoll,
   afterSubmit,
+  recheckAfterTimeout,
   catalogHint,
   filterModels,
   modelNotOnMachineNote,
@@ -458,10 +459,28 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
         ) : null}
         {/* 超时后节点可能只是还没重启完:给一个「再下发一次」,不用重新选模型。 */}
         {phase.kind === 'timeout' && !busy ? (
-          <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.requested)} testID="node-model-retry-timeout"
-            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
-            <Text style={{ color: colors.accent, fontSize: 12 }}>再下发一次（{phase.requested}）</Text>
-          </Pressable>
+          <View style={{ flexDirection: 'row', gap: 12 }}>
+            {/* 0.2.474:超时先「再检查一次」——读一次配置就能定论,别让用户以为必须重下发。 */}
+            <Pressable accessibilityRole="button" testID="node-model-recheck"
+              onPress={async () => {
+                const before = phase;
+                try {
+                  const v = await fetchNodeConfig(cfg, node.node_id);
+                  const next = recheckAfterTimeout(before, v);
+                  setPhase(next);
+                  if (next.kind === 'restarting') setPhase({ kind: 'timeout', requested: before.requested, previous: before.previous, hot: before.hot });
+                } catch {
+                  setPhase(before);
+                }
+              }}
+              style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+              <Text style={{ color: colors.accent, fontSize: 12 }}>再检查一次</Text>
+            </Pressable>
+            <Pressable accessibilityRole="button" onPress={() => void applyModel(phase.requested)} testID="node-model-retry-timeout"
+              style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+              <Text style={{ color: colors.textSecondary, fontSize: 12 }}>再下发一次（{phase.requested}）</Text>
+            </Pressable>
+          </View>
         ) : null}
       </View>
     </View>

@@ -20,7 +20,7 @@ export type ModelChangePhase =
   | { kind: 'submitting'; requested: string }
   | { kind: 'restarting'; requested: string; baseRevision: number; polls: number; previous?: string | null; hot?: boolean }
   | { kind: 'applied'; model: string; previous?: string | null }
-  | { kind: 'timeout'; requested: string }
+  | { kind: 'timeout'; requested: string; previous?: string | null; hot?: boolean }
   | { kind: 'conflict' }
   | { kind: 'error'; message: string };
 
@@ -98,7 +98,7 @@ export function afterPoll(
     }
   }
   const polls = phase.polls + 1;
-  if (polls >= maxPolls) return { kind: 'timeout', requested: phase.requested };
+  if (polls >= maxPolls) return { kind: 'timeout', requested: phase.requested, previous: phase.previous, hot: phase.hot };
   return { ...phase, polls };
 }
 
@@ -240,3 +240,21 @@ export function providerGroupSummary(groups: readonly { provider: string; models
 
 /** 重启级变更(flags 等)单独一个开关:必须有能在 sentinel-75 之后把它拉起来的 supervisor。 */
 export const canEditRestartTier = (view: NodeConfigView | null | undefined): boolean => !!view?.config_update_capable;
+
+/**
+ * 超时后的「再检查一次」(2026-11-05,0.2.474)。
+ *
+ * 90s 超时有两种真相：① 真的没切过去；② 切过去了但客户端当时没读到（热变更早期就是这样）。
+ * 超时后把选择权交回用户时，只给「重新选一次」会让人以为要重下发一遍 —— 其实读一次配置就能定论。
+ *   · 读回来已经是目标模型 ⇒ applied
+ *   · 还不是 ⇒ 重新进入轮询（计数清零，再给一个完整窗口）
+ *   · 读失败(view=null) ⇒ 保持 timeout，不假报成功
+ */
+export function recheckAfterTimeout(
+  phase: Extract<ModelChangePhase, { kind: 'timeout' }>,
+  view: NodeConfigView | null,
+): ModelChangePhase {
+  if (!view) return phase;
+  if (view.model === phase.requested) return { kind: 'applied', model: phase.requested, previous: phase.previous ?? null };
+  return { kind: 'restarting', requested: phase.requested, baseRevision: view.config_revision, polls: 0, previous: phase.previous ?? null, hot: phase.hot };
+}
