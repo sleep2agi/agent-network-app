@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.487:",
+  "- 切节点后不会再把上一个节点的模型当成候选：B 的清单还在读时，列表是空的 + 「正在读取」，不会再让你把 A 的模型点给 B。",
+  "",
   "What's new in 0.2.486:",
   "- 切模型超时/报错时，界面给出一行可复制的诊断（node_id / runtime / 从哪个模型到哪个模型 / 等了多久 / 错误摘要），贴给运维不用再问五个问题。",
   "",
