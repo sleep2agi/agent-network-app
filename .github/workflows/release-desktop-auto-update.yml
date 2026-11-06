@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.484:
+            - 搜 `status=` / `runtime=` 时分组被搜索固定住；这时点分组按钮选别的档，会自动清掉那段搜索并说明原因，不会再出现「点了没反应」。
+
             What's new in 0.2.483:
             - 侧栏标题会标出当前视图（「40 个 agent · 按在线态」/「· 按运行时」），避免以为会话变少了；按部门时照旧不标。
 

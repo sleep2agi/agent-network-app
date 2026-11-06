@@ -270,6 +270,7 @@ ck('选中项会写入设备偏好', screenSrc.includes('selectGroupBy') && scre
 ck('「未上报」组会解释原因（0.481）', screenSrc.includes('groupHeaderHint') && screenSrc.includes('agent-group-hint-'));
 ck('搜索前缀会联动分区（0.482）', screenSrc.includes('effectiveGroupByFor') && screenSrc.includes('viewGroupBy'));
 ck('标题标出当前分区（0.483）', screenSrc.includes('headerViewSuffix(viewGroupBy)'));
+ck('搜索锁住分组时选中会清搜索并说明（0.484）', screenSrc.includes('groupUnlockHint(query)') && screenSrc.includes('agents-group-note'));
 ck('运行时分区的数据源是会话的 runtime', screenSrc.includes('runtimeByAlias') && screenSrc.includes('runtimeGroupOf'));
 ck('分组选择会被记住', screenSrc.includes('loadGroupBy') && screenSrc.includes('saveGroupBy'));
 
