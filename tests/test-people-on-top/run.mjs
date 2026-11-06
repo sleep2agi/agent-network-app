@@ -106,21 +106,39 @@ async function run(vp, viewport, ua) {
   };
   const search = page.getByPlaceholder(/搜索/).first();
   const searchBox = await box(page, 'input[placeholder*="搜索"]');
+
+  // 区块已移到列表之后(admin #4036),它们可能不在首屏 —— 几何断言改为「DOM 顺序」断言,
+  // 不依赖滚动位置;需要量的宽度/绘制再单独滚进视野。
+  const domOrder = await page.evaluate(() => {
+    const q = (sel) => document.querySelector(sel);
+    const group = q('[data-testid^="agent-group-"]');
+    const people = q('[data-testid="people-header"]');
+    const registered = q('[data-testid="registered-agents-header"]');
+    // group 在 people 之前 ⇒ group.compareDocumentPosition(people) 含 FOLLOWING
+    const precedes = (a, b) => !!(a && b && (a.compareDocumentPosition(b) & 4));
+    return {
+      hasGroup: !!group, hasPeople: !!people, hasRegistered: !!registered,
+      peopleAfterGroup: precedes(group, people),
+      registeredAfterGroup: registered ? precedes(group, registered) : null,
+      // 人员与已登记都要在列表之后:即它们都在「第一个分组」之后
+    };
+  });
+  record(vp, '1 人员/已登记节点 below the conversation list (DOM order after the first agent group)', {
+    present: domOrder.hasPeople,
+    belowList: domOrder.peopleAfterGroup,
+    registeredBelowList: domOrder.registeredAfterGroup === null ? true : domOrder.registeredAfterGroup,
+  }, domOrder);
+
+  // 布局类断言:把人员区滚进视野再量(它在列表下方,首屏看不到)。
+  await page.locator(tid('people-header')).scrollIntoViewIfNeeded().catch(() => {});
+  await sleep(400);
   const m = await measure();
-  await page.screenshot({ path: join(OUT, `${vp}-1-top.png`) });
-  const firstGroupY = m.groups.length ? Math.min(...m.groups.map(g => g.y)) : null;
-  record(vp, '1 人员/已登记节点 below the conversation list (after the last agent group), not under the search box', {
-    present: !!m.people,
-    // 新消息要靠上:人员头必须落在第一个分组之下(不是紧贴搜索框)。
-    belowGroups: !!m.people && firstGroupY !== null && m.people.y > firstGroupY,
-    notUnderSearch: !!m.people && !!searchBox && m.people.y - searchBox.b > 60,
-    // 「已登记节点」同样下沉(admin #4036 红框里两组)。
-    registeredBelowGroups: !!m.registered && firstGroupY !== null && m.registered.y > firstGroupY,
-  }, { searchBottom: searchBox?.b, peopleY: m.people?.y, registeredY: m.registered?.y, firstGroupY, groups: m.groups.length });
+  const agentRowNearby = await box(page, '[data-testid^="agent-row-"]');
+  await page.screenshot({ path: join(OUT, `${vp}-1-bottom.png`) });
   const count = await page.locator(tid('people-count')).innerText().catch(() => '');
   const countPaint = await paintedText(page, tid('people-count'), '3'); // a single digit: painted ≥ 4px wide, not only textContent
   const personRow = await box(page, '[data-testid^="person-row-"]');
-  const agentRow = await box(page, '[data-testid^="agent-row-"]');
+  const agentRow = agentRowNearby;
   record(vp, '2 header shows the count; people rows share the agent rows’ left edge and width', { count: count === '3', countPainted: !!countPaint?.painted && countPaint.w >= 4, left: !!personRow && !!agentRow && Math.abs(personRow.x - agentRow.x) <= 1, width: !!personRow && !!agentRow && Math.abs(personRow.w - agentRow.w) <= 1 }, { count, countPaint, personRow, agentRow });
 
   // 3 fold → reload → still folded → unfold
