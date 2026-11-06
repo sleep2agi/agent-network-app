@@ -144,3 +144,15 @@ export function groupForQuery(query: string): GroupBy | null {
 export function effectiveGroupBy(selected: GroupBy, query: string): GroupBy {
   return groupForQuery(query) ?? selected;
 }
+
+/**
+ * 侧栏标题后缀(0.483)。
+ *
+ * 0.477–0.482 加了分组切换之后,不仔细看按钮的人可能以为列表「少了人」——
+ * 其实只是当前按在线态/运行时分区。所以在计数后面标出当前视图,回到部门时就不标(那是默认,不用解释)。
+ */
+export function headerViewSuffix(by: GroupBy): string {
+  if (by === 'status') return ' · 按在线态';
+  if (by === 'runtime') return ' · 按运行时';
+  return '';
+}
