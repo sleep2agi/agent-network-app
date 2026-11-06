@@ -7,6 +7,7 @@
 // best-effort: a preference we cannot store just lasts for this session.
 import * as FileSystem from 'expo-file-system/legacy';
 import { parseCollapsed } from './agents-list';
+import { GROUP_BY_KEY, parseGroupBy, type GroupBy } from './agent-list-grouping';
 import { parseConversationTab, type ConversationTab } from './conversation-tab';
 import { parseStoredListWidth } from './wide-layout';
 
@@ -28,7 +29,7 @@ export const LEGION3D_SPIN_KEY = 'agent_list_legion3d_spin_v1';
 export type RailLabels = 'icons' | 'labels';
 const PREFS_FILE = () => `${FileSystem.documentDirectory}agent_list_prefs_v1.json`;
 
-type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string; [LEGION3D_FOCUS_KEY]?: string; [LEGION3D_SPEED_KEY]?: string; [LEGION3D_SPIN_KEY]?: string };
+type Prefs = { [LIST_WIDTH_KEY]?: string; [COLLAPSED_KEY]?: string; [CONVERSATION_TAB_KEY]?: string; [RAIL_LABELS_KEY]?: string; [LEGION3D_OPEN_KEY]?: string; [LEGION3D_FOCUS_KEY]?: string; [LEGION3D_SPEED_KEY]?: string; [LEGION3D_SPIN_KEY]?: string; [GROUP_BY_KEY]?: string };
 
 const webStorage = (): Storage | null => {
   try {
@@ -78,6 +79,11 @@ export const loadRailLabels = async (): Promise<RailLabels> => {
   return v;
 };
 export const saveRailLabels = (v: RailLabels): Promise<void> => writeKey(RAIL_LABELS_KEY, parseRailLabels(v));
+
+/** 侧栏分组视图(0.477):部门(默认) / 在线态。按设备记住 —— 这是这台机器上的习惯,不是账号属性。
+ *  读回 fail-safe:空串、损坏、未来维度都退回 department(见 parseGroupBy)。 */
+export const loadGroupBy = async (): Promise<GroupBy> => parseGroupBy(await readKey(GROUP_BY_KEY));
+export const saveGroupBy = (v: GroupBy): Promise<void> => writeKey(GROUP_BY_KEY, parseGroupBy(v));
 
 /** 三态(2026-11-05):'1' 展开 / '0' 收起 / 没有存过 ⇒ null。
  *  为什么不是布尔:这个功能从「预览」变成默认展开,老用户没存过时不该被当成「选过收起」。 */

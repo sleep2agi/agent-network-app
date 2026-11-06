@@ -68,7 +68,8 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab } from './agent-list-prefs';
+import { groupByHint, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
 import { pinyinMatch } from './lib/pinyin';
@@ -313,6 +314,18 @@ export default function AgentsScreen({
     loadCollapsedGroups().then(v => { if (live) setCollapsed(v); }).catch(() => {});
     return () => { live = false; };
   }, []);
+  // 分组视图(0.477):部门(默认) / 在线态。按设备记住;切换只影响分区方式,不改搜索/筛选/未读口径。
+  const [groupBy, setGroupBy] = useState<GroupBy>('department');
+  useEffect(() => {
+    let live = true;
+    loadGroupBy().then(v => { if (live) setGroupBy(v); }).catch(() => {});
+    return () => { live = false; };
+  }, []);
+  const toggleGroupBy = () => setGroupBy(prev => {
+    const next: GroupBy = prev === 'status' ? 'department' : 'status';
+    void saveGroupBy(next);
+    return next;
+  });
   // 「全部 / 未读 N」(board #449,conversation-tab.ts):只在会话列表(能置顶的那个)上出现,每台设备记住选了哪个。
   // 首帧用内存 / localStorage 里的值(peekConversationTab),手机从会话返回时不会先闪「全部」。
   const showTabs = rowMenu;
@@ -471,6 +484,12 @@ export default function AgentsScreen({
     { counts: liveUnread.counts, manualUnread: convFlags.manualUnread },
     [...(onOpenPerson ? people : []), ...(groups ?? [])],
   );
+  // 在线态分区的数据源:直接读会话上的 status(hub 的 working/running/online/… 两种历史写法都有)。
+  const statusByAlias = useMemo(() => {
+    const m = new Map<string, string | undefined>();
+    for (const s of tabbedSessions) m.set(s.alias, s.status);
+    return m;
+  }, [tabbedSessions]);
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
       // 搜索也命中部门名:分区改成按部门之后,「搜 TMWork 找到这一部门的 agent」比
@@ -484,9 +503,14 @@ export default function AgentsScreen({
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
       // 有部门数据时,没有归属的 agent 统一进「未归属」——按部门分区就要把没分配的也显式列出来,
       // 否则它们会被前缀拆成好几种「看起来像部门」的组。没有部门数据时 undefined = 旧行为。
-      teamOf: alias => (deptByAlias.size ? (deptByAlias.get(alias) ?? '未归属') : undefined),
+      teamOf: alias => (groupBy === 'status'
+        ? statusGroupOf(statusByAlias.get(alias))
+        : (deptByAlias.size ? (deptByAlias.get(alias) ?? '未归属') : undefined)),
+      // 在线态分区要固定顺序(正在工作→在线→异常→离线→未上报),否则离线会因为「在线人数同为 0」
+      // 跟「未上报」按拼音混排。部门分区不传,保持原行为。
+      teamOrder: groupBy === 'status' ? statusGroupRank : undefined,
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, groupBy, statusByAlias],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -937,6 +961,8 @@ export default function AgentsScreen({
           <Text style={styles.listHeader}>
             {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} 个 agent`}
           </Text>
+          {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
+          <ToggleGroupBy groupBy={groupBy} onPress={toggleGroupBy} />
           <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
             <Ionicons name="add" size={24} color={colors.accent} />
           </Pressable>
@@ -971,6 +997,8 @@ export default function AgentsScreen({
             ) : (
               <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} 个 agent`}</Text>
             )}
+            {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
+            <ToggleGroupBy groupBy={groupBy} onPress={toggleGroupBy} />
             <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
               <Ionicons name="add" size={24} color={colors.accent} />
             </Pressable>
@@ -1360,3 +1388,24 @@ const makeRowStyles = () => ({
 } as const);
 let rowStyles = makeRowStyles();
 onThemeChange(() => { rowStyles = makeRowStyles(); });
+
+/** 分组视图切换(0.477)。只露「当前按什么分区」,点一下换另一种;实现见 agent-list-grouping。
+ *  单独抽出来是因为紧凑布局与宽布局各有一份列表头,两处必须完全一致(测试按 testID 找)。 */
+function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: () => void }) {
+  const label = groupBy === 'status' ? '分组 · 在线态' : '分组 · 部门';
+  return (
+    <Pressable
+      testID="agents-group-by-toggle"
+      accessibilityRole="button"
+      accessibilityLabel={`${label}（${groupByHint(groupBy)}）`}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [
+        { marginRight: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.subtleFill },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      <Text style={{ color: colors.textSecondary, fontSize: 11 }} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+}

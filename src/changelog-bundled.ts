@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.477:",
+  "- 侧栏多了「分组」开关：可以在「按部门」和「按在线态（正在工作/在线/异常/离线/未上报）」之间切换，选择按设备记住。",
+  "",
   "What's new in 0.2.476:",
   "- 侧栏清单标题改成「40 个 agent」，与中文界面一致；搜索框提示不再被截成「搜索 agent…」，能直接看见可以搜 node_id。",
   "",

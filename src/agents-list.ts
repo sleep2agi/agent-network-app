@@ -281,7 +281,11 @@ export function buildSections(
   opts: { match?: Matcher; sort?: SortContext; unread?: UnreadContext
     /** 分组标题(部门):给了就按 Hub 的真实归属分,拿不到返回 undefined 则该行退回 alias 前缀。
      *  admin 2026-10-26「军团里面能分组吗…明显的划分区」—— 部门是有数据的,不用猜前缀。 */
-    teamOf?: (alias: string) => string | undefined } = {},
+    teamOf?: (alias: string) => string | undefined
+    /** 分区的固定顺序(0.477):给了就按它的返回值排,不再按「在线人数」排。
+     *  按在线态分区时必须给 —— 否则「离线」与「未上报」在线人数都是 0,会退化成按标题拼音排,
+     *  离线节点可能浮到上面。不给 = 保持原有「有在线成员的组在上」的行为。 */
+    teamOrder?: (title: string) => number } = {},
 ): AgentSection[] {
   const q = query.trim();
   const match = opts.match ?? substringMatch;
@@ -319,6 +323,7 @@ export function buildSections(
       (a, b) =>
         // 「未归属」永远排最后:它不是部门,是待整理的那一堆(admin 2026-10-26 按部门分区之后)。
         (a.title === '未归属' ? 1 : 0) - (b.title === '未归属' ? 1 : 0) ||
+        (opts.teamOrder ? opts.teamOrder(a.title) - opts.teamOrder(b.title) : 0) ||
         (b.online > 0 ? 1 : 0) - (a.online > 0 ? 1 : 0) ||
         b.online - a.online ||
         a.title.localeCompare(b.title),
