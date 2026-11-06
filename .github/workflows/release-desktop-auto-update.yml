@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.473:
+            - 切模型不再假超时：OpenCode V2 节点是热切换，以前客户端要等满 90s 才报超时，现在读回新模型就算成功。
+
             What's new in 0.2.472:
             - 读屏在刷新时会念「正在重新加载组织架构，请稍候」，不会再把「等结果」听成「按钮没反应」。
 
