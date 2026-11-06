@@ -194,7 +194,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       if (Date.now() >= deadline) { expire(); return; }
       if (!failed) setView(v);
       setReadFailed(failed);
-      const next = afterPoll(current, v);
+      const next = afterPoll(current, v, undefined, { hot: v2 });
       setPhase(next);
       if (next.kind === 'restarting') {
         current = next;
@@ -254,7 +254,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     if (!view || busy) return;
     setPhase({ kind: 'submitting', requested: model });
     const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
-    const next = afterSubmit(model, view.config_revision, res, currentModel);
+    // 热变更(OpenCode V2 纯 model)不抬高 config_revision,要靠 hot 让它立刻算生效。
+    const next = afterSubmit(model, view.config_revision, res, currentModel, { hot: v2 });
     if (next.kind === 'conflict') void reload();
     // 生效后把筛选清掉:否则下次进来列表还停在旧筛选上,看不到刚切过去的模型。
     if (next.kind === 'applied') setFilter('');

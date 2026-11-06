@@ -28,6 +28,19 @@ const restarting = { kind: 'restarting' as const, requested: 'm2', baseRevision:
 check('revision bumped + model matches → applied', afterPoll(restarting, { config_revision: 4, model: 'm2', config_update_capable: true }).kind === 'applied');
 check('revision bumped but model differs → still restarting', afterPoll(restarting, { config_revision: 4, model: 'm1', config_update_capable: true }).kind === 'restarting');
 check('same revision with requested model → still restarting (hub not yet finalized)', afterPoll(restarting, { config_revision: 3, model: 'm2', config_update_capable: true }).kind === 'restarting');
+// 2026-11-05 通信欧2号:热变更(v2 纯 model)Hub 已 applied、客户端却等到 90s 超时(假超时)。
+check('hot: revision unchanged but model already target → applied (no false 90s timeout)',
+  afterPoll(restarting, { config_revision: 3, model: 'm2', config_update_capable: true }, undefined, { hot: true }).kind === 'applied');
+check('hot: still not applied while the node reports the old model',
+  afterPoll(restarting, { config_revision: 3, model: 'm1', config_update_capable: true }, undefined, { hot: true }).kind === 'restarting');
+check('non-hot keeps requiring a bumped revision even if model matches',
+  afterPoll(restarting, { config_revision: 3, model: 'm2', config_update_capable: true }).kind === 'restarting');
+check('hot phase text says "等节点确认新模型", not "重启"(it does not restart)',
+  phaseText({ kind: 'restarting', requested: 'm2', baseRevision: 3, polls: 2, hot: true }).includes('确认新模型')
+  && !phaseText({ kind: 'restarting', requested: 'm2', baseRevision: 3, polls: 2, hot: true }).includes('重启'));
+check('afterSubmit carries the hot flag into the restarting phase',
+  (() => { const p = afterSubmit('m2', 3, { ok: true }, 'm1', { hot: true }); return p.kind === 'restarting' && p.hot === true; })());
+
 check('read failure counts as a poll, never as applied', (() => { const p = afterPoll(restarting, null); return p.kind === 'restarting' && p.polls === 1; })());
 check(`timeout after ${RESTART_MAX_POLLS} polls`, (() => {
   let p = restarting as ReturnType<typeof afterPoll>;
