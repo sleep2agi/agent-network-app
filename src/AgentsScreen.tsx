@@ -1324,6 +1324,27 @@ export default function AgentsScreen({
 // render time. Rebuilt on every restyle (theme or 界面密度, src/ui-scale.ts): the row geometry goes
 // through ds(), and `spacing` itself is density-scaled.
 const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFactor);
+/** 分组视图切换(0.477)。只露「当前按什么分区」,点一下换另一种;实现见 agent-list-grouping。
+ *  单独抽出来是因为紧凑布局与宽布局各有一份列表头,两处必须完全一致(测试按 testID 找)。 */
+function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: () => void }) {
+  const label = groupBy === 'status' ? '分组 · 在线态' : '分组 · 部门';
+  return (
+    <Pressable
+      testID="agents-group-by-toggle"
+      accessibilityRole="button"
+      accessibilityLabel={`${label}（${groupByHint(groupBy)}）`}
+      onPress={onPress}
+      hitSlop={8}
+      style={({ pressed }) => [
+        { marginRight: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+        pressed && { opacity: 0.6 },
+      ]}
+    >
+      <Text style={{ color: colors.textSecondary, fontSize: 11 }} numberOfLines={1}>{label}</Text>
+    </Pressable>
+  );
+}
+
 const makeRowStyles = () => ({
   head: { paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.sm, paddingBottom: spacing.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: ds(36) },
@@ -1389,23 +1410,3 @@ const makeRowStyles = () => ({
 let rowStyles = makeRowStyles();
 onThemeChange(() => { rowStyles = makeRowStyles(); });
 
-/** 分组视图切换(0.477)。只露「当前按什么分区」,点一下换另一种;实现见 agent-list-grouping。
- *  单独抽出来是因为紧凑布局与宽布局各有一份列表头,两处必须完全一致(测试按 testID 找)。 */
-function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: () => void }) {
-  const label = groupBy === 'status' ? '分组 · 在线态' : '分组 · 部门';
-  return (
-    <Pressable
-      testID="agents-group-by-toggle"
-      accessibilityRole="button"
-      accessibilityLabel={`${label}（${groupByHint(groupBy)}）`}
-      onPress={onPress}
-      hitSlop={8}
-      style={({ pressed }) => [
-        { marginRight: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: 999, backgroundColor: colors.subtleFill },
-        pressed && { opacity: 0.6 },
-      ]}
-    >
-      <Text style={{ color: colors.textSecondary, fontSize: 11 }} numberOfLines={1}>{label}</Text>
-    </Pressable>
-  );
-}
