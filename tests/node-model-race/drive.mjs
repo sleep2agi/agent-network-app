@@ -156,10 +156,15 @@ try {
   // 这是产品既有行为（兜底优先），不作为本次负控的硬判定。
   console.log(`failedHasRetry=${obs.failedHasRetry}（只记录：失败时优先用本机上报清单兜底）`);
   console.log('NEGATIVE-CONTROL PASS');
+  // serveExport 的静态服务器会一直挂着事件循环；显式退出，否则 CI 会把它当超时（实测本地也是跑完不退出）。
+  process.exitCode = 0;
 } catch (e) {
   console.log('OBSERVATIONS ' + JSON.stringify(obs, null, 2));
   console.error('NEGATIVE-CONTROL FAIL: ' + (e && e.message));
+  process.exitCode = 1;
   throw e;
 } finally {
-  await browser.close();
+  await browser.close().catch(() => {});
+  // 不等静态服务器优雅关闭：结果已经打印，直接收尾。
+  setTimeout(() => process.exit(process.exitCode ?? 0), 50);
 }
