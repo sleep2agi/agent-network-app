@@ -68,7 +68,7 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { GROUP_BY_CYCLE, groupByHint, groupByLabel, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { GROUP_BY_CYCLE, groupByHint, groupByLabel, groupCountLabel, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -1093,7 +1093,7 @@ export default function AgentsScreen({
           disabled={!section.collapsible}
           onPress={() => toggleGroup(section.title)}
           accessibilityRole={section.collapsible ? 'button' : 'header'}
-          accessibilityLabel={`${section.title} ${section.online}/${section.total} 在线${section.collapsible ? (section.collapsed ? ',已折叠' : ',已展开') : ''}`}
+          accessibilityLabel={`${section.title} ${groupCountLabel(groupBy, section.online, section.total).a11y}${section.collapsible ? (section.collapsed ? ',已折叠' : ',已展开') : ''}`}
           accessibilityState={section.collapsible ? { expanded: !section.collapsed } : undefined}
           // admin 2026-10-26「军团里面能分组吗…有明显的划分区，有点小发光，就是要震撼」:
           // 每个团之间一条发丝分隔线(第一组不画),标题前缀一条 brand 色的微光竖条。
@@ -1123,7 +1123,7 @@ export default function AgentsScreen({
               </View>
             ) : null;
           })()}
-          <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{section.online}/{section.total}</Text>
+          <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{groupCountLabel(groupBy, section.online, section.total).text}</Text>
         </Pressable>
       )}
       ItemSeparatorComponent={compact ? undefined : () => (

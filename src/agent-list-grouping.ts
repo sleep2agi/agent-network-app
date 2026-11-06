@@ -88,3 +88,21 @@ export function groupByLabel(by: GroupBy): string {
   if (by === 'runtime') return '分组 · 运行时';
   return '分组 · 部门';
 }
+
+/**
+ * 分组标题右侧的计数文案(0.480)。
+ *
+ * 按部门/团队看时 `在线/总数` 有意义(一个部门里有人在线、有人离线)。但按**在线态**或**运行时**分区时,
+ * 「离线」组的在线人数恒为 0 —— 写 `0/4` 会被读成「这组没人」,读到「0/4 在线」更是自相矛盾。
+ * 所以这两种视图只给总数,a11y 也改成「N 个」。
+ */
+export function groupCountLabel(
+  by: GroupBy,
+  online: number,
+  total: number,
+): { text: string; a11y: string } {
+  if (by === 'department') {
+    return { text: `${online}/${total}`, a11y: `${online}/${total} 在线` };
+  }
+  return { text: String(total), a11y: `${total} 个` };
+}
