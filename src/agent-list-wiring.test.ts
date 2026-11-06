@@ -73,7 +73,8 @@ ck('folded state loaded on mount', agents.includes('loadCollapsedGroups().then('
 ck('non-collapsible header is disabled and has no chevron', agents.includes('disabled={!section.collapsible}') && agents.includes('{section.collapsible ? (\n            <Ionicons'));
 // 0.480:按部门时显示「在线/总数」;按在线态/运行时分区时只给总数(否则「离线」组会写成 0/N,
 // 读起来像「这组没人」)。两种形态都由 groupCountLabel 产出,断言它被用在标题右侧。
-ck('header shows the group count via groupCountLabel', agents.includes('groupCountLabel(groupBy, section.online, section.total).text'));
+// 0.482:计数用「实际渲染的分组」(viewGroupBy,可被 status=/runtime= 查询临时覆盖)
+ck('header shows the group count via groupCountLabel', agents.includes('groupCountLabel(viewGroupBy, section.online, section.total).text'));
 
 // ── search / + / sorting kept ──
 ck('search input still bound to query', (agents.match(/value=\{query\}/g) ?? []).length === 2 && (agents.match(/onChangeText=\{setQuery\}/g) ?? []).length === 2);

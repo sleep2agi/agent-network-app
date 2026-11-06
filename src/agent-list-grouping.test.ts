@@ -4,7 +4,7 @@
 // 1) Session.status 的每种写法都能落到唯一分区,认不出的进「未上报」而不是「在线」;
 // 2) 分区顺序固定:正在工作 → 在线 → 异常 → 离线 → 未上报(离线必须沉底,不许浮上来);
 // 3) 存储读回 fail-safe:空/损坏/未来维度一律退回 department。
-import { groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
+import { effectiveGroupBy, groupByHint, groupByLabel, groupCountLabel, groupForQuery, groupHeaderHint, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
 
 const checks: [string, boolean][] = [];
 const ck = (name: string, ok: boolean) => checks.push([name, ok]);
@@ -62,6 +62,14 @@ ck('运行时: 未上报组有解释', !!groupHeaderHint('runtime', UNKNOWN_GROU
 ck('部门视图不解释(没有「未上报」语义)', groupHeaderHint('department', UNKNOWN_GROUP) === null);
 ck('其他组不解释', groupHeaderHint('status', '离线') === null && groupHeaderHint('runtime', 'codex-cli') === null);
 ck('解释里给出原因(旧 agent-node / 无节点身份)', (groupHeaderHint('status', UNKNOWN_GROUP) ?? '').includes('agent-node'));
+
+// 9) 搜索前缀联动分区(0.482)
+ck('status= 前缀 → 在线态分区', groupForQuery('status=offline') === 'status');
+ck('runtime= 前缀 → 运行时分区', groupForQuery('runtime=codex') === 'runtime');
+ck('大小写/空白都认', groupForQuery('  STATUS=offline ') === 'status');
+ck('普通搜索不改变分区', groupForQuery('苏猫') === null && groupForQuery('model=deepseek') === null);
+ck('查询决定维度时优先于用户选择', effectiveGroupBy('department', 'status=offline') === 'status');
+ck('查询不指向维度时用用户选择的', effectiveGroupBy('runtime', '苏猫') === 'runtime');
 
 let bad = 0;
 for (const [name, ok] of checks) {
