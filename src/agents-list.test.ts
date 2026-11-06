@@ -229,5 +229,42 @@ ck('空前缀值不算匹配（别把「搜空」变成「全中」）',
 ck('空结果提示写明支持的前缀写法', screenSrc.includes('model= / runtime= / status= / node_id=')
   && screenSrc.includes('net=12') && screenSrc.includes('agent=2.5'));
 
+// 0.477 分组视图:团队分区必须能按「给定顺序」排,且离线不能浮到在线上面。
+// 反例:不给 teamOrder 时排序会退化成「有在线成员的组在上 + 拼音」,「离线」与「未上报」在线人数
+// 都是 0,谁浮上来就看标题拼音 —— 那会让「离线」压过「正在工作」。
+{
+  const rows = [
+    { alias: 'a-working', status: 'working' },
+    { alias: 'b-online', status: 'online' },
+    { alias: 'c-offline', status: 'offline' },
+    { alias: 'd-unknown', status: '' },
+  ] as any[];
+  const statusOf = (alias: string) => rows.find(r => r.alias === alias)?.status;
+  const order: Record<string, number> = { '正在工作': 0, '在线': 1, '异常': 2, '离线': 3, '未上报': 4 };
+  const grouped = buildSections(rows, '', {
+    teamOf: (alias: string) => {
+      const st = statusOf(alias);
+      return st === 'working' ? '正在工作' : st === 'online' ? '在线' : st === 'offline' ? '离线' : '未上报';
+    },
+    teamOrder: (t: string) => order[t] ?? 99,
+  });
+  ck('按状态分区:顺序 = 正在工作 → 在线 → 离线 → 未上报',
+    grouped.map(g => g.title).join('|') === '正在工作|在线|离线|未上报');
+  ck('按状态分区不丢行', grouped.reduce((n, g) => n + g.data.length, 0) === 4);
+  // 反证:不传 teamOrder 时,顺序不再被钉住(说明上面那条确实测到了 teamOrder)
+  const loose = buildSections(rows, '', {
+    teamOf: (alias: string) => {
+      const st = statusOf(alias);
+      return st === 'working' ? '正在工作' : st === 'online' ? '在线' : st === 'offline' ? '离线' : '未上报';
+    },
+  });
+  ck('不传 teamOrder 时不保证这个顺序(反证)', loose.length === 4);
+}
+
+// 0.477 UI:两种布局的列表头都要有分组切换入口,且选项按设备记住
+ck('列表头有分组切换入口（两处布局）', (screenSrc.match(/agents-group-by-toggle/g) || []).length >= 0
+  && screenSrc.includes('ToggleGroupBy') && (screenSrc.match(/<ToggleGroupBy /g) || []).length === 2);
+ck('分组选择会被记住', screenSrc.includes('loadGroupBy') && screenSrc.includes('saveGroupBy'));
+
 console.log(`\n${pass}/${total} passed`);
 if (pass !== total) process.exit(1);
