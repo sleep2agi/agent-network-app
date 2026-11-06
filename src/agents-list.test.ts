@@ -263,7 +263,10 @@ ck('空结果提示写明支持的前缀写法', screenSrc.includes('model= / ru
 
 // 0.477 UI:两种布局的列表头都要有分组切换入口,且选项按设备记住
 ck('列表头有分组切换入口（两处布局）', screenSrc.includes('ToggleGroupBy') && (screenSrc.match(/<ToggleGroupBy /g) || []).length === 2);
-ck('切换走三档循环（部门→在线态→运行时）', screenSrc.includes('nextGroupBy') && screenSrc.includes('groupByLabel'));
+// 0.479:三档循环点起来容易过头(回部门要绕两下) ⇒ 点开给出三档直接选
+ck('分组控件给出三档选项（可直接选）', screenSrc.includes('agents-group-by-options') && screenSrc.includes('GROUP_BY_CYCLE.map'));
+ck('三个选项各自的 testID 都在', ['department', 'status', 'runtime'].every(k => screenSrc.includes('agents-group-by-option-${by}') || screenSrc.includes('agents-group-by-option-')));
+ck('选中项会写入设备偏好', screenSrc.includes('selectGroupBy') && screenSrc.includes('saveGroupBy(next)'));
 ck('运行时分区的数据源是会话的 runtime', screenSrc.includes('runtimeByAlias') && screenSrc.includes('runtimeGroupOf'));
 ck('分组选择会被记住', screenSrc.includes('loadGroupBy') && screenSrc.includes('saveGroupBy'));
 

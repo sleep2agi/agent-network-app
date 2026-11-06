@@ -591,6 +591,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.479:
+            - 「分组」按钮改成点开直接选三档（部门 / 在线态 / 运行时）：以前要连点三次才绕回部门，现在一步到位。
+
             What's new in 0.2.478:
             - 「分组」再多一档：可以按运行时分区（codex-cli / opencode-cli / grok… / 未上报），点同一个按钮在三档之间循环。
 
