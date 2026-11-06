@@ -68,7 +68,7 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { GROUP_BY_CYCLE, effectiveGroupBy as effectiveGroupByFor, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, groupUnlockHint, headerViewSuffix, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { GROUP_BY_CYCLE, GROUP_CHIP_VISUAL_HEIGHT, GROUP_OPTION_MIN_HEIGHT, GROUP_TOGGLE_HIT_SLOP, effectiveGroupBy as effectiveGroupByFor, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, groupUnlockHint, headerViewSuffix, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -1377,9 +1377,9 @@ function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: (by: G
         accessibilityLabel={`${label}（${groupByHint(groupBy)}）`}
         accessibilityState={{ expanded: open }}
         onPress={() => setOpen(v => !v)}
-        hitSlop={8}
+        hitSlop={GROUP_TOGGLE_HIT_SLOP}
         style={({ pressed }) => [
-          { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+          { height: GROUP_CHIP_VISUAL_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
           pressed && { opacity: 0.6 },
         ]}
       >
@@ -1399,8 +1399,9 @@ function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: (by: G
                   if (!on) onPress(by);
                   setOpen(false);
                 }}
+                hitSlop={GROUP_TOGGLE_HIT_SLOP}
                 style={({ pressed }) => [
-                  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: on ? colors.railActiveBg : colors.subtleFill },
+                  { minHeight: GROUP_OPTION_MIN_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: on ? colors.railActiveBg : colors.subtleFill },
                   pressed && { opacity: 0.6 },
                 ]}
               >
