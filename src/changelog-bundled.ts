@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.478:",
+  "- 「分组」再多一档：可以按运行时分区（codex-cli / opencode-cli / grok… / 未上报），点同一个按钮在三档之间循环。",
+  "",
   "What's new in 0.2.477:",
   "- 侧栏多了「分组」开关：可以在「按部门」和「按在线态（正在工作/在线/异常/离线/未上报）」之间切换，选择按设备记住。",
   "",

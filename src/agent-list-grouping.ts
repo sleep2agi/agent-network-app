@@ -6,11 +6,12 @@
 //
 //   department(默认) —— 沿用部门/团队分区,不改变现有行为
 //   status           —— 按在线态分区:正在工作 / 在线 / 异常 / 离线 / 未上报
+//   runtime          —— 按运行时分区(codex-cli / opencode-cli / grok-… / 未上报)
 //
 // 为什么先做 status:数据已经在 Session.status 上(不需要新的 hub 接口),而且它直接回答
 // 「谁掉线了」这个每天都在问的问题。运行时 / 主机分组要等 agentDirectory 的字段落定再加。
 
-export type GroupBy = 'department' | 'status';
+export type GroupBy = 'department' | 'status' | 'runtime';
 export const GROUP_BY_KEY = 'agent_list_group_by_v1';
 
 /** 分组键的展示名。顺序即分区顺序:在干活的排最前,离线的沉底。 */
@@ -39,18 +40,51 @@ export function statusGroupRank(group: string): number {
   return i < 0 ? STATUS_GROUP_ORDER.length : i;
 }
 
+/** 分区名的「未上报」兜底:运行时没上报时不要显示空标题。 */
+export const UNKNOWN_GROUP = '未上报';
+
+/**
+ * Session.runtime → 分区名(0.478)。
+ *
+ * 不把运行时改写成漂亮名字:运维贴回来的诊断行里写的就是 `runtime=codex-cli` / `runtime=opencode-cli`,
+ * 两边用同一个字符串才对得上。空 → 「未上报」;去首尾空白,大小写保持原样(上游是固定枚举)。
+ */
+export function runtimeGroupOf(runtime?: string | null): string {
+  const r = (runtime ?? '').trim();
+  return r || UNKNOWN_GROUP;
+}
+
+/** 运行时分区的排序权重:「未上报」永远最后,其余交给 buildSections 原有规则(在线人数→拼音)。 */
+export function runtimeGroupRank(title: string): number {
+  return title === UNKNOWN_GROUP ? 1 : 0;
+}
+
 /**
  * 读回设备上保存的视图。
  * 只认已知的两个值:旧版本写进来的空串、别的维度名、损坏数据都退回默认(department),
  * 这样升级后不会出现「列表突然空了」这种吓人结果。
  */
 export function parseGroupBy(raw: string | null | undefined): GroupBy {
-  return raw === 'status' || raw === 'department' ? raw : 'department';
+  return raw === 'status' || raw === 'runtime' || raw === 'department' ? raw : 'department';
 }
 
 /** 给 UI 用的一行说明:切换后用户能预期看到什么。 */
 export function groupByHint(by: GroupBy): string {
-  return by === 'status'
-    ? '按在线态分区:正在工作 / 在线 / 异常 / 离线 / 未上报'
-    : '按部门/团队分区(默认)';
+  if (by === 'status') return '按在线态分区:正在工作 / 在线 / 异常 / 离线 / 未上报';
+  if (by === 'runtime') return '按运行时分区:codex-cli / opencode-cli / grok… / 未上报';
+  return '按部门/团队分区(默认)';
+}
+
+/** 切换顺序(0.478):部门 → 在线态 → 运行时 → 部门。单键循环比下拉更省一次点击。 */
+export const GROUP_BY_CYCLE: readonly GroupBy[] = ['department', 'status', 'runtime'];
+export function nextGroupBy(by: GroupBy): GroupBy {
+  const i = Math.max(0, GROUP_BY_CYCLE.indexOf(by));
+  return GROUP_BY_CYCLE[(i + 1) % GROUP_BY_CYCLE.length];
+}
+
+/** 分区按钮上显示什么(短)。 */
+export function groupByLabel(by: GroupBy): string {
+  if (by === 'status') return '分组 · 在线态';
+  if (by === 'runtime') return '分组 · 运行时';
+  return '分组 · 部门';
 }
