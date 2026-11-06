@@ -4,7 +4,7 @@
 // 1) Session.status 的每种写法都能落到唯一分区,认不出的进「未上报」而不是「在线」;
 // 2) 分区顺序固定:正在工作 → 在线 → 异常 → 离线 → 未上报(离线必须沉底,不许浮上来);
 // 3) 存储读回 fail-safe:空/损坏/未来维度一律退回 department。
-import { effectiveGroupBy, groupByHint, groupByLabel, groupCountLabel, groupForQuery, groupHeaderHint, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
+import { effectiveGroupBy, groupByHint, headerViewSuffix, groupByLabel, groupCountLabel, groupForQuery, groupHeaderHint, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
 
 const checks: [string, boolean][] = [];
 const ck = (name: string, ok: boolean) => checks.push([name, ok]);
@@ -70,6 +70,11 @@ ck('大小写/空白都认', groupForQuery('  STATUS=offline ') === 'status');
 ck('普通搜索不改变分区', groupForQuery('苏猫') === null && groupForQuery('model=deepseek') === null);
 ck('查询决定维度时优先于用户选择', effectiveGroupBy('department', 'status=offline') === 'status');
 ck('查询不指向维度时用用户选择的', effectiveGroupBy('runtime', '苏猫') === 'runtime');
+
+// 10) 标题后缀(0.483)
+ck('部门视图不加后缀(默认不用解释)', headerViewSuffix('department') === '');
+ck('在线态视图标出「按在线态」', headerViewSuffix('status') === ' · 按在线态');
+ck('运行时视图标出「按运行时」', headerViewSuffix('runtime') === ' · 按运行时');
 
 let bad = 0;
 for (const [name, ok] of checks) {
