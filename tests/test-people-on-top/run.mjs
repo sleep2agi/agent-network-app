@@ -1,11 +1,12 @@
-// 「人员」区块在会话 / agent 列表最上面(Vincent 2026-09-30「这个人员放太下面了」:304 个 agent 时它沉在最底)。
+// 「人员」「已登记节点」在会话列表中**之后**(admin 2026-11-06 #4036:它们压在列表上方,新消息反被顶下去)。
+// 历史:2026-09-30 Vincent 曾要求人员放到最上面;11-06 admin 按「新消息靠前」改回下方 —— 这条 drive 跟最新口径走。
 // Not in CI: needs Playwright + Chromium and a web export. No hub: an in-page Tauri stub answers every request
 // with placeholder data (40 agents in 3 teams, 3 people). Nothing touches 127.0.0.1:9200.
 //
 //   WEB_DIR=<expo export dir> OUT=<png dir> PLAYWRIGHT_MODULE=<…/playwright/index.mjs> node tests/test-people-on-top/run.mjs
 //
 // For 1320×754 (desktop) and 390×844 (phone):
-//   1  人员 is the first section: its header sits right under the search box and above every agent group header
+//   1  people/registered sections sit BELOW the conversation list (after the last agent group), not under the search box
 //   2  header shows the count (3); people rows share the agent rows' left edge / width
 //   3  tap the header → folds (rows gone, count stays); reload → still folded (per-device); tap → unfolds
 //   4  typing in the search box filters people too (「cheng」 → only chengshi)
@@ -94,24 +95,28 @@ async function run(vp, viewport, ua) {
 
   const measure = async () => {
     const people = await box(page, tid('people-header'));
+    const registered = await box(page, tid('registered-agents-header'));
     const groups = [];
     for (const loc of await page.locator('[data-testid^="agent-group-"]').all()) {
       const id = await loc.getAttribute('data-testid');
       if (!/^agent-group-示例/.test(id ?? '') && !/^agent-group-/.test(id ?? '')) continue;
       const b = await loc.boundingBox(); if (b) groups.push({ id, y: r1(b.y) });
     }
-    return { people, groups };
+    return { people, registered, groups };
   };
   const search = page.getByPlaceholder(/搜索/).first();
   const searchBox = await box(page, 'input[placeholder*="搜索"]');
   const m = await measure();
   await page.screenshot({ path: join(OUT, `${vp}-1-top.png`) });
   const firstGroupY = m.groups.length ? Math.min(...m.groups.map(g => g.y)) : null;
-  record(vp, '1 人员 is the first section: under the search box, above every agent group', {
+  record(vp, '1 人员/已登记节点 below the conversation list (after the last agent group), not under the search box', {
     present: !!m.people,
-    underSearch: !!m.people && !!searchBox && m.people.y >= searchBox.b - 0.5 && m.people.y - searchBox.b <= 60,
-    aboveGroups: !!m.people && firstGroupY !== null && m.people.b <= firstGroupY + 0.5,
-  }, { searchBottom: searchBox?.b, peopleY: m.people?.y, peopleBottom: m.people?.b, firstGroupY, groups: m.groups.length });
+    // 新消息要靠上:人员头必须落在第一个分组之下(不是紧贴搜索框)。
+    belowGroups: !!m.people && firstGroupY !== null && m.people.y > firstGroupY,
+    notUnderSearch: !!m.people && !!searchBox && m.people.y - searchBox.b > 60,
+    // 「已登记节点」同样下沉(admin #4036 红框里两组)。
+    registeredBelowGroups: !!m.registered && firstGroupY !== null && m.registered.y > firstGroupY,
+  }, { searchBottom: searchBox?.b, peopleY: m.people?.y, registeredY: m.registered?.y, firstGroupY, groups: m.groups.length });
   const count = await page.locator(tid('people-count')).innerText().catch(() => '');
   const countPaint = await paintedText(page, tid('people-count'), '3'); // a single digit: painted ≥ 4px wide, not only textContent
   const personRow = await box(page, '[data-testid^="person-row-"]');
