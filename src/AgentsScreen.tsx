@@ -68,7 +68,7 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { GROUP_BY_CYCLE, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { GROUP_BY_CYCLE, effectiveGroupBy as effectiveGroupByFor, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -484,6 +484,8 @@ export default function AgentsScreen({
     [...(onOpenPerson ? people : []), ...(groups ?? [])],
   );
   // 在线态分区的数据源:直接读会话上的 status(hub 的 working/running/online/… 两种历史写法都有)。
+  // 0.482:输入 `status=` / `runtime=` 前缀时,本次分区跟着查询走(不改用户存的偏好)。
+  const viewGroupBy = effectiveGroupByFor(groupBy, query);
   const statusByAlias = useMemo(() => {
     const m = new Map<string, string | undefined>();
     for (const s of tabbedSessions) m.set(s.alias, s.status);
@@ -508,16 +510,16 @@ export default function AgentsScreen({
       unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
       // 有部门数据时,没有归属的 agent 统一进「未归属」——按部门分区就要把没分配的也显式列出来,
       // 否则它们会被前缀拆成好几种「看起来像部门」的组。没有部门数据时 undefined = 旧行为。
-      teamOf: alias => (groupBy === 'status'
+      teamOf: alias => (viewGroupBy === 'status'
         ? statusGroupOf(statusByAlias.get(alias))
-        : groupBy === 'runtime'
+        : viewGroupBy === 'runtime'
           ? runtimeGroupOf(runtimeByAlias.get(alias))
           : (deptByAlias.size ? (deptByAlias.get(alias) ?? '未归属') : undefined)),
       // 在线态分区要固定顺序(正在工作→在线→异常→离线→未上报),否则离线会因为「在线人数同为 0」
       // 跟「未上报」按拼音混排。部门分区不传,保持原行为。
-      teamOrder: groupBy === 'status' ? statusGroupRank : groupBy === 'runtime' ? runtimeGroupRank : undefined,
+      teamOrder: viewGroupBy === 'status' ? statusGroupRank : viewGroupBy === 'runtime' ? runtimeGroupRank : undefined,
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, groupBy, statusByAlias, runtimeByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, viewGroupBy, statusByAlias, runtimeByAlias],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -969,7 +971,7 @@ export default function AgentsScreen({
             {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} 个 agent`}
           </Text>
           {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-          <ToggleGroupBy groupBy={groupBy} onPress={selectGroupBy} />
+          <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} />
           <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
             <Ionicons name="add" size={24} color={colors.accent} />
           </Pressable>
@@ -1005,7 +1007,7 @@ export default function AgentsScreen({
               <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} 个 agent`}</Text>
             )}
             {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-            <ToggleGroupBy groupBy={groupBy} onPress={selectGroupBy} />
+            <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} />
             <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
               <Ionicons name="add" size={24} color={colors.accent} />
             </Pressable>
@@ -1094,7 +1096,7 @@ export default function AgentsScreen({
           disabled={!section.collapsible}
           onPress={() => toggleGroup(section.title)}
           accessibilityRole={section.collapsible ? 'button' : 'header'}
-          accessibilityLabel={`${section.title} ${groupCountLabel(groupBy, section.online, section.total).a11y}${section.collapsible ? (section.collapsed ? ',已折叠' : ',已展开') : ''}`}
+          accessibilityLabel={`${section.title} ${groupCountLabel(viewGroupBy, section.online, section.total).a11y}${section.collapsible ? (section.collapsed ? ',已折叠' : ',已展开') : ''}`}
           accessibilityState={section.collapsible ? { expanded: !section.collapsed } : undefined}
           // admin 2026-10-26「军团里面能分组吗…有明显的划分区，有点小发光，就是要震撼」:
           // 每个团之间一条发丝分隔线(第一组不画),标题前缀一条 brand 色的微光竖条。
@@ -1124,11 +1126,11 @@ export default function AgentsScreen({
               </View>
             ) : null;
           })()}
-          <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{groupCountLabel(groupBy, section.online, section.total).text}</Text>
+          <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{groupCountLabel(viewGroupBy, section.online, section.total).text}</Text>
         </Pressable>
         {/* 0.481:「未上报」组要说明为什么存在 —— 以前只写「未上报」,用户会以为数据丢了。 */}
         {(() => {
-          const hint = groupHeaderHint(groupBy, section.title);
+          const hint = groupHeaderHint(viewGroupBy, section.title);
           if (!hint || section.collapsed) return null;
           return (
             <Text testID={`agent-group-hint-${section.title}`} selectable={false}

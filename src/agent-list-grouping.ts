@@ -120,3 +120,27 @@ export function groupHeaderHint(by: GroupBy, title: string): string | null {
   if (by === 'runtime') return '这些会话没有上报运行时（旧 agent-node 不上报清单，或只是别名、没有节点身份）';
   return null;
 }
+
+/**
+ * 搜索前缀 → 应该用哪种分组(0.482)。
+ *
+ * 输入 `status=offline` 时,列表只剩离线会话;若分区还按部门,用户看到的是「好几个部门各一行」,
+ * 跟「我在看离线」这件事对不上。同理 `runtime=codex`。
+ * 返回 null = 这个查询不指向某个分组维度,沿用用户选的分组。
+ *
+ * 只认这两个前缀(与 agents-list.ts 的搜索前缀集合一致);`model=` / `host=` / `node_id=` 不改变分区。
+ */
+export function groupForQuery(query: string): GroupBy | null {
+  const q = (query ?? '').trim().toLowerCase();
+  if (q.startsWith('status=')) return 'status';
+  if (q.startsWith('runtime=')) return 'runtime';
+  return null;
+}
+
+/**
+ * 实际用于渲染的分组:查询决定了维度就用查询的,否则用用户选的。
+ * 注意:这只影响**本次渲染**,不回写设备偏好 —— 用户清掉查询后应当回到他选的那个视图。
+ */
+export function effectiveGroupBy(selected: GroupBy, query: string): GroupBy {
+  return groupForQuery(query) ?? selected;
+}

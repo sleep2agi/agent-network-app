@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.482:",
+  "- 搜 `status=offline` 或 `runtime=codex` 时，分组会自动切到对应维度（只影响这次筛选，不改你选的默认分组）。",
+  "",
   "What's new in 0.2.481:",
   "- 「未上报」分组会解释原因：旧 agent-node 不上报清单，或这条只是别名、没有节点身份 —— 不再让人以为数据丢了。",
   "",
