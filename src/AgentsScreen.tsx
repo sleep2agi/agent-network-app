@@ -68,7 +68,7 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { GROUP_BY_CYCLE, effectiveGroupBy as effectiveGroupByFor, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, headerViewSuffix, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { GROUP_BY_CYCLE, effectiveGroupBy as effectiveGroupByFor, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, groupUnlockHint, headerViewSuffix, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -316,14 +316,23 @@ export default function AgentsScreen({
   }, []);
   // 分组视图(0.477):部门(默认) / 在线态。按设备记住;切换只影响分区方式,不改搜索/筛选/未读口径。
   const [groupBy, setGroupBy] = useState<GroupBy>('department');
+  // 一句临时说明(0.484):选了分组但清掉了搜索前缀时,告诉用户为什么搜索被清了。
+  const [groupNote, setGroupNote] = useState('');
   useEffect(() => {
     let live = true;
     loadGroupBy().then(v => { if (live) setGroupBy(v); }).catch(() => {});
     return () => { live = false; };
   }, []);
+  // 0.484:搜索把分组锁住时(status= / runtime=),用户点别的一档要同时把那段前缀查询清掉,
+  // 否则会出现「点了按部门,列表还是按在线态」——查询优先级更高,不说明白就是 bug 观感。
   const selectGroupBy = (next: GroupBy) => {
+    const unlock = groupUnlockHint(query);
     setGroupBy(next);
     void saveGroupBy(next);
+    if (unlock) {
+      setQuery('');
+      setGroupNote(unlock);
+    }
   };
   // 「全部 / 未读 N」(board #449,conversation-tab.ts):只在会话列表(能置顶的那个)上出现,每台设备记住选了哪个。
   // 首帧用内存 / localStorage 里的值(peekConversationTab),手机从会话返回时不会先闪「全部」。
@@ -1015,6 +1024,13 @@ export default function AgentsScreen({
           {q ? <Text style={[styles.listHeader, rowStyles.searchCount]} testID="agents-search-count">{searchCountLabel(q, shownCount, sessions.length, registeredRows.length)}</Text> : null}
         </View>
       )}
+      {/* 0.484:清掉 status=/runtime= 前缀时的一句说明,免得用户以为搜索被吞了。 */}
+      {groupNote ? (
+        <Text testID="agents-group-note" selectable={false}
+          style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16, paddingHorizontal: spacing.md, paddingBottom: 2 }}>
+          {groupNote}
+        </Text>
+      ) : null}
       {showTabs ? (
         // 飞书 / 微信的位置:搜索框下面、列表上面,左缘对齐行的头像(手机 = 行的 padX;桌面侧栏 = 列表内边距 + 行内边距)。
         <View testID="conversation-tabs-bar" style={[rowStyles.tabsBar, compact ? rowStyles.tabsBarCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}>

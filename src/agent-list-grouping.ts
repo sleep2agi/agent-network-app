@@ -156,3 +156,16 @@ export function headerViewSuffix(by: GroupBy): string {
   if (by === 'runtime') return ' · 按运行时';
   return '';
 }
+
+/**
+ * 用户在搜索把分组「锁住」时点了别的一档,该怎么解释(0.484)。
+ *
+ * 0.482 的做法是「查询决定分区」;但如果用户此时点分组按钮选另一档,不说明白就会出现
+ * 「我点了按部门,列表还是按在线态」——因为查询优先级更高。所以选中时同时清掉那个前缀查询,
+ * 并回一句为什么。
+ */
+export function groupUnlockHint(query: string): string | null {
+  const forced = groupForQuery(query);
+  if (!forced) return null;
+  return `搜索里的 ${forced === 'status' ? 'status=' : 'runtime='} 会固定分组，已帮你清掉这段搜索`;
+}
