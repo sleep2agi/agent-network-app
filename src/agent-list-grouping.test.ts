@@ -4,7 +4,7 @@
 // 1) Session.status 的每种写法都能落到唯一分区,认不出的进「未上报」而不是「在线」;
 // 2) 分区顺序固定:正在工作 → 在线 → 异常 → 离线 → 未上报(离线必须沉底,不许浮上来);
 // 3) 存储读回 fail-safe:空/损坏/未来维度一律退回 department。
-import { groupByHint, groupByLabel, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
+import { groupByHint, groupByLabel, groupCountLabel, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
 
 const checks: [string, boolean][] = [];
 const ck = (name: string, ok: boolean) => checks.push([name, ok]);
@@ -48,6 +48,13 @@ ck('循环: 未知值也回到第一档', nextGroupBy('weird' as any) === 'statu
 ck('标签: 三档各不相同', new Set([groupByLabel('department'), groupByLabel('status'), groupByLabel('runtime')]).size === 3);
 ck('存储: runtime 能读回', parseGroupBy('runtime') === 'runtime');
 ck('提示: runtime 写明 codex/opencode', groupByHint('runtime').includes('codex') && groupByHint('runtime').includes('opencode'));
+
+// 7) 分组标题计数(0.480):按部门才显示「在线/总数」
+ck('部门视图: 显示 在线/总数', groupCountLabel('department', 3, 7).text === '3/7');
+ck('部门视图: a11y 说「在线」', groupCountLabel('department', 3, 7).a11y.includes('在线'));
+ck('在线态视图: 只给总数(离线组不会是 0/N)', groupCountLabel('status', 0, 4).text === '4');
+ck('在线态视图: a11y 不说「在线」', !groupCountLabel('status', 0, 4).a11y.includes('在线'));
+ck('运行时视图: 同样只给总数', groupCountLabel('runtime', 1, 5).text === '5');
 
 let bad = 0;
 for (const [name, ok] of checks) {
