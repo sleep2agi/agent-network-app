@@ -68,7 +68,7 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { groupByHint, groupByLabel, nextGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { GROUP_BY_CYCLE, groupByHint, groupByLabel, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -321,11 +321,10 @@ export default function AgentsScreen({
     loadGroupBy().then(v => { if (live) setGroupBy(v); }).catch(() => {});
     return () => { live = false; };
   }, []);
-  const toggleGroupBy = () => setGroupBy(prev => {
-    const next = nextGroupBy(prev);
+  const selectGroupBy = (next: GroupBy) => {
+    setGroupBy(next);
     void saveGroupBy(next);
-    return next;
-  });
+  };
   // 「全部 / 未读 N」(board #449,conversation-tab.ts):只在会话列表(能置顶的那个)上出现,每台设备记住选了哪个。
   // 首帧用内存 / localStorage 里的值(peekConversationTab),手机从会话返回时不会先闪「全部」。
   const showTabs = rowMenu;
@@ -970,7 +969,7 @@ export default function AgentsScreen({
             {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} 个 agent`}
           </Text>
           {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-          <ToggleGroupBy groupBy={groupBy} onPress={toggleGroupBy} />
+          <ToggleGroupBy groupBy={groupBy} onPress={selectGroupBy} />
           <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
             <Ionicons name="add" size={24} color={colors.accent} />
           </Pressable>
@@ -1006,7 +1005,7 @@ export default function AgentsScreen({
               <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} 个 agent`}</Text>
             )}
             {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-            <ToggleGroupBy groupBy={groupBy} onPress={toggleGroupBy} />
+            <ToggleGroupBy groupBy={groupBy} onPress={selectGroupBy} />
             <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
               <Ionicons name="add" size={24} color={colors.accent} />
             </Pressable>
@@ -1332,24 +1331,57 @@ export default function AgentsScreen({
 // render time. Rebuilt on every restyle (theme or 界面密度, src/ui-scale.ts): the row geometry goes
 // through ds(), and `spacing` itself is density-scaled.
 const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFactor);
-/** 分组视图切换(0.477)。只露「当前按什么分区」,点一下换另一种;实现见 agent-list-grouping。
+/** 分组视图切换(0.477 起;0.479 改成「点开三档直接选」)。实现见 agent-list-grouping。
  *  单独抽出来是因为紧凑布局与宽布局各有一份列表头,两处必须完全一致(测试按 testID 找)。 */
-function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: () => void }) {
+function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: (by: GroupBy) => void }) {
+  // 0.479:三档循环点起来容易「点过头」(想回部门要再绕两下),所以点开就给出三档让用户直接选。
+  // 仍然是这一个按钮 + 一行选项:侧栏头部很窄,放三个常驻 chip 会挤掉标题。
+  const [open, setOpen] = useState(false);
   const label = groupByLabel(groupBy);
   return (
-    <Pressable
-      testID="agents-group-by-toggle"
-      accessibilityRole="button"
-      accessibilityLabel={`${label}（${groupByHint(groupBy)}）`}
-      onPress={onPress}
-      hitSlop={8}
-      style={({ pressed }) => [
-        { marginRight: 6, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
-        pressed && { opacity: 0.6 },
-      ]}
-    >
-      <Text style={{ color: colors.textSecondary, fontSize: 11 }} numberOfLines={1}>{label}</Text>
-    </Pressable>
+    <View style={{ marginRight: 6 }}>
+      <Pressable
+        testID="agents-group-by-toggle"
+        accessibilityRole="button"
+        accessibilityLabel={`${label}（${groupByHint(groupBy)}）`}
+        accessibilityState={{ expanded: open }}
+        onPress={() => setOpen(v => !v)}
+        hitSlop={8}
+        style={({ pressed }) => [
+          { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+          pressed && { opacity: 0.6 },
+        ]}
+      >
+        <Text style={{ color: colors.textSecondary, fontSize: 11 }} numberOfLines={1}>{label}</Text>
+      </Pressable>
+      {open ? (
+        <View testID="agents-group-by-options" style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
+          {GROUP_BY_CYCLE.map(by => {
+            const on = by === groupBy;
+            return (
+              <Pressable
+                key={by}
+                testID={`agents-group-by-option-${by}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: on }}
+                onPress={() => {
+                  if (!on) onPress(by);
+                  setOpen(false);
+                }}
+                style={({ pressed }) => [
+                  { paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, backgroundColor: on ? colors.railActiveBg : colors.subtleFill },
+                  pressed && { opacity: 0.6 },
+                ]}
+              >
+                <Text style={{ color: on ? colors.accent : colors.textSecondary, fontSize: 11 }} numberOfLines={1}>
+                  {groupByLabel(by).replace('分组 · ', '')}
+                </Text>
+              </Pressable>
+            );
+          })}
+        </View>
+      ) : null}
+    </View>
   );
 }
 
