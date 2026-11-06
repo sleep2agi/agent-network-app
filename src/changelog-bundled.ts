@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.474:",
+  "- 侧栏顺序调整：新消息/会话排在前面，「已登记节点」和「人员」移到会话列表下面（搜索、折叠、未读都还在）。",
+  "",
   "What's new in 0.2.473:",
   "- 切模型不再假超时：OpenCode V2 节点是热切换，以前客户端要等满 90s 才报超时，现在读回新模型就算成功。",
   "",
