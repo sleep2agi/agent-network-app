@@ -68,7 +68,7 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { GROUP_BY_CYCLE, groupByHint, groupByLabel, groupCountLabel, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { GROUP_BY_CYCLE, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -1087,6 +1087,7 @@ export default function AgentsScreen({
       stickySectionHeadersEnabled={false}
       renderSectionHeader={({ section }) => (
         // Small section label + online/total; tap folds the group (not 新消息, not while searching).
+        <>
         <Pressable
           onLayout={alignFirstRow && section === shownSections[0] ? e => { firstHeaderHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}
           testID={`agent-group-${section.title}`}
@@ -1125,6 +1126,18 @@ export default function AgentsScreen({
           })()}
           <Text selectable={false} style={[rowStyles.groupCount, { color: colors.textMuted }]}>{groupCountLabel(groupBy, section.online, section.total).text}</Text>
         </Pressable>
+        {/* 0.481:「未上报」组要说明为什么存在 —— 以前只写「未上报」,用户会以为数据丢了。 */}
+        {(() => {
+          const hint = groupHeaderHint(groupBy, section.title);
+          if (!hint || section.collapsed) return null;
+          return (
+            <Text testID={`agent-group-hint-${section.title}`} selectable={false}
+              style={{ color: colors.textMuted, fontSize: 11, lineHeight: 16, paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingBottom: 2 }}>
+              {hint}
+            </Text>
+          );
+        })()}
+        </>
       )}
       ItemSeparatorComponent={compact ? undefined : () => (
         <View style={[rowStyles.separator, { backgroundColor: colors.border }]} />
