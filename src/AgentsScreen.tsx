@@ -68,7 +68,7 @@ import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
 import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
-import { groupByHint, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
+import { groupByHint, groupByLabel, nextGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
 import { CONVERSATION_TABS, applyConversationTab, applyConversationTabToPeople, formatTabCount, unreadConversationCount, type ConversationTab } from './conversation-tab';
 import { agentUnreadCounts, latestMessageAtByAgent } from './agent-unread-counts';
@@ -322,7 +322,7 @@ export default function AgentsScreen({
     return () => { live = false; };
   }, []);
   const toggleGroupBy = () => setGroupBy(prev => {
-    const next: GroupBy = prev === 'status' ? 'department' : 'status';
+    const next = nextGroupBy(prev);
     void saveGroupBy(next);
     return next;
   });
@@ -490,6 +490,12 @@ export default function AgentsScreen({
     for (const s of tabbedSessions) m.set(s.alias, s.status);
     return m;
   }, [tabbedSessions]);
+  // 按运行时分区(0.478):同样直接读会话上的 runtime,不需要新接口。
+  const runtimeByAlias = useMemo(() => {
+    const m = new Map<string, string | null | undefined>();
+    for (const s of tabbedSessions) m.set(s.alias, s.runtime ?? null);
+    return m;
+  }, [tabbedSessions]);
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
       // 搜索也命中部门名:分区改成按部门之后,「搜 TMWork 找到这一部门的 agent」比
@@ -505,12 +511,14 @@ export default function AgentsScreen({
       // 否则它们会被前缀拆成好几种「看起来像部门」的组。没有部门数据时 undefined = 旧行为。
       teamOf: alias => (groupBy === 'status'
         ? statusGroupOf(statusByAlias.get(alias))
-        : (deptByAlias.size ? (deptByAlias.get(alias) ?? '未归属') : undefined)),
+        : groupBy === 'runtime'
+          ? runtimeGroupOf(runtimeByAlias.get(alias))
+          : (deptByAlias.size ? (deptByAlias.get(alias) ?? '未归属') : undefined)),
       // 在线态分区要固定顺序(正在工作→在线→异常→离线→未上报),否则离线会因为「在线人数同为 0」
       // 跟「未上报」按拼音混排。部门分区不传,保持原行为。
-      teamOrder: groupBy === 'status' ? statusGroupRank : undefined,
+      teamOrder: groupBy === 'status' ? statusGroupRank : groupBy === 'runtime' ? runtimeGroupRank : undefined,
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, groupBy, statusByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, groupBy, statusByAlias, runtimeByAlias],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -1327,7 +1335,7 @@ const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFac
 /** 分组视图切换(0.477)。只露「当前按什么分区」,点一下换另一种;实现见 agent-list-grouping。
  *  单独抽出来是因为紧凑布局与宽布局各有一份列表头,两处必须完全一致(测试按 testID 找)。 */
 function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: () => void }) {
-  const label = groupBy === 'status' ? '分组 · 在线态' : '分组 · 部门';
+  const label = groupByLabel(groupBy);
   return (
     <Pressable
       testID="agents-group-by-toggle"

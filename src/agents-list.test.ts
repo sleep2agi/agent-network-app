@@ -262,8 +262,9 @@ ck('空结果提示写明支持的前缀写法', screenSrc.includes('model= / ru
 }
 
 // 0.477 UI:两种布局的列表头都要有分组切换入口,且选项按设备记住
-ck('列表头有分组切换入口（两处布局）', (screenSrc.match(/agents-group-by-toggle/g) || []).length >= 0
-  && screenSrc.includes('ToggleGroupBy') && (screenSrc.match(/<ToggleGroupBy /g) || []).length === 2);
+ck('列表头有分组切换入口（两处布局）', screenSrc.includes('ToggleGroupBy') && (screenSrc.match(/<ToggleGroupBy /g) || []).length === 2);
+ck('切换走三档循环（部门→在线态→运行时）', screenSrc.includes('nextGroupBy') && screenSrc.includes('groupByLabel'));
+ck('运行时分区的数据源是会话的 runtime', screenSrc.includes('runtimeByAlias') && screenSrc.includes('runtimeGroupOf'));
 ck('分组选择会被记住', screenSrc.includes('loadGroupBy') && screenSrc.includes('saveGroupBy'));
 
 console.log(`\n${pass}/${total} passed`);

@@ -4,7 +4,7 @@
 // 1) Session.status 的每种写法都能落到唯一分区,认不出的进「未上报」而不是「在线」;
 // 2) 分区顺序固定:正在工作 → 在线 → 异常 → 离线 → 未上报(离线必须沉底,不许浮上来);
 // 3) 存储读回 fail-safe:空/损坏/未来维度一律退回 department。
-import { groupByHint, parseGroupBy, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER } from './agent-list-grouping';
+import { groupByHint, groupByLabel, nextGroupBy, parseGroupBy, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, STATUS_GROUP_ORDER, UNKNOWN_GROUP } from './agent-list-grouping';
 
 const checks: [string, boolean][] = [];
 const ck = (name: string, ok: boolean) => checks.push([name, ok]);
@@ -27,11 +27,27 @@ ck('保存 status 能读回', parseGroupBy('status') === 'status');
 ck('保存 department 能读回', parseGroupBy('department') === 'department');
 ck('空串退回 department', parseGroupBy('') === 'department');
 ck('null 退回 department', parseGroupBy(null) === 'department');
-ck('未知维度(未来版本)退回 department', parseGroupBy('runtime') === 'department');
+ck('未知维度(未来版本)退回 department', parseGroupBy('host') === 'department');
 
 // 4) 提示文案能表明两种视图的差别
 ck('status 提示写明在线态', groupByHint('status').includes('在线'));
 ck('department 提示写明默认', groupByHint('department').includes('默认'));
+
+// 5) 按运行时分区(0.478)
+ck('runtime: codex-cli 原样作分区名', runtimeGroupOf('codex-cli') === 'codex-cli');
+ck('runtime: opencode-cli 原样', runtimeGroupOf('opencode-cli') === 'opencode-cli');
+ck('runtime: 去首尾空白', runtimeGroupOf('  grok-build-cli ') === 'grok-build-cli');
+ck('runtime: 空 → 未上报', runtimeGroupOf('') === UNKNOWN_GROUP && runtimeGroupOf(undefined) === UNKNOWN_GROUP);
+ck('runtime: 未上报 排最后', runtimeGroupRank(UNKNOWN_GROUP) === 1 && runtimeGroupRank('codex-cli') === 0);
+
+// 6) 三档循环 + 标签
+ck('循环: department → status', nextGroupBy('department') === 'status');
+ck('循环: status → runtime', nextGroupBy('status') === 'runtime');
+ck('循环: runtime → department', nextGroupBy('runtime') === 'department');
+ck('循环: 未知值也回到第一档', nextGroupBy('weird' as any) === 'status');
+ck('标签: 三档各不相同', new Set([groupByLabel('department'), groupByLabel('status'), groupByLabel('runtime')]).size === 3);
+ck('存储: runtime 能读回', parseGroupBy('runtime') === 'runtime');
+ck('提示: runtime 写明 codex/opencode', groupByHint('runtime').includes('codex') && groupByHint('runtime').includes('opencode'));
 
 let bad = 0;
 for (const [name, ok] of checks) {
