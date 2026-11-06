@@ -571,6 +571,10 @@
     "node-model-race/drive.mjs": {
       "kind": "stub",
       "secs": 130
+    },
+    "legion3d-nonempty/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
     }
   }
 }

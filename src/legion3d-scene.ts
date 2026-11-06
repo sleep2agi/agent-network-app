@@ -61,11 +61,15 @@ export type LabelCommand = {
 export type SceneCommand = RingCommand | BodyCommand | LabelCommand;
 
 /** 体在屏幕上的基础半轴(像素)。数字来自 Dashboard 的视觉参数,别随手改。 */
+// 体的半径是**世界坐标单位**，必须再乘投影 scale（≈ focal/dist ≈ 120–500）才变成屏幕像素。
+// #4086 前的值是 26/18/13/9 —— 看着像像素，其实被当成世界单位再乘了一遍 scale，
+// 于是每个体会放大 ~300 倍：一个核心体就能铺满整块面板（深色主题下看起来就是「黑屏/空面板」）。
+// 这里改成与 legion-3d.test.ts 里同一套口径（core 0.085 / person 0.033 / agent 0.021）。
 const BODY_BASE: Record<LegionNodeKind, number> = {
-  core: 26,
-  group: 18,
-  person: 13,
-  agent: 9,
+  core: 0.085,
+  group: 0.045,
+  person: 0.033,
+  agent: 0.021,
 };
 
 /** 环的分段数:96 段在 1440px 宽的画布上看不出折线,也不至于让命令数失控。 */
