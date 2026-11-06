@@ -567,6 +567,10 @@
     "task-tag-status/drive.mjs": {
       "kind": "stub",
       "secs": 14
+    },
+    "node-model-race/drive.mjs": {
+      "kind": "stub",
+      "secs": 130
     }
   }
 }
