@@ -2,6 +2,7 @@ import type { RuntimeReadinessMap } from './runtime-readiness';
 import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
 import { buildConfigPatch } from './node-variant-patch';
+import { buildDirectoryBody, parseDirectoryResponse, validateDirectoryRequest, type DirectoryRequest, type DirectoryResult } from './session-source-directory';
 import { buildSourceForkBody, classifyStatus, type SourceForkReceipt, type SourceForkSelection, type SourceForkStatus } from './session-source-fork';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
@@ -1735,6 +1736,45 @@ export const getSessionSourceFork = async (cfg: HubConfig, requestId: string, ne
 
 /** 轮询语义：registration_confirmed 只作注册回执；unknown 走 retryPlan（不新开 intent）。 */
 export const classifySourceFork = (status: SourceForkStatus) => classifyStatus(status);
+
+// ── #46bf69cd 现有 OpenCode 项目/Session 目录（只读 preview）──────────────
+// 合同：docs/runbooks/session-source-directory.md。ready 之外无 snapshot；404=gate 未开放，不 fallback。
+export type DirectoryPostResult =
+  | { ok: true; requestId: string }
+  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; error: string };
+
+export const postSourceDirectory = async (cfg: HubConfig, req: DirectoryRequest): Promise<DirectoryPostResult> => {
+  const v = validateDirectoryRequest(req);
+  if (!v.ok) return { ok: false, error: v.error };
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/directory`, {
+      method: 'POST', headers: { ...headers(cfg), 'content-type': 'application/json' }, body: JSON.stringify(buildDirectoryBody(req)), signal,
+    }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'source_directory_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (res.status === 409) return { ok: false, conflict: true, error: 'conflict' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true || typeof d.request_id !== 'string') {
+      const e = String(d?.error ?? '');
+      if (/unavailable/i.test(e)) return { ok: false, unavailable: true, error: e };
+      return { ok: false, error: e || 'Hub 返回空响应' };
+    }
+    return { ok: true, requestId: d.request_id };
+  } catch (e) { return { ok: false, error: String((e as Error)?.message ?? e) }; }
+};
+
+export const getSourceDirectory = async (cfg: HubConfig, requestId: string, networkId: string): Promise<DirectoryResult> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/directory/${encodeURIComponent(requestId)}?network_id=${encodeURIComponent(networkId)}`, { headers: headers(cfg), signal }));
+    if (res.status === 404) return { kind: 'unavailable', error: 'source_directory_unavailable' };
+    if (res.status === 401 || res.status === 403) return { kind: 'denied', error: `HTTP ${res.status}` };
+    if (res.status === 400) return { kind: 'invalid', error: 'invalid' };
+    if (!res.ok) return { kind: 'failed', requestId, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null);
+    return parseDirectoryResponse(d, requestId);
+  } catch (e) { return { kind: 'failed', requestId, error: String((e as Error)?.message ?? e) }; }
+};
 
 // ── app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）读写 ────────────────
 //
