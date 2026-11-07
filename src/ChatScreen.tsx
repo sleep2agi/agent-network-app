@@ -2291,7 +2291,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         </Pressable>
       </View>
         {modelSheetOpen ? (
-          <View style={styles.modelSheet} testID="composer-model-sheet">
+          <View style={[styles.modelSheet, { maxHeight: Math.max(240, Math.round((rootHeight || 600) * 0.72)) }]} testID="composer-model-sheet">
+            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
             {sheet.rows.map(r => (
               <View key={r.key} style={styles.modelSheetRow} testID={`model-sheet-row-${r.key}`}>
                 <Text style={styles.modelSheetLabel}>{r.label}</Text>
@@ -2311,6 +2312,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 {switchState.kind === 'unsupported' ? `切换未启用：${switchState.message}` : '切换未启用：正在读取该节点的受权详情…'}
               </Text>
             )}
+            </ScrollView>
           </View>
         ) : null}
 
