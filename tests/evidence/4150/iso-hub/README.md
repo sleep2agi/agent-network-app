@@ -40,6 +40,27 @@ client parse: ready projects=1 sessions=1 servers=1 selExp=null
 daemon 只在开启项目/attach 选择时才下发 `selection_expires_at`（`session-source-directory.ts:156`）。
 新会话（`project-create`）需要该字段，因此必须在 launcher pin（`ANET_BIN_ABS` + sha）就绪后开启，属下一轮。
 
+## 链 2：newSession（现有项目 → 新空会话）
+
+`project-driver.ts`（客户端 `buildProjectCreateBody` / `validateProjectCreateSelection` + 真 Hub + 真 daemon project worker）：
+
+```
+directory: ready servers=1
+select POST: 200 pending
+select ready: projects=1 sessions=1 selExp=1794086134400
+client validate: {"ok":true}
+client body keys: child_name,intent_id,project_id,selection_scope,snapshot_id
+project-create POST: 200 {"status":"create_pending","operation_kind":"project_new_session",...}
+project-create final: {"status":"unknown_rotation_required","session_creation":"unknown","registration_is_health":false}
+```
+
+读数：
+- 客户端五字段 body 被 Hub 接受（200 `create_pending`），`selection_scope` 来自「选过 Server 且返回 projects」的那次请求；
+- 终态 `unknown_rotation_required` 的原因在 daemon 侧合成子进程：fixture 子进程会 POST `${hub}/fixture-register`，
+  那是**测试内建 Hub 才有的 fixture 端点**，真 Hub 不实现 ⇒ 注册无法确认，Hub 按合同落 unknown（不重放、不冒充 registered）。
+- 该树自带的 anet CLI 二进制（`/tmp/opencode/anet-4099-test-only-29040e2/.../opencode --help`）
+  **不输出** `ANET_CAPABILITY_SOURCE_RESUME_V1`，不能当 launcher pin 用；真链需要 2 号提供带该能力的 CLI 或 fixture 端点。
+
 ## 复现命令
 
 ```
