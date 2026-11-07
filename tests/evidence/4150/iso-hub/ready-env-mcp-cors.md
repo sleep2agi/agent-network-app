@@ -59,3 +59,24 @@ clear : POST /mcp 200 payload = {"ok":true,"update_id":"cu_b408c00a-…","apply_
 - **UI 更早就被挡**：`/mcp` 预检不允 `mcp-protocol-version`/`accept`，浏览器根本发不出去。
 
 三者是不同层次的阻塞，不能混为一谈。
+
+## high 被拒的下一层原因：catalog 没有 variants
+
+容器内查全部节点（无 secret，只读）：
+
+```
+ctl-var-… / ui-real-… / ui-seed-source / ui-var-… → opencode_variant_config_capable = true
+ui-ready-daemon / ui-ready-anchor                    → false
+```
+
+但 `opencode_catalog` 是**扁平的模型 id 列表**，没有 per-model variants：
+
+```
+["opencode/longcat-2.5-preview-free", …, "fixture/model"]
+```
+
+而原生 harness 的 `opencode.json` 里确实写了 `variants: [{id:"high"},{id:"low"}]`。
+⇒ Hub 侧按 catalog 判断「该模型没有 high 档」→ `variant_unsupported`。
+这不是客户端问题，也不是 CORS 问题，是 **catalog 未携带 variants 元数据**（或 Hub 未从 config 能力推出可选档位）。
+
+clear（写 null）不需要档位存在，所以 applied(hot) 成功 —— 与上面完全自洽。
