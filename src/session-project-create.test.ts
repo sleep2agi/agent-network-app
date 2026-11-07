@@ -10,7 +10,13 @@ const ck = (name: string, cond: boolean) => { n += 1; assert.ok(cond, name); con
 const sel = { selectionScope: 'srcdir_abc-1', snapshotId: 'snap_1', projectId: 'oprj_9', childName: 'new-child', intentId: 'intent_1' };
 
 const body = buildProjectCreateBody(sel);
-ck('body has exactly 5 contract keys', JSON.stringify(Object.keys(body)) === JSON.stringify(['selection_scope', 'snapshot_id', 'project_id', 'child_name', 'intent_id']));
+const attach = buildProjectCreateBody({ ...sel, projectId: undefined, sessionId: 'oses_1' } as any);
+ck('attach body uses session_id only', !!attach.session_id && !('project_id' in attach));
+ck('both provided rejected', validateProjectCreateSelection({ ...sel, sessionId: 'oses_1' }).ok === false);
+ck('neither provided rejected', validateProjectCreateSelection({ ...sel, projectId: undefined }).ok === false);
+ck('oses_ accepted in attach branch', validateProjectCreateSelection({ ...sel, projectId: undefined, sessionId: 'oses_1' }).ok === true);
+ck('body has exactly 5 contract keys', Object.keys(body).length === 5
+  && ['selection_scope', 'snapshot_id', 'project_id', 'child_name', 'intent_id'].every(k => k in body));
 ck('no network/daemon/native/token fields', !/(network|daemon|server|url|path|token|model|session_id)/i.test(Object.keys(body).join(',')));
 ck('valid selection ok', validateProjectCreateSelection(sel).ok === true);
 ck('server-only scope rejected (must be srcdir_)', validateProjectCreateSelection({ ...sel, selectionScope: 'osrv_x' }).ok === false);

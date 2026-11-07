@@ -21,7 +21,9 @@ export interface ProjectCreateSelection {
   /** 选中 Server 后返回 projects 的那次 directory 请求 id（srcdir_…）。 */
   selectionScope: string;
   snapshotId: string;
-  projectId: string;
+  /** 二选一：新建空 Session（oprj_…）或 attach 已有 Session（opaque oses_…）。 */
+  projectId?: string;
+  sessionId?: string;
   childName: string;
   intentId: string;
 }
@@ -37,7 +39,12 @@ export type Check = { ok: true } | { ok: false; error: string };
 export function validateProjectCreateSelection(s: Partial<ProjectCreateSelection>): Check {
   if (!s.selectionScope || !SCOPED.test(s.selectionScope)) return { ok: false, error: 'selection_scope 必须来自「选过 Server 并返回 projects」的目录请求（srcdir_…）' };
   if (!s.snapshotId || !SNAP.test(s.snapshotId)) return { ok: false, error: 'snapshot_id 非法（snap_…）' };
-  if (!s.projectId || !PROJ.test(s.projectId)) return { ok: false, error: 'project_id 非法（oprj_…）' };
+  const hasProject = !!s.projectId;
+  const hasSession = !!s.sessionId;
+  if (hasProject === hasSession) return { ok: false, error: 'project_id 与 session_id 必须二选一（互斥）' };
+  if (hasProject && !PROJ.test(s.projectId as string)) return { ok: false, error: 'project_id 非法（oprj_…）' };
+  // attach 分支：session_id 是目录返回的 opaque ID（oses_…），仅此通道可用；绝不进 fork 的 ses_
+  if (hasSession && !/^oses_[A-Za-z0-9-]{1,80}$/.test(s.sessionId as string)) return { ok: false, error: 'session_id 非法（oses_… opaque 目录 ID）' };
   if (!s.childName || !NAME.test(s.childName)) return { ok: false, error: 'child_name 非法（沿用节点名校验）' };
   if (!s.intentId || !INTENT.test(s.intentId)) return { ok: false, error: 'intent_id 非法（[A-Za-z0-9_-]{1,200}）' };
   return { ok: true };
@@ -45,13 +52,15 @@ export function validateProjectCreateSelection(s: Partial<ProjectCreateSelection
 
 /** 请求体：**恰好**五个字段（顺序固定），杜绝 network/daemon/native id/token 泄漏。 */
 export function buildProjectCreateBody(s: ProjectCreateSelection): Record<string, string> {
-  return {
+  const base: Record<string, string> = {
     selection_scope: s.selectionScope,
     snapshot_id: s.snapshotId,
-    project_id: s.projectId,
     child_name: s.childName,
     intent_id: s.intentId,
   };
+  if (s.projectId) base.project_id = s.projectId;
+  else if (s.sessionId) base.session_id = s.sessionId;
+  return base;
 }
 
 /** 目录快照是否可用于「新会话」：必须带 selection_expires_at 且未过期（旧快照一律不行）。 */
