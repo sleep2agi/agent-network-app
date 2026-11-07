@@ -2,6 +2,7 @@ import type { RuntimeReadinessMap } from './runtime-readiness';
 import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
 import { buildConfigPatch } from './node-variant-patch';
+import { buildSourceForkBody, classifyStatus, type SourceForkReceipt, type SourceForkSelection, type SourceForkStatus } from './session-source-fork';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
@@ -1664,6 +1665,70 @@ export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequ
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
 };
+
+// ── #4150 受管 source 独立 fork（gated preview）────────────────────────────
+// 合同：docs/runbooks/session-source-transport.md（db2ea154）。只 managed source → independent fork。
+// 404 = gate 未开启 → unavailable（调用方显示「未开放」，绝不 fallback 普通 create）。
+export type SourceForkPostResult =
+  | { ok: true; receipt: SourceForkReceipt }
+  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; invalid?: string; error: string };
+
+export const postSessionSourceFork = async (cfg: HubConfig, sel: SourceForkSelection): Promise<SourceForkPostResult> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source`, {
+      method: 'POST',
+      headers: { ...headers(cfg), 'content-type': 'application/json' },
+      body: JSON.stringify(buildSourceForkBody(sel)),
+      signal,
+    }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'source_fork_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (res.status === 409) return { ok: false, conflict: true, error: 'conflict' };
+    if (res.status === 400) return { ok: false, invalid: String((await res.json().catch(() => null) as any)?.error ?? 'invalid'), error: 'invalid' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true || typeof d.request_id !== 'string') return { ok: false, error: String(d?.error ?? 'Hub 返回空响应') };
+    return { ok: true, receipt: mapSourceForkReceipt(d) };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) };
+  }
+};
+
+const mapSourceForkReceipt = (d: any): SourceForkReceipt => ({
+  ok: true,
+  requestId: d.request_id,
+  intentId: d.intent_id,
+  networkId: d.network_id,
+  sourceNodeId: d.source_node_id,
+  daemonNodeId: typeof d.daemon_node_id === 'string' ? d.daemon_node_id : undefined,
+  sessionId: d.session_id,
+  mode: d.mode,
+  childName: d.child_name,
+  status: d.status as SourceForkStatus,
+  expiresAt: typeof d.expires_at === 'number' ? d.expires_at : undefined,
+  nativeAcceptance: typeof d.native_acceptance === 'string' ? d.native_acceptance : undefined,
+  dispatchScope: typeof d.dispatch_scope === 'string' ? d.dispatch_scope : undefined,
+  childSessionId: typeof d.child_session_id === 'string' ? d.child_session_id : undefined,
+  childNodeId: typeof d.child_node_id === 'string' ? d.child_node_id : undefined,
+});
+
+/** GET 用同一 request_id + 选中网络轮询；只收敛已知 ID，不做重放。 */
+export const getSessionSourceFork = async (cfg: HubConfig, requestId: string, networkId: string): Promise<SourceForkPostResult> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/${encodeURIComponent(requestId)}?network_id=${encodeURIComponent(networkId)}`, { headers: headers(cfg), signal }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'source_fork_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true) return { ok: false, error: String(d?.error ?? 'Hub 返回空响应') };
+    return { ok: true, receipt: mapSourceForkReceipt(d) };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) };
+  }
+};
+
+/** 轮询语义：registration_confirmed 只作注册回执；unknown 走 retryPlan（不新开 intent）。 */
+export const classifySourceFork = (status: SourceForkStatus) => classifyStatus(status);
 
 // ── app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）读写 ────────────────
 //
