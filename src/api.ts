@@ -1687,7 +1687,13 @@ export const postSessionSourceFork = async (cfg: HubConfig, sel: SourceForkSelec
     if (res.status === 400) return { ok: false, invalid: String((await res.json().catch(() => null) as any)?.error ?? 'invalid'), error: 'invalid' };
     if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
     const d = await res.json().catch(() => null) as any;
-    if (!d || d.ok !== true || typeof d.request_id !== 'string') return { ok: false, error: String(d?.error ?? 'Hub 返回空响应') };
+    if (!d || d.ok !== true || typeof d.request_id !== 'string') {
+      const e = String(d?.error ?? '');
+      // 契约：gate 关闭返回 {ok:false,error:'source_fork_unavailable'}（404）；冲突是 409/conflict。
+      if (/source_fork_unavailable|unavailable/i.test(e)) return { ok: false, unavailable: true, error: e || 'source_fork_unavailable' };
+      if (/conflict|409/i.test(e)) return { ok: false, conflict: true, error: e || 'conflict' };
+      return { ok: false, error: e || 'Hub 返回空响应' };
+    }
     return { ok: true, receipt: mapSourceForkReceipt(d) };
   } catch (e) {
     return { ok: false, error: String((e as Error)?.message ?? e) };
