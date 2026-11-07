@@ -80,7 +80,7 @@ export type ProjectCreateOutcome =
 export function classifyProjectCreate(status: ProjectCreateStatus, sessionCreation?: string, childNodeId?: string): ProjectCreateOutcome {
   if (status === 'registration_confirmed') return { kind: 'registered', status, childNodeId };
   if (status === 'unknown_rotation_required') return { kind: 'unknown', status, sessionCreation: 'unknown' };
-  if (sessionCreation === 'unknown' && status !== 'registration_confirmed') {
+  if (sessionCreation === 'unknown') {
     return { kind: 'unknown', status: 'unknown_rotation_required', sessionCreation: 'unknown' };
   }
   return { kind: 'progress', status };
