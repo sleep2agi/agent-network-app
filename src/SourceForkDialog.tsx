@@ -1,13 +1,15 @@
 // #4150 受管 source 独立 fork（gated preview）对话框。
 // 合同见 docs/runbooks/session-source-transport.md：只 managed source → independent fork，
 // 404 = gate 未开放（不 fallback 普通创建），unknown 用同一 intent 重试、不新开意图。
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import DialogFrame from './DialogFrame';
 import { getSourceDirectory, getSessionSourceFork, postSourceDirectory, postSessionSourceFork, type HubConfig } from './api';
 import { canStartFork, classifyStatus, gateClosedMessage, newIntentId, validateSelection, type SourceForkReceipt } from './session-source-fork';
 import { gateClosedDirectoryMessage, sessionBadge, type DirectorySnapshot } from './session-source-directory';
+import { canUseSnapshotForNewSession, classifyProjectCreate, projectCreateLabel } from './session-project-create';
+import { getSourceProjectCreate, postSourceProjectCreate } from './api';
 import { t } from './i18n';
 import { useTranslation } from './i18n-react';
 import { colors, spacing, type as typeScale } from './theme';
@@ -32,6 +34,11 @@ export default function SourceForkDialog({
   const [unavailable, setUnavailable] = useState(false);
   const [intentId, setIntentId] = useState<string | null>(null);
   // #46bf69cd 目录只读：只展示，不提供 attach/fork 入口；oses_ 不可当 fork session。
+  // #4150 新会话（现有项目）：只读目录里选项目 → 提交；旧快照（无 selection_expires_at）不给入口
+  const receiptScopeRef = useRef<string | null>(null);   // 选过 Server 的那次 directory 请求 id（selection_scope 来源）
+  const [projectPick, setProjectPick] = useState<string | null>(null);
+  const [projectIntent, setProjectIntent] = useState<string>('');
+  const [projectState, setProjectState] = useState<{ kind: 'idle' | 'busy' | 'submitted' | 'failed'; message?: string }>({ kind: 'idle' });
   const [dirState, setDirState] = useState<{ kind: 'idle' | 'pending' | 'ready' | 'failed' | 'unavailable' | 'denied'; error?: string; snapshot?: DirectorySnapshot }>({ kind: 'idle' });
 
   // 轮询：同 request_id + 当前 network；unknown 不新开意图，只提示用同一 intent 重试
@@ -68,7 +75,16 @@ export default function SourceForkDialog({
         if (!requestId) return;
         const r = await getSourceDirectory(cfg, requestId, networkId);
         if (!live) return;
-        if (r.kind === 'ready') { setDirState({ kind: 'ready', snapshot: r.snapshot }); if (timer) clearInterval(timer); }
+        if (r.kind === 'ready') {
+          setDirState({ kind: 'ready', snapshot: r.snapshot });
+          if (timer) clearInterval(timer);
+          // 合同：selection_scope 必须是「选过 Server 并返回 projects」的请求；单 Server 时自动选它
+          const servers = r.snapshot.servers ?? [];
+          if (servers.length === 1 && networkId) {
+            const sel = await postSourceDirectory(cfg, { networkId, sourceNodeId, daemonNodeId: sourceNodeId });
+            if (live && sel.ok) receiptScopeRef.current = sel.requestId;
+          }
+        }
         else if (r.kind === 'failed' || r.kind === 'unavailable' || r.kind === 'denied') { setDirState({ kind: r.kind as any, error: r.kind === 'unavailable' ? gateClosedDirectoryMessage() : r.error }); if (timer) clearInterval(timer); }
       }, 1500);
     })();
@@ -155,6 +171,60 @@ export default function SourceForkDialog({
             <Text testID="source-directory-pending" style={{ color: colors.textMuted, fontSize: typeScale.small }}>读取中…</Text>
           )}
         </View>
+        {/* #4150 新会话：从只读目录里选项目 → 提交（不是 fork、不 attach；oses_ 不参与） */}
+        {dirState.kind === 'ready' && dirState.snapshot ? (() => {
+          const usable = canUseSnapshotForNewSession({
+            snapshot: { expiresAt: dirState.snapshot.expiresAt, selectionExpiresAt: dirState.snapshot.selectionExpiresAt },
+            hasProjectCreateCapability: true,
+          });
+          if (!usable.ok) {
+            return (
+              <View testID="project-create-section">
+                <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>新建会话：{usable.reason}</Text>
+              </View>
+            );
+          }
+          return (
+            <View testID="project-create-section" style={{ gap: 4 }}>
+              <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>新建会话（现有项目，只读选择）</Text>
+              {dirState.snapshot.projects.slice(0, 6).map(pj => (
+                <Pressable key={pj.projectId} testID={`project-create-pick-${pj.projectId}`} onPress={() => setProjectPick(pj.projectId)}>
+                  <Text style={{ fontSize: typeScale.small, color: pj.projectId === projectPick ? colors.accent : colors.text }} numberOfLines={1}>
+                    {pj.title || pj.projectId}{pj.projectId === projectPick ? '（已选）' : ''}
+                  </Text>
+                </Pressable>
+              ))}
+              <TextInput testID="project-create-child-name" value={childName} onChangeText={setChildName} placeholder={t('nodeClone.childNamePlaceholder')} />
+              <Pressable
+                testID="project-create-submit"
+                disabled={projectState.kind === 'busy' || !projectPick || !childName}
+                onPress={async () => {
+                  if (!projectPick || !networkId) return;
+                  const intent = projectIntent || newIntentId(`prjc_${projectPick}`);
+                  setProjectIntent(intent);
+                  setProjectState({ kind: 'busy' });
+                  const r = await postSourceProjectCreate(cfg, {
+                    selectionScope: receiptScopeRef.current ?? '',
+                    snapshotId: dirState.snapshot!.snapshotId,
+                    projectId: projectPick,
+                    childName,
+                    intentId: intent,
+                  });
+                  if (!r.ok) { setProjectState({ kind: 'failed', message: r.unavailable ? '新建会话未开放（不会退回普通创建）' : r.error }); return; }
+                  setProjectState({ kind: 'submitted', message: projectCreateLabel(classifyProjectCreate(r.status as any, r.sessionCreation)) });
+                }}
+                style={buttonStyle('primary')}
+              >
+                <Text style={buttonTextStyle('primary')}>新建会话</Text>
+              </Pressable>
+              {projectState.message ? (
+                <Text testID="project-create-status" style={{ color: projectState.kind === 'failed' ? colors.blocked : colors.text, fontSize: typeScale.small }}>
+                  {projectState.message}
+                </Text>
+              ) : null}
+            </View>
+          );
+        })() : null}
         {!gate.ok ? <Text testID="source-fork-gate" style={{ color: colors.textMuted, fontSize: typeScale.small }}>{gate.reason}</Text> : null}
         {message ? <Text testID="source-fork-message" style={{ color: colors.blocked, fontSize: typeScale.small }}>{message}</Text> : null}
         {receipt ? (

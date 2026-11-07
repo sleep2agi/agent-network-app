@@ -3,6 +3,7 @@ import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
 import { buildConfigPatch } from './node-variant-patch';
 import { buildDirectoryBody, parseDirectoryResponse, validateDirectoryRequest, type DirectoryRequest, type DirectoryResult } from './session-source-directory';
+import { buildProjectCreateBody, validateProjectCreateSelection, type ProjectCreateSelection } from './session-project-create';
 import { buildSourceForkBody, classifyStatus, type SourceForkReceipt, type SourceForkSelection, type SourceForkStatus } from './session-source-fork';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
@@ -1789,6 +1790,45 @@ export const getSourceDirectory = async (cfg: HubConfig, requestId: string, netw
     const d = await res.json().catch(() => null);
     return parseDirectoryResponse(d, requestId);
   } catch (e) { return { kind: 'failed', requestId, error: String((e as Error)?.message ?? e) }; }
+};
+
+// ── #4150 现有项目 → 新空 Session（gated preview）──────────────────────────
+export type ProjectCreatePostResult =
+  | { ok: true; requestId: string; status: string; sessionCreation?: string; label: string }
+  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; error: string };
+
+const projectCreateLabelOf = (d: any): string => String(d?.status ?? '');
+
+export const postSourceProjectCreate = async (cfg: HubConfig, sel: ProjectCreateSelection): Promise<ProjectCreatePostResult> => {
+  const v = validateProjectCreateSelection(sel);
+  if (!v.ok) return { ok: false, error: v.error };
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/project-create`, {
+      method: 'POST', headers: { ...headers(cfg), 'content-type': 'application/json' }, body: JSON.stringify(buildProjectCreateBody(sel)), signal,
+    }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'project_create_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (res.status === 409) return { ok: false, conflict: true, error: 'conflict' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true || typeof d.request_id !== 'string') {
+      const e = String(d?.error ?? '');
+      if (/unavailable/i.test(e)) return { ok: false, unavailable: true, error: e };
+      if (/conflict|409/i.test(e)) return { ok: false, conflict: true, error: e };
+      return { ok: false, error: e || 'Hub 返回空响应' };
+    }
+    return { ok: true, requestId: d.request_id, status: projectCreateLabelOf(d), sessionCreation: d.session_creation, label: projectCreateLabelOf(d) };
+  } catch (e) { return { ok: false, error: String((e as Error)?.message ?? e) }; }
+};
+
+export const getSourceProjectCreate = async (cfg: HubConfig, requestId: string, networkId: string): Promise<{ ok: true; status: string; sessionCreation?: string; childNodeId?: string } | { ok: false; error: string }> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/project-create/${encodeURIComponent(requestId)}?network_id=${encodeURIComponent(networkId)}`, { headers: headers(cfg), signal }));
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true) return { ok: false, error: String(d?.error ?? 'Hub 返回空响应') };
+    return { ok: true, status: String(d.status ?? ''), sessionCreation: d.session_creation, childNodeId: d.child_node_id };
+  } catch (e) { return { ok: false, error: String((e as Error)?.message ?? e) }; }
 };
 
 // ── app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）读写 ────────────────

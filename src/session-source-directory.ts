@@ -57,6 +57,8 @@ export interface DirectorySession {
 export interface DirectorySnapshot {
   snapshotId: string;
   expiresAt: number | null;
+  /** 合同：只有带该字段的 ready 快照才能授权「新会话」（约 10 分钟选择窗口）。 */
+  selectionExpiresAt: number | null;
   leaseKind: string | null;
   completeness: string | null;
   servers: DirectoryServer[];
@@ -106,6 +108,7 @@ export function pickSnapshot(raw: unknown): DirectorySnapshot | null {
   return {
     snapshotId,
     expiresAt: typeof s.expires_at === 'number' ? s.expires_at : null,
+    selectionExpiresAt: typeof s.selection_expires_at === 'number' ? s.selection_expires_at : null,
     leaseKind: typeof s.lease_kind === 'string' ? s.lease_kind : null,
     completeness: typeof s.completeness === 'string' ? s.completeness : null,
     servers, projects, sessions,
