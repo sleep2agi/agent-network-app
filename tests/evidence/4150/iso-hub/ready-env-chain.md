@@ -1,5 +1,8 @@
 # READY 环境（shared-ui…426feee1）真实浏览器：登录 → 目录 → 新 Session=registration_confirmed
 
+> **UI 来源更正**：本文件里的浏览器跑的是 READY 环境**自带的 UI**（由 product `9ae2a955` 构建，
+> 其 bundle 内含 `selection_scope`），**不是**我本地 `ecb6ca37` 的 export。后者只用于早前自建的 8898 环境。
+
 浏览器：官方镜像 `mcr.microsoft.com/playwright:v1.59.1-noble`
 （digest `sha256:b0ab6f3cb99aa7803adbc14d9027ec1785fc6e433b97e134e0f8fe61683b6b53`，与本机 playwright 1.59.1 精确对应）
 
