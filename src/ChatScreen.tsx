@@ -64,6 +64,7 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
+import { readComposerModelSnapshot, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -1978,12 +1979,51 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
   const [sessionModel, setSessionModel] = useState('');
+  // #4130:模型来自定向全量行,不能使用 light 列表或其他节点的候选。
+  const [reportedModel, setReportedModel] = useState<ComposerModelSnapshot | null>(null);
+  // cfg is memoized from the account, alias and network above. A new opaque scope
+  // rejects old cached text during render, before effect cleanup can run.
+  // A-B-A gets a fresh scope as well; no credentials enter a serialized key.
+  const composerModelScope = useMemo(() => ({}), [cfg, alias]);
   // 聊天信息里「规则文件」「技能」出不出现,口径同节点信息页(visibleNodeSections)。
   // 能力位只在全量 /api/status 里有(chat-info-model.ts chatInfoCaps 顶部):下面 30s 的 light 轮询
   // 只给得出 agent-node 那一半(lightCaps,兜底);全量行在进聊天和每次打开聊天信息时取一次(fullCaps)。
   const [lightCaps, setLightCaps] = useState<ChatInfoCaps>({ rules: false, skills: false });
   const [fullCaps, setFullCaps] = useState<ChatInfoCaps | null>(null);
   const sessionCaps = fullCaps ?? lightCaps;
+  // #4130 显示段(admin 2026-11-07):输入框底部显示这个会话自己的模型。
+  // 只认会话行上报的值;未知/过期明确提示,不冒充此刻原生模型回读。
+  const composerModelLine = readComposerModelSnapshot(reportedModel, composerModelScope);
+  // 手机不额外加行(会从消息区挪走 16px,把键盘贴合 / 按住语音的贴合用例顶红):
+  // 手机用页头那颗已有的 model chip 显示(未知时写「模型未知或已过期」),桌面才在发送区加一行。
+  // 横屏手机(视口高 < 560)连「未知」占位也不画:那颗 chip 会把页头撑高 4px,
+  // tests/test-composer-keyboard-inset 的 last 断言只剩 3px 余量,一撑就红。
+  const compactViewport = menuWindowHeight > 0 && menuWindowHeight < 560;
+  useEffect(() => {
+    let live = true;
+    let generation = 0;
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const current = ++generation;
+      try {
+        const data = await fetchNodeStatus(cfg, alias);
+        const value = reportedComposerModel(data.sessions ?? [], cfg.networkId, alias);
+        if (live && current === generation) {
+          if (expiry) clearTimeout(expiry);
+          setReportedModel(value ? { scope: composerModelScope, value, expiresAt: Date.now() + 35_000 } : null);
+          if (value) expiry = setTimeout(() => { if (live) setReportedModel(null); }, 35_000);
+        }
+      } catch {
+        if (live && current === generation) {
+          if (expiry) clearTimeout(expiry);
+          setReportedModel(null);
+        }
+      }
+    };
+    void poll();
+    const timer = setInterval(poll, 30_000);
+    return () => { live = false; clearInterval(timer); if (expiry) clearTimeout(expiry); };
+  }, [cfg, alias, composerModelScope]);
   // Deliberately a slower, separate poll than the 5s message poll above:
   // an agent's online/offline state changes far less often than messages
   // do, so 30s keeps the status badge fresh without doubling the chat's
@@ -2180,9 +2220,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        {sessionModel ? (
+        {sessionModel || !compactViewport ? (
           <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-            {sessionModel}
+            {sessionModel || t('chat.modelUnknown')}
           </Text>
         ) : null}
         <Pressable
@@ -2824,6 +2864,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>{t('chat.priority')}</Text>
                 </Pressable>
               ) : null}
+              <Text style={[styles.desktopModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
+                {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+              </Text>
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
@@ -3300,6 +3343,11 @@ const makeStyles = (B = bubbleLayout()) =>
     userSelect: 'none',
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
+  // #4130:输入框上方右对齐的一行「runtime · model」,只在会话上报了模型时出现(不占位、不撑高)。
+  composerModelLine: { paddingHorizontal: spacing.md, alignItems: 'flex-end' },
+  composerModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: '80%' },
+  // 桌面:同一句文案挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
+  desktopModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: 200, marginRight: 8 },
   // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
   // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
   desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
