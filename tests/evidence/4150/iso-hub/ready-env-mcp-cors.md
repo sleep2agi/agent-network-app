@@ -1,0 +1,41 @@
+# READY 环境：UI 无法调用 /mcp（预检头不匹配）——变体/模型路径首阻塞
+
+真实浏览器（官方 playwright 1.59.1 镜像，--network container:…426feee1，--user 1000:1000）已跑通：
+登录 → 目录 → 新 Session = `registration_confirmed`（见 ready-env-chain.md）。
+
+下一步「同 child high / clear」走的是 UI 的 `update_node_config`（`POST ${hub}/mcp`），实跑失败：
+
+```
+page.evaluate → TypeError: Failed to fetch   (at patchVariant, POST /mcp)
+```
+
+容器内直接做预检，原因确定：
+
+```
+OPTIONS /mcp  → 204
+  access-control-allow-origin : http://127.0.0.1:18080
+  access-control-allow-headers: Content-Type, Authorization
+  access-control-allow-methods: GET, POST, PUT, DELETE, OPTIONS
+```
+
+客户端实际发送的头（`src/api.ts` 的 update_node_config 调用）：
+
+```
+Accept: application/json, text/event-stream
+MCP-Protocol-Version: 2025-03-26
+Content-Type, Authorization
+```
+
+`mcp-protocol-version` 与 `accept` 不在 allow-headers 里 ⇒ 预检失败 ⇒ 浏览器拒绝 `/mcp`
+⇒ **UI 侧完全无法修改模型/档位**（不只是档位，任何走 MCP 的功能都不行）。
+
+同类问题还有 SSE：`/events/users/me` 的 `cache-control` 头同样被拒（已单独报）。
+
+## 需要的（Hub 侧配置，不改客户端）
+
+- 把 `mcp-protocol-version`、`accept` 加进 `Access-Control-Allow-Headers`（或让 UI 与 Hub 同源）
+- SSE 允许 `cache-control`
+
+## 未做
+
+- fork：9ae stock 版本门拒绝 patch、gate OFF，不手动开、不 fallback
