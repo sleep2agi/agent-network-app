@@ -2831,6 +2831,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>{t('chat.priority')}</Text>
                 </Pressable>
               ) : null}
+              {composerModelLine ? (
+                <Text style={[styles.desktopModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
+                  {composerModelLine}
+                </Text>
+              ) : null}
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
@@ -2880,6 +2885,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             onPick={pickSuggest}
           />
         ) : null}
+      {composerModelLine ? (
+        <View style={styles.composerModelLine}>
+          <Text style={[styles.composerModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
+            {composerModelLine}
+          </Text>
+        </View>
+      ) : null}
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
@@ -2947,13 +2959,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onPlus={() => plusEvent('toggle')}
         />
       </View>
-      {composerModelLine ? (
-        <View style={styles.composerModelLine}>
-          <Text style={[styles.composerModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
-            {composerModelLine}
-          </Text>
-        </View>
-      ) : null}
       {plusMenuOpen ? (
         // Inline, in the chat pane only (two-pane: never over the agent list). It is a
         // sibling after the input row inside the root column, so the inverted message
@@ -3314,9 +3319,11 @@ const makeStyles = (B = bubbleLayout()) =>
     userSelect: 'none',
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
-  // #4130:输入框底部右对齐的一行「runtime · model」,只在会话上报了模型时出现(不占位、不撑高)。
-  composerModelLine: { paddingHorizontal: spacing.md, paddingBottom: spacing.xs, alignItems: 'flex-end' },
+  // #4130:输入框上方右对齐的一行「runtime · model」,只在会话上报了模型时出现(不占位、不撑高)。
+  composerModelLine: { paddingHorizontal: spacing.md, alignItems: 'flex-end' },
   composerModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: '80%' },
+  // 桌面:同一句文案挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
+  desktopModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: 200, marginRight: 8 },
   // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
   // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
   desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
