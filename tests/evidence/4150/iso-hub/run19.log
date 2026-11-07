@@ -1,0 +1,9 @@
+TITLE: ANet
+INPUTS: 3
+BTN_BOX: {"x":448,"y":525.5,"width":384,"height":40} pressables: 2
+CLICK_RESULT: clicked
+BODY_AFTER_LOGIN: "\n\n\n"
+CALLS: []
+ERRS: []
+URL: http://127.0.0.1:18080/
+HTML_HEAD: <!DOCTYPE html><html lang="en"><head><style id="react-native-stylesheet"></style> <meta charset="utf-8"> <meta httpequiv="X-UA-Compatible" content="IE=edge"> <meta name="viewport" content="width=device-width, initial-scale=1, shrink-to-fit=no"> <title>ANet</title> <!-- The `react-native-web` recommended style reset: https://necolas.github.io/react-native-web/docs/setup/#root-element --> <style id="expo-reset"> /* These styles make the body full-height */ html, body { height: 100%; } /* These styles disable body scrolling if you are using <ScrollView> */ body { overflow: hidden; } /* These styles make the root element full-height */ #root { display: flex; height: 100%; flex: 1; } </style> <!-- Paint the page in the app's own ground colour before the bundle runs. Expo's default template has no background, so the desktop window showed a white page between load and React's first frame. Value
