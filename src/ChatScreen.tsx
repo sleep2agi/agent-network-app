@@ -2332,6 +2332,18 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
           </Text>
         </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.info')}
+          accessibilityHint={t('chat.infoHint')}
+          onPress={() => setInfoOpen(true)}
+          hitSlop={10}
+          style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
+          testID="chat-header-more"
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
+        </Pressable>
+      </View>
         {modelSheetOpen ? (
           <View style={styles.modelSheet} testID="composer-model-sheet">
             {sheet.rows.map(r => (
@@ -2366,18 +2378,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             ) : null}
           </View>
         ) : null}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.info')}
-          accessibilityHint={t('chat.infoHint')}
-          onPress={() => setInfoOpen(true)}
-          hitSlop={10}
-          style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
-          testID="chat-header-more"
-        >
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
-        </Pressable>
-      </View>
 
       {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
       {searchOpen ? (
@@ -3238,7 +3238,7 @@ const makeStyles = (B = bubbleLayout()) =>
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   // Model id chip: secondary, one line, never steals width from the name column.
   // 浮层：面板挂在页头行内，用绝对定位铺满聊天区宽度（左/右 8），避免被页头行的布局裁掉右半。
-  modelSheet: { position: 'absolute', top: 54, left: 8, right: 8, zIndex: 30, padding: 10, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  modelSheet: { position: 'absolute', top: 54, left: 8, right: 8, zIndex: 9999, elevation: 12, padding: 10, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   modelSheetRow: { flexDirection: 'row', gap: 8, paddingVertical: 3 },
   modelSheetLabel: { width: 84, fontSize: ds(11), color: colors.textMuted },
   modelSheetValue: { flex: 1, fontSize: ds(11), color: colors.text },
