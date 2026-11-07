@@ -291,6 +291,26 @@ export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
   { title: '帮助与关于', keys: ['about'] },
 ];
 
+/**
+ * 设置首页每个分类的图标底色(#4093):原来一律主色蓝方块,扫一眼分不出类别。
+ * 色块上的图形是固定白(onBubbleMine),这几档在深浅两色下都不变,白对每一档 ≥ 4.5:1(settings-icon-colors.test.ts 守);
+ * 没列的分类回落主色。
+ */
+/** 手机设置首页里「Hub 设置」并进的那一组(组标题,与 PHONE_SETTINGS_GROUPS 同一份字面量)。 */
+export const PHONE_SERVER_GROUP_TITLE = '通用';
+
+export const PHONE_ICON_COLOR: Partial<Record<SettingsCategoryKey | 'server', string>> = {
+  server: '#0369a1',
+  users: '#0f766e',
+  agentTeams: '#7c3aed',
+  notifications: '#e11d48',
+  appearance: '#b45309',
+  localHub: '#2563eb',
+  voice: '#047857',
+  shortcuts: '#4f46e5',
+  about: '#475569',
+};
+
 /** 列表行与子页标题用的名字;没写就用分类名。 */
 export const PHONE_ROW_LABEL: Partial<Record<SettingsCategoryKey, string>> = { about: '关于 ANet' };
 export const phoneRowLabel = (cat: Pick<SettingsCategory, 'key' | 'label'>): string => PHONE_ROW_LABEL[cat.key] ?? cat.label;
