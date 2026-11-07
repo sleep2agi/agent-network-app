@@ -1,5 +1,6 @@
 // ck-style：#4099 modelVariant 契约（序列化 omitted/null/string、能力门、切模型档位适配）
 import { strict as assert } from 'node:assert';
+import { lastUpdateApplied } from './node-model-change';
 import { buildConfigPatch, variantValueError, variantWritable, variantChoices, variantAfterModelSwitch } from './node-variant-patch';
 
 let n = 0;
@@ -48,6 +49,30 @@ ck('next list includes → keep', variantAfterModelSwitch({ previousModel: 'a', 
 ck('next none → must-reselect (no auto clear)', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: 'high', nextModelVariants: [] }).action === 'must-reselect');
 ck('next unknown → must-reselect', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: 'high', nextModelVariants: undefined }).action === 'must-reselect');
 ck('no variant → keep', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: null }).action === 'keep');
+
+// ── #4099 last_update 真实形状（server/src/node-config-last-update.ts）联测 ──
+
+
+// 真实 applied 形状
+ck('last_update applied + update_id 对齐 → applied',
+  lastUpdateApplied({ update_id: 'u1', status: 'applied', terminal: true, requested_model: 'openai/m2', error: null }, 'u1', 'openai/m2').applied);
+// update_id 不一致
+ck('update_id 不一致 → 不算 applied',
+  !lastUpdateApplied({ update_id: 'u_other', status: 'applied', terminal: true, requested_model: 'openai/m2' }, 'u1', 'openai/m2').applied);
+// requested_model 不一致
+ck('requested_model 不一致 → 不算 applied',
+  !lastUpdateApplied({ update_id: 'u1', status: 'applied', terminal: true, requested_model: 'openai/other' }, 'u1', 'openai/m2').applied);
+// 非终态 / unknown
+ck('status=pending → 不算 applied',
+  !lastUpdateApplied({ update_id: 'u1', status: 'pending', terminal: false }, 'u1', 'openai/m2').applied);
+ck('status=unknown → 不算 applied',
+  !lastUpdateApplied({ update_id: 'u1', status: 'unknown', terminal: false }, 'u1', 'openai/m2').applied);
+ck('status=rejected → 不算 applied',
+  !lastUpdateApplied({ update_id: 'u1', status: 'rejected', terminal: true, error: 'OpenCode V2 session is not running' }, 'u1', 'openai/m2').applied);
+ck('last_update=null → 不算 applied', !lastUpdateApplied(null, 'u1', 'openai/m2').applied);
+ck('last_update 缺失 → 不算 applied', !lastUpdateApplied(undefined, 'u1', 'openai/m2').applied);
+// applied 但仍要读回 model_effective 匹配（这里只验 last 判定；组合条件在组件 fixture）
+ck('applied 但期望模型为空 → 仅按 last 判定', lastUpdateApplied({ update_id: 'u1', status: 'applied', terminal: true }, 'u1', null).applied);
 
 console.log(`${n}/${n} passed`);
 process.exit(0);

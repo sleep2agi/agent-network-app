@@ -1571,7 +1571,14 @@ export interface NodeConfigRead {
   /** #4099：节点是否显式声明可写档位（server 顶层 opencode_variant_config_capable）。 */
   opencode_variant_config_capable?: boolean;
   /** #4099：最近一次下发终局（null = 从未下发）。res.ok 只是 pending，不是 ack。 */
-  last_update?: { request_id?: string | null; status?: string | null } | null;
+  last_update?: {
+    update_id?: string | null;
+    status?: string | null;
+    observed_status?: string | null;
+    terminal?: boolean;
+    requested_model?: string | null;
+    error?: string | null;
+  } | null;
 }
 
 /** null = hub 没有这个接口(404/501/非 JSON);其它失败抛错(调用方按「读失败」处理)。 */
@@ -1599,8 +1606,16 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
       ? ((d as any).modelVariant === null ? null : String((d as any).modelVariant))
       : undefined,
     opencode_variant_config_capable: (d as any).opencode_variant_config_capable === true,
+    // 真实形状见 server/src/node-config-last-update.ts（update_id / status / terminal / requested_model / error）
     last_update: (d as any).last_update && typeof (d as any).last_update === 'object'
-      ? { request_id: (d as any).last_update.request_id ?? null, status: (d as any).last_update.status ?? null }
+      ? {
+          update_id: (d as any).last_update.update_id ?? null,
+          status: (d as any).last_update.status ?? null,
+          observed_status: (d as any).last_update.observed_status ?? null,
+          terminal: (d as any).last_update.terminal === true,
+          requested_model: (d as any).last_update.requested_model ?? null,
+          error: (d as any).last_update.error ?? null,
+        }
       : ((d as any).last_update === null ? null : undefined),
   };
 };

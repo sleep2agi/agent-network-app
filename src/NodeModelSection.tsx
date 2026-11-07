@@ -12,6 +12,7 @@ import { variantAfterModelSwitch, variantChoices, variantValueError, variantWrit
 import { fetchHubNodes, fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
 import { styles } from './app-styles';
 import {
+  lastUpdateApplied,
   afterPoll,
   afterSubmit,
   recheckAfterTimeout,
@@ -307,8 +308,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       const after = await reload();
       if (!isCurrent(token)) return;
       const updateId = (res as { update_id?: string }).update_id;
-      const lastOk = !!after?.last_update && after.last_update.status === 'applied'
-        && (!updateId || !after.last_update.request_id || after.last_update.request_id === updateId);
+      const lastJudgement = lastUpdateApplied(after?.last_update, updateId, model);
+      const lastOk = lastJudgement.applied;
       if (!after) { setPhase({ kind: 'error', message: '已接受，但读回失败：生效模型未确认（不当作已生效）' }); return; }
       if (lastOk && after.model_effective === model) { setFilter(''); setPhase({ kind: 'applied', model, previous: currentModel ?? null } as any); return; }
       setPhase({ kind: 'error', message: `已接受，但未确认：last_update=${after.last_update?.status ?? 'unknown'} · 生效模型 ${after.model_effective ?? 'unknown'}` });
@@ -363,8 +364,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
       const after = await reload();
       if (!isCurrent(token)) return;
       const updateId = (res as { update_id?: string }).update_id;
-      const lastOk = !!after?.last_update && after.last_update.status === 'applied'
-        && (!updateId || !after.last_update.request_id || after.last_update.request_id === updateId);
+      const lastJudgement = lastUpdateApplied(after?.last_update, updateId, expectedModel);
+      const lastOk = lastJudgement.applied;
       const modelOk = after?.model_effective === expectedModel;
       const variantOk = after?.modelVariant !== undefined && (after.modelVariant ?? null) === (nextVariant ?? null);
       if (!after) setPhase({ kind: 'error', message: '已接受，但读回失败：当前档位未确认（不当作已生效）' });
