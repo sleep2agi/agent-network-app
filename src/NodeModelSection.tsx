@@ -84,7 +84,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
-  const [v2VariantMap] = useState<Record<string, unknown> | null>(null);
+  const [v2VariantMap, setV2VariantMap] = useState<Record<string, unknown> | null>(null);
   // 同 runtime 兄弟节点报过的模型(仅在本机没上报时使用)
   const [peerModels, setPeerModels] = useState<string[]>([]);
   // 贡献候选的兄弟节点台数(写进提示里:数字比一串 id 更可信)
@@ -168,6 +168,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
         if (polled.status === 'ready') {
           const ids = modelIdsFromCatalog(polled.snapshot);
           setV2Models(ids);
+          // #4099：把目录里的 per-model variants 记下来（接口没给就是 undefined → UI 显示未知）
+          const map: Record<string, unknown> = {};
+          for (const m of (polled.snapshot as { models?: Array<{ providerId?: string; id?: string; variants?: unknown }> }).models ?? []) {
+            const key = `${m.providerId ?? ''}/${m.id ?? ''}`;
+            if (key && m.variants !== undefined) map[key] = m.variants;
+          }
+          setV2VariantMap(Object.keys(map).length ? map : null);
           setV2Note(ids.length ? '列表来自这台机器上的 OpenCode V2 服务器，不是内置清单。' : 'OpenCode 服务器返回了空列表。仍可手输 provider/model。');
           return;
         }
