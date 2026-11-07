@@ -21,6 +21,7 @@ const tables: TranslationTable = {
   'chat.empty': ['选择一个 agent 开始聊天', 'Select an agent to start chatting'],
   'chat.emptyHint': ['会话显示在右侧，列表始终保留', 'Chat opens on the right; your conversation list stays visible'],
   'chat.reportedModel': ['节点上报：{model}', 'Node-reported: {model}'],
+  'chat.modelSheetOpen': ['查看当前模型与可用模型目录', 'Show current model and catalog'],
   'chat.modelUnknown': ['模型未知或已过期', 'Model unknown or stale'],
   'server.overview': ['概览', 'Overview'],
   'server.nodes': ['节点', 'Nodes'],

@@ -65,6 +65,7 @@ import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import { modelSheet, switchAvailability } from './composer-model-sheet';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -1994,6 +1995,15 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4130 显示段(admin 2026-11-07):输入框底部显示这个会话自己的模型。
   // 只认会话行上报的值;未知/过期明确提示,不冒充此刻原生模型回读。
   const composerModelLine = readComposerModelSnapshot(reportedModel, composerModelScope);
+  // #4130 第一主线（只读）：点模型行 → 打开面板，展示当前模型 / Provider / 目录 / 档位。
+  // 聊天页目前拿不到该节点的 daemon_node_id，所以目录显式 unsupported，不猜、不拿别节点候选。
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  const sheet = modelSheet({
+    reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
+    catalog: null,
+    catalogError: '聊天页尚未解析该节点的 daemon_node_id，未接 read_opencode_catalog',
+  });
+  const sheetSwitch = switchAvailability();
   // 手机复用页头空间，但来源与桌面一致：只展示当前 scope 内未过期的上报。
   useEffect(() => {
     let live = true;
@@ -2216,9 +2226,30 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-        </Text>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelSheetOpen')}
+          onPress={() => setModelSheetOpen(v => !v)}
+          style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
+          testID="chat-header-model-button"
+        >
+          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+            {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+          </Text>
+        </Pressable>
+        {modelSheetOpen ? (
+          <View style={styles.modelSheet} testID="composer-model-sheet">
+            {sheet.rows.map(r => (
+              <View key={r.key} style={styles.modelSheetRow} testID={`model-sheet-row-${r.key}`}>
+                <Text style={styles.modelSheetLabel}>{r.label}</Text>
+                <Text style={styles.modelSheetValue} numberOfLines={2}>{r.value}</Text>
+              </View>
+            ))}
+            <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
+              切换未启用：{sheetSwitch.reason}
+            </Text>
+          </View>
+        ) : null}
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.info')}
@@ -3090,6 +3121,11 @@ const makeStyles = (B = bubbleLayout()) =>
   // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   // Model id chip: secondary, one line, never steals width from the name column.
+  modelSheet: { marginHorizontal: 12, marginBottom: 8, padding: 10, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  modelSheetRow: { flexDirection: 'row', gap: 8, paddingVertical: 3 },
+  modelSheetLabel: { width: 84, fontSize: ds(11), color: colors.textMuted },
+  modelSheetValue: { flex: 1, fontSize: ds(11), color: colors.text },
+  modelSheetDisabled: { marginTop: 6, fontSize: ds(11), color: colors.textMuted },
   modelChip: {
     maxWidth: 132, marginRight: 6, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
