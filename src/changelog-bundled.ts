@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.489:",
+  "- 聊天输入框底部会显示这个会话正在用的模型（形如「codex-tui · gpt-5-codex」）；",
+  "  没上报就什么都不显示，不会拿默认配置冒充；会话离线时标出「离线」。",
+  "- 设置子页的自动化检查改成按结构识行，以后再加行内元素不会再误判。",
+  "",
   "What's new in 0.2.488:",
   "- 手机设置首页改版：顶部一张身份卡（头像/名字/管理员/Hub 地址），分类图标各有一色，外观行直接显示当前深浅，「切换账号 / 退出登录」合成最下面一组两行。",
   "- 军团 3D 的标签会避让：不再压在更近的部门盘上，也不会互相叠字。",
