@@ -384,7 +384,9 @@ export function SettingsTextField({ label, testID, ...input }: TextInputProps & 
 }
 
 /**
- * 设置首页顶部的身份卡(#4093「移动端设置首页丑」):主色底 + 一枚装饰圆,头像 · 名字(+ 角色小标)· 一行地址,整卡一个按钮。
+ * 设置首页顶部的身份卡(#4093「移动端设置首页丑」)
+ * 子元素 testID 沿用积木的后缀约定(-label / -label-pill / -value / -accessory):drive 按「settings-row-* 去掉这些后缀」
+ * 收集分类行,自造后缀(-subtitle / -pill)会被当成一个分类去点。:主色底 + 一枚装饰圆,头像 · 名字(+ 角色小标)· 一行地址,整卡一个按钮。
  * 底色用「我发出的气泡」那一档(bubbleMine,深浅两档都是实底蓝),字和图形用 onBubbleMine(两档都是白)——
  * 不用 accent:深色下 accent 是亮蓝、onAccent 是黑字,整张卡会发灰。
  */
@@ -411,9 +413,9 @@ export function SettingsProfileCard({ name, subtitle, pill, onPress, testID, acc
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
           <Text style={styles.profileName} numberOfLines={1} testID={`${id}-label`}>{name}</Text>
-          {pill ? <Text style={[styles.pill, styles.profilePill]} numberOfLines={1} testID={`${id}-pill`}>{pill}</Text> : null}
+          {pill ? <Text style={[styles.pill, styles.profilePill]} numberOfLines={1} testID={`${id}-label-pill`}>{pill}</Text> : null}
         </View>
-        {subtitle ? <Text style={styles.profileSub} numberOfLines={1} testID={`${id}-subtitle`}>{subtitle}</Text> : null}
+        {subtitle ? <Text style={styles.profileSub} numberOfLines={1} testID={`${id}-value`}>{subtitle}</Text> : null}
       </View>
       {onPress ? (
         <View style={styles.profileChevron} testID={`${id}-accessory`}>
