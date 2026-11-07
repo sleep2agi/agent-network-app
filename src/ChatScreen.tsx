@@ -1994,11 +1994,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4130 显示段(admin 2026-11-07):输入框底部显示这个会话自己的模型。
   // 只认会话行上报的值;未知/过期明确提示,不冒充此刻原生模型回读。
   const composerModelLine = readComposerModelSnapshot(reportedModel, composerModelScope);
-  // 手机不额外加行(会从消息区挪走 16px,把键盘贴合 / 按住语音的贴合用例顶红):
-  // 手机用页头那颗已有的 model chip 显示(未知时写「模型未知或已过期」),桌面才在发送区加一行。
-  // 横屏手机(视口高 < 560)连「未知」占位也不画:那颗 chip 会把页头撑高 4px,
-  // tests/test-composer-keyboard-inset 的 last 断言只剩 3px 余量,一撑就红。
-  const compactViewport = menuWindowHeight > 0 && menuWindowHeight < 560;
+  // 手机复用页头空间，但来源与桌面一致：只展示当前 scope 内未过期的上报。
   useEffect(() => {
     let live = true;
     let generation = 0;
@@ -2220,11 +2216,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        {sessionModel || !compactViewport ? (
-          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-            {sessionModel || t('chat.modelUnknown')}
-          </Text>
-        ) : null}
+        <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+        </Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.info')}
