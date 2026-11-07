@@ -17,6 +17,7 @@ ck('no daemon/token/url/path/binding fields', !/(daemon|token|url|path|binding|e
 
 // 2) 校验
 ck('valid selection passes', validateSelection(sel).ok === true);
+ck('network with hyphen accepted', validateSelection({ ...sel, networkId: 'net-sweep' }).ok === true);
 ck('missing network rejected', validateSelection({ ...sel, networkId: '' }).ok === false);
 ck('bad session prefix rejected', validateSelection({ ...sel, sessionId: 'abc' }).ok === false);
 ck('bad intent chars rejected', validateSelection({ ...sel, intentId: 'a b' }).ok === false);

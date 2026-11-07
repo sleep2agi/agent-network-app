@@ -50,7 +50,7 @@ export type SourceForkStatus = (typeof SOURCE_FORK_STATUSES)[number];
 
 const SESSION_RE = /^ses_[A-Za-z0-9]{1,190}$/;
 const INTENT_RE = /^[A-Za-z0-9_-]{1,200}$/;
-const NET_RE = /^net_[A-Za-z0-9_-]{1,120}$/;
+const NET_RE = /^net[_-][A-Za-z0-9_\-]{1,120}$/;
 const NODE_RE = /^[A-Za-z0-9_.:-]{1,200}$/;
 const NAME_RE = /^[^\s\x00-\x1f\x7f]{1,64}$/;
 
