@@ -65,6 +65,9 @@ export type SceneCommand = RingCommand | BodyCommand | LabelCommand;
 // #4086 前的值是 26/18/13/9 —— 看着像像素，其实被当成世界单位再乘了一遍 scale，
 // 于是每个体会放大 ~300 倍：一个核心体就能铺满整块面板（深色主题下看起来就是「黑屏/空面板」）。
 // 这里改成与 legion-3d.test.ts 里同一套口径（core 0.085 / person 0.033 / agent 0.021）。
+/** 标签的屏幕盒（渲染端按 80 宽、单行 12 高居中排）。避让用同一套尺寸，避免两边各算一套。 */
+export const LABEL_BOX = { width: 80, height: 12 } as const;
+
 const BODY_BASE: Record<LegionNodeKind, number> = {
   core: 0.085,
   group: 0.045,
@@ -150,17 +153,36 @@ export function buildLegionScene(
     .slice(0, Math.max(0, budget))
     .sort((a, b) => b.depth - a.depth);
   const byId = new Map(layout.nodes.map((n) => [n.id, n] as const));
+  // #4086 残留:标签原来一律贴在体下方，会和「更近的体」或别的标签叠在一起
+  // （实测「军团」被部门盘压住）。这里做一次贪心避让：近的先占位，
+  // 与已放置标签或**更近的体**相撞就跳过 —— 宁可少一个标签，也不留半截字。
+  const LABEL_W = LABEL_BOX.width;
+  const LABEL_H = LABEL_BOX.height;
+  const placed: Array<{ x: number; y: number }> = [];
+  const nearerBodies = bodies
+    .slice()
+    .sort((a, b) => a.depth - b.depth)  // 近 → 远
+    .map((b) => ({ x: b.x, y: b.y, rx: b.rx, ry: b.ry, depth: b.depth }));
   for (const body of labeled) {
     const node = byId.get(body.id);
     const text = (node?.label ?? '').trim();
     if (!text) continue;
+    // 标签中心 x、上边缘 y：渲染端按 80 宽、单行 12 高居中排。
+    const lx = body.x;
+    const ly = body.y + body.ry + 4;
+    const overlapsBox = (px: number, py: number, prx: number, pry: number) =>
+      Math.abs(px - lx) < (LABEL_W / 2 + prx) && Math.abs(py - (ly + LABEL_H / 2)) < (LABEL_H / 2 + pry);
+    if (placed.some((p) => Math.abs(p.x - lx) < LABEL_W && Math.abs(p.y - ly) < LABEL_H)) continue;
+    // 只躲**比它更近**的体（更远的体本来就会被它盖住，属于正常遮挡）。
+    if (nearerBodies.some((b) => b.depth < body.depth && overlapsBox(b.x, b.y, b.rx, b.ry))) continue;
+    placed.push({ x: lx, y: ly });
     commands.push({
       kind: 'label',
       id: body.id,
       text,
-      x: body.x,
+      x: lx,
       // 标签放在体的正下方:盘上写字会和节点圆重叠。
-      y: body.y + body.ry + 4,
+      y: ly,
       depth: body.depth,
       scale: body.scale,
     });

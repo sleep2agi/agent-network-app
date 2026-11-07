@@ -2,7 +2,7 @@
 // 三端渲染器(桌面 WebView canvas / 手机 WebView 或 Skia)都吃同一份 SceneCommand,
 // 所以这张表的语义一旦错了,三端一起错 —— 这正是要在这里钉住的原因。
 import { buildLegionLayout, type LegionInput } from './legion/legion-layout';
-import { buildLegionScene, sceneCounts, wantsLabel, RING_SEGMENTS, LABEL_BUDGET } from './legion3d-scene';
+import { buildLegionScene, sceneCounts, wantsLabel, RING_SEGMENTS, LABEL_BUDGET, LABEL_BOX } from './legion3d-scene';
 
 let pass = 0;
 const total: string[] = [];
@@ -115,6 +115,21 @@ ck('命令数有上界（200 节点不至于每帧画上万条）', (() => {
   return c.bodies === bigLayout.nodes.length && bigLayout.nodes.length === 133
     && c.labels <= LABEL_BUDGET && c.rings === 3;
 })());
+
+// #4086 残留：标签避让（近的先占位；与更近的体或已放标签相撞就跳过）
+{
+  const scene = buildLegionScene(layout, cam, size, {});
+  const labels = scene.filter((c) => c.kind === 'label') as Array<{ id: string; x: number; y: number; depth: number }>;
+  const bodies = scene.filter((c) => c.kind === 'body') as Array<{ id: string; x: number; y: number; rx: number; ry: number; depth: number }>;
+  const collide = (a: { x: number; y: number }, b: { x: number; y: number; rx: number; ry: number; depth: number }) =>
+    Math.abs(a.x - b.x) < (LABEL_BOX.width / 2 + b.rx) && Math.abs((a.y + LABEL_BOX.height / 2) - b.y) < (LABEL_BOX.height / 2 + b.ry);
+  const bad = labels.filter((l) => bodies.some((b) => b.depth < l.depth && collide(l, b)));
+  ck('#4086 标签不压在更近的体上', bad.length === 0);
+  const overlap = labels.some((a, i) => labels.some((b, j) => j > i
+    && Math.abs(a.x - b.x) < LABEL_BOX.width && Math.abs(a.y - b.y) < LABEL_BOX.height));
+  ck('#4086 标签之间不重叠', !overlap);
+  ck('#4086 仍然保留标签（不是全删）', labels.length > 0);
+}
 
 console.log(`legion 3d scene: ${pass}/${total.length} checks passed`);
 if (pass !== total.length) process.exit(1);
