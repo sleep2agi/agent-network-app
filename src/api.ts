@@ -1,6 +1,7 @@
 import type { RuntimeReadinessMap } from './runtime-readiness';
 import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
+import { buildConfigPatch } from './node-variant-patch';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
@@ -1561,6 +1562,10 @@ export interface NodeConfigRead {
   model: string | null;
   flags?: Record<string, unknown>;
   config_update_capable: boolean;
+  /** #4099：节点当前档位（server：config_snapshot.modelVariant，兼容顶层 model_variant 投影）。 */
+  model_variant?: string | null;
+  /** #4099：节点是否显式声明可写档位（server gate：config_snapshot.opencode_variant_config_capable === true）。 */
+  variant_capable?: boolean;
 }
 
 /** null = hub 没有这个接口(404/501/非 JSON);其它失败抛错(调用方按「读失败」处理)。 */
@@ -1581,13 +1586,28 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
     model: typeof d.model === 'string' ? d.model : null,
     flags: d.flags && typeof d.flags === 'object' ? d.flags : undefined,
     config_update_capable: d.config_update_capable === true,
+    // 读回来源：顶层投影优先，其次 config_snapshot（server 的真实存放处）
+    model_variant: (() => {
+      const top = (d as { model_variant?: unknown }).model_variant;
+      if (typeof top === 'string' || top === null) return top;
+      const snap = (d as { config_snapshot?: { modelVariant?: unknown } }).config_snapshot;
+      const v = snap?.modelVariant;
+      return typeof v === 'string' || v === null ? v : undefined;
+    })(),
+    variant_capable: (() => {
+      const top = (d as { variant_capable?: unknown }).variant_capable;
+      if (typeof top === 'boolean') return top;
+      const snap = (d as { config_snapshot?: { opencode_variant_config_capable?: unknown } }).config_snapshot;
+      return snap?.opencode_variant_config_capable === true;
+    })(),
   };
 };
 
 export interface UpdateNodeConfigRequest {
   nodeId: string;
   baseRevision: number;
-  patch: { model?: string; flags?: Record<string, unknown> };
+  /** #4099：modelVariant 省略=不改档、null=清除、string=选档（序列化见 node-variant-patch.buildConfigPatch）。 */
+  patch: { model?: string; flags?: Record<string, unknown>; modelVariant?: string | null };
 }
 
 export type UpdateNodeConfigResult =
@@ -1597,9 +1617,7 @@ export type UpdateNodeConfigResult =
 
 export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequest): Promise<UpdateNodeConfigResult> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
-  const patch: Record<string, unknown> = {};
-  if (typeof req.patch.model === 'string') patch.model = req.patch.model;
-  if (req.patch.flags && typeof req.patch.flags === 'object') patch.flags = req.patch.flags;
+  const patch = buildConfigPatch(req.patch);
   const args = {
     node_id: req.nodeId,
     base_revision: req.baseRevision,
