@@ -1981,7 +1981,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [sessionModel, setSessionModel] = useState('');
   // #4130:模型来自定向全量行,不能使用 light 列表或其他节点的候选。
   const [reportedModel, setReportedModel] = useState<ComposerModelSnapshot | null>(null);
-  // cfg is memoized from accountCfg/alias/networkId above. A new opaque scope
+  // cfg is memoized from the account, alias and network above. A new opaque scope
   // rejects old cached text during render, before effect cleanup can run.
   // A-B-A gets a fresh scope as well; no credentials enter a serialized key.
   const composerModelScope = useMemo(() => ({}), [cfg, alias]);
