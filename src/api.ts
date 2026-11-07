@@ -1564,10 +1564,12 @@ export interface NodeConfigRead {
   model: string | null;
   flags?: Record<string, unknown>;
   config_update_capable: boolean;
-  /** #4099：节点当前档位（server：config_snapshot.modelVariant，兼容顶层 model_variant 投影）。 */
-  model_variant?: string | null;
-  /** #4099：节点是否显式声明可写档位（server gate：config_snapshot.opencode_variant_config_capable === true）。 */
-  variant_capable?: boolean;
+  /** #4099：会话/节点**实际生效**的模型（server GET 顶层 model_effective；缺省 = unknown，绝不用配置 model 顶替）。 */
+  model_effective?: string;
+  /** #4099：当前档位（server 顶层 modelVariant；**null = 明确清除**，缺省 = unknown）。 */
+  modelVariant?: string | null;
+  /** #4099：节点是否显式声明可写档位（server 顶层 opencode_variant_config_capable）。 */
+  opencode_variant_config_capable?: boolean;
 }
 
 /** null = hub 没有这个接口(404/501/非 JSON);其它失败抛错(调用方按「读失败」处理)。 */
@@ -1588,20 +1590,13 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
     model: typeof d.model === 'string' ? d.model : null,
     flags: d.flags && typeof d.flags === 'object' ? d.flags : undefined,
     config_update_capable: d.config_update_capable === true,
-    // 读回来源：顶层投影优先，其次 config_snapshot（server 的真实存放处）
-    model_variant: (() => {
-      const top = (d as { model_variant?: unknown }).model_variant;
-      if (typeof top === 'string' || top === null) return top;
-      const snap = (d as { config_snapshot?: { modelVariant?: unknown } }).config_snapshot;
-      const v = snap?.modelVariant;
-      return typeof v === 'string' || v === null ? v : undefined;
-    })(),
-    variant_capable: (() => {
-      const top = (d as { variant_capable?: unknown }).variant_capable;
-      if (typeof top === 'boolean') return top;
-      const snap = (d as { config_snapshot?: { opencode_variant_config_capable?: unknown } }).config_snapshot;
-      return snap?.opencode_variant_config_capable === true;
-    })(),
+    // 读回只认 server GET 顶层字段（server.ts:6478-6480）：
+    // model_effective 缺省 = unknown；modelVariant 用 hasOwnProperty 区分「键不存在(unknown)」与「null(明确清除)」。
+    model_effective: typeof (d as any).model_effective === 'string' ? (d as any).model_effective : undefined,
+    modelVariant: Object.prototype.hasOwnProperty.call(d ?? {}, 'modelVariant')
+      ? ((d as any).modelVariant === null ? null : String((d as any).modelVariant))
+      : undefined,
+    opencode_variant_config_capable: (d as any).opencode_variant_config_capable === true,
   };
 };
 

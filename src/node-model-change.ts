@@ -90,7 +90,9 @@ export function afterPoll(
   maxPolls: number = RESTART_MAX_POLLS,
   opts: { hot?: boolean } = {},
 ): ModelChangePhase {
-  if (view && view.model === phase.requested) {
+  // 只认 server GET 顶层 model_effective（生效模型）；缺省 = unknown，不拿配置 model 冒充会话读回。
+  const effective = (view as { model_effective?: string } | null)?.model_effective;
+  if (view && effective !== undefined && effective === phase.requested) {
     const bumped = view.config_revision > phase.baseRevision;
     // 重启级变更仍然要 revision 抬高(否则可能读到的是旧值);热变更不要求。
     if (bumped || opts.hot) {

@@ -101,14 +101,22 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 换节点要重置「自动重试已用过」的标记:否则从 A 节点切到 B 节点时,B 永远不会自动重试。
   useEffect(() => { autoRetried.current = false; }, [node.node_id]);
 
+  // 作用域代际：账号/Hub/网络/节点任一变化即 +1；所有 await 回来都要比对，
+  // 旧 scope 的回包不得 setView/setPhase，也不得释放新 scope 的锁。
+  const scopeGen = useRef(0);
+  const scopeKey = `${cfg.profileId ?? ''}|${cfg.serverUrl}|${cfg.networkId ?? ''}|${node.node_id}`;
+  useEffect(() => { scopeGen.current += 1; }, [scopeKey]);
+
   const reload = useCallback(async () => {
+    const gen = scopeGen.current;
     try {
       const v = await fetchNodeConfig(cfg, node.node_id);
+      if (scopeGen.current !== gen) return null;      // 旧回包丢弃
       setView(v);
       setReadFailed(false);
       return v;
     } catch {
-      setReadFailed(true);
+      if (scopeGen.current === gen) setReadFailed(true);
       return null;
     }
   }, [cfg, node.node_id]);
@@ -272,9 +280,18 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 真正下发一次配置变更。抽出来是为了让「超时后再下发一次」复用同一条路径,
   // 而不是让用户重新在列表/输入框里把同一个模型再选一遍。
   const applyModel = async (model: string) => {
-    if (!view || busy) return;
+    if (!view || busy || submitInFlight.current) return;
+    submitInFlight.current = true;                       // 同步单飞（model 与 variant 共用一把锁）
+    const gen = scopeGen.current;
     setPhase({ kind: 'submitting', requested: model });
-    const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
+    let res;
+    try {
+      res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
+    } finally {
+      // 只有仍在同一 scope 时才释放；旧 scope 的 finally 不能解开新 scope 的锁
+      if (scopeGen.current === gen) submitInFlight.current = false;
+    }
+    if (scopeGen.current !== gen) return;                // 旧 scope 回包：不 setPhase
     // 热变更(OpenCode V2 纯 model)不抬高 config_revision,要靠 hot 让它立刻算生效。
     const next = afterSubmit(model, view.config_revision, res, currentModel, { hot: v2 });
     if (next.kind === 'conflict') void reload();
@@ -284,13 +301,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   };
 
   // #4099 档位：能力门 = 节点显式声明；写 = 同 model + modelVariant（hot）。不拼后缀、不硬编码档位。
-  const variantGate = variantWritable({ variantCapable: view?.variant_capable ?? (node.config_snapshot as any)?.opencode_variant_config_capable, runtime: node.runtime ?? null });
+  const variantGate = variantWritable({ variantCapable: view?.opencode_variant_config_capable === true, runtime: node.runtime ?? null });
   const variantOpts = (() => {
     // 目录里的 per-model variants（接口就绪后由 catalog 快照提供）；当前未提供 → 未知，绝不编造
     const perModel = (v2VariantMap as Record<string, unknown> | null) ?? null;
     return variantChoices(perModel ? perModel[currentModel ?? ''] : undefined);
   })();
-  const currentVariant = view?.model_variant ?? null;
+  const currentVariant = view?.modelVariant;   // undefined = unknown；null = 明确清除
 
   // #4099：切模型时原档位是否适配（keep / clear / must-reselect）——只提示，不自动改配置。
   const pendingModel = (() => {
@@ -311,6 +328,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     const err = variantValueError(nextVariant);
     if (err) { setPhase({ kind: 'error', message: err }); return; }
     submitInFlight.current = true;                       // 同步单飞（同一 render 连点也只发一次）
+    const gen = scopeGen.current;
     setPhase({ kind: 'submitting', requested: currentModel ?? '' });
     let res;
     try {
@@ -320,16 +338,18 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
         // 同 model 只改档位：显式带 modelVariant（=hot），不传 flags/channels
         patch: { ...(currentModel ? { model: currentModel } : {}), modelVariant: nextVariant },
       });
-    } finally { submitInFlight.current = false; }
+    } finally { if (scopeGen.current === gen) submitInFlight.current = false; }
+    if (scopeGen.current !== gen) return;
     if (res.ok) {
       // 配置接受 ≠ 会话生效：必须读回 node 的 model 与 variant 都匹配才叫 applied
       const after = await reload();
       const expectedModel = currentModel ?? null;
-      const modelOk = !expectedModel || (after?.model ?? null) === expectedModel;
-      const variantOk = (after?.model_variant ?? null) === (nextVariant ?? null);
+      // 生效模型只认 model_effective（缺省 = unknown，不拿配置 model 冒充）
+      const modelOk = !expectedModel || after?.model_effective === expectedModel;
+      const variantOk = after?.modelVariant !== undefined && (after?.modelVariant ?? null) === (nextVariant ?? null);
       if (!after) setPhase({ kind: 'error', message: '配置已接受，但读回失败：当前档位未确认（不当作已生效）' });
       else if (modelOk && variantOk) setPhase({ kind: 'applied', model: after.model ?? '', hot: true } as any);
-      else setPhase({ kind: 'error', message: `配置已接受，但读回未匹配：模型 ${after.model ?? '—'} · 档位 ${after.model_variant ?? '—'}（未确认）` });
+      else setPhase({ kind: 'error', message: `配置已接受，但读回未匹配：生效模型 ${after.model_effective ?? 'unknown'} · 档位 ${after.modelVariant === undefined ? 'unknown' : (after.modelVariant ?? 'null')}（未确认）` });
     }
     else if (res.conflict) { void reload(); setPhase({ kind: 'conflict' } as any); }
     else if (res.unsupported) setPhase({ kind: 'error', message: res.error });
