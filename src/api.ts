@@ -2,7 +2,7 @@ import type { RuntimeReadinessMap } from './runtime-readiness';
 import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
 import { buildConfigPatch } from './node-variant-patch';
-import { buildDirectoryBody, parseDirectoryResponse, validateDirectoryRequest, type DirectoryRequest, type DirectoryResult } from './session-source-directory';
+import { buildDirectoryBody, buildDirectorySelectBody, parseDirectoryResponse, validateDirectoryRequest, type DirectoryRequest, type DirectoryResult } from './session-source-directory';
 import { buildProjectCreateBody, validateProjectCreateSelection, type ProjectCreateSelection } from './session-project-create';
 import { buildSourceForkBody, classifyStatus, type SourceForkReceipt, type SourceForkSelection, type SourceForkStatus } from './session-source-fork';
 import { reportProfileAuthResponse } from './profile-auth-state';
@@ -1759,12 +1759,12 @@ export type DirectoryPostResult =
   | { ok: true; requestId: string }
   | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; error: string };
 
-export const postSourceDirectory = async (cfg: HubConfig, req: DirectoryRequest): Promise<DirectoryPostResult> => {
+export const postSourceDirectory = async (cfg: HubConfig, req: DirectoryRequest, serverId?: string): Promise<DirectoryPostResult> => {
   const v = validateDirectoryRequest(req);
   if (!v.ok) return { ok: false, error: v.error };
   try {
     const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/directory`, {
-      method: 'POST', headers: { ...headers(cfg), 'content-type': 'application/json' }, body: JSON.stringify(buildDirectoryBody(req)), signal,
+      method: 'POST', headers: { ...headers(cfg), 'content-type': 'application/json' }, body: JSON.stringify(serverId ? buildDirectorySelectBody(req, serverId) : buildDirectoryBody(req)), signal,
     }));
     if (res.status === 404) return { ok: false, unavailable: true, error: 'source_directory_unavailable' };
     if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
