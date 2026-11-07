@@ -169,7 +169,9 @@ check('生效后记住上一模型并给「切回」入口', (() => {
   const applied = afterPoll(submitted, { config_revision: 6, model: 'deepseek/next', model_effective: 'deepseek/next' } as any);
   return applied.kind === 'applied' && applied.previous === 'deepseek/old' && section.includes('node-model-revert');
 })());
-check('切换生效后清空筛选（避免下次进来看不到新模型）', section.includes("if (next.kind === 'applied') setFilter('')"));
+check('切换生效后清空筛选（避免下次进来看不到新模型）',
+  // 实现从 afterSubmit(next) 改成 last_update+读回判定，断言语义不变：只有 applied 分支才 setFilter('')
+  section.includes("setFilter('')") && /lastOk && after\.model_effective === model[^\n]*setFilter\(''\)/.test(section));
 check('失败时给「再试一次」且先校验候选', section.includes('node-model-retry-error') && section.includes('validateModelId(candidate).ok') && section.includes('void submit()'));
 check('超时后给出「再下发一次」且复用 applyModel', section.includes('node-model-retry-timeout') && section.includes('applyModel(phase.requested)') && section.includes('const applyModel = async'));
 check('斜杠两侧的空白被吃掉（粘贴场景）', (() => {
