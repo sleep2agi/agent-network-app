@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.488:",
+  "- 手机设置首页改版：顶部一张身份卡（头像/名字/管理员/Hub 地址），分类图标各有一色，外观行直接显示当前深浅，「切换账号 / 退出登录」合成最下面一组两行。",
+  "- 军团 3D 的标签会避让：不再压在更近的部门盘上，也不会互相叠字。",
+  "",
   "What's new in 0.2.487:",
   "- 切节点后不会再把上一个节点的模型当成候选：B 的清单还在读时，列表是空的 + 「正在读取」，不会再让你把 A 的模型点给 B。",
   "",
