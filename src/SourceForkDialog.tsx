@@ -84,7 +84,7 @@ export default function SourceForkDialog({
           const servers = r.snapshot.servers ?? [];
           if (servers.length === 1 && networkId) {
             // 合同：第二次 POST 必须带 server_id（selection_scope 来自「返回 projects」的那次请求）
-            const sel = await postSourceDirectory(cfg, { networkId, sourceNodeId, daemonNodeId: sourceNodeId }, servers[0].serverId);
+            const sel = await postSourceDirectory(cfg, { networkId, sourceNodeId, daemonNodeId: sourceNodeId }, servers[0].serverId, requestId ?? undefined);
             if (live && sel.ok) receiptScopeRef.current = sel.requestId;
           }
         }

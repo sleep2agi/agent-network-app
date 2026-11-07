@@ -12,7 +12,7 @@ const req = { networkId: 'net-sweep', sourceNodeId: 'n_src', daemonNodeId: 'd_1'
 // body 恰好三字段
 const body = buildDirectoryBody(req);
 ck('body keys exactly 3', JSON.stringify(Object.keys(body)) === JSON.stringify(['network_id', 'source_node_id', 'daemon_node_id']));
-ck('select body adds server_id', JSON.stringify(Object.keys(buildDirectorySelectBody(req, 'osrv_1'))) === JSON.stringify(['network_id', 'source_node_id', 'daemon_node_id', 'server_id']));
+ck('select body adds server_id + selection_scope', JSON.stringify(Object.keys(buildDirectorySelectBody(req, 'osrv_00000000-0000-4000-8000-000000000000', 'srcdir_00000000-0000-4000-8000-000000000000'))) === JSON.stringify(['network_id', 'source_node_id', 'daemon_node_id', 'server_id', 'selection_scope']));
 ck('no url/path/token in body', !/(url|path|token|secret)/i.test(Object.keys(body).join(',')));
 
 // 校验

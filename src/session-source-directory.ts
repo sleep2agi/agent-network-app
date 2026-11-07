@@ -33,9 +33,19 @@ export function buildDirectoryBody(r: DirectoryRequest): Record<string, string> 
   return { network_id: r.networkId, source_node_id: r.sourceNodeId, daemon_node_id: r.daemonNodeId };
 }
 
-/** 选 Server 的第二次 POST：父请求 + server_id（必须来自同一 ready 选择）。 */
-export function buildDirectorySelectBody(r: DirectoryRequest, serverId: string): Record<string, string> {
-  return { ...buildDirectoryBody(r), server_id: serverId };
+/** 合同：server_id 与 selection_scope 必须成对出现（Hub 缺一即 400）。 */
+const SRCDIR_ID_RE = /^srcdir_[a-f0-9-]{36}$/;
+const OSRV_ID_RE = /^osrv_[a-f0-9-]{36}$/;
+
+export function validateDirectorySelect(serverId: string, selectionScope: string): { ok: true } | { ok: false; error: string } {
+  if (!OSRV_ID_RE.test(serverId)) return { ok: false, error: '缺少或非法的 server_id' };
+  if (!SRCDIR_ID_RE.test(selectionScope)) return { ok: false, error: 'selection_scope 必须是父 directory 请求 id（srcdir_）' };
+  return { ok: true };
+}
+
+/** 选 Server 的第二次 POST：父请求 + server_id + selection_scope（合同：父请求 id）。 */
+export function buildDirectorySelectBody(r: DirectoryRequest, serverId: string, selectionScope: string): Record<string, string> {
+  return { ...buildDirectoryBody(r), server_id: serverId, selection_scope: selectionScope };
 }
 
 export type DirectoryStatus = 'pending' | 'claimed' | 'ready' | 'failed';
