@@ -74,7 +74,7 @@ export function modelSheet(input: SheetInput): SheetModel {
   rows.push({
     key: 'current',
     label: '当前模型',
-    value: current || (input.catalogError ? `未知（${input.catalogError}）` : '未知（本会话尚未上报）'),
+    value: current || '未知（本会话尚未上报）',
     readOnly: true,
   });
 
