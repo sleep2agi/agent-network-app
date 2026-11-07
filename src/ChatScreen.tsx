@@ -1994,6 +1994,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4130 显示段(admin 2026-11-07):输入框底部显示这个会话自己的模型。
   // 只认会话行上报的值;未知/过期明确提示,不冒充此刻原生模型回读。
   const composerModelLine = readComposerModelSnapshot(reportedModel, composerModelScope);
+  // 手机不额外加行(会从消息区挪走 16px,把键盘贴合 / 按住语音的贴合用例顶红):
+  // 手机用页头那颗已有的 model chip 显示(未知时写「模型未知或已过期」),桌面才在发送区加一行。
+  // 横屏手机(视口高 < 560)连「未知」占位也不画:那颗 chip 会把页头撑高 4px,
+  // tests/test-composer-keyboard-inset 的 last 断言只剩 3px 余量,一撑就红。
+  const compactViewport = menuWindowHeight > 0 && menuWindowHeight < 560;
   useEffect(() => {
     let live = true;
     let generation = 0;
@@ -2215,9 +2220,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        {sessionModel ? (
+        {sessionModel || !compactViewport ? (
           <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-            {sessionModel}
+            {sessionModel || t('chat.modelUnknown')}
           </Text>
         ) : null}
         <Pressable
@@ -2911,11 +2916,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             onPick={pickSuggest}
           />
         ) : null}
-      <View style={styles.composerModelLine}>
-        <Text style={[styles.composerModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
-          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-        </Text>
-      </View>
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
