@@ -4,7 +4,7 @@
 //
 // 样式约定同 NodeDetailScreen:`styles` 用 live binding、不解构;卡片
 // colors.card / 12 圆角 / spacing.lg;按钮沿用 retryBtn。
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
@@ -83,7 +83,14 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
   // 同步单飞：state 更新是异步的，连点两次可能在同一个 render 里都看到 busy=false；
   // 用 ref 在发请求前**同步**置位，覆盖 model 与 variant 两条提交路径。
-  const submitInFlight = useRef(false);
+  // 同步 render scope token + 每 scope 独立锁（旧 finally 无法解开新 scope 的锁）
+  const scopeToken = useMemo(() => ({}), [cfg.profileId, cfg.serverUrl, cfg.networkId, node.node_id]);
+  const scopeTokenRef = useRef(scopeToken);
+  scopeTokenRef.current = scopeToken;
+  const locksRef = useRef<WeakMap<object, boolean>>(new WeakMap());
+  const isCurrent = (t: object) => scopeTokenRef.current === t;
+  const acquire = (t: object) => { if (!locksRef.current.has(t)) locksRef.current.set(t, false); if (locksRef.current.get(t)) return false; locksRef.current.set(t, true); return true; };
+  const release = (t: object) => { locksRef.current.set(t, false); };
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
@@ -103,20 +110,25 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
 
   // 作用域代际：账号/Hub/网络/节点任一变化即 +1；所有 await 回来都要比对，
   // 旧 scope 的回包不得 setView/setPhase，也不得释放新 scope 的锁。
-  const scopeGen = useRef(0);
-  const scopeKey = `${cfg.profileId ?? ''}|${cfg.serverUrl}|${cfg.networkId ?? ''}|${node.node_id}`;
-  useEffect(() => { scopeGen.current += 1; }, [scopeKey]);
+  // scope 变化：清掉旧 scope 的展示状态（旧回包另由 token 判定，不会写回）
+  useEffect(() => {
+    setView(undefined);
+    setPhase({ kind: 'idle' });
+    setV2Models(null);
+    setV2VariantMap(null);
+    setReadFailed(false);
+  }, [scopeToken]);
 
   const reload = useCallback(async () => {
-    const gen = scopeGen.current;
+    const token = scopeTokenRef.current;
     try {
       const v = await fetchNodeConfig(cfg, node.node_id);
-      if (scopeGen.current !== gen) return null;      // 旧回包丢弃
+      if (!isCurrent(token)) return null;             // 旧 scope 回包丢弃
       setView(v);
       setReadFailed(false);
       return v;
     } catch {
-      if (scopeGen.current === gen) setReadFailed(true);
+      if (isCurrent(token)) setReadFailed(true);
       return null;
     }
   }, [cfg, node.node_id]);
@@ -280,24 +292,29 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 真正下发一次配置变更。抽出来是为了让「超时后再下发一次」复用同一条路径,
   // 而不是让用户重新在列表/输入框里把同一个模型再选一遍。
   const applyModel = async (model: string) => {
-    if (!view || busy || submitInFlight.current) return;
-    submitInFlight.current = true;                       // 同步单飞（model 与 variant 共用一把锁）
-    const gen = scopeGen.current;
+    if (!view || busy) return;
+    const token = scopeTokenRef.current;
+    if (!acquire(token)) return;
     setPhase({ kind: 'submitting', requested: model });
-    let res;
     try {
-      res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
+      const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
+      if (!isCurrent(token)) return;
+      if (!res.ok) {
+        if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); }
+        else setPhase({ kind: 'error', message: res.error });
+        return;
+      }
+      const after = await reload();
+      if (!isCurrent(token)) return;
+      const updateId = (res as { update_id?: string }).update_id;
+      const lastOk = !!after?.last_update && after.last_update.status === 'applied'
+        && (!updateId || !after.last_update.request_id || after.last_update.request_id === updateId);
+      if (!after) { setPhase({ kind: 'error', message: '已接受，但读回失败：生效模型未确认（不当作已生效）' }); return; }
+      if (lastOk && after.model_effective === model) { setFilter(''); setPhase({ kind: 'applied', model, previous: currentModel ?? null } as any); return; }
+      setPhase({ kind: 'error', message: `已接受，但未确认：last_update=${after.last_update?.status ?? 'unknown'} · 生效模型 ${after.model_effective ?? 'unknown'}` });
     } finally {
-      // 只有仍在同一 scope 时才释放；旧 scope 的 finally 不能解开新 scope 的锁
-      if (scopeGen.current === gen) submitInFlight.current = false;
+      if (isCurrent(token)) release(token);
     }
-    if (scopeGen.current !== gen) return;                // 旧 scope 回包：不 setPhase
-    // 热变更(OpenCode V2 纯 model)不抬高 config_revision,要靠 hot 让它立刻算生效。
-    const next = afterSubmit(model, view.config_revision, res, currentModel, { hot: v2 });
-    if (next.kind === 'conflict') void reload();
-    // 生效后把筛选清掉:否则下次进来列表还停在旧筛选上,看不到刚切过去的模型。
-    if (next.kind === 'applied') setFilter('');
-    setPhase(next);
   };
 
   // #4099 档位：能力门 = 节点显式声明；写 = 同 model + modelVariant（hot）。不拼后缀、不硬编码档位。
@@ -324,36 +341,38 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     : null;
 
   const applyVariant = async (nextVariant: string | null) => {
-    if (!view || busy || submitInFlight.current || !variantGate.ok) return;
+    if (!view || busy || !variantGate.ok) return;
     const err = variantValueError(nextVariant);
     if (err) { setPhase({ kind: 'error', message: err }); return; }
-    submitInFlight.current = true;                       // 同步单飞（同一 render 连点也只发一次）
-    const gen = scopeGen.current;
-    setPhase({ kind: 'submitting', requested: currentModel ?? '' });
-    let res;
+    const expectedModel = view.model_effective;
+    if (!expectedModel) { setPhase({ kind: 'error', message: '生效模型 unknown：禁止写档位（先让节点上报 model_effective）' }); return; }
+    const token = scopeTokenRef.current;
+    if (!acquire(token)) return;
+    setPhase({ kind: 'submitting', requested: expectedModel });
     try {
-      res = await updateNodeConfig(cfg, {
-        nodeId: node.node_id,
-        baseRevision: view.config_revision,
-        // 同 model 只改档位：显式带 modelVariant（=hot），不传 flags/channels
-        patch: { ...(currentModel ? { model: currentModel } : {}), modelVariant: nextVariant },
+      const res = await updateNodeConfig(cfg, {
+        nodeId: node.node_id, baseRevision: view.config_revision,
+        patch: { model: expectedModel, modelVariant: nextVariant },
       });
-    } finally { if (scopeGen.current === gen) submitInFlight.current = false; }
-    if (scopeGen.current !== gen) return;
-    if (res.ok) {
-      // 配置接受 ≠ 会话生效：必须读回 node 的 model 与 variant 都匹配才叫 applied
+      if (!isCurrent(token)) return;
+      if (!res.ok) {
+        if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); }
+        else setPhase({ kind: 'error', message: res.error });
+        return;
+      }
       const after = await reload();
-      const expectedModel = currentModel ?? null;
-      // 生效模型只认 model_effective（缺省 = unknown，不拿配置 model 冒充）
-      const modelOk = !expectedModel || after?.model_effective === expectedModel;
-      const variantOk = after?.modelVariant !== undefined && (after?.modelVariant ?? null) === (nextVariant ?? null);
-      if (!after) setPhase({ kind: 'error', message: '配置已接受，但读回失败：当前档位未确认（不当作已生效）' });
-      else if (modelOk && variantOk) setPhase({ kind: 'applied', model: after.model ?? '', hot: true } as any);
-      else setPhase({ kind: 'error', message: `配置已接受，但读回未匹配：生效模型 ${after.model_effective ?? 'unknown'} · 档位 ${after.modelVariant === undefined ? 'unknown' : (after.modelVariant ?? 'null')}（未确认）` });
+      if (!isCurrent(token)) return;
+      const updateId = (res as { update_id?: string }).update_id;
+      const lastOk = !!after?.last_update && after.last_update.status === 'applied'
+        && (!updateId || !after.last_update.request_id || after.last_update.request_id === updateId);
+      const modelOk = after?.model_effective === expectedModel;
+      const variantOk = after?.modelVariant !== undefined && (after.modelVariant ?? null) === (nextVariant ?? null);
+      if (!after) setPhase({ kind: 'error', message: '已接受，但读回失败：当前档位未确认（不当作已生效）' });
+      else if (lastOk && modelOk && variantOk) setPhase({ kind: 'applied', model: after.model_effective ?? '', hot: true } as any);
+      else setPhase({ kind: 'error', message: `已接受，但未确认：last_update=${after.last_update?.status ?? 'unknown'} · 生效模型 ${after.model_effective ?? 'unknown'} · 档位 ${after.modelVariant === undefined ? 'unknown' : (after.modelVariant ?? 'null')}` });
+    } finally {
+      if (isCurrent(token)) release(token);
     }
-    else if (res.conflict) { void reload(); setPhase({ kind: 'conflict' } as any); }
-    else if (res.unsupported) setPhase({ kind: 'error', message: res.error });
-    else setPhase({ kind: 'error', message: res.error });
   };
 
   const submit = async () => {

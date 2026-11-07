@@ -1570,6 +1570,8 @@ export interface NodeConfigRead {
   modelVariant?: string | null;
   /** #4099：节点是否显式声明可写档位（server 顶层 opencode_variant_config_capable）。 */
   opencode_variant_config_capable?: boolean;
+  /** #4099：最近一次下发终局（null = 从未下发）。res.ok 只是 pending，不是 ack。 */
+  last_update?: { request_id?: string | null; status?: string | null } | null;
 }
 
 /** null = hub 没有这个接口(404/501/非 JSON);其它失败抛错(调用方按「读失败」处理)。 */
@@ -1597,6 +1599,9 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
       ? ((d as any).modelVariant === null ? null : String((d as any).modelVariant))
       : undefined,
     opencode_variant_config_capable: (d as any).opencode_variant_config_capable === true,
+    last_update: (d as any).last_update && typeof (d as any).last_update === 'object'
+      ? { request_id: (d as any).last_update.request_id ?? null, status: (d as any).last_update.status ?? null }
+      : ((d as any).last_update === null ? null : undefined),
   };
 };
 
