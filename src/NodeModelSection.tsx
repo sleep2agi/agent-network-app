@@ -8,6 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
+import { variantChoices, variantValueError, variantWritable } from './node-variant-patch';
 import { fetchHubNodes, fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
 import { styles } from './app-styles';
 import {
@@ -82,6 +83,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
+  // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
+  const [v2VariantMap] = useState<Record<string, unknown> | null>(null);
   // 同 runtime 兄弟节点报过的模型(仅在本机没上报时使用)
   const [peerModels, setPeerModels] = useState<string[]>([]);
   // 贡献候选的兄弟节点台数(写进提示里:数字比一串 id 更可信)
@@ -270,6 +273,32 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     setPhase(next);
   };
 
+  // #4099 档位：能力门 = 节点显式声明；写 = 同 model + modelVariant（hot）。不拼后缀、不硬编码档位。
+  const variantGate = variantWritable({ variantCapable: view?.variant_capable ?? (node.config_snapshot as any)?.opencode_variant_config_capable, runtime: node.runtime ?? null });
+  const variantOpts = (() => {
+    // 目录里的 per-model variants（接口就绪后由 catalog 快照提供）；当前未提供 → 未知，绝不编造
+    const perModel = (v2VariantMap as Record<string, unknown> | null) ?? null;
+    return variantChoices(perModel ? perModel[currentModel ?? ''] : undefined);
+  })();
+  const currentVariant = view?.model_variant ?? null;
+
+  const applyVariant = async (nextVariant: string | null) => {
+    if (!view || busy || !variantGate.ok) return;
+    const err = variantValueError(nextVariant);
+    if (err) { setPhase({ kind: 'error', message: err }); return; }
+    setPhase({ kind: 'submitting', requested: currentModel ?? '' });
+    const res = await updateNodeConfig(cfg, {
+      nodeId: node.node_id,
+      baseRevision: view.config_revision,
+      // 同 model 只改档位：显式带 modelVariant（=hot），不传 flags/channels
+      patch: { ...(currentModel ? { model: currentModel } : {}), modelVariant: nextVariant },
+    });
+    if (res.ok) { await reload(); setPhase({ kind: 'applied', model: currentModel ?? '', hot: true } as any); }
+    else if (res.conflict) { void reload(); setPhase({ kind: 'conflict' } as any); }
+    else if (res.unsupported) setPhase({ kind: 'error', message: res.error });
+    else setPhase({ kind: 'error', message: res.error });
+  };
+
   const submit = async () => {
     if (!view || busy) return;
     const v = validateModelId(candidate);
@@ -287,6 +316,43 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
           <Text style={{ color: colors.text, flex: 1, fontSize: 14 }} selectable>
             {currentModel || (view === undefined && !readFailed ? '读取中…' : '—')}
           </Text>
+        </View>
+        <View testID="node-variant-row" style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+          <Text style={{ color: colors.textMuted, width: 96, fontSize: 13 }}>思考档位</Text>
+          {!variantGate.ok ? (
+            <Text testID="node-variant-disabled" style={{ color: colors.textMuted, fontSize: 12, flex: 1 }}>
+              {variantGate.reason}
+            </Text>
+          ) : variantOpts.kind === 'unknown' ? (
+            <Text testID="node-variant-unknown" style={{ color: colors.textMuted, fontSize: 12, flex: 1 }}>
+              未知：本节点目录未提供该模型的 variants
+            </Text>
+          ) : variantOpts.kind === 'none' ? (
+            <Text testID="node-variant-none" style={{ color: colors.textMuted, fontSize: 12, flex: 1 }}>
+              该模型没有可选档位{currentVariant ? `（当前上报 ${currentVariant}）` : ''}
+            </Text>
+          ) : (
+            <>
+              {variantOpts.options.map(v => (
+                <Pressable
+                  key={v}
+                  testID={`node-variant-chip-${v}`}
+                  disabled={busy}
+                  onPress={() => void applyVariant(v === currentVariant ? null : v)}
+                  style={({ pressed }) => [{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: v === currentVariant ? colors.accent : colors.border, opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Text style={{ fontSize: 12, color: v === currentVariant ? colors.accent : colors.text }}>
+                    {v}{v === currentVariant ? '（当前）' : ''}
+                  </Text>
+                </Pressable>
+              ))}
+              {currentVariant ? (
+                <Pressable testID="node-variant-clear" onPress={() => void applyVariant(null)} disabled={busy}>
+                  <Text style={{ fontSize: 12, color: colors.textMuted }}>清除档位</Text>
+                </Pressable>
+              ) : null}
+            </>
+          )}
         </View>
         {/* 代际没声明(opencode 系 runtime 但 flags 里没有 opencodeGeneration)时,
             模型清单很可能是读不到的——这是排查里最常见的一步,提前说一句。 */}

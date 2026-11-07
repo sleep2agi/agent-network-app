@@ -1617,7 +1617,14 @@ export type UpdateNodeConfigResult =
 
 export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequest): Promise<UpdateNodeConfigResult> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
-  const patch = buildConfigPatch(req.patch);
+  const patch: Record<string, unknown> = {};
+  if (typeof req.patch.model === 'string') patch.model = req.patch.model;
+  if (req.patch.flags && typeof req.patch.flags === 'object') patch.flags = req.patch.flags;
+  // #4099：只有显式给出 modelVariant 才写（省略=不改档，null=清除）—— 语义集中在 buildConfigPatch
+  if (Object.prototype.hasOwnProperty.call(req.patch, 'modelVariant')) {
+    const variantPatch = buildConfigPatch(req.patch);
+    if ('modelVariant' in variantPatch) patch.modelVariant = variantPatch.modelVariant;
+  }
   const args = {
     node_id: req.nodeId,
     base_revision: req.baseRevision,
