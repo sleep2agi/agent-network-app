@@ -2015,7 +2015,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
     catalog: null,
     // 目录不再由聊天页查询：直接复用下方节点模型区（NodeModelSection）的目录与可用性。
-    catalogError: '模型目录见下方「节点模型」区（同一份受权读取，不重复查询）',
+    catalogError: t('chat.modelCatalogSeeBelow'),
   });
   // 账号/网络身份一变，就作废旧作用域（下一帧起 targetNode 为 null，不展示旧节点）。
   // 目标绑定：controlSession.node_id 在当前账号/network 的受权 nodes 里**唯一**匹配；
@@ -2026,7 +2026,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     setResolvedTarget(null);
     setSwitchState({ kind: 'idle' });
     const wanted = wantedNodeId;
-    if (!wanted) { setSwitchState({ kind: 'unsupported', message: '会话没有 node_id：拒绝用 alias 或其它节点代替' }); return () => { live = false; }; }
+    if (!wanted) { setSwitchState({ kind: 'unsupported', message: t('chat.forkNoNodeId') }); return () => { live = false; }; }
     (async () => {
       try {
         const { nodes } = await fetchHubNodes(cfg);
@@ -2034,7 +2034,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         // fetchHubNodes(cfg) 已按当前账号/network 取；这里只按 node_id 唯一匹配（HubNode 无 network_id 字段）。
         const matches = (nodes ?? []).filter(n => n.node_id === wanted);
         if (matches.length !== 1) {
-          setSwitchState({ kind: 'unsupported', message: matches.length === 0 ? '当前账号/network 内找不到该 node_id 的受权详情' : `该 node_id 在本 network 内有 ${matches.length} 条歧义记录，拒绝写入` });
+          setSwitchState({ kind: 'unsupported', message: matches.length === 0 ? t('chat.forkNodeMissing') : t('chat.forkNodeAmbiguous', { count: matches.length }) });
           return;
         }
         setResolvedTarget({ scope: scopeToken, node: matches[0] });
@@ -2309,7 +2309,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
               />
             ) : (
               <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
-                {switchState.kind === 'unsupported' ? `切换未启用：${switchState.message}` : '切换未启用：正在读取该节点的受权详情…'}
+                {switchState.kind === 'unsupported' ? t('chat.switchDisabled', { reason: switchState.message ?? '' }) : t('chat.switchLoading')}
               </Text>
             )}
             </ScrollView>
@@ -3070,7 +3070,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       >
         <Text style={[styles.composerModelEntryText, { color: colors.textMuted }]} numberOfLines={1}>
           {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-          {` · 档位 ${sheet.variantsKnown ? (sheet.rows.find(r => r.key === 'variants')?.value ?? '').slice(0, 24) : '未知'}`}
+          {t('chat.variantSuffix', { value: sheet.variantsKnown ? (sheet.rows.find(r => r.key === 'variants')?.value ?? '').slice(0, 24) : t('chat.variantUnknownShort') })}
         </Text>
       </Pressable>
       {plusMenuOpen ? (
