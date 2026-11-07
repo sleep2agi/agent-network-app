@@ -39,3 +39,23 @@ Content-Type, Authorization
 ## 未做
 
 - fork：9ae stock 版本门拒绝 patch、gate OFF，不手动开、不 fallback
+
+## 容器内 RPC 对照（不经浏览器，排除 CORS）
+
+脚本 `ctl-variant.ts`（docker exec 在 READY 容器内跑，读 /state 私有配置，不打印 token）：
+
+```
+directory → ready · select → ready · 新 Session → registration_confirmed
+child = node_prjc_fdf3e73c-…
+
+high  : POST /mcp 200 但 payload = {"ok":false,"error":"variant_unsupported"}
+clear : POST /mcp 200 payload = {"ok":true,"update_id":"cu_b408c00a-…","apply_mode":"hot"}
+        → /api/nodes/<child>/config 读回 last_update.applied、modelVariant=null、model=fixture/model
+```
+
+于是可以分开说：
+- **后端/运行时能做**：clear 真实 applied（hot），读回一致；
+- **high 被明确拒绝**：`variant_unsupported`（不是静默失败）——该 child 的原生 catalog 上没有 high 档；
+- **UI 更早就被挡**：`/mcp` 预检不允 `mcp-protocol-version`/`accept`，浏览器根本发不出去。
+
+三者是不同层次的阻塞，不能混为一谈。
