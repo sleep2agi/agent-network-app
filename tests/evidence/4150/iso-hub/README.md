@@ -61,6 +61,22 @@ project-create final: {"status":"unknown_rotation_required","session_creation":"
 - 该树自带的 anet CLI 二进制（`/tmp/opencode/anet-4099-test-only-29040e2/.../opencode --help`）
   **不输出** `ANET_CAPABILITY_SOURCE_RESUME_V1`，不能当 launcher pin 用；真链需要 2 号提供带该能力的 CLI 或 fixture 端点。
 
+## 链 3：attach（现有 Session → 复用，不新建）
+
+`attach-driver.ts`（同一客户端 builder，`session_id` 分支）：
+
+```
+select ready: projects=1 sessions=1
+client body keys: child_name,intent_id,selection_scope,session_id,snapshot_id
+project-create POST: 200 {"status":"create_pending","operation_kind":"attach_existing_session",...}
+final: {"status":"unknown_rotation_required","operation_kind":"attach_existing_session",
+        "session_creation":"not_performed","registration_is_health":false}
+```
+
+读数要点：`session_creation=not_performed` —— attach 分支**不新建会话**，合同语义正确；
+终态仍是 `unknown_rotation_required`，与链 2 同因（fixture 子进程要 `/fixture-register`）。
+grant 里已配 `allow_attach_existing`（policy_id + 目录 + 1h 窗口 + 5min ttl）。
+
 ## 复现命令
 
 ```
