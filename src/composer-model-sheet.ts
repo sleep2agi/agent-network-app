@@ -114,7 +114,20 @@ export function modelSheet(input: SheetInput): SheetModel {
   return { rows, hasCurrent: !!model, variantsKnown: false };
 }
 
-/** 切换能力：本轮一律关闭，并给出原因；调用方不得把它当作成功。 */
-export function switchAvailability(): { enabled: false; reason: string } {
-  return { enabled: false, reason: '需要会话级切换接口 + 切换后回读；当前只有节点级写入，未启用' };
+export interface SwitchInput {
+  /** 是否有目标绑定：本账号当前 network 的受权 HubNode 详情（含真实 daemon 绑定）。 */
+  hasTarget: boolean;
+  /** 目标节点是否声明支持配置写入（config_update_capable）。 */
+  configUpdateCapable?: boolean | null;
+  /** 是否有可选模型（来自本节点 catalog）。 */
+  optionCount?: number;
+}
+
+/** 切换能力：只复用**现有节点设置**受支持路径（updateNodeConfig/baseRevision/回读），不做会话级写。
+ *  不具备目标绑定 / 节点不支持配置写入 / 没有可选模型时，明确禁用并给准确原因。 */
+export function switchAvailability(input: SwitchInput): { enabled: boolean; reason: string } {
+  if (!input.hasTarget) return { enabled: false, reason: '无目标绑定：本账号当前 network 内找不到该节点的受权详情' };
+  if (input.configUpdateCapable !== true) return { enabled: false, reason: '该 Hub 不提供节点配置写入（config_update_capable≠true），不能切换' };
+  if ((input.optionCount ?? 0) === 0) return { enabled: false, reason: '本节点没有可选的模型目录，先到节点页拉取' };
+  return { enabled: true, reason: '切换 = 写入该节点配置（带 baseRevision），成功后以节点上报回读为准' };
 }

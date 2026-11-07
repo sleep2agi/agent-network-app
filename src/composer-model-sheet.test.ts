@@ -39,9 +39,14 @@ ck('empty catalog explained', row(empty, 'catalog').value.includes('空'));
 ck('variants row says undeterminable', row(full, 'variants').value.includes('variants'));
 ck('variantsKnown false', full.variantsKnown === false);
 
-// 切换：本轮恒关闭且给原因
-const sw = switchAvailability();
-ck('switch disabled', sw.enabled === false && sw.reason.includes('会话级'));
+// 切换：按能力判定
+ck('no target → disabled', switchAvailability({ hasTarget: false }).enabled === false);
+ck('no target reason', switchAvailability({ hasTarget: false }).reason.includes('无目标绑定'));
+ck('hub without write → disabled', switchAvailability({ hasTarget: true, configUpdateCapable: false, optionCount: 2 }).enabled === false);
+ck('no options → disabled', switchAvailability({ hasTarget: true, configUpdateCapable: true, optionCount: 0 }).enabled === false);
+const okSw = switchAvailability({ hasTarget: true, configUpdateCapable: true, optionCount: 3 });
+ck('capable → enabled', okSw.enabled === true);
+ck('capable reason mentions readback', okSw.reason.includes('回读'));
 
 // 全部行只读（本轮没有任何写操作入口）
 ck('all rows readOnly', full.rows.every(r => r.readOnly === true));

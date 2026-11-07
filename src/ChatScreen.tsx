@@ -65,7 +65,7 @@ import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
-import { pollOpenCodeCatalog, queueOpenCodeCatalog } from './api';
+import { fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubNode, type NodeConfigRead } from './api';
 import { modelSheet, switchAvailability } from './composer-model-sheet';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
@@ -2002,12 +2002,73 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 目录查询：只查**本节点**（node_id 缺失就拒绝，不用 alias/别的节点兜底）；换账号/网络/目标/关面板 → epoch 自增，旧回包丢弃且不重发。
   const [catalogState, setCatalogState] = useState<{ status: 'idle' | 'pending' | 'ready' | 'failed'; error?: string; models?: Array<{ providerId: string; id: string }>; providers?: Array<{ id: string }> }>({ status: 'idle' });
   const catalogEpoch = useRef(0);
+  // 切换：复用现有节点设置路径（fetchNodeConfig / updateNodeConfig(baseRevision) / 回读）。
+  const [targetNode, setTargetNode] = useState<HubNode | null>(null);
+  const [nodeCfg, setNodeCfg] = useState<NodeConfigRead | null>(null);
+  const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'conflict' | 'unsupported' | 'timeout' | 'error'; message?: string }>({ kind: 'idle' });
   const sheet = modelSheet({
     reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
     catalog: catalogState.status === 'ready' ? { models: catalogState.models, providers: catalogState.providers } : null,
     catalogError: catalogState.status === 'failed' ? catalogState.error ?? '目录不可用' : catalogState.status === 'pending' ? '正在向本节点查询…' : null,
   });
-  const sheetSwitch = switchAvailability();
+  // 目标绑定：只在本账号当前 network 的受权 HubNode 详情里找（不用 alias 反推、不猜 daemon id）。
+  const openEpoch = catalogEpoch;
+  useEffect(() => {
+    if (!modelSheetOpen) return;
+    let live = true;
+    setTargetNode(null); setNodeCfg(null); setSwitchState({ kind: 'idle' });
+    (async () => {
+      try {
+        const { nodes } = await fetchHubNodes(cfg);
+        const pick = (nodes ?? []).find(n => n.alias === alias) ?? null;
+        if (!live) return;
+        if (!pick) { setSwitchState({ kind: 'unsupported', message: '本账号当前 network 内找不到该节点的受权详情' }); return; }
+        setTargetNode(pick);
+        const view = await fetchNodeConfig(cfg, pick.node_id).catch(() => null);
+        if (!live) return;
+        setNodeCfg(view);
+        if (!view) setSwitchState({ kind: 'unsupported', message: '该 Hub 没有节点配置接口（404/501）' });
+      } catch (e) {
+        if (live) setSwitchState({ kind: 'error', message: String((e as Error)?.message ?? e).slice(0, 120) });
+      }
+    })();
+    return () => { live = false; };
+  }, [modelSheetOpen, cfg, alias]);
+
+  const switchOptions = catalogState.status === 'ready'
+    ? (catalogState.models ?? []).map(m => `${m.providerId}/${m.id}`).filter(m => m !== (reportedModel?.value.model ?? ''))
+    : [];
+  const sheetSwitch = switchAvailability({
+    hasTarget: !!targetNode,
+    configUpdateCapable: nodeCfg?.config_update_capable ?? null,
+    optionCount: switchOptions.length,
+  });
+
+  const doSwitchModel = async (model: string) => {
+    if (!sheetSwitch.enabled || !targetNode) return;
+    const epoch = ++catalogEpoch.current;
+    setSwitchState({ kind: 'busy', message: `写入 ${model}…` });
+    try {
+      const res = await updateNodeConfig(cfg, { nodeId: targetNode.node_id, baseRevision: nodeCfg?.config_revision ?? 0, patch: { model } });
+      if (openEpoch.current !== epoch) return;
+      if (res.ok) {
+        // 只认回读：配置接受 ≠ 会话已生效；会话当前模型仍等节点上报
+        const view = await fetchNodeConfig(cfg, targetNode.node_id).catch(() => null);
+        if (openEpoch.current !== epoch) return;
+        setNodeCfg(view);
+        setSwitchState({ kind: 'ok', message: `节点配置已接受（revision ${view?.config_revision ?? '?'}）；会话模型以节点上报为准` });
+      } else if (res.conflict) {
+        setSwitchState({ kind: 'conflict', message: res.error });
+      } else if (res.unsupported) {
+        setSwitchState({ kind: 'unsupported', message: res.error });
+      } else {
+        setSwitchState({ kind: 'error', message: res.error });
+      }
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      setSwitchState({ kind: /timeout|超时|abort/i.test(msg) ? 'timeout' : 'error', message: msg.slice(0, 120) });
+    }
+  };
   const targetNodeId = controlSession?.node_id ?? null;
   useEffect(() => {
     if (!modelSheetOpen) { catalogEpoch.current += 1; return; }
@@ -2279,9 +2340,30 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 <Text style={styles.modelSheetValue} numberOfLines={2}>{r.value}</Text>
               </View>
             ))}
+            {sheetSwitch.enabled && switchOptions.length ? (
+              <View style={styles.modelSheetOptions}>
+                {switchOptions.slice(0, 8).map((m, i) => (
+                  <Pressable
+                    key={m}
+                    accessibilityRole="button"
+                    onPress={() => void doSwitchModel(m)}
+                    disabled={switchState.kind === 'busy'}
+                    style={({ pressed }) => [styles.modelSheetOption, pressed && { opacity: 0.6 }]}
+                    testID={`model-sheet-option-${i}`}
+                  >
+                    <Text style={styles.modelSheetOptionText} numberOfLines={1}>{m}</Text>
+                  </Pressable>
+                ))}
+              </View>
+            ) : null}
             <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
-              切换未启用：{sheetSwitch.reason}
+              {sheetSwitch.enabled ? sheetSwitch.reason : `切换未启用：${sheetSwitch.reason}`}
             </Text>
+            {switchState.kind !== 'idle' ? (
+              <Text style={styles.modelSheetDisabled} testID="model-sheet-switch-status">
+                {switchState.kind === 'busy' ? '切换中…' : `状态：${switchState.kind === 'ok' ? '已接受' : switchState.kind} — ${switchState.message ?? ''}`}
+              </Text>
+            ) : null}
           </View>
         ) : null}
         <Pressable
@@ -3160,6 +3242,9 @@ const makeStyles = (B = bubbleLayout()) =>
   modelSheetRow: { flexDirection: 'row', gap: 8, paddingVertical: 3 },
   modelSheetLabel: { width: 84, fontSize: ds(11), color: colors.textMuted },
   modelSheetValue: { flex: 1, fontSize: ds(11), color: colors.text },
+  modelSheetOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  modelSheetOption: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  modelSheetOptionText: { fontSize: ds(11), color: colors.text },
   modelSheetDisabled: { marginTop: 6, fontSize: ds(11), color: colors.textMuted },
   modelChip: {
     maxWidth: 132, marginRight: 6, paddingHorizontal: 6, paddingVertical: 2,
