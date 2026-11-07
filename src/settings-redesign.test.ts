@@ -92,7 +92,10 @@ console.log('# 5 v2:其他分类的行也是设置积木(#427 v2)');
   ck('积木:SettingsControlRow / SettingsActionRow 的控件都在右侧同一列(marginLeft auto)', /control: \{ marginLeft: 'auto'/.test(kit) && /styles\.control, styles\.actionButton/.test(kit));
   const list = settings.slice(settings.indexOf('const phoneList = ('), settings.indexOf('const listHeader = ('));
   ck('手机设置首页:每个分类一行 SettingsRow(带图标),分组 = SettingsGroup', /<SettingsGroup key=\{group\.title/.test(list) && /<SettingsRow\s+key=\{cat\.key\}[\s\S]*?icon=\{SETTINGS_CATEGORIES\.find/.test(list) && !/styles\.phoneRow\b/.test(list));
-  ck('手机设置首页:切换账号 / 退出登录 = SettingsButton', (list.match(/<SettingsButton variant="plain"/g) ?? []).length === 2);
+  // #4093 v3:两块整宽按钮合成一组两行;顶部账号换成身份卡;每个分类有自己的图标色。
+  ck('手机设置首页:切换账号 / 退出登录 = 一组两行(主色 / 红色)', /<SettingsGroup testID="settings-group-session">/.test(list) && (list.match(/<SettingsRow centered tone="(accent|danger)"/g) ?? []).length === 2 && !/<SettingsButton/.test(list));
+  ck('手机设置首页:账号 = 顶部身份卡', /<SettingsProfileCard\s+testID="settings-row-account"/.test(list));
+  ck('手机设置首页:分类行带各自的图标色', /iconColor=\{PHONE_ICON_COLOR\[cat\.key\]\}/.test(list));
 }
 
 console.log('# 6 footer 在卡片下面:不许说「下面 / below」(那会指空)');

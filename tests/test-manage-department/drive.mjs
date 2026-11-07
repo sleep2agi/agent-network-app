@@ -9,7 +9,7 @@
 // 我(tester)在前端,示例成员甲在前端一组(他有一个 Agent,报了降级),示例成员乙在后端。
 //
 // phone 390×844 (Android UA ⇒ touch), light + dark:
-//   entry    设置列表最上面一组「管理本部门」→ 全屏,直接进「前端」(只负责一个部门);底栏只有「添加成员 | 添加子部门」
+//   entry    设置列表身份卡下面一组「管理本部门」(在「通用」各行之上)→ 全屏,直接进「前端」(只负责一个部门);底栏只有「添加成员 | 添加子部门」
 //            (自己负责的那个部门归上一级 ⇒ 没有「更多」);点一组 → 有「更多」
 //   links    部门页底部「本部门任务」→ 两张卡;「本部门 Agent」→ 一个 Agent,降级原因写出来
 //   move     点前端一组的人 →「调动到其他部门…」→ 后端、网络根灰掉不能点;选「前端」⇒ PUT { department_id: 'd_fe' }
@@ -125,13 +125,17 @@ for (const theme of ['light', 'dark']) {
         return;
       }
       const row = await page.locator(tid('settings-row-manageDepartment')).boundingBox();
-      const firstGroup = await page.locator(tid('settings-group-0')).boundingBox();
+      // #4093 v3: the account group became the profile card on top (settings-row-account) and there is no
+      // settings-group-0 any more ⇒ the entry must sit between the profile card and the first category row (外观 is in 通用).
+      const card = await page.locator(tid('settings-row-account')).boundingBox();
+      const firstGroup = await page.locator(tid('settings-row-appearance')).boundingBox();
       await page.locator(tid('settings-row-manageDepartment')).tap();
       await page.locator(tid('org-phone')).waitFor({ timeout: 8000 });
       await page.waitForTimeout(400);
       const title = (await page.locator(tid('org-title')).innerText()).trim();
       await shot('1-own-department');
       record(where, 'settings row → straight into the one department I lead', {
+        rowBelowProfileCard: !!row && !!card && row.y >= card.y + card.height - 0.5,
         rowAboveGroups: !!row && !!firstGroup && row.y + row.height <= firstGroup.y + 0.5,
         title: title === '前端',
         addMember: await has(page, 'org-add-member'), addDept: await has(page, 'org-add-dept'),

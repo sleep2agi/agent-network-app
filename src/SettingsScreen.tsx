@@ -61,10 +61,10 @@ import LanguageSettings from './LanguageSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, clearPendingSettingsDetail, closeSettingsPage, peekPendingSettingsDetail, filterSettings, phoneRowLabel, phoneSettingsGroups, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
+import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, clearPendingSettingsDetail, closeSettingsPage, peekPendingSettingsDetail, filterSettings, phoneRowLabel, phoneSettingsGroups, PHONE_ICON_COLOR, PHONE_SERVER_GROUP_TITLE, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
 import SettingsPhonePage, { accountSubtitle, type PhonePagesCtx } from './SettingsPhonePages';
 import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
-import { SETTINGS_ROW_PAD_X, settingsRowMinHeight, SettingsAccountRow, SettingsActionRow, SettingsButton, SettingsCardContent, SettingsControlRow, SettingsGroup, SettingsRow, SettingsSwitchRow, settingsPageContentStyle } from './settings-kit';
+import { SETTINGS_ROW_PAD_X, settingsRowMinHeight, SettingsAccountRow, SettingsActionRow, SettingsButton, SettingsCardContent, SettingsControlRow, SettingsGroup, SettingsProfileCard, SettingsRow, SettingsSwitchRow, settingsPageContentStyle } from './settings-kit';
 import { useModalSafePadding } from './safe-area-runtime';
 
 import { withBasePadding } from './modal-safe-area';
@@ -471,6 +471,7 @@ export default function SettingsScreen({
   const phoneValue = (key: SettingsCategoryKey): string => {
     if (key === 'account') return me.username ?? cfg.username ?? '';
     if (key === 'about') return tr('settings.copy.179', { v0: APP_VERSION });
+    if (key === 'appearance') return settingsText(THEME_PREFERENCE_LABEL[themeSnap.pref] ?? '');
     return '';
   };
   const canLogout = cfg.profileId !== LOCAL_HUB_PROFILE_ID;
@@ -525,49 +526,83 @@ export default function SettingsScreen({
   };
   const phoneList = (
     <ScrollView style={styles.phoneScroll} contentContainerStyle={styles.phoneListContent} testID="settings-phone-list">
-      {/* v2(#427):列表页也是设置积木 —— 每个分类一行(行首图标方块 · 名字 · 右侧值 · ›),分组标题照旧。 */}
-      {onOpenServer ? (
-        <SettingsGroup testID="settings-group-server">
+      {/* v3(#4093「移动端设置首页丑」):
+          ① 账号不再是一张单行卡,换成顶部身份卡(主色底 · 头像 · 名字 + 角色 · Hub 地址),整卡一个按钮推入账号页;
+          ② 「Hub 设置」并进「通用」组当第一行(没有 onOpenServer 照旧不出;没有「通用」组时退回原来的独立一组);
+          ③ 每个分类一个图标色(PHONE_ICON_COLOR),外观行右侧显示当前偏好;
+          ④ 「切换账号 / 退出登录」合成最下面一组两行:切换 = 主色,退出 = 红色,退出照旧先弹确认。 */}
+      {(() => {
+        const groups = phoneSettingsGroups(filtered);
+        const accountCat = groups.flatMap(g => g.rows).find(c => c.key === 'account');
+        const serverRow = onOpenServer ? (
           <SettingsRow
             testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}
+            key="server"
             icon="cloud-outline"
+            iconColor={PHONE_ICON_COLOR.server}
             label={tr('nav.server')}
             value={maskedHubHost(cfg.serverUrl)}
             accessibilityLabel={tr('nav.server')}
             onPress={onOpenServer}
           />
-        </SettingsGroup>
-      ) : null}
-      {managedDepts.length && me.networkId ? (
-        <SettingsGroup testID="settings-group-manage-dept">
-          <SettingsRow
-            testID="settings-row-manageDepartment"
-            icon="git-network-outline"
-            label={tr('dept.manage')}
-            accessibilityLabel={tr('dept.manage')}
-            onPress={() => setManageDeptOpen(true)}
-          />
-        </SettingsGroup>
-      ) : null}
-      {phoneSettingsGroups(filtered).map((group, gi) => (
-        <SettingsGroup key={group.title ?? `g${gi}`} title={group.title ? settingsText(group.title) : undefined} testID={`settings-group-${gi}`}>
-          {group.rows.map(cat => (
-            <SettingsRow
-              key={cat.key}
-              testID={`settings-row-${cat.key}`}
-              icon={SETTINGS_CATEGORIES.find(c => c.key === cat.key)?.icon}
-              label={settingsText(phoneRowLabel(cat))}
-              value={phoneValue(cat.key) || undefined}
-              accessibilityLabel={settingsText(phoneRowLabel(cat))}
-              onPress={() => openPage(cat.key)}
-            />
-          ))}
-        </SettingsGroup>
-      ))}
-      {/* 切换账号(Vincent 2026-09-29)/ 退出登录:最下面两块整宽按钮(照微信),v2 起是设置积木的 SettingsButton,
-          和上面的卡片同一左右边距。退出登录要先确认(弹窗不变)。 */}
-      <SettingsButton variant="plain" label={tr('accounts.switch')} onPress={() => setSwitcherOpen(true)} testID="settings-switch-account-block" />
-      {canLogout ? <SettingsButton variant="plain" label={tr('settings.copy.6')} onPress={() => setLogoutConfirm(true)} testID="settings-logout-block" /> : null}
+        ) : null;
+        const hasGeneral = groups.some(g => g.title === PHONE_SERVER_GROUP_TITLE);
+        const accountName = phoneValue('account') || tr('settings.copy.12');
+        const host = maskedHubHost(cfg.serverUrl);
+        const profileSub = [host, me.networkName].filter(Boolean).join(' · ');
+        return (
+          <>
+            {accountCat ? (
+              <SettingsProfileCard
+                testID="settings-row-account"
+                name={accountName}
+                pill={usersAvailable ? tr('users.role.admin') : undefined}
+                subtitle={profileSub || undefined}
+                accessibilityLabel={`${settingsText(phoneRowLabel(accountCat))} ${accountName}${host ? `，Hub ${host}` : ''}`}
+                onPress={() => openPage('account')}
+              />
+            ) : null}
+            {serverRow && !hasGeneral ? <SettingsGroup testID="settings-group-server">{serverRow}</SettingsGroup> : null}
+            {managedDepts.length && me.networkId ? (
+              <SettingsGroup testID="settings-group-manage-dept">
+                <SettingsRow
+                  testID="settings-row-manageDepartment"
+                  icon="git-network-outline"
+                  iconColor={PHONE_ICON_COLOR.agentTeams}
+                  label={tr('dept.manage')}
+                  accessibilityLabel={tr('dept.manage')}
+                  onPress={() => setManageDeptOpen(true)}
+                />
+              </SettingsGroup>
+            ) : null}
+            {groups.map((group, gi) => {
+              const rows = group.rows.filter(cat => cat.key !== 'account');
+              if (!rows.length) return null;
+              return (
+                <SettingsGroup key={group.title ?? `g${gi}`} title={group.title ? settingsText(group.title) : undefined} testID={`settings-group-${gi}`}>
+                  {group.title === PHONE_SERVER_GROUP_TITLE ? serverRow : null}
+                  {rows.map(cat => (
+                    <SettingsRow
+                      key={cat.key}
+                      testID={`settings-row-${cat.key}`}
+                      icon={SETTINGS_CATEGORIES.find(c => c.key === cat.key)?.icon}
+                      iconColor={PHONE_ICON_COLOR[cat.key]}
+                      label={settingsText(phoneRowLabel(cat))}
+                      value={phoneValue(cat.key) || undefined}
+                      accessibilityLabel={settingsText(phoneRowLabel(cat))}
+                      onPress={() => openPage(cat.key)}
+                    />
+                  ))}
+                </SettingsGroup>
+              );
+            })}
+          </>
+        );
+      })()}
+      <SettingsGroup testID="settings-group-session">
+        <SettingsRow centered tone="accent" label={tr('accounts.switch')} onPress={() => setSwitcherOpen(true)} testID="settings-switch-account-block" />
+        {canLogout ? <SettingsRow centered tone="danger" label={tr('settings.copy.6')} onPress={() => setLogoutConfirm(true)} testID="settings-logout-block" /> : null}
+      </SettingsGroup>
     </ScrollView>
   );
   // 顶栏(列表与子页同一高度、同一底色 = 状态栏那条的底色,和微信一样看不出接缝;标题位置切页不跳)。

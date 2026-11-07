@@ -109,10 +109,10 @@ function RowShell({ children, onPress, disabled, testID, accessibilityLabel, acc
   );
 }
 
-function RowLabel({ label, subtitle, tone, subtitleTone, testID }: { label: string; subtitle?: ReactNode; tone?: SettingsTone; subtitleTone?: SettingsTone; testID?: string }) {
+function RowLabel({ label, subtitle, tone, subtitleTone, testID, centered }: { label: string; subtitle?: ReactNode; tone?: SettingsTone; subtitleTone?: SettingsTone; testID?: string; centered?: boolean }) {
   return (
-    <View style={styles.labelBox}>
-      <Text style={[styles.label, { color: toneColor(tone, colors.text) }]} numberOfLines={2} testID={testID}>{label}</Text>
+    <View style={[styles.labelBox, centered && styles.labelCentered]}>
+      <Text style={[styles.label, { color: toneColor(tone, colors.text) }, centered && styles.labelTextCentered]} numberOfLines={2} testID={testID}>{label}</Text>
       {subtitle ? <Text style={[styles.subtitle, { color: toneColor(subtitleTone, colors.textMuted) }]} numberOfLines={2}>{subtitle}</Text> : null}
     </View>
   );
@@ -122,8 +122,10 @@ function RowLabel({ label, subtitle, tone, subtitleTone, testID }: { label: stri
  * 标签 · 右侧值 · ›。有 onPress 默认画 ›(chevron={false} 关掉);没有 onPress 就是只读的「标签 — 值」。
  * external = 跳到应用外(浏览器),右侧用 ↗ 而不是 ›。
  */
-export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, valueExtra, tone, onPress, chevron, external, busy, disabled, testID, accessibilityLabel, icon, iconColor }: {
+export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, valueExtra, tone, onPress, chevron, external, busy, disabled, testID, accessibilityLabel, icon, iconColor, centered }: {
   label: string;
+  /** 标签整行居中(设置首页底部「切换账号 / 退出登录」那组动作行;不画 ›)。 */
+  centered?: boolean;
   /** 行首图标(Ionicons 名):主色 / iconColor 的小方块,放在 SETTINGS_LEAD 格子里(和账号头像同一列)。 */
   icon?: string;
   iconColor?: string;
@@ -142,16 +144,18 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
   testID?: string;
   accessibilityLabel?: string;
 }) {
-  const showChevron = chevron ?? !!onPress;
+  const showChevron = centered ? false : chevron ?? !!onPress;
   const id = testID ?? ROW_ID;
   return (
     <RowShell onPress={onPress} disabled={disabled} testID={id} accessibilityLabel={accessibilityLabel ?? label} accessibilityRole={external ? 'link' : 'button'} accessibilityState={busy ? { busy } : undefined}>
       {icon ? (
         <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}>
-          <View style={[styles.iconTile, { backgroundColor: iconColor ?? colors.accent }]}><Ionicons name={icon as any} size={17} color={colors.onAccent} /></View>
+          {/* 自带 iconColor 的色块(需求 4093 的分类色)是深浅两色共用的固定色,图形用固定白(onBubbleMine,两档都是白);
+              没给色就是主色块,图形照旧 onAccent(深色下 accent 偏亮、onAccent 是深色)。 */}
+          <View style={[styles.iconTile, { backgroundColor: iconColor ?? colors.accent }]}><Ionicons name={icon as any} size={17} color={iconColor ? colors.onBubbleMine : colors.onAccent} /></View>
         </View>
       ) : null}
-      <RowLabel label={label} subtitle={subtitle} tone={tone} subtitleTone={subtitleTone} testID={`${id}-label`} />
+      <RowLabel label={label} subtitle={subtitle} tone={tone} subtitleTone={subtitleTone} testID={`${id}-label`} centered={centered} />
       {busy ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
       {valueExtra ? <View style={styles.valueExtra}>{valueExtra}</View> : null}
       {value ? <Text style={[styles.value, valueExtra ? styles.valueFit : null, { color: toneColor(valueTone, colors.textMuted) }]} numberOfLines={1} testID={`${id}-value`}>{value}</Text> : null}
@@ -379,6 +383,49 @@ export function SettingsTextField({ label, testID, ...input }: TextInputProps & 
   );
 }
 
+/**
+ * 设置首页顶部的身份卡(#4093「移动端设置首页丑」)
+ * 子元素 testID 沿用积木的后缀约定(-label / -label-pill / -value / -accessory):drive 按「settings-row-* 去掉这些后缀」
+ * 收集分类行,自造后缀(-subtitle / -pill)会被当成一个分类去点。:主色底 + 一枚装饰圆,头像 · 名字(+ 角色小标)· 一行地址,整卡一个按钮。
+ * 底色用「我发出的气泡」那一档(bubbleMine,深浅两档都是实底蓝),字和图形用 onBubbleMine(两档都是白)——
+ * 不用 accent:深色下 accent 是亮蓝、onAccent 是黑字,整张卡会发灰。
+ */
+export function SettingsProfileCard({ name, subtitle, pill, onPress, testID, accessibilityLabel }: {
+  name: string;
+  subtitle?: string;
+  pill?: string;
+  onPress?: () => void;
+  testID?: string;
+  accessibilityLabel?: string;
+}) {
+  const id = testID ?? 'settings-profile-card';
+  return (
+    <Pressable
+      testID={id}
+      accessibilityRole="button"
+      accessibilityLabel={accessibilityLabel ?? name}
+      onPress={onPress}
+      style={({ pressed }) => [styles.profileCard, { minHeight: Math.max(76, ds(84)) }, pressed && { opacity: 0.88 }]}
+    >
+      <View pointerEvents="none" style={styles.profileOrb} />
+      <View pointerEvents="none" style={styles.profileOrbSmall} />
+      <View style={styles.profileAvatar}><AliasAvatar alias={name} size={52} /></View>
+      <View style={styles.accountCopy}>
+        <View style={styles.accountNameLine}>
+          <Text style={styles.profileName} numberOfLines={1} testID={`${id}-label`}>{name}</Text>
+          {pill ? <Text style={[styles.pill, styles.profilePill]} numberOfLines={1} testID={`${id}-label-pill`}>{pill}</Text> : null}
+        </View>
+        {subtitle ? <Text style={styles.profileSub} numberOfLines={1} testID={`${id}-value`}>{subtitle}</Text> : null}
+      </View>
+      {onPress ? (
+        <View style={styles.profileChevron} testID={`${id}-accessory`}>
+          <Ionicons name="chevron-forward" size={18} color={colors.onBubbleMine} />
+        </View>
+      ) : null}
+    </Pressable>
+  );
+}
+
 /** 整宽按钮:primary = 主色实心(保存);destructive = 卡片底红字(清除 / 删除);plain = 卡片底正文色。 */
 export function SettingsButton({ label, onPress, variant = 'primary', disabled, busy, testID, accessibilityLabel }: {
   label: string;
@@ -445,6 +492,22 @@ const makeStyles = () => StyleSheet.create({
   row: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: SETTINGS_ROW_PAD_X, paddingVertical: spacing.sm, backgroundColor: colors.groupedRow },
   rowPressed: { backgroundColor: colors.groupedRowPressed },
   labelBox: { flexShrink: 1, minWidth: 0, gap: 2 },
+  labelCentered: { flex: 1, alignItems: 'center' },
+  labelTextCentered: { textAlign: 'center', fontWeight: '500' },
+  profileCard: {
+    flexDirection: 'row', alignItems: 'center', gap: spacing.md,
+    marginHorizontal: SETTINGS_GUTTER, marginTop: spacing.md,
+    paddingHorizontal: SETTINGS_ROW_PAD_X, paddingVertical: spacing.md,
+    borderRadius: radius.surface, backgroundColor: colors.bubbleMine, overflow: 'hidden',
+    ...elevated('raised'),
+  },
+  profileOrb: { position: 'absolute', right: -48, top: -64, width: 170, height: 170, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)' },
+  profileOrbSmall: { position: 'absolute', right: 56, bottom: -54, width: 96, height: 96, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.08)' },
+  profileAvatar: { padding: 3, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.35)', flexShrink: 0 },
+  profileName: { color: colors.onBubbleMine, fontSize: 19, fontWeight: '600', flexShrink: 1, minWidth: 0 },
+  profilePill: { color: colors.onBubbleMine, backgroundColor: 'rgba(255,255,255,0.22)' },
+  profileChevron: { width: ACCESSORY, height: ACCESSORY, marginLeft: 'auto', alignItems: 'center', justifyContent: 'center' },
+  profileSub: { color: colors.onBubbleMine, opacity: 0.88, fontSize: 13, lineHeight: 18 },
   label: { fontSize: 16 },
   subtitle: { fontSize: 13, lineHeight: 18 },
   value: { flex: 1, minWidth: 0, fontSize: 15, textAlign: 'right' },

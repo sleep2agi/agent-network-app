@@ -28,7 +28,8 @@ const phoneSwitch = settings.indexOf('testID="settings-switch-account-block"');
 const phoneLogout = settings.indexOf('testID="settings-logout-block"');
 ck('S4 phone: 切换账号 block is rendered right before the 退出登录 block', phoneSwitch > 0 && phoneLogout > phoneSwitch && !settings.slice(phoneSwitch, phoneLogout).includes('testID="settings-row-'));
 // #427 v2:两块都是设置积木的整宽按钮(同一个 SettingsButton variant),边距 / 高度天然一致。
-ck('S5 phone: same block style as 退出登录 (so edges / height line up)', settings.includes(`<SettingsButton variant="plain" label={tr('accounts.switch')} onPress={() => setSwitcherOpen(true)} testID="settings-switch-account-block" />`) && settings.includes(`<SettingsButton variant="plain" label={tr('settings.copy.6')} onPress={() => setLogoutConfirm(true)} testID="settings-logout-block" />`) && phoneSwitch < phoneLogout);
+// #4093 v3:两块整宽按钮合成最下面一组两行(切换 = 主色、退出 = 红色,都居中),仍是切换在上、退出在下。
+ck('S5 phone: 切换账号 / 退出登录 are one bottom group, accent + danger rows', settings.includes(`<SettingsRow centered tone="accent" label={tr('accounts.switch')} onPress={() => setSwitcherOpen(true)} testID="settings-switch-account-block" />`) && settings.includes(`<SettingsRow centered tone="danger" label={tr('settings.copy.6')} onPress={() => setLogoutConfirm(true)} testID="settings-logout-block" />`) && settings.includes('<SettingsGroup testID="settings-group-session">') && phoneSwitch < phoneLogout);
 ck('S6 phone: shown even when 退出登录 is hidden (local workspace)', !settings.slice(settings.lastIndexOf('\n', phoneSwitch - 200), phoneSwitch).includes('canLogout ?'));
 // ── wide: a row above the 退出登录 row ──
 const wideSwitch = settings.indexOf('testID="settings-switch-account-row"');

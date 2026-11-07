@@ -52,11 +52,14 @@ ck('desktop: workspace SettingsScreen has no 服务器 row', !/<SettingsScreen\b
 // ── wiring: SettingsScreen / ServerScreen ──
 const settings = read('src/SettingsScreen.tsx');
 const listStart = settings.indexOf('const phoneList = (');
-const firstGroups = settings.indexOf('phoneSettingsGroups(filtered).map', listStart);
+const firstGroups = settings.indexOf('{groups.map((group, gi) =>', listStart);
 const serverRowAt = settings.indexOf('testID={`settings-row-${PHONE_SETTINGS_SERVER_ENTRY.key}`}', listStart);
 ck('Settings: the 服务器 row is in the phone list', listStart >= 0 && serverRowAt > listStart);
-ck('Settings: the 服务器 row is above every other group (near the top)', serverRowAt > 0 && serverRowAt < firstGroups);
-ck('Settings: the row only renders when onOpenServer is passed', /\{onOpenServer \? \(\s*<SettingsGroup testID="settings-group-server">/.test(settings));
+// #4093 v3:服务器行并进「通用」组当第一行;没有「通用」组时退回原来的独立一组。
+ck('Settings: the 服务器 row is defined before the category groups render', serverRowAt > 0 && serverRowAt < firstGroups);
+ck('Settings: the row only renders when onOpenServer is passed', /const serverRow = onOpenServer \? \(\s*<SettingsRow/.test(settings));
+ck('Settings: the row is the first row of the 通用 group', /<SettingsGroup key=\{group\.title[^>]*>\s*\{group\.title === PHONE_SERVER_GROUP_TITLE \? serverRow : null\}/.test(settings));
+ck('Settings: falls back to its own group when there is no 通用 group', /\{serverRow && !hasGeneral \? <SettingsGroup testID="settings-group-server">\{serverRow\}<\/SettingsGroup> : null\}/.test(settings));
 // #427 v2:列表行是设置积木的 SettingsRow(有 onPress 就画 ›),和其他分类行同一套。
 ck('Settings: the row uses the grouped-list row style and chevron', /<SettingsRow\s+testID=\{`settings-row-\$\{PHONE_SETTINGS_SERVER_ENTRY\.key\}`\}[\s\S]*?onPress=\{onOpenServer\}/.test(settings.slice(serverRowAt - 80, firstGroups)));
 const server = read('src/ServerScreen.tsx');
