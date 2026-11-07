@@ -2994,17 +2994,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             onPick={pickSuggest}
           />
         ) : null}
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('chat.modelSheetOpen')}
-        onPress={() => setModelSheetOpen(v => !v)}
-        style={({ pressed }) => [styles.composerModelEntry, pressed && { opacity: 0.6 }]}
-        testID="composer-model-entry"
-      >
-        <Text style={[styles.composerModelEntryText, { color: colors.textMuted }]} numberOfLines={1}>
-          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-        </Text>
-      </Pressable>
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
@@ -3072,6 +3061,18 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onPlus={() => plusEvent('toggle')}
         />
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('chat.modelSheetOpen')}
+        onPress={() => setModelSheetOpen(v => !v)}
+        style={({ pressed }) => [styles.composerModelEntry, pressed && { opacity: 0.6 }]}
+        testID="composer-model-entry"
+      >
+        <Text style={[styles.composerModelEntryText, { color: colors.textMuted }]} numberOfLines={1}>
+          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+          {` · 档位 ${sheet.variantsKnown ? (sheet.rows.find(r => r.key === 'variants')?.value ?? '').slice(0, 24) : '未知'}`}
+        </Text>
+      </Pressable>
       {plusMenuOpen ? (
         // Inline, in the chat pane only (two-pane: never over the agent list). It is a
         // sibling after the input row inside the root column, so the inverted message
@@ -3443,7 +3444,7 @@ const makeStyles = (B = bubbleLayout()) =>
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
   // #4130:输入框上方右对齐的一行「runtime · model」,只在会话上报了模型时出现(不占位、不撑高)。
   composerModelLine: { paddingHorizontal: spacing.md, alignItems: 'flex-end' },
-  composerModelEntry: { alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingBottom: 2 },
+  composerModelEntry: { alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: 2 },
   composerModelEntryText: { fontSize: ds(11) },
   composerModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: '80%' },
   // 桌面:同一句文案挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
