@@ -420,7 +420,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
                   testID={`node-variant-chip-${v}`}
                   disabled={busy}
                   onPress={() => void applyVariant(v === currentVariant ? null : v)}
-                  style={({ pressed }) => [{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: 999, borderWidth: 1, borderColor: v === currentVariant ? colors.accent : colors.border, opacity: pressed ? 0.6 : 1 }]}
+                  style={({ pressed }) => [{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: v === currentVariant ? colors.accent : colors.border, opacity: pressed ? 0.6 : 1 }]}
                 >
                   <Text style={{ fontSize: 12, color: v === currentVariant ? colors.accent : colors.text }}>
                     {v}{v === currentVariant ? '（当前）' : ''}

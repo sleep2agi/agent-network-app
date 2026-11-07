@@ -2267,17 +2267,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.modelSheetOpen')}
-          onPress={() => setModelSheetOpen(v => !v)}
-          style={({ pressed }) => [{ opacity: pressed ? 0.6 : 1 }]}
-          testID="chat-header-model-button"
-        >
-          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-            {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-          </Text>
-        </Pressable>
+        <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+        </Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.info')}
@@ -3187,12 +3179,12 @@ const makeStyles = (B = bubbleLayout()) =>
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   // Model id chip: secondary, one line, never steals width from the name column.
   // 浮层：面板挂在页头行内，用绝对定位铺满聊天区宽度（左/右 8），避免被页头行的布局裁掉右半。
-  modelSheet: { position: 'absolute', top: 54, left: 8, right: 8, zIndex: 9999, elevation: 12, padding: 10, borderRadius: 10, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  modelSheet: { position: 'absolute', top: 54, left: 8, right: 8, zIndex: 9999, elevation: 12, padding: 10, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   modelSheetRow: { flexDirection: 'row', gap: 8, paddingVertical: 3 },
   modelSheetLabel: { width: 84, fontSize: ds(11), color: colors.textMuted },
   modelSheetValue: { flex: 1, fontSize: ds(11), color: colors.text },
   modelSheetOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  modelSheetOption: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  modelSheetOption: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.item, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
   modelSheetOptionText: { fontSize: ds(11), color: colors.text },
   modelSheetDisabled: { marginTop: 6, fontSize: ds(11), color: colors.textMuted },
   modelChip: {
