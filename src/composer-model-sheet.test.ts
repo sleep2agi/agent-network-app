@@ -35,9 +35,15 @@ ck('catalog error surfaced', row(err, 'catalog').value.includes('Hub 不支持 r
 const empty = modelSheet({ reported: null, catalog: { models: [] } });
 ck('empty catalog explained', row(empty, 'catalog').value.includes('空'));
 
-// 档位：明确不可确定
-ck('variants row says undeterminable', row(full, 'variants').value.includes('variants'));
-ck('variantsKnown false', full.variantsKnown === false);
+// 档位：三态区分
+ck('variants unknown when field missing', row(full, 'variants').value.includes('尚未提供'));
+ck('variantsKnown false when missing', full.variantsKnown === false);
+const noneV = modelSheet({ reported: { model: 'm' }, catalog: null, variants: [] });
+ck('variants empty → 明确没有', row(noneV, 'variants').value.includes('没有可选档位'));
+ck('variants empty → known', noneV.variantsKnown === true);
+const someV = modelSheet({ reported: { model: 'm' }, catalog: null, variants: ['low', 'high'] });
+ck('variants listed read-only', row(someV, 'variants').value.includes('low · high') && row(someV, 'variants').value.includes('未接入写入'));
+ck('variants listed → known', someV.variantsKnown === true);
 
 // 切换：按能力判定
 ck('no target → disabled', switchAvailability({ hasTarget: false }).enabled === false);

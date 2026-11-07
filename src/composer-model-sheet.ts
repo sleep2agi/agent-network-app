@@ -22,6 +22,8 @@ export interface SheetCatalog {
 export interface SheetInput {
   reported: SheetReportedModel | null;
   catalog: SheetCatalog | null;
+  /** 目录里该模型真实给出的档位：undefined = 接口未提供（未知）；[] = 明确没有；非空 = 可选档位。 */
+  variants?: string[] | null;
   /** catalog 取不到时的原因（unsupported / timeout / 非 V2 等），原样展示，不编造。 */
   catalogError?: string | null;
 }
@@ -103,15 +105,16 @@ export function modelSheet(input: SheetInput): SheetModel {
     });
   }
 
-  // 4) 思考档位：当前 catalog 没有 variants 字段 → 明确不可确定
-  rows.push({
-    key: 'variants',
-    label: '可用思考档位',
-    value: '不可确定：当前 Hub 的模型目录不提供 variants / 思考程度字段',
-    readOnly: true,
-  });
+  // 4) 思考档位：区分「接口未提供（未知）」与「明确没有档位」与「真实可选档位」，不编造可写能力。
+  const variants = input.variants;
+  const variantsKnown = Array.isArray(variants);
+  let variantsValue: string;
+  if (!variantsKnown) variantsValue = '未知：Hub 目录尚未提供 variants 字段（不猜、不显示假档位）';
+  else if (variants.length === 0) variantsValue = '该模型没有可选档位';
+  else variantsValue = `可选：${variants.join(' · ')}（只读展示，未接入写入）`;
+  rows.push({ key: 'variants', label: '可用思考档位', value: variantsValue, readOnly: true });
 
-  return { rows, hasCurrent: !!model, variantsKnown: false };
+  return { rows, hasCurrent: !!model, variantsKnown };
 }
 
 export interface SwitchInput {
