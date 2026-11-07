@@ -11,7 +11,7 @@
 //   4  after every switch the agent list and the task list show only that account's data
 //   5  after every switch the previous hub's user SSE is closed and the new hub's is open
 //   6  reload: both accounts are still saved, the last one is still active
-//   7  geometry: phone — the 切换账号 block lines up with 退出登录; wide — 切换账号 is a row in the same column as
+//   7  geometry: phone — 切换账号 / 退出登录 are adjacent rows of one bottom group, aligned with the profile card (#4093); wide — 切换账号 is a row in the same column as
 //      添加 Hub / 账号 and the isolated 移除当前账号 button sits under them with its label centred (settings v1, #648)
 //   8  phone shows a bottom sheet; wide shows a centred dialog
 // Screenshots go to OUT. Exit 1 when any assertion fails.
@@ -137,15 +137,24 @@ async function run(vp, viewport, ua, wide) {
   if (!wide) {
     const sw = await box(page, tid('settings-switch-account-block'));
     const lo = await box(page, tid('settings-logout-block'));
-    const grp = await box(page, tid('settings-group-0') + ' > div:last-child');
+    // #4093 v3: 切换账号 / 退出登录 are two rows of ONE bottom group (settings-group-session) — adjacent, same column,
+    // same height; the group card lines up with the profile card on top (settings-row-account) and the other groups.
+    const grp = await box(page, tid('settings-group-session'));
+    const card = await box(page, tid('settings-row-account'));
     const swText = await page.locator(tid('settings-switch-account-block')).evaluate(e => { const r = e.firstElementChild.getBoundingClientRect(); const b = e.getBoundingClientRect(); return { cx: r.x + r.width / 2, bcx: b.x + b.width / 2, cy: r.y + r.height / 2, bcy: b.y + b.height / 2 }; });
-    record(vp, '7 phone: 切换账号 block geometry', {
-      aboveLogout: sw.y + sw.h <= lo.y,
+    const loColor = await page.locator(`${tid('settings-logout-block')} >> text=退出登录`).first().evaluate(e => getComputedStyle(e).color);
+    const [lr, lg, lb] = (loColor.match(/\d+/g) || []).map(Number);
+    record(vp, '7 phone: 切换账号 / 退出登录 = one bottom group', {
+      aboveLogout: sw.y + sw.h <= lo.y + 0.5,
       sameLeft: Math.abs(sw.x - lo.x) <= 0.5, sameWidth: Math.abs(sw.w - lo.w) <= 0.5, sameHeight: Math.abs(sw.h - lo.h) <= 0.5,
-      gapEqualsLogoutGap: Math.abs((lo.y - (sw.y + sw.h)) - 16) <= 1,
-      alignedWithRowBlocks: !!grp && Math.abs(grp.x - sw.x) <= 0.5 && Math.abs(grp.w - sw.w) <= 0.5,
+      adjacentRows: Math.abs(lo.y - (sw.y + sw.h)) <= 1.5, // only the hairline separator between them
+      atLeast48: sw.h >= 47.5 && lo.h >= 47.5,
+      bothInGroup: !!grp && sw.y >= grp.y - 0.5 && lo.y + lo.h <= grp.y + grp.h + 0.5,
+      // settings-group-session is the outer group View (full width); the rows sit inside its card's 1px border.
+      alignedWithProfileCard: !!card && Math.abs(sw.x - card.x) <= 1.5 && Math.abs((sw.x + sw.w) - (card.x + card.w)) <= 1.5,
       labelCentred: Math.abs(swText.cx - swText.bcx) <= 1 && Math.abs(swText.cy - swText.bcy) <= 1,
-    }, { switch: sw, logout: lo, rowBlock: grp, label: swText });
+      logoutIsDanger: lr > lg + 60 && lr > lb + 60,
+    }, { switch: sw, logout: lo, group: grp, profileCard: card, label: swText, logoutColor: loColor });
     await page.locator(tid('settings-switch-account-block')).screenshot({ path: join(OUT, `${vp}-switch-row.png`) });
   } else {
     const sw = await box(page, tid('settings-switch-account-row'));
