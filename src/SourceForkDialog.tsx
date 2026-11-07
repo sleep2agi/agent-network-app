@@ -37,6 +37,8 @@ export default function SourceForkDialog({
   // #4150 新会话（现有项目）：只读目录里选项目 → 提交；旧快照（无 selection_expires_at）不给入口
   const receiptScopeRef = useRef<string | null>(null);   // 选过 Server 的那次 directory 请求 id（selection_scope 来源）
   const [projectPick, setProjectPick] = useState<string | null>(null);
+  // attach 分支：目录里的 opaque session（oses_）；与 project 互斥
+  const [attachPick, setAttachPick] = useState<string | null>(null);
   const [projectIntent, setProjectIntent] = useState<string>('');
   const [projectState, setProjectState] = useState<{ kind: 'idle' | 'busy' | 'submitted' | 'failed'; message?: string }>({ kind: 'idle' });
   const [dirState, setDirState] = useState<{ kind: 'idle' | 'pending' | 'ready' | 'failed' | 'unavailable' | 'denied'; error?: string; snapshot?: DirectorySnapshot }>({ kind: 'idle' });
@@ -188,30 +190,42 @@ export default function SourceForkDialog({
             <View testID="project-create-section" style={{ gap: 4 }}>
               <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>新建会话（现有项目，只读选择）</Text>
               {dirState.snapshot.projects.slice(0, 6).map(pj => (
-                <Pressable key={pj.projectId} testID={`project-create-pick-${pj.projectId}`} onPress={() => setProjectPick(pj.projectId)}>
+                <Pressable key={pj.projectId} testID={`project-create-pick-${pj.projectId}`} onPress={() => { setProjectPick(pj.projectId); setAttachPick(null); }}>
                   <Text style={{ fontSize: typeScale.small, color: pj.projectId === projectPick ? colors.accent : colors.text }} numberOfLines={1}>
                     {pj.title || pj.projectId}{pj.projectId === projectPick ? '（已选）' : ''}
+                  </Text>
+                </Pressable>
+              ))}
+              {(dirState.snapshot.sessions ?? []).slice(0, 4).map(ses => (
+                <Pressable key={ses.sessionId} testID={`project-create-attach-${ses.sessionId}`} onPress={() => { setAttachPick(ses.sessionId); setProjectPick(null); }}>
+                  <Text style={{ fontSize: typeScale.small, color: ses.sessionId === attachPick ? colors.accent : colors.textMuted }} numberOfLines={1}>
+                    attach：{ses.title || ses.sessionId}（binding unknown · candidate）{ses.sessionId === attachPick ? '（已选）' : ''}
                   </Text>
                 </Pressable>
               ))}
               <TextInput testID="project-create-child-name" value={childName} onChangeText={setChildName} placeholder={t('nodeClone.childNamePlaceholder')} />
               <Pressable
                 testID="project-create-submit"
-                disabled={projectState.kind === 'busy' || !projectPick || !childName}
+                disabled={projectState.kind === 'busy' || (!projectPick && !attachPick) || !childName}
                 onPress={async () => {
-                  if (!projectPick || !networkId) return;
-                  const intent = projectIntent || newIntentId(`prjc_${projectPick}`);
+                  if ((!projectPick && !attachPick) || !networkId) return;
+                  const key = projectPick ?? attachPick!;
+                  const intent = projectIntent || newIntentId(`prjc_${key}`);
                   setProjectIntent(intent);
                   setProjectState({ kind: 'busy' });
-                  const r = await postSourceProjectCreate(cfg, {
-                    selectionScope: receiptScopeRef.current ?? '',
-                    snapshotId: dirState.snapshot!.snapshotId,
-                    projectId: projectPick,
-                    childName,
-                    intentId: intent,
-                  });
-                  if (!r.ok) { setProjectState({ kind: 'failed', message: r.unavailable ? '新建会话未开放（不会退回普通创建）' : r.error }); return; }
-                  setProjectState({ kind: 'submitted', message: projectCreateLabel(classifyProjectCreate(r.status as any, r.sessionCreation)) });
+                  const payload = projectPick
+                    ? { selectionScope: receiptScopeRef.current ?? '', snapshotId: dirState.snapshot!.snapshotId, projectId: projectPick, childName, intentId: intent }
+                    : { selectionScope: receiptScopeRef.current ?? '', snapshotId: dirState.snapshot!.snapshotId, sessionId: attachPick!, childName, intentId: intent };
+                  const r = await postSourceProjectCreate(cfg, payload as any);
+                  if (!r.ok) { setProjectState({ kind: 'failed', message: r.unavailable ? '该通道未开放（不会退回普通创建）' : r.error }); return; }
+                  let status = r.status; let sessionCreation = r.sessionCreation; let childNodeId: string | undefined;
+                  for (let i = 0; i < 26 && status !== 'registration_confirmed' && status !== 'unknown_rotation_required'; i++) {
+                    await new Promise(res => setTimeout(res, 2000));
+                    const g = await getSourceProjectCreate(cfg, r.requestId, networkId);
+                    if (!g.ok) break;
+                    status = g.status; sessionCreation = g.sessionCreation; childNodeId = g.childNodeId;
+                  }
+                  setProjectState({ kind: 'submitted', message: projectCreateLabel(classifyProjectCreate(status as any, sessionCreation, childNodeId)) });
                 }}
                 style={buttonStyle('primary')}
               >
