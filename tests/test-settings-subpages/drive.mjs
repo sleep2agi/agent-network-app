@@ -231,7 +231,21 @@ if (!DESKTOP_ONLY) for (const theme of ['light', 'dark']) {
     try { await fn(); } catch (e) { ck(`${theme} ${name}: 打开`, false, String(e.message || e).split('\n')[0]); }
   };
 
-  const keys = await page.locator('[data-testid^="settings-row-"]').evaluateAll(els => els.map(e => e.getAttribute('data-testid')).filter(id => !/-(label|chevron)-/.test(id) && !/-(label|value|accessory|lead)$/.test(id)).map(id => id.replace('settings-row-', '')));
+  // 只把「行」当分类点开：行内部的积木（-value / -label-pill / -subtitle / -chevron …）不是可点开的行。
+  // 判据用结构而不是后缀黑名单：若某 id 以另一个 settings-row-* 的 id + '-' 开头，它就是那一行的子块
+  // （身份卡那次 settings-row-account-subtitle 被当成分类，就是黑名单漏了 -subtitle）。
+  const picked = await page.locator('[data-testid^="settings-row-"]').evaluateAll(els => {
+    const ids = [...new Set(els.map(e => e.getAttribute('data-testid')).filter(Boolean))];
+    const dropped = [];
+    const keep = ids.filter(id => {
+      const parent = ids.find(other => other !== id && id.startsWith(`${other}-`));
+      if (parent) dropped.push(`${id} (−${parent})`);
+      return !parent;
+    });
+    return { keys: keep.map(id => id.replace('settings-row-', '')), dropped };
+  });
+  const keys = picked.keys;
+  if (picked.dropped.length) console.log(`INFO: ${theme} 行内积木已排除: ${picked.dropped.join(', ')}`);
   ck(`${theme} list: 子页清单`, keys.length >= 6, keys.join(','));
   for (const key of keys) {
     // 服务器 is not a settings subpage: on the phone its row opens the full 服务器 page (#501), whose ‹ goes back to 设置.
