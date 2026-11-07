@@ -8,7 +8,7 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
-import { variantChoices, variantValueError, variantWritable } from './node-variant-patch';
+import { variantAfterModelSwitch, variantChoices, variantValueError, variantWritable } from './node-variant-patch';
 import { fetchHubNodes, fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
 import { styles } from './app-styles';
 import {
@@ -289,6 +289,20 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   })();
   const currentVariant = view?.model_variant ?? null;
 
+  // #4099：切模型时原档位是否适配（keep / clear / must-reselect）——只提示，不自动改配置。
+  const pendingModel = (() => {
+    const raw = (typeof candidate === 'string' ? candidate : '').trim();
+    return raw || null;
+  })();
+  const variantHint = pendingModel && pendingModel !== currentModel && currentVariant
+    ? variantAfterModelSwitch({
+        previousModel: currentModel,
+        nextModel: pendingModel,
+        currentVariant,
+        nextModelVariants: v2VariantMap ? v2VariantMap[pendingModel] : undefined,
+      })
+    : null;
+
   const applyVariant = async (nextVariant: string | null) => {
     if (!view || busy || !variantGate.ok) return;
     const err = variantValueError(nextVariant);
@@ -324,6 +338,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             {currentModel || (view === undefined && !readFailed ? '读取中…' : '—')}
           </Text>
         </View>
+        {variantHint && variantHint.action !== 'keep' ? (
+          <Text testID="node-variant-hint" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+            {variantHint.action === 'clear'
+              ? `切到 ${pendingModel} 后档位将按合同显式清除（modelVariant: null）`
+              : `切到 ${pendingModel} 后需要重新选择档位（不拼后缀、不硬编码）`}
+          </Text>
+        ) : null}
         <View testID="node-variant-row" style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
           <Text style={{ color: colors.textMuted, width: 96, fontSize: 13 }}>思考档位</Text>
           {!variantGate.ok ? (
