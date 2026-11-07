@@ -35,7 +35,9 @@ export default function SourceForkDialog({
   useEffect(() => {
     if (!receipt || !networkId) return;
     const outcome = classifyStatus(receipt.status);
-    if (outcome.kind !== 'progress') return;
+    // unknown 也要继续用 GET 收敛已知 request_id（不发 POST、不新开 intent）；
+    // refused 是终态，停止轮询。
+    if (outcome.kind !== 'progress' && outcome.kind !== 'unknown') return;
     let live = true;
     const timer = setInterval(async () => {
       const r = await getSessionSourceFork(cfg, receipt.requestId, networkId);
