@@ -44,3 +44,19 @@ SSE `/events/users/me` 仍被 CORS 预检拦（`cache-control` 不在 `Access-Co
 - same child 高档/clear + ack（下一轮）
 - attach（下一轮）
 - fork：9ae stock 版本门拒绝 patch、gate OFF，准确显示未开放，不 fallback
+
+## attach（同环境，真实浏览器）
+
+```
+directory → ready
+select    → ready  sessions=5
+attach POST 200 → operation_kind=attach_existing_session
+                  session_creation=not_performed      ← 合同语义正确：attach 不新建会话
+final: unknown_rotation_required, child=null
+```
+
+读数：请求被 Hub 正确识别为 attach 分支且明确「未新建会话」；但终态是 `unknown`，
+与目录快照里 `attach_authorized=false`（合同恒定）一致 —— 没有有限 attach 授权时不得 attach，
+UI 也不提供该入口。**没有用任何方式绕过该授权。**
+
+fork：9ae stock 版本门拒绝指定 patch、gate OFF，未手动开、未 fallback。
