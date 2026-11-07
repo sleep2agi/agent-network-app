@@ -1,7 +1,7 @@
 // ck-style (self-executing; run by scripts/run-tests.mjs). #4130 显示段:
-// 输入框底部那行模型只认会话自己上报的值,缺了就什么都不显示。
+// 模型 helper 只认会话上报；缺值返回 null，由聊天 UI 显示未知提示。
 import { strict as assert } from 'node:assert';
-import { composerModelLabel } from './composer-model-label';
+import { composerModelLabel, reportedComposerModel } from './composer-model-label';
 
 let n = 0;
 const ck = (name: string, cond: boolean, extra = '') => {
@@ -28,6 +28,12 @@ ck('offline tag', composerModelLabel({ model: 'm1', runtime: 'r1', status: 'offl
 ck('online no tag', composerModelLabel({ model: 'm1', status: 'online' }) === 'm1');
 // 首尾空白清掉
 ck('trim', composerModelLabel({ model: '  m1  ', runtime: '  r1  ' }) === 'r1 · m1');
+
+const rows = [{ alias: 'a', network_id: 'n1', model: 'one' }, { alias: 'a', network_id: 'n2', model: 'two' }];
+ck('scope by network', reportedComposerModel(rows, 'n2', 'a')?.model === 'two');
+ck('unknown network hides', reportedComposerModel(rows, undefined, 'a') === null);
+ck('missing row network hides', reportedComposerModel([{ alias: 'a', model: 'one' }], 'n1', 'a') === null);
+ck('duplicate scope hides', reportedComposerModel([rows[0], rows[0]], 'n1', 'a') === null);
 
 console.log(`${n}/${n} passed`);
 process.exit(0);
