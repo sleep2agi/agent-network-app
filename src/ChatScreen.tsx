@@ -2003,11 +2003,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 切换：复用现有节点设置路径（fetchNodeConfig / updateNodeConfig(baseRevision) / 回读）。
   // 解析出来的目标绑定：**连同作用域一起存**，渲染时再校验一次当前 scope（key 只能保证 remount，
   // 不能替代首帧门：换账号/网络后第一帧就可能拿到旧 state）。
-  const [resolvedTarget, setResolvedTarget] = useState<{ scope: string; node: HubNode } | null>(null);
-  // 账号/网络 epoch：cfg 身份变化就自增，scope 里带上它。
-  const scopeEpoch = useRef(0);
-  const scopeId = `${cfg.profileId ?? ''}|${cfg.serverUrl}|${cfg.networkId ?? ''}|${scopeEpoch.current}`;
-  const targetNode = resolvedTarget && resolvedTarget.scope === scopeId ? resolvedTarget.node : null;
+  const [resolvedTarget, setResolvedTarget] = useState<{ scope: object; node: HubNode } | null>(null);
+  // 作用域 token：**同步、稳定**，含账号/网络/会话/目标 node_id；不含任何凭据值。
+  // 用 useMemo 而不是"effect 里自增 ref"——后者在同一 render 里读到旧值，正是审查指出的错版本。
+  const wantedNodeId = controlSession?.node_id ?? null;
+  const scopeToken = useMemo(() => ({}), [cfg.profileId, cfg.serverUrl, cfg.networkId, alias, wantedNodeId]);
+  // 缺 node_id 或 scope 不匹配 → 立即不显示旧 target（同一个 render 内判定，不依赖后续 effect）。
+  const targetNode = wantedNodeId && resolvedTarget && resolvedTarget.scope === scopeToken ? resolvedTarget.node : null;
   const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'unsupported' | 'error'; message?: string }>({ kind: 'idle' });
   const sheet = modelSheet({
     reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
@@ -2016,8 +2018,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     catalogError: '模型目录见下方「节点模型」区（同一份受权读取，不重复查询）',
   });
   // 账号/网络身份一变，就作废旧作用域（下一帧起 targetNode 为 null，不展示旧节点）。
-  useEffect(() => { scopeEpoch.current += 1; setResolvedTarget(null); }, [cfg.profileId, cfg.serverUrl, cfg.networkId, alias]);
-
   // 目标绑定：controlSession.node_id 在当前账号/network 的受权 nodes 里**唯一**匹配；
   // 缺 ID 或歧义 → 零写（不做 .find(alias) 取首个，也不猜 daemon）。
   useEffect(() => {
@@ -2025,7 +2025,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     let live = true;
     setResolvedTarget(null);
     setSwitchState({ kind: 'idle' });
-    const wanted = controlSession?.node_id ?? null;
+    const wanted = wantedNodeId;
     if (!wanted) { setSwitchState({ kind: 'unsupported', message: '会话没有 node_id：拒绝用 alias 或其它节点代替' }); return () => { live = false; }; }
     (async () => {
       try {
@@ -2037,13 +2037,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           setSwitchState({ kind: 'unsupported', message: matches.length === 0 ? '当前账号/network 内找不到该 node_id 的受权详情' : `该 node_id 在本 network 内有 ${matches.length} 条歧义记录，拒绝写入` });
           return;
         }
-        setResolvedTarget({ scope: scopeId, node: matches[0] });
+        setResolvedTarget({ scope: scopeToken, node: matches[0] });
       } catch (e) {
         if (live) setSwitchState({ kind: 'error', message: String((e as Error)?.message ?? e).slice(0, 120) });
       }
     })();
     return () => { live = false; };
-  }, [modelSheetOpen, cfg, controlSession?.node_id]);
+  }, [modelSheetOpen, cfg, scopeToken, wantedNodeId]);
 
   // 手机复用页头空间，但来源与桌面一致：只展示当前 scope 内未过期的上报。
   useEffect(() => {
@@ -2994,6 +2994,17 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             onPick={pickSuggest}
           />
         ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('chat.modelSheetOpen')}
+        onPress={() => setModelSheetOpen(v => !v)}
+        style={({ pressed }) => [styles.composerModelEntry, pressed && { opacity: 0.6 }]}
+        testID="composer-model-entry"
+      >
+        <Text style={[styles.composerModelEntryText, { color: colors.textMuted }]} numberOfLines={1}>
+          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+        </Text>
+      </Pressable>
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
@@ -3432,6 +3443,8 @@ const makeStyles = (B = bubbleLayout()) =>
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
   // #4130:输入框上方右对齐的一行「runtime · model」,只在会话上报了模型时出现(不占位、不撑高)。
   composerModelLine: { paddingHorizontal: spacing.md, alignItems: 'flex-end' },
+  composerModelEntry: { alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingBottom: 2 },
+  composerModelEntryText: { fontSize: ds(11) },
   composerModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: '80%' },
   // 桌面:同一句文案挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
   desktopModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: 200, marginRight: 8 },
