@@ -5,7 +5,7 @@
 // `https://github.com/<repo>/releases/download/<tag>/<file>`。前者是 asset API
 // 端点（需要 Accept 头/跟随重定向），站点校验与普通 updater 都按后者解析。
 //
-// 这个脚本在 draft 阶段（attach-android-apk 之后、发布之前）把 manifest 的
+// 这个脚本在 draft 阶段（finalize-release 挂完 APK 之后、发布之前）把 manifest 的
 // 平台 URL 映射成同一次发布里真实资产的 browser_download_url，并回读断言：
 //   * 缺映射 / 歧义 / 非公开 URL → 抛错（fail-closed），不静默留坏 URL；
 //   * 已经是公开下载链接时幂等，不上传、不改字节；

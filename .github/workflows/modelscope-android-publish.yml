@@ -80,9 +80,9 @@ jobs:
         run: |
           set -euo pipefail
           resolved="$(git rev-parse HEAD)"
-          # Separate tests. A combined `[[ =~ && == ]]` succeeds on macOS bash 3.2.
-          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
-          [[ "$resolved" == "$REQUESTED_COMMIT" ]]
+          # Explicit exit: macOS bash 3.2 ignores errexit on a failing [[ ]].
+          if ! [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then exit 1; fi
+          if ! [[ "$resolved" == "$REQUESTED_COMMIT" ]]; then exit 1; fi
           git fetch origin main
           git merge-base --is-ancestor "$resolved" origin/main
 
