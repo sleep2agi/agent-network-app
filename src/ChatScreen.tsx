@@ -2001,7 +2001,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 聊天页目前拿不到该节点的 daemon_node_id，所以目录显式 unsupported，不猜、不拿别节点候选。
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
   // 切换：复用现有节点设置路径（fetchNodeConfig / updateNodeConfig(baseRevision) / 回读）。
-  const [targetNode, setTargetNode] = useState<HubNode | null>(null);
+  // 解析出来的目标绑定：**连同作用域一起存**，渲染时再校验一次当前 scope（key 只能保证 remount，
+  // 不能替代首帧门：换账号/网络后第一帧就可能拿到旧 state）。
+  const [resolvedTarget, setResolvedTarget] = useState<{ scope: string; node: HubNode } | null>(null);
+  // 账号/网络 epoch：cfg 身份变化就自增，scope 里带上它。
+  const scopeEpoch = useRef(0);
+  const scopeId = `${cfg.profileId ?? ''}|${cfg.serverUrl}|${cfg.networkId ?? ''}|${scopeEpoch.current}`;
+  const targetNode = resolvedTarget && resolvedTarget.scope === scopeId ? resolvedTarget.node : null;
   const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'unsupported' | 'error'; message?: string }>({ kind: 'idle' });
   const sheet = modelSheet({
     reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
@@ -2009,12 +2015,15 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // 目录不再由聊天页查询：直接复用下方节点模型区（NodeModelSection）的目录与可用性。
     catalogError: '模型目录见下方「节点模型」区（同一份受权读取，不重复查询）',
   });
+  // 账号/网络身份一变，就作废旧作用域（下一帧起 targetNode 为 null，不展示旧节点）。
+  useEffect(() => { scopeEpoch.current += 1; setResolvedTarget(null); }, [cfg.profileId, cfg.serverUrl, cfg.networkId, alias]);
+
   // 目标绑定：controlSession.node_id 在当前账号/network 的受权 nodes 里**唯一**匹配；
   // 缺 ID 或歧义 → 零写（不做 .find(alias) 取首个，也不猜 daemon）。
   useEffect(() => {
     if (!modelSheetOpen) return;
     let live = true;
-    setTargetNode(null);
+    setResolvedTarget(null);
     setSwitchState({ kind: 'idle' });
     const wanted = controlSession?.node_id ?? null;
     if (!wanted) { setSwitchState({ kind: 'unsupported', message: '会话没有 node_id：拒绝用 alias 或其它节点代替' }); return () => { live = false; }; }
@@ -2028,7 +2037,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           setSwitchState({ kind: 'unsupported', message: matches.length === 0 ? '当前账号/network 内找不到该 node_id 的受权详情' : `该 node_id 在本 network 内有 ${matches.length} 条歧义记录，拒绝写入` });
           return;
         }
-        setTargetNode(matches[0]);
+        setResolvedTarget({ scope: scopeId, node: matches[0] });
       } catch (e) {
         if (live) setSwitchState({ kind: 'error', message: String((e as Error)?.message ?? e).slice(0, 120) });
       }
