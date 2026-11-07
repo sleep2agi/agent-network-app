@@ -65,8 +65,9 @@ import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
-import { fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubNode, type NodeConfigRead } from './api';
-import { modelSheet, switchAvailability } from './composer-model-sheet';
+import { fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, type HubNode, type NodeConfigRead } from './api';
+import { modelSheet } from './composer-model-sheet';
+import NodeModelSection from './NodeModelSection';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -2005,7 +2006,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 切换：复用现有节点设置路径（fetchNodeConfig / updateNodeConfig(baseRevision) / 回读）。
   const [targetNode, setTargetNode] = useState<HubNode | null>(null);
   const [nodeCfg, setNodeCfg] = useState<NodeConfigRead | null>(null);
-  const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'busy' | 'ok' | 'conflict' | 'unsupported' | 'timeout' | 'error'; message?: string }>({ kind: 'idle' });
+  const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'unsupported' | 'error'; message?: string }>({ kind: 'idle' });
   const sheet = modelSheet({
     reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
     catalog: catalogState.status === 'ready' ? { models: catalogState.models, providers: catalogState.providers } : null,
@@ -2035,40 +2036,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     return () => { live = false; };
   }, [modelSheetOpen, cfg, alias]);
 
-  const switchOptions = catalogState.status === 'ready'
-    ? (catalogState.models ?? []).map(m => `${m.providerId}/${m.id}`).filter(m => m !== (reportedModel?.value.model ?? ''))
-    : [];
-  const sheetSwitch = switchAvailability({
-    hasTarget: !!targetNode,
-    configUpdateCapable: nodeCfg?.config_update_capable ?? null,
-    optionCount: switchOptions.length,
-  });
-
-  const doSwitchModel = async (model: string) => {
-    if (!sheetSwitch.enabled || !targetNode) return;
-    const epoch = ++catalogEpoch.current;
-    setSwitchState({ kind: 'busy', message: `写入 ${model}…` });
-    try {
-      const res = await updateNodeConfig(cfg, { nodeId: targetNode.node_id, baseRevision: nodeCfg?.config_revision ?? 0, patch: { model } });
-      if (openEpoch.current !== epoch) return;
-      if (res.ok) {
-        // 只认回读：配置接受 ≠ 会话已生效；会话当前模型仍等节点上报
-        const view = await fetchNodeConfig(cfg, targetNode.node_id).catch(() => null);
-        if (openEpoch.current !== epoch) return;
-        setNodeCfg(view);
-        setSwitchState({ kind: 'ok', message: `节点配置已接受（revision ${view?.config_revision ?? '?'}）；会话模型以节点上报为准` });
-      } else if (res.conflict) {
-        setSwitchState({ kind: 'conflict', message: res.error });
-      } else if (res.unsupported) {
-        setSwitchState({ kind: 'unsupported', message: res.error });
-      } else {
-        setSwitchState({ kind: 'error', message: res.error });
-      }
-    } catch (e) {
-      const msg = String((e as Error)?.message ?? e);
-      setSwitchState({ kind: /timeout|超时|abort/i.test(msg) ? 'timeout' : 'error', message: msg.slice(0, 120) });
-    }
-  };
   const targetNodeId = controlSession?.node_id ?? null;
   useEffect(() => {
     if (!modelSheetOpen) { catalogEpoch.current += 1; return; }
@@ -2352,30 +2319,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 <Text style={styles.modelSheetValue} numberOfLines={2}>{r.value}</Text>
               </View>
             ))}
-            {sheetSwitch.enabled && switchOptions.length ? (
-              <View style={styles.modelSheetOptions}>
-                {switchOptions.slice(0, 8).map((m, i) => (
-                  <Pressable
-                    key={m}
-                    accessibilityRole="button"
-                    onPress={() => void doSwitchModel(m)}
-                    disabled={switchState.kind === 'busy'}
-                    style={({ pressed }) => [styles.modelSheetOption, pressed && { opacity: 0.6 }]}
-                    testID={`model-sheet-option-${i}`}
-                  >
-                    <Text style={styles.modelSheetOptionText} numberOfLines={1}>{m}</Text>
-                  </Pressable>
-                ))}
-              </View>
-            ) : null}
-            <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
-              {sheetSwitch.enabled ? sheetSwitch.reason : `切换未启用：${sheetSwitch.reason}`}
-            </Text>
-            {switchState.kind !== 'idle' ? (
-              <Text style={styles.modelSheetDisabled} testID="model-sheet-switch-status">
-                {switchState.kind === 'busy' ? '切换中…' : `状态：${switchState.kind === 'ok' ? '已接受' : switchState.kind} — ${switchState.message ?? ''}`}
+            {targetNode ? (
+              // 直接复用节点页的模型区（同一份 availability / hot V2 语义 / revision 写与回读），不另造会话写。
+              <NodeModelSection cfg={cfg} node={targetNode} runtimeVersion={controlSession?.version ?? undefined} />
+            ) : (
+              <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
+                {switchState.kind === 'unsupported' ? `切换未启用：${switchState.message}` : '切换未启用：正在读取该节点的受权详情…'}
               </Text>
-            ) : null}
+            )}
           </View>
         ) : null}
 
