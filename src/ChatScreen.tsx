@@ -65,7 +65,7 @@ import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
-import { fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, type HubNode, type NodeConfigRead } from './api';
+import type { HubNode } from './api';
 import { modelSheet } from './composer-model-sheet';
 import NodeModelSection from './NodeModelSection';
 import ChatToolRail from './ChatToolRail';
@@ -2000,72 +2000,42 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4130 第一主线（只读）：点模型行 → 打开面板，展示当前模型 / Provider / 目录 / 档位。
   // 聊天页目前拿不到该节点的 daemon_node_id，所以目录显式 unsupported，不猜、不拿别节点候选。
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
-  // 目录查询：只查**本节点**（node_id 缺失就拒绝，不用 alias/别的节点兜底）；换账号/网络/目标/关面板 → epoch 自增，旧回包丢弃且不重发。
-  const [catalogState, setCatalogState] = useState<{ status: 'idle' | 'pending' | 'ready' | 'failed'; error?: string; models?: Array<{ providerId: string; id: string }>; providers?: Array<{ id: string }> }>({ status: 'idle' });
-  const catalogEpoch = useRef(0);
   // 切换：复用现有节点设置路径（fetchNodeConfig / updateNodeConfig(baseRevision) / 回读）。
   const [targetNode, setTargetNode] = useState<HubNode | null>(null);
-  const [nodeCfg, setNodeCfg] = useState<NodeConfigRead | null>(null);
   const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'unsupported' | 'error'; message?: string }>({ kind: 'idle' });
   const sheet = modelSheet({
     reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
-    catalog: catalogState.status === 'ready' ? { models: catalogState.models, providers: catalogState.providers } : null,
-    catalogError: catalogState.status === 'failed' ? catalogState.error ?? '目录不可用' : catalogState.status === 'pending' ? '正在向本节点查询…' : null,
+    catalog: null,
+    // 目录不再由聊天页查询：直接复用下方节点模型区（NodeModelSection）的目录与可用性。
+    catalogError: '模型目录见下方「节点模型」区（同一份受权读取，不重复查询）',
   });
-  // 目标绑定：只在本账号当前 network 的受权 HubNode 详情里找（不用 alias 反推、不猜 daemon id）。
-  const openEpoch = catalogEpoch;
+  // 目标绑定：controlSession.node_id 在当前账号/network 的受权 nodes 里**唯一**匹配；
+  // 缺 ID 或歧义 → 零写（不做 .find(alias) 取首个，也不猜 daemon）。
   useEffect(() => {
     if (!modelSheetOpen) return;
     let live = true;
-    setTargetNode(null); setNodeCfg(null); setSwitchState({ kind: 'idle' });
+    setTargetNode(null);
+    setSwitchState({ kind: 'idle' });
+    const wanted = controlSession?.node_id ?? null;
+    if (!wanted) { setSwitchState({ kind: 'unsupported', message: '会话没有 node_id：拒绝用 alias 或其它节点代替' }); return () => { live = false; }; }
     (async () => {
       try {
         const { nodes } = await fetchHubNodes(cfg);
-        const pick = (nodes ?? []).find(n => n.alias === alias) ?? null;
         if (!live) return;
-        if (!pick) { setSwitchState({ kind: 'unsupported', message: '本账号当前 network 内找不到该节点的受权详情' }); return; }
-        setTargetNode(pick);
-        const view = await fetchNodeConfig(cfg, pick.node_id).catch(() => null);
-        if (!live) return;
-        setNodeCfg(view);
-        if (!view) setSwitchState({ kind: 'unsupported', message: '该 Hub 没有节点配置接口（404/501）' });
+        // fetchHubNodes(cfg) 已按当前账号/network 取；这里只按 node_id 唯一匹配（HubNode 无 network_id 字段）。
+        const matches = (nodes ?? []).filter(n => n.node_id === wanted);
+        if (matches.length !== 1) {
+          setSwitchState({ kind: 'unsupported', message: matches.length === 0 ? '当前账号/network 内找不到该 node_id 的受权详情' : `该 node_id 在本 network 内有 ${matches.length} 条歧义记录，拒绝写入` });
+          return;
+        }
+        setTargetNode(matches[0]);
       } catch (e) {
         if (live) setSwitchState({ kind: 'error', message: String((e as Error)?.message ?? e).slice(0, 120) });
       }
     })();
     return () => { live = false; };
-  }, [modelSheetOpen, cfg, alias]);
+  }, [modelSheetOpen, cfg, controlSession?.node_id]);
 
-  const targetNodeId = controlSession?.node_id ?? null;
-  useEffect(() => {
-    if (!modelSheetOpen) { catalogEpoch.current += 1; return; }
-    const epoch = ++catalogEpoch.current;
-    let timer: ReturnType<typeof setInterval> | undefined;
-    let stopped = false;
-    const stale = () => stopped || catalogEpoch.current !== epoch;
-    if (!targetNodeId) {
-      setCatalogState({ status: 'failed', error: '缺少目标 node_id：拒绝用 alias 或其它节点代替' });
-      return () => { stopped = true; if (timer) clearInterval(timer); };
-    }
-    setCatalogState({ status: 'pending' });
-    (async () => {
-      const queued = await queueOpenCodeCatalog(cfg, { nodeId: targetNodeId, daemonNodeId: targetNodeId });
-      if (stale()) return;
-      if (!queued.ok) { setCatalogState({ status: 'failed', error: queued.error }); return; }
-      const poll = async () => {
-        const r = await pollOpenCodeCatalog(cfg, queued.request_id);
-        if (stale()) return;
-        if (!r.ok) { setCatalogState({ status: 'failed', error: r.error }); if (timer) clearInterval(timer); return; }
-        if (r.status === 'ready') {
-          setCatalogState({ status: 'ready', models: r.snapshot.models ?? [], providers: (r.snapshot.providers ?? []).map(p => ({ id: String(p.id) })) });
-          if (timer) clearInterval(timer);
-        }
-      };
-      void poll();
-      timer = setInterval(() => { void poll(); }, 1500);
-    })();
-    return () => { stopped = true; if (timer) clearInterval(timer); };
-  }, [modelSheetOpen, targetNodeId, cfg, alias]);
   // 手机复用页头空间，但来源与桌面一致：只展示当前 scope 内未过期的上报。
   useEffect(() => {
     let live = true;
@@ -2321,7 +2291,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             ))}
             {targetNode ? (
               // 直接复用节点页的模型区（同一份 availability / hot V2 语义 / revision 写与回读），不另造会话写。
-              <NodeModelSection cfg={cfg} node={targetNode} runtimeVersion={controlSession?.version ?? undefined} />
+              <NodeModelSection
+                key={`${cfg.profileId ?? cfg.serverUrl}|${cfg.networkId ?? ''}|${targetNode.node_id}`}
+                cfg={cfg}
+                node={targetNode}
+                runtimeVersion={controlSession?.version ?? undefined}
+              />
             ) : (
               <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
                 {switchState.kind === 'unsupported' ? `切换未启用：${switchState.message}` : '切换未启用：正在读取该节点的受权详情…'}
