@@ -30,8 +30,7 @@ const OUT = process.env.OUT || '';
 if (OUT) mkdirSync(OUT, { recursive: true });
 
 const NEAR = 2;
-// NEG_BLOCK=1：把列表设成 overflow:hidden（真的不能滚），可达性判定必须失败——真实阻断负控制
-const NEG_BLOCK = process.env.NEG_BLOCK === '1';
+// Each reveal checks rejection of a user-unscrollable container, then restores it.
 const rows = [];
 let failures = 0;
 const r1 = (n) => (n == null ? n : Math.round(n * 10) / 10);
@@ -86,7 +85,7 @@ const measure = (page, paneId, newest = null) => page.evaluate(([paneId, newest]
     const hb = header ? header.bottom : null;
     clip = { top: Math.max(0, hb ?? 0), bottom: Math.min(row.getBoundingClientRect().top, window.innerHeight), left: 0, right: window.innerWidth };
     let n = el;
-    while (n && n !== pane.parentElement) {
+    while (n) {
       const cs = getComputedStyle(n);
       if (cs.overflowY !== 'visible' || cs.overflowX !== 'visible') {
         const b = n.getBoundingClientRect();
@@ -150,8 +149,6 @@ async function open(v, sc, { touch = true, sim = true } = {}) {
 }
 
 
-// #4207：贴底态下最新一条的末行若被列表顶边裁掉，用**原生 scrollTop** 往上找（不是 transform），
-// 最多 REVEAL_MAX 像素；返回实际滚了多少（0 = 本来可见，null = 滚到上限仍不可见）。
 const reveal = [];
 // #4207：贴底态末行被裁剪时，用**原生 scrollTop** 滚到「末行完整落在所有裁剪祖先的交集内」。
 // 预算按实测需要量算（不写死常数）：所需位移 <= 列表可视高（一屏）才算合理可达。
@@ -183,7 +180,7 @@ const revealNewest = async (page, newest) => {
     // 交集：所有 overflow 祖先（含 pane 以上）+ 页头下沿 + 输入区上沿 + 视口
     const clip = { top: Math.max(0, headerBottom), bottom: Math.min(composerTop, window.innerHeight), left: 0, right: window.innerWidth };
     let n = el;
-    while (n && n !== pane.parentElement) {
+    while (n) {
       const cs = getComputedStyle(n);
       if (cs.overflowY !== 'visible' || cs.overflowX !== 'visible') {
         const b = n.getBoundingClientRect();
@@ -289,8 +286,8 @@ for (const v of VIEWPORTS) for (const sc of SCREENS) {
       seat: !!m && Math.abs(m.composerBottom - kbTop) <= NEAR,
       noX: !!m && !m.overflowX,
     };
-    // The newest message's last line sits between the header and the composer (WeChat: the list stays pinned to
-    // the newest message; in landscape a tall bubble may lose its top, never its end).
+    // Keep ordinary bubbles visible at rest. In a short landscape viewport,
+    // the original tall bubble must be reachable within one list viewport.
     if (sc.newest) {
       // 贴底态：末行完整落在所有裁剪祖先交集内即通过
       const seatOk = !!m && Math.abs(m.composerBottom - kbTop) <= NEAR;
