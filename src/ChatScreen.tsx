@@ -65,6 +65,7 @@ import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import { pollOpenCodeCatalog, queueOpenCodeCatalog } from './api';
 import { modelSheet, switchAvailability } from './composer-model-sheet';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
@@ -1998,12 +1999,45 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4130 第一主线（只读）：点模型行 → 打开面板，展示当前模型 / Provider / 目录 / 档位。
   // 聊天页目前拿不到该节点的 daemon_node_id，所以目录显式 unsupported，不猜、不拿别节点候选。
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  // 目录查询：只查**本节点**（node_id 缺失就拒绝，不用 alias/别的节点兜底）；换账号/网络/目标/关面板 → epoch 自增，旧回包丢弃且不重发。
+  const [catalogState, setCatalogState] = useState<{ status: 'idle' | 'pending' | 'ready' | 'failed'; error?: string; models?: Array<{ providerId: string; id: string }>; providers?: Array<{ id: string }> }>({ status: 'idle' });
+  const catalogEpoch = useRef(0);
   const sheet = modelSheet({
     reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
-    catalog: null,
-    catalogError: '聊天页尚未解析该节点的 daemon_node_id，未接 read_opencode_catalog',
+    catalog: catalogState.status === 'ready' ? { models: catalogState.models, providers: catalogState.providers } : null,
+    catalogError: catalogState.status === 'failed' ? catalogState.error ?? '目录不可用' : catalogState.status === 'pending' ? '正在向本节点查询…' : null,
   });
   const sheetSwitch = switchAvailability();
+  const targetNodeId = controlSession?.node_id ?? null;
+  useEffect(() => {
+    if (!modelSheetOpen) { catalogEpoch.current += 1; return; }
+    const epoch = ++catalogEpoch.current;
+    let timer: ReturnType<typeof setInterval> | undefined;
+    let stopped = false;
+    const stale = () => stopped || catalogEpoch.current !== epoch;
+    if (!targetNodeId) {
+      setCatalogState({ status: 'failed', error: '缺少目标 node_id：拒绝用 alias 或其它节点代替' });
+      return () => { stopped = true; if (timer) clearInterval(timer); };
+    }
+    setCatalogState({ status: 'pending' });
+    (async () => {
+      const queued = await queueOpenCodeCatalog(cfg, { nodeId: targetNodeId, daemonNodeId: targetNodeId });
+      if (stale()) return;
+      if (!queued.ok) { setCatalogState({ status: 'failed', error: queued.error }); return; }
+      const poll = async () => {
+        const r = await pollOpenCodeCatalog(cfg, queued.request_id);
+        if (stale()) return;
+        if (!r.ok) { setCatalogState({ status: 'failed', error: r.error }); if (timer) clearInterval(timer); return; }
+        if (r.status === 'ready') {
+          setCatalogState({ status: 'ready', models: r.snapshot.models ?? [], providers: (r.snapshot.providers ?? []).map(p => ({ id: String(p.id) })) });
+          if (timer) clearInterval(timer);
+        }
+      };
+      void poll();
+      timer = setInterval(() => { void poll(); }, 1500);
+    })();
+    return () => { stopped = true; if (timer) clearInterval(timer); };
+  }, [modelSheetOpen, targetNodeId, cfg, alias]);
   // 手机复用页头空间，但来源与桌面一致：只展示当前 scope 内未过期的上报。
   useEffect(() => {
     let live = true;
