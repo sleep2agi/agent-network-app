@@ -14,6 +14,27 @@ export interface ComposerModelInput {
   status?: string | null;
 }
 
+export interface ComposerModelSnapshot {
+  scope: object;
+  value: ComposerModelInput;
+  expiresAt: number;
+}
+
+/** A render-scope object is never reused across account/chat transitions.
+ * Check age during render too: mobile/background timers may be suspended. */
+export function readComposerModelSnapshot(snapshot: ComposerModelSnapshot | null, scope: object, now = Date.now()): string | null {
+  if (!snapshot || snapshot.scope !== scope || !Number.isFinite(snapshot.expiresAt) || now >= snapshot.expiresAt) return null;
+  return composerModelLabel(snapshot.value);
+}
+
+/** Only accept an unambiguous full-status row from the selected network. */
+export function reportedComposerModel(rows: ReadonlyArray<{ alias: string; network_id?: string | null; model?: string | null; runtime?: string | null; status?: string | null }>, networkId: string | undefined, alias: string): ComposerModelInput | null {
+  if (!networkId) return null;
+  const matching = rows.filter(row => row.alias === alias && row.network_id === networkId);
+  if (matching.length !== 1 || !matching[0].model?.trim()) return null;
+  return { model: matching[0].model, runtime: matching[0].runtime, status: matching[0].status };
+}
+
 export function composerModelLabel(input: ComposerModelInput): string | null {
   const model = typeof input.model === 'string' ? input.model.trim() : '';
   if (!model) return null;
