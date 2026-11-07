@@ -81,6 +81,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [currentCopied, setCurrentCopied] = useState(false);
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
+  // 同步单飞：state 更新是异步的，连点两次可能在同一个 render 里都看到 busy=false；
+  // 用 ref 在发请求前**同步**置位，覆盖 model 与 variant 两条提交路径。
+  const submitInFlight = useRef(false);
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
@@ -304,17 +307,30 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     : null;
 
   const applyVariant = async (nextVariant: string | null) => {
-    if (!view || busy || !variantGate.ok) return;
+    if (!view || busy || submitInFlight.current || !variantGate.ok) return;
     const err = variantValueError(nextVariant);
     if (err) { setPhase({ kind: 'error', message: err }); return; }
+    submitInFlight.current = true;                       // 同步单飞（同一 render 连点也只发一次）
     setPhase({ kind: 'submitting', requested: currentModel ?? '' });
-    const res = await updateNodeConfig(cfg, {
-      nodeId: node.node_id,
-      baseRevision: view.config_revision,
-      // 同 model 只改档位：显式带 modelVariant（=hot），不传 flags/channels
-      patch: { ...(currentModel ? { model: currentModel } : {}), modelVariant: nextVariant },
-    });
-    if (res.ok) { await reload(); setPhase({ kind: 'applied', model: currentModel ?? '', hot: true } as any); }
+    let res;
+    try {
+      res = await updateNodeConfig(cfg, {
+        nodeId: node.node_id,
+        baseRevision: view.config_revision,
+        // 同 model 只改档位：显式带 modelVariant（=hot），不传 flags/channels
+        patch: { ...(currentModel ? { model: currentModel } : {}), modelVariant: nextVariant },
+      });
+    } finally { submitInFlight.current = false; }
+    if (res.ok) {
+      // 配置接受 ≠ 会话生效：必须读回 node 的 model 与 variant 都匹配才叫 applied
+      const after = await reload();
+      const expectedModel = currentModel ?? null;
+      const modelOk = !expectedModel || (after?.model ?? null) === expectedModel;
+      const variantOk = (after?.model_variant ?? null) === (nextVariant ?? null);
+      if (!after) setPhase({ kind: 'error', message: '配置已接受，但读回失败：当前档位未确认（不当作已生效）' });
+      else if (modelOk && variantOk) setPhase({ kind: 'applied', model: after.model ?? '', hot: true } as any);
+      else setPhase({ kind: 'error', message: `配置已接受，但读回未匹配：模型 ${after.model ?? '—'} · 档位 ${after.model_variant ?? '—'}（未确认）` });
+    }
     else if (res.conflict) { void reload(); setPhase({ kind: 'conflict' } as any); }
     else if (res.unsupported) setPhase({ kind: 'error', message: res.error });
     else setPhase({ kind: 'error', message: res.error });
@@ -340,9 +356,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
         </View>
         {variantHint && variantHint.action !== 'keep' ? (
           <Text testID="node-variant-hint" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
-            {variantHint.action === 'clear'
-              ? `切到 ${pendingModel} 后档位将按合同显式清除（modelVariant: null）`
-              : `切到 ${pendingModel} 后需要重新选择档位（不拼后缀、不硬编码）`}
+            {`切到 ${pendingModel} 后原档位可能不再适用：不会自动清除，请手动选择或清除档位`}
           </Text>
         ) : null}
         <View testID="node-variant-row" style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>

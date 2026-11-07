@@ -45,7 +45,7 @@ ck('list deduped/filtered', list.kind === 'list' && JSON.stringify(list.options)
 // 8) 切模型时档位适配
 ck('same model keeps', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'a', currentVariant: 'high' }).action === 'keep');
 ck('next list includes → keep', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: 'high', nextModelVariants: ['high'] }).action === 'keep');
-ck('next none → clear', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: 'high', nextModelVariants: [] }).action === 'clear');
+ck('next none → must-reselect (no auto clear)', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: 'high', nextModelVariants: [] }).action === 'must-reselect');
 ck('next unknown → must-reselect', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: 'high', nextModelVariants: undefined }).action === 'must-reselect');
 ck('no variant → keep', variantAfterModelSwitch({ previousModel: 'a', nextModel: 'b', currentVariant: null }).action === 'keep');
 
