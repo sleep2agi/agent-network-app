@@ -77,6 +77,27 @@ final: {"status":"unknown_rotation_required","operation_kind":"attach_existing_s
 终态仍是 `unknown_rotation_required`，与链 2 同因（fixture 子进程要 `/fixture-register`）。
 grant 里已配 `allow_attach_existing`（policy_id + 目录 + 1h 窗口 + 5min ttl）。
 
+## 浏览器内真请求（真实 UI 运行时，非 node 脚本）
+
+导出的客户端（`ecb6ca37`）静态服务于 `127.0.0.1:8930`，浏览器里真登录后，用页面自己的
+fetch 栈打目录链（`ui-dir2.mjs`）：
+
+```
+login            POST /api/auth/login → GET /api/auth/me → /api/status → /api/nodes → /api/messages
+directory POST   200 pending → ready   servers=1
+select POST      200 pending → ready   projects=1 sessions=1 selection_expires_at=1794087298778
+```
+
+这证明三件事：① 浏览器 origin 下 CORS 已放行（`COMMHUB_CORS_ORIGINS`）；② 修复后的五字段
+select body 在真浏览器栈里被接受；③ `selection_expires_at` 在开启项目/attach 选择时下发。
+
+两个真实首错（已交 2 号）：
+- 首个：`Access-Control-Allow-Origin` 为空（默认 allowlist 不含 `http://127.0.0.1:8930`）
+- 第二个：SSE `/events/users/me` 被预检拦 —— `cache-control` 不在 `Access-Control-Allow-Headers`
+
+**仍未验证**：UI 上四条按钮的真实点击。原因：登录后 Agents 只列出有 session 的节点，
+`p_source` 没有 session 行 ⇒ 源节点详情的 Clone/fork 入口不可达。不使用伪造注册绕过。
+
 ## 复现命令
 
 ```
