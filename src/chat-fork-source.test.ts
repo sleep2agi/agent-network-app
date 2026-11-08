@@ -15,3 +15,12 @@ const menu = { alias: 'current', canOpenNode: true, hasRulesTarget: false, skill
 assert.equal(chatInfoGroups({ ...menu, fork: true }).flat().filter(row => row.key === 'fork').length, 1);
 assert.equal(chatInfoGroups(menu).flat().some(row => row.key === 'fork'), false);
 console.log('PASS chat fork source: fresh scoped identity, no opaque/stale/ambiguous session; opt-in menu');
+
+// The live Hub reports a co-presence v2 node as `opencode-sdk` (its OpenCode V2 server is
+// attached) as well as `opencode-cli`. Pinning the exact string rejected a real node and the
+// fork palette could only say "fork_requires_opencode_v2".
+const sdkNode = { ...node, runtime: 'opencode-sdk' };
+assert.equal(select([session], [sdkNode]).ok, true);
+const v1Node = { ...node, opencode_generation: 'v1' };
+assert.equal(select([session], [v1Node]).ok, false);
+console.log('PASS chat fork source: opencode-sdk v2 accepted, v1 still refused');
