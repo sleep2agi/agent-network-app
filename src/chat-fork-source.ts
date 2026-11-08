@@ -10,7 +10,13 @@ export function chatForkSource(sessions: readonly Session[], nodes: readonly Hub
   if (!session.node_id) return { ok: false as const, error: 'fork_node_id_missing' };
   const authorized = nodes.filter(node => node.node_id === session.node_id);
   if (authorized.length !== 1) return { ok: false as const, error: 'fork_node_not_unique' };
-  if (authorized[0].runtime !== 'opencode-cli' || authorized[0].opencode_generation !== 'v2') return { ok: false as const, error: 'fork_requires_opencode_v2' };
+  // The Hub reports a co-presence node either as `opencode-cli` (hand-started TUI node) or
+  // `opencode-sdk` (node whose OpenCode V2 server is attached); both are the same generation.
+  // Pinning the exact runtime string rejected a live v2 node and the palette only said
+  // "fork_requires_opencode_v2". Generation is still required: v1 cannot be forked here.
+  const runtime = authorized[0].runtime;
+  const isOpencode = typeof runtime === 'string' && runtime.startsWith('opencode-');
+  if (!isOpencode || authorized[0].opencode_generation !== 'v2') return { ok: false as const, error: 'fork_requires_opencode_v2' };
   if (!session.session_id || !/^ses_[A-Za-z0-9]{1,190}$/.test(session.session_id)) return { ok: false as const, error: 'fork_native_session_missing' };
   return { ok: true as const, nodeId: session.node_id, sessionId: session.session_id, networkId,
     label: session.alias, path: session.project_dir ?? null };
