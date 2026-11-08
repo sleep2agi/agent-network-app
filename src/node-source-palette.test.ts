@@ -2,6 +2,7 @@
 // 只测判断：过滤、分组计数、当前项、禁用原因、提交体逐字字段。JSX 不在这里测。
 import { strict as assert } from 'node:assert';
 import {
+  activeSourceKey,
   buildPaletteSubmission,
   childNameIssue,
   currentSourceKey,
@@ -163,6 +164,7 @@ const order = view.order;
 ck('keyboard down walks the visible order and stops at the end', stepActiveKey(order, null, 1) === order[0] && stepActiveKey(order, order[order.length - 1], 1) === order[order.length - 1]);
 ck('keyboard up walks back and stops at the start', stepActiveKey(order, order[0], -1) === order[0] && stepActiveKey(order, order[1], -1) === order[0]);
 ck('keyboard on an empty list does nothing', stepActiveKey([], 'x', 1) === null);
+ck('keyboard Enter only accepts an active row still visible after filtering', activeSourceKey(order, order[1]) === order[1] && activeSourceKey(order, 'fork:filtered-away') === null && activeSourceKey(order, null) === null);
 
 // ── 10) 初始名必须是合法节点名 ───────────────────────────────────────────
 const suggested = [suggestChildName('fork', '示例-A', 'ses_A'), suggestChildName('project', 'Alpha', 'oprj_1'), suggestChildName('session', 'Beta-已有', 'oses_3')];

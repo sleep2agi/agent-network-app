@@ -364,9 +364,19 @@ try {
     const { ctx: c7, page: p7 } = await mount({ width: 1280, height: 900 });
     await p7.getByTestId('source-palette-search').click();
     await p7.keyboard.press('ArrowDown');
+    const outline = await p7.evaluate(() => {
+      const el = document.querySelector('[data-testid="source-palette-row-ses_B"]');
+      return el ? getComputedStyle(el).borderTopWidth : '';
+    });
+    ck('keyboard: ↓ paints a visible active-row outline before Enter', outline === '1px', outline);
+    // Active 行被搜索隐藏后，Enter 不能提交一个列表里看不见的行。
+    await p7.getByTestId('source-palette-search').fill('beta');
+    await p7.keyboard.press('Enter');
+    ck('keyboard: Enter ignores an active row hidden by the search', (await text(p7, 'source-palette-selected')).includes('ses_A'));
+    await p7.getByTestId('source-palette-search').fill('');
     await p7.keyboard.press('Enter');
     const selected = await text(p7, 'source-palette-selected');
-    ck('keyboard: ↓ then Enter moves the selection off the default row', selected.includes('ses_B'), selected);
+    ck('keyboard: Enter selects the still-visible active row after clearing the search', selected.includes('ses_B'), selected);
     await p7.keyboard.press('Escape');
     ck('keyboard: Esc closes the overlay', (await count(p7, '[data-testid="source-fork-frame"]')) === 0);
     await c7.close();

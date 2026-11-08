@@ -362,6 +362,13 @@ export function currentSourceKey(selectedKey: string | null | undefined, rows: r
   return rows.find(row => row.key === key)?.key ?? null;
 }
 
+/** 键盘 Enter 只能选中**当前过滤结果里可见**的 active 行；被搜索隐藏的行不算。 */
+export function activeSourceKey(order: readonly string[], activeKey: string | null | undefined): string | null {
+  const key = (activeKey ?? '').trim();
+  if (!key) return null;
+  return order.includes(key) ? key : null;
+}
+
 /** 键盘：上/下移动 active；到边界不循环（和系统列表一致）。 */
 export function stepActiveKey(order: readonly string[], activeKey: string | null, delta: 1 | -1): string | null {
   if (!order.length) return null;

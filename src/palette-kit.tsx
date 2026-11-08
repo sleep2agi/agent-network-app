@@ -241,11 +241,13 @@ export function PaletteGroupHeader({ title, count, path, testID }: { title: stri
   );
 }
 
-export function PaletteRow({ testID, label, detail, current, disabled, onPress, accessibilityLabel }: {
+export function PaletteRow({ testID, label, detail, current, active, disabled, onPress, accessibilityLabel }: {
   testID: string;
   label: string;
   detail?: string | null;
   current: boolean;
+  /** 键盘 ↓/↑ 移动到的行：给一个可见轮廓，抬手前就能看出 Enter 会选哪一行。 */
+  active?: boolean;
   disabled?: boolean;
   onPress: () => void;
   accessibilityLabel: string;
@@ -259,7 +261,7 @@ export function PaletteRow({ testID, label, detail, current, disabled, onPress, 
       aria-selected={current}
       aria-disabled={!!disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, current && styles.rowCurrent, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.row, current && styles.rowCurrent, !!active && styles.rowActive, pressed && { opacity: 0.7 }]}
     >
       <View style={styles.rowMain}>
         <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
