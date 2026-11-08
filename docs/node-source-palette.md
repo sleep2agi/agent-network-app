@@ -47,5 +47,5 @@ search/empty/error states, copy and new-node entry, keyboard navigation and
 bounded desktop/phone layout. It is registered in `tests/drives.json`.
 
 Screenshots and execution logs are external artifacts under
-`/tmp/opencode/fork2-shots/` and `/tmp/opencode/fork2-*.log`; consult actual exit
-codes, not this document, for pass/fail evidence.
+`/tmp/opencode/fork-palette-shots/` and `/tmp/opencode/fork-palette-*.log`; consult
+actual exit codes, not this document, for pass/fail evidence.

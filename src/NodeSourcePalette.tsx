@@ -109,6 +109,8 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   const [selectedKey, setSelectedKey] = useState<string | null>(null);
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [childName, setChildName] = useState('');
+  // 名字是用户改过的就不再被自动建议覆盖；没改过时换目标行跟着换（fork-… / …-new / …-attach）。
+  const [childNameTouched, setChildNameTouched] = useState(false);
   const [busy, setBusy] = useState(false);
   const [projectUnresolved, setProjectUnresolved] = useState(false);
   const [daemonId, setDaemonId] = useState<string | null>(suppliedDaemon ?? null);
@@ -188,8 +190,8 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
       }
       requestId = posted.requestId;
       directoryRequestRef.current = requestId;
-      timer = setInterval(async () => {
-        if (!requestId) return;
+      const tick = async () => {
+        if (!live || !requestId) return;
         const result = await getSourceDirectory(cfg, requestId, networkId);
         if (!live) return;
         if (result.kind === 'ready') {
@@ -209,14 +211,13 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
               autoScopedRef.current = selected.requestId;
               directoryRequestRef.current = selected.requestId;
               requestId = selected.requestId;
-              setDirectory({ kind: 'pending' });
-              // Keep polling the newly selected scope, never submit the initial snapshot.
-              timer = setInterval(async () => {
-                const scoped = await getSourceDirectory(cfg, selected.requestId, networkId);
-                if (!live) return;
-                if (scoped.kind === 'ready') { if (timer) clearInterval(timer); setDirectory({ kind: 'ready', snapshot: scoped.snapshot, selectionScope: selected.requestId }); }
-                if (scoped.kind === 'failed' || scoped.kind === 'denied' || scoped.kind === 'unavailable') { if (timer) clearInterval(timer); setDirectory({ kind: scoped.kind, error: scoped.error }); }
-              }, DIRECTORY_POLL_MS);
+              // Keep the initial authorized rows on screen (they are disabled, with the real
+              // reason) while the selected scope is read once — no blank flash, no replay of
+              // the initial snapshot as if it had a selection_scope.
+              const scoped = await getSourceDirectory(cfg, selected.requestId, networkId);
+              if (!live) return;
+              if (scoped.kind === 'ready') setDirectory({ kind: 'ready', snapshot: scoped.snapshot, selectionScope: selected.requestId });
+              else if (scoped.kind === 'failed' || scoped.kind === 'denied' || scoped.kind === 'unavailable') setDirectory({ kind: scoped.kind, error: scoped.error });
             } else setDirectory({ kind: 'failed', error: selected.error });
           }
           return;
@@ -225,7 +226,10 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           if (timer) clearInterval(timer);
           setDirectory({ kind: result.kind, error: result.kind === 'unavailable' ? `${result.error} · ${gateClosedDirectoryMessage()}` : result.error });
         }
-      }, DIRECTORY_POLL_MS);
+      };
+      // 第一次不要白等一个轮询周期；行一就绪就先画出来（没拿到 selection_scope 时是禁用态）。
+      void tick();
+      timer = setInterval(() => { void tick(); }, DIRECTORY_POLL_MS);
     })();
     return () => { live = false; if (timer) clearInterval(timer); };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, networkId, sourceNodeId, daemonId, daemonError]);
@@ -303,7 +307,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     setSelectedKey(row.key);
     setActiveKey(row.key);
     setReceipt(null);
-    setChildName(prev => prev || suggestChildName(row.kind, row.title, row.id));
+    if (!childNameTouched) setChildName(suggestChildName(row.kind, row.title, row.id));
   };
 
   const chooseServer = async (serverId: string) => {
@@ -552,7 +556,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
             <TextInput
               testID={target === 'fork' ? 'source-fork-child-name' : 'project-create-child-name'}
               value={childName}
-              onChangeText={value => { setChildName(value); setErrorText(null); }}
+              onChangeText={value => { setChildName(value); setChildNameTouched(true); setErrorText(null); }}
               placeholder={t('sourcePalette.childName')}
               placeholderTextColor={colors.textMuted}
               editable={!busy}
@@ -582,7 +586,15 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           </Text>
         ) : null}
         {notice ? <Text style={styles.notice} testID="project-create-status">{notice}</Text> : null}
-        {errorText ? <PaletteError text={errorText} testID={target === 'fork' ? 'source-fork-message' : 'source-palette-action-error'} /> : null}
+        {/* 兼容旧证据驱动：新建/接入的失败同时挂在 project-create-status 上（fork 仍走 source-fork-message）；
+            真实错误码原样显示，不做 fallback、不吞成成功。 */}
+        {errorText ? (
+          <PaletteError
+            text={errorText}
+            testID={target === 'fork' ? 'source-fork-message' : 'project-create-status'}
+            textTestID="source-palette-action-error"
+          />
+        ) : null}
       </View>
 
       {view.status === 'ready' && view.catalogTotal > 0 ? (

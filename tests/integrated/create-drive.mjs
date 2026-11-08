@@ -3,7 +3,21 @@
 import { readFile } from 'node:fs/promises';
 import { pathToFileURL } from 'node:url';
 const original = await readFile(new URL('../evidence/4150/neg-create-ui.mjs', import.meta.url), 'utf8');
+// 2026-11-08: the palette opens with a directory POST + poll before rows exist. Wait for
+// the real element instead of the old fixed 1200/2500ms sleeps — same assertions, no
+// first-paint race (scenario C used to skip the click when the button had not painted yet).
+const WAIT_FOR_READY = `  await page.getByTestId('node-clone-fork-open').waitFor({ timeout: 30000 });
+  await page.getByTestId('node-clone-fork-open').click();
+  await page.getByTestId('source-fork-frame').waitFor({ timeout: 30000 });
+  // Rows render before selection_scope arrives; wait until they are actually submittable
+  // (aria-disabled=false), otherwise a click is refused and the scenario silently no-ops.
+  await page.waitForFunction(() => {
+    const row = document.querySelector('[data-testid="project-create-pick-oprj_1"]');
+    return !!document.querySelector('[data-testid="source-directory-failed"]')
+      || (!!row && !row.innerText.includes('selection_scope'));
+  }, null, { timeout: 30000 });`;
 const source = original
+  .replace("  await page.waitForTimeout(1200);\n  const btn = page.locator('[data-testid=\"node-clone-fork-open\"]');\n  if (await btn.count()) { await btn.click(); await page.waitForTimeout(2500); }", WAIT_FOR_READY)
   .replaceAll('osrv_1', 'osrv_00000000-0000-0000-0000-000000000001')
   .replaceAll('srcdir_sel1', 'srcdir_00000000-0000-0000-0000-000000000003')
   .replaceAll('srcdir_1', 'srcdir_00000000-0000-0000-0000-000000000002')

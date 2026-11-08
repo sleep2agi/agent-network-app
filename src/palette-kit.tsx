@@ -257,6 +257,7 @@ export function PaletteRow({ testID, label, detail, current, disabled, onPress, 
       accessibilityRole="button"
       accessibilityState={{ selected: current, disabled: !!disabled }}
       aria-selected={current}
+      aria-disabled={!!disabled}
       onPress={onPress}
       style={({ pressed }) => [styles.row, current && styles.rowCurrent, pressed && { opacity: 0.7 }]}
     >
@@ -279,11 +280,11 @@ export function PaletteLoading({ text, testID }: { text: string; testID: string 
   );
 }
 
-export function PaletteError({ text, testID, detail }: { text: string; testID: string; detail?: string | null }) {
+export function PaletteError({ text, testID, detail, textTestID }: { text: string; testID: string; detail?: string | null; textTestID?: string }) {
   const styles = makePaletteStyles();
   return (
     <View style={styles.errorBox} testID={testID}>
-      <Text style={styles.errorText}>{text}</Text>
+      <Text style={styles.errorText} testID={textTestID}>{text}</Text>
       {detail ? <Text style={styles.errorDetail}>{detail}</Text> : null}
     </View>
   );
