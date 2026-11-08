@@ -1,0 +1,30 @@
+import { registerTranslations } from './i18n';
+
+/** 节点来源浮层（新建节点 / 接入已有会话 / fork）与复制节点的浮层文案。 */
+export const nodeSourcePaletteTranslations = {
+  'sourcePalette.title': ['节点来源', 'Node source'],
+  'sourcePalette.subtitle': ['在这台 source 节点上新建会话、接入已有会话，或独立 fork。', 'Create a session on this source, attach an existing one, or fork independently.'],
+  'sourcePalette.search': ['搜索项目或会话', 'Search projects or sessions'],
+  'sourcePalette.searchLabel': ['搜索项目或会话', 'Search projects or sessions'],
+  'sourcePalette.loading': ['正在读取目录…', 'Reading the directory…'],
+  'sourcePalette.forkSection': ['可 fork 的受管会话', 'Managed sessions you can fork'],
+  'sourcePalette.directorySection': ['新建会话 / 接入已有会话', 'New session / attach an existing one'],
+  'sourcePalette.empty': ['目录里没有可选的项目或会话（授权范围内为空）。', 'No projects or sessions in this scope.'],
+  'sourcePalette.emptyHint': ['这不是加载失败：Hub 已返回授权范围内的空目录。', 'This is not a load failure: the Hub returned an empty authorized scope.'],
+  'sourcePalette.noMatch': ['没有匹配「{query}」的项目或会话。', 'No project or session matches “{query}”.'],
+  'sourcePalette.catalogEmpty': ['没有可选的节点来源。', 'No node sources are available.'],
+  'sourcePalette.confirmHint': ['先选一个会话或项目', 'Pick a session or a project first'],
+  'sourcePalette.childName': ['新名称', 'New name'],
+  'sourcePalette.submit': ['提交', 'Submit'],
+  'sourcePalette.submitting': ['提交中…', 'Submitting…'],
+  'sourcePalette.cancel': ['取消', 'Cancel'],
+  'sourcePalette.close': ['关闭', 'Close'],
+  'sourcePalette.mode': ['模式', 'Mode'],
+  'sourcePalette.selected': ['已选', 'Selected'],
+  'sourcePalette.rowDisabled': ['不能提交', 'Cannot submit'],
+  'sourcePalette.needsServer': ['选一个 Server 才能拿到 selection_scope', 'Pick a server to get a selection_scope'],
+  'sourcePalette.sourceLine': ['network {network} · source node {node}', 'network {network} · source node {node}'],
+  'sourcePalette.disabledRowHint': ['灰掉的行都带着真实原因，点一下会说明为什么不能提交。', 'Disabled rows carry the real reason; tapping one explains why.'],
+} as const;
+
+registerTranslations(nodeSourcePaletteTranslations);
