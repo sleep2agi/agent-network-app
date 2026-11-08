@@ -4,13 +4,15 @@
 //
 // 样式约定同 NodeDetailScreen:`styles` 用 live binding、不解构;卡片
 // colors.card / 12 圆角 / spacing.lg;按钮沿用 retryBtn。
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
+import { variantAfterModelSwitch, variantChoices, variantValueError, variantWritable } from './node-variant-patch';
 import { fetchHubNodes, fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
 import { styles } from './app-styles';
 import {
+  lastUpdateApplied,
   afterPoll,
   afterSubmit,
   recheckAfterTimeout,
@@ -71,9 +73,19 @@ async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string
   }
 }
 
-export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: HubConfig; node: HubNode; runtimeVersion?: string | null }) {
+export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiveConfig }: { cfg: HubConfig; node: HubNode; runtimeVersion?: string | null; onEffectiveConfig?: (value: NodeConfigRead | null) => void }) {
+  const scope = useMemo(() => ({}), [cfg, node.node_id]);
+  const currentScope = useRef<object | null>(scope);
+  currentScope.current = scope;
+  useEffect(() => { currentScope.current = scope; return () => { currentScope.current = null; }; }, [scope]);
+  const writeLock = useRef<object | null>(null);
+  const readGeneration = useRef(0);
+  const callback = useRef(onEffectiveConfig);
+  callback.current = onEffectiveConfig;
   // undefined = 还没读到;null = hub 没有这个接口
-  const [view, setView] = useState<NodeConfigRead | null | undefined>(undefined);
+  const [record, setRecord] = useState<{ scope: object; value: NodeConfigRead | null } | null>(null);
+  const view = record?.scope === scope ? record.value : undefined;
+  const setView = (value: NodeConfigRead | null) => setRecord({ scope, value });
   const [readFailed, setReadFailed] = useState(false);
   const [picked, setPicked] = useState<string>('');
   // 点了「当前：provider / model」会复制,但以前没有任何反馈 —— 用户不知道到底复制没复制。
@@ -82,6 +94,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
+  // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
+  const [v2VariantMap, setV2VariantMap] = useState<Record<string, unknown> | null>(null);
   // 同 runtime 兄弟节点报过的模型(仅在本机没上报时使用)
   const [peerModels, setPeerModels] = useState<string[]>([]);
   // 贡献候选的兄弟节点台数(写进提示里:数字比一串 id 更可信)
@@ -95,19 +109,31 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 换节点要重置「自动重试已用过」的标记:否则从 A 节点切到 B 节点时,B 永远不会自动重试。
   useEffect(() => { autoRetried.current = false; }, [node.node_id]);
 
-  const reload = useCallback(async () => {
+  const reload = useCallback(async (publish = true) => {
+    const token = scope;
+    const generation = ++readGeneration.current;
     try {
       const v = await fetchNodeConfig(cfg, node.node_id);
-      setView(v);
+      if (currentScope.current !== token || generation !== readGeneration.current) return null;
+      if (v && v.node_id !== node.node_id) { setReadFailed(true); callback.current?.(null); return null; }
+      setRecord({ scope: token, value: v });
       setReadFailed(false);
+      if (publish && writeLock.current !== token) callback.current?.(v);
       return v;
     } catch {
-      setReadFailed(true);
+      if (currentScope.current === token && generation === readGeneration.current) {
+        setReadFailed(true);
+        if (publish) callback.current?.(null);
+      }
       return null;
     }
-  }, [cfg, node.node_id]);
+  }, [cfg, node.node_id, scope]);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    setPhase({ kind: 'idle' }); setV2Models(null); setV2VariantMap(null); setReadFailed(false);
+    setPicked(''); setCustom(''); setFilter('');
+  }, [scope]);
 
   useEffect(() => {
     if (!v2) return;
@@ -165,6 +191,13 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
         if (polled.status === 'ready') {
           const ids = modelIdsFromCatalog(polled.snapshot);
           setV2Models(ids);
+          // #4099：把目录里的 per-model variants 记下来（接口没给就是 undefined → UI 显示未知）
+          const map: Record<string, unknown> = {};
+          for (const m of (polled.snapshot as { models?: Array<{ providerId?: string; id?: string; variants?: unknown }> }).models ?? []) {
+            const key = `${m.providerId ?? ''}/${m.id ?? ''}`;
+            if (key && m.variants !== undefined) map[key] = m.variants;
+          }
+          setV2VariantMap(Object.keys(map).length ? map : null);
           setV2Note(ids.length ? '列表来自这台机器上的 OpenCode V2 服务器，不是内置清单。' : 'OpenCode 服务器返回了空列表。仍可手输 provider/model。');
           return;
         }
@@ -181,24 +214,25 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // the server-side change. Poll counts must not reset the deadline.
   useEffect(() => {
     if (requested === null || baseRevision === null) return;
+    const token = scope;
     let active = true;
     let current: Extract<ModelChangePhase, { kind: 'restarting' }> = { kind: 'restarting', requested, baseRevision, polls: 0 };
     let timer: ReturnType<typeof setTimeout>;
     const deadline = Date.now() + RESTART_TIMEOUT_MS;
     const expire = () => {
-      if (!active) return;
+      if (!active || currentScope.current !== token) return;
       active = false;
       clearTimeout(timer);
       setPhase({ kind: 'timeout', requested });
     };
     const deadlineTimer = setTimeout(expire, RESTART_TIMEOUT_MS);
     const tick = async () => {
-      if (!active) return;
+      if (!active || currentScope.current !== token) return;
       if (Date.now() >= deadline) { expire(); return; }
       let v: NodeConfigRead | null = null;
       let failed = false;
       try { v = await fetchNodeConfig(cfg, node.node_id); } catch { failed = true; }
-      if (!active) return;
+      if (!active || currentScope.current !== token) return;
       if (Date.now() >= deadline) { expire(); return; }
       if (!failed) setView(v);
       setReadFailed(failed);
@@ -214,7 +248,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     };
     timer = setTimeout(tick, RESTART_POLL_MS);
     return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
-  }, [requested, baseRevision, cfg, node.node_id]);
+  }, [requested, baseRevision, cfg, node.node_id, scope]);
 
   // V2 共存节点上纯 model 是 hot 变更:不受 config_update_capable 限制(它只挡重启级).
   const availability = modelControlAvailability(view === undefined ? null : view, { hotModel: v2 });
@@ -227,7 +261,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     : (v2 && peerModels.length > 0 ? peerModels : suggestedModels(node.runtime));
   const usingBuiltinFallback = v2 && v2Catalog.length === 0 && peerModels.length === 0;
   const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
-  const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
+  const currentModel = view?.model_effective ?? view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
   // 只在「opencode 系 runtime 却没写代际」时提示;写了 v1/v2 或不是 opencode 都不打扰。
   const isOpenCodeRuntime = /opencode/i.test(node.runtime ?? '');
@@ -259,15 +293,82 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 真正下发一次配置变更。抽出来是为了让「超时后再下发一次」复用同一条路径,
   // 而不是让用户重新在列表/输入框里把同一个模型再选一遍。
   const applyModel = async (model: string) => {
-    if (!view || busy) return;
+    if (!view || busy || writeLock.current === scope) return;
+    const token = scope;
+    writeLock.current = token;
+    ++readGeneration.current;
     setPhase({ kind: 'submitting', requested: model });
-    const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
-    // 热变更(OpenCode V2 纯 model)不抬高 config_revision,要靠 hot 让它立刻算生效。
-    const next = afterSubmit(model, view.config_revision, res, currentModel, { hot: v2 });
-    if (next.kind === 'conflict') void reload();
-    // 生效后把筛选清掉:否则下次进来列表还停在旧筛选上,看不到刚切过去的模型。
-    if (next.kind === 'applied') setFilter('');
-    setPhase(next);
+    try {
+      const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
+      if (currentScope.current !== token) return;
+      if (v2 && res.ok) {
+        const after = await reload(false);
+        if (currentScope.current !== token) return;
+        const confirmed = lastUpdateApplied(after?.last_update, res.update_id, model).applied && after?.model_effective === model;
+        callback.current?.(confirmed ? after : null);
+        if (confirmed) setFilter('');
+        setPhase(confirmed ? { kind: 'applied', model, previous: currentModel } : { kind: 'error', message: '已接受，但生效模型未确认' });
+        return;
+      }
+      // Legacy restart controls keep their existing revision observation path.
+      const next = afterSubmit(model, view.config_revision, res, currentModel, { hot: v2 });
+      if (next.kind === 'conflict') void reload();
+      if (next.kind === 'applied') setFilter('');
+      setPhase(next);
+    } finally { if (writeLock.current === token) writeLock.current = null; }
+  };
+
+  // #4099 档位：能力门 = 节点显式声明；写 = 同 model + modelVariant（hot）。不拼后缀、不硬编码档位。
+  const variantGate = variantWritable({ variantCapable: view?.opencode_variant_config_capable === true, runtime: node.runtime ?? null });
+  const variantOpts = (() => {
+    // 目录里的 per-model variants（接口就绪后由 catalog 快照提供）；当前未提供 → 未知，绝不编造
+    const perModel = (v2VariantMap as Record<string, unknown> | null) ?? null;
+    return variantChoices(perModel ? perModel[view?.model_effective ?? ''] : undefined);
+  })();
+  const currentVariant = view?.modelVariant;
+
+  // #4099：切模型时原档位是否适配（keep / clear / must-reselect）——只提示，不自动改配置。
+  const pendingModel = (() => {
+    const raw = (typeof candidate === 'string' ? candidate : '').trim();
+    return raw || null;
+  })();
+  const variantHint = pendingModel && pendingModel !== currentModel && currentVariant
+    ? variantAfterModelSwitch({
+        previousModel: currentModel,
+        nextModel: pendingModel,
+        currentVariant,
+        nextModelVariants: v2VariantMap ? v2VariantMap[pendingModel] : undefined,
+      })
+    : null;
+
+  const applyVariant = async (nextVariant: string | null) => {
+    if (!view || busy || !variantGate.ok || writeLock.current === scope) return;
+    const err = variantValueError(nextVariant);
+    if (err) { setPhase({ kind: 'error', message: err }); return; }
+    const effectiveModel = view.model_effective;
+    if (!effectiveModel) { setPhase({ kind: 'error', message: '生效模型未知，不能写档位' }); return; }
+    const token = scope;
+    writeLock.current = token;
+    ++readGeneration.current;
+    setPhase({ kind: 'submitting', requested: effectiveModel });
+    try {
+      const res = await updateNodeConfig(cfg, {
+        nodeId: node.node_id,
+        baseRevision: view.config_revision,
+        // 同 model 只改档位：显式带 modelVariant（=hot），不传 flags/channels
+        patch: { model: effectiveModel, modelVariant: nextVariant },
+      });
+      if (currentScope.current !== token) return;
+      if (res.ok) {
+        const after = await reload(false);
+        if (currentScope.current !== token) return;
+        const confirmed = lastUpdateApplied(after?.last_update, res.update_id, effectiveModel).applied
+          && after?.model_effective === effectiveModel && after?.modelVariant !== undefined && after.modelVariant === nextVariant;
+        callback.current?.(confirmed ? after : null);
+        setPhase(confirmed ? { kind: 'applied', model: effectiveModel } : { kind: 'error', message: '已接受，但当前档位未确认' });
+      } else if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); }
+      else setPhase({ kind: 'error', message: res.error });
+    } finally { if (writeLock.current === token) writeLock.current = null; }
   };
 
   const submit = async () => {
@@ -287,6 +388,48 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
           <Text style={{ color: colors.text, flex: 1, fontSize: 14 }} selectable>
             {currentModel || (view === undefined && !readFailed ? '读取中…' : '—')}
           </Text>
+        </View>
+        {variantHint && variantHint.action !== 'keep' ? (
+          <Text testID="node-variant-hint" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+            {`切到 ${pendingModel} 后原档位可能不再适用：不会自动清除，请手动选择或清除档位`}
+          </Text>
+        ) : null}
+        <View testID="node-variant-row" style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: 6 }}>
+          <Text style={{ color: colors.textMuted, width: 96, fontSize: 13 }}>思考档位</Text>
+          {!variantGate.ok ? (
+            <Text testID="node-variant-disabled" style={{ color: colors.textMuted, fontSize: 12, flex: 1 }}>
+              {variantGate.reason}
+            </Text>
+          ) : variantOpts.kind === 'unknown' ? (
+            <Text testID="node-variant-unknown" style={{ color: colors.textMuted, fontSize: 12, flex: 1 }}>
+              未知：本节点目录未提供该模型的 variants
+            </Text>
+          ) : variantOpts.kind === 'none' ? (
+            <Text testID="node-variant-none" style={{ color: colors.textMuted, fontSize: 12, flex: 1 }}>
+              该模型没有可选档位{currentVariant ? `（当前上报 ${currentVariant}）` : ''}
+            </Text>
+          ) : (
+            <>
+              {variantOpts.options.map(v => (
+                <Pressable
+                  key={v}
+                  testID={`node-variant-chip-${v}`}
+                  disabled={busy}
+                  onPress={() => void applyVariant(v === currentVariant ? null : v)}
+                  style={({ pressed }) => [{ paddingHorizontal: 10, paddingVertical: 4, borderRadius: radius.pill, borderWidth: 1, borderColor: v === currentVariant ? colors.accent : colors.border, opacity: pressed ? 0.6 : 1 }]}
+                >
+                  <Text style={{ fontSize: 12, color: v === currentVariant ? colors.accent : colors.text }}>
+                    {v}{v === currentVariant ? '（当前）' : ''}
+                  </Text>
+                </Pressable>
+              ))}
+              {currentVariant ? (
+                <Pressable testID="node-variant-clear" onPress={() => void applyVariant(null)} disabled={busy}>
+                  <Text style={{ fontSize: 12, color: colors.textMuted }}>清除档位</Text>
+                </Pressable>
+              ) : null}
+            </>
+          )}
         </View>
         {/* 代际没声明(opencode 系 runtime 但 flags 里没有 opencodeGeneration)时,
             模型清单很可能是读不到的——这是排查里最常见的一步,提前说一句。 */}
@@ -490,13 +633,15 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             <Pressable accessibilityRole="button" testID="node-model-recheck"
               onPress={async () => {
                 const before = phase;
+                const token = scope;
                 try {
                   const v = await fetchNodeConfig(cfg, node.node_id);
+                  if (currentScope.current !== token) return;
                   const next = recheckAfterTimeout(before, v);
                   setPhase(next);
                   if (next.kind === 'restarting') setPhase({ kind: 'timeout', requested: before.requested, previous: before.previous, hot: before.hot });
                 } catch {
-                  setPhase(before);
+                  if (currentScope.current === token) setPhase(before);
                 }
               }}
               style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>

@@ -90,7 +90,9 @@ export function afterPoll(
   maxPolls: number = RESTART_MAX_POLLS,
   opts: { hot?: boolean } = {},
 ): ModelChangePhase {
-  if (view && view.model === phase.requested) {
+  // 只认 server GET 顶层 model_effective（生效模型）；缺省 = unknown，不拿配置 model 冒充会话读回。
+  const effective = (view as { model_effective?: string } | null)?.model_effective;
+  if (view && effective !== undefined && effective === phase.requested) {
     const bumped = view.config_revision > phase.baseRevision;
     // 重启级变更仍然要 revision 抬高(否则可能读到的是旧值);热变更不要求。
     if (bumped || opts.hot) {
@@ -298,4 +300,22 @@ export function modelChangeDiag(
     parts.push(`error=${msg || '?'}`);
   }
   return parts.join(' ');
+}
+
+/** #4099：last_update 是否真的「已应用」——按 server/src/node-config-last-update.ts 的真实形状判定。
+ *  status 必须 applied；update_id 必须存在且与本次提交对齐；requested_model 与期望模型一致。
+ *  terminal=false 或 status='unknown' 一律不算 applied（「不知道结没结束」≠「结束了」）。 */
+export function lastUpdateApplied(
+  last: { update_id?: string | null; status?: string | null; terminal?: boolean; requested_model?: string | null } | null | undefined,
+  updateId: string | undefined,
+  expectedModel: string | null | undefined,
+): { applied: boolean; reason: string } {
+  if (!last) return { applied: false, reason: 'last_update 缺失（节点从未下发过配置或不可读）' };
+  if (!updateId || last.update_id !== updateId) return { applied: false, reason: 'last_update.update_id 缺失或与本次提交不一致' };
+  if (last.terminal !== true) return { applied: false, reason: 'last_update 尚未明确终局' };
+  if (last.status !== 'applied') return { applied: false, reason: `last_update.status=${last.status ?? 'unknown'}` };
+  if (expectedModel && last.requested_model && last.requested_model !== expectedModel) {
+    return { applied: false, reason: `last_update.requested_model=${last.requested_model} 与期望不一致` };
+  }
+  return { applied: true, reason: 'last_update=applied 且与本次提交对齐' };
 }

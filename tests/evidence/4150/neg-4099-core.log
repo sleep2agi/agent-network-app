@@ -1,0 +1,21 @@
+PASS A1 读回旧值 → 无 applied 成功态元素 — 当前模型 未知（本会话尚未上报） Provider 未上报（不从裸模型名猜） 可用模型目录 不可用：模型目录见下方「节点模型」区（同一份受权读取，不重复查询） 
+PASS A1 仍给出接受但未确认说明 — 已接受，但未确认：last_update=unknown · 生效模型 openai/gpt-5-codex · 档位 low
+PASS A1 无异常
+PASS A2 读回 unknown → 无 applied 成功态元素 — 当前模型 未知（本会话尚未上报） Provider 未上报（不从裸模型名猜） 可用模型目录 不可用：模型目录见下方「节点模型」区（同一份受权读取，不重复查询） 
+PASS A2 不当 null 且写明 unknown — 已接受，但未确认：last_update=unknown · 生效模型 openai/gpt-5-codex · 档位 unknown
+PASS A2 无异常
+PASS A3 读回失败 → 无 applied 成功态元素 — 当前模型 未知（本会话尚未上报） Provider 未上报（不从裸模型名猜） 可用模型目录 不可用：模型目录见下方「节点模型」区（同一份受权读取，不重复查询） 
+PASS A3 写明读回失败/未确认 — 已接受，但读回失败：当前档位未确认（不当作已生效）
+PASS A3 无异常
+PASS C 同 render 双击只 1 次写 — writes=1
+PASS C 无异常
+PASS B 切目标后旧写只发生一次且不污染新目标 — writes=1 newSheet=""
+DBG B2 panel=1 chips=1 row="思考档位|low|high（当前）|清除档位" gate=""
+PASS B2 新 target 可再提交（writes 增加 1，旧 finally 未锁死新 scope） — writes 1 -> 2
+PASS B 无异常
+PASS E1 last_update=applied 且 request_id 对齐 → applied — 当前模型 未知（本会话尚未上报） Provider 未上报（不从裸模型名猜） 可用模型目录 不可用：模型目录见下方「节点模型」区（同一份受权读取，不重复查询） 可用思考档位 未知：
+PASS E1 无异常
+PASS E2 request_id 不匹配 → 未确认 — 已接受，但未确认：last_update=applied · 生效模型 openai/gpt-5-codex · 档位 high
+PASS E2 无异常
+DETAIL {"fail":0,"total":18}
+neg4099 exit=0

@@ -1,0 +1,16 @@
+PASS A 项目可选
+PASS A POST 五字段且带 project_id — {"selection_scope":"srcdir_sel1","snapshot_id":"snap_1","child_name":"child-a","intent_id":"prjc_oprj_1_0grfd3kgvr","project_id":"oprj_1"}
+PASS A 有 selection_scope/snapshot/intent
+PASS A 最终 registered 文案（≠online） — 已注册（registration_confirmed） · child node_prjc_1——注册回执不等于在线/健
+PASS A 无异常
+PASS B attach 目标可选
+PASS B POST 带 session_id 且不带 project_id — {"selection_scope":"srcdir_sel1","snapshot_id":"snap_1","child_name":"child-b","intent_id":"prjc_oses_1_0avut9clcz","session_id":"oses_1"}
+PASS B 无异常
+PASS C 404 显示未开放且不 fallback — 该通道未开放（不会退回普通创建）
+PASS C 无异常
+PASS D unknown：POST 只 1 次（不重放） — create=1
+PASS D unknown：仍用 GET 收敛 — poll=1
+PASS D 文案写明结果未知/禁止重放 — 结果未知（session_creation=unknown）：可能已创建，禁止自动重放或更换 intent
+PASS D 无异常
+DETAIL {"fail":0,"total":14}
+create exit=0

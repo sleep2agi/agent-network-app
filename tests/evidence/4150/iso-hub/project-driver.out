@@ -1,0 +1,7 @@
+directory: ready servers= 1
+select POST: 200 pending
+select ready: projects= 1 sessions= 1 selExp= 1794086134400
+client validate: {"ok":true}
+client body keys: child_name,intent_id,project_id,selection_scope,snapshot_id
+project-create POST: 200 {"ok":true,"request_id":"prjc_afcad358-3048-44f0-a251-1bca5def33f3","network_id":"net_2244326784fb","daemon_node_id":"p_daemon","intent_id":"iso-intent-dir-1","child_name":"iso-child-1","status":"create_pending","accepted_at":1794085506494,"expires_at":1794085
+project-create final: {"ok":true,"request_id":"prjc_afcad358-3048-44f0-a251-1bca5def33f3","network_id":"net_2244326784fb","daemon_node_id":"p_daemon","intent_id":"iso-intent-dir-1","child_name":"iso-child-1","status":"unknown_rotation_required","accepted_at":1794085506494,"expires_at":1794085806494,"operation_kind":"project_new_session","session_creation":"unknown","registration_is_health":false,"native_acceptance":"not_verified"}

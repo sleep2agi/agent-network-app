@@ -1,0 +1,9 @@
+client validate: {"ok":true}
+client body keys: daemon_node_id,network_id,source_node_id
+POST status: 200 keys: daemon_node_id,expires_at,network_id,ok,request_id,source_node_id,status
+POST body: {"ok":true,"request_id":"srcdir_a7829e9a-f5dd-4b09-ae87-446da2c93aa4","network_id":"net_2244326784fb","source_node_id":"p_source","daemon_node_id":"p_daemon","expires_at":1794085318395,"status":"pending"}
+poll 1: 200 ready   
+ready/failed body: {"ok":true,"request_id":"srcdir_a7829e9a-f5dd-4b09-ae87-446da2c93aa4","network_id":"net_2244326784fb","source_node_id":"p_source","daemon_node_id":"p_daemon","expires_at":1794085318395,"status":"ready","snapshot":{"snapshot_id":"snap_5573c344-f5f4-485e-851e-87d0d911986a","expires_at":1794085318395,"lease_kind":"process_local","servers":[{"server_id":"osrv_7eff4af6-7229-40d0-933c-f26373af3a9d","title":"Server"}],"projects":[],"sessions":[],"completeness":"authorized_scope_only"}}
+select POST: 200 {"ok":true,"request_id":"srcdir_e2ff9b5c-0af1-461f-9976-5002c3faf212","network_id":"net_2244326784fb","source_node_id":"p_source","daemon_node_id":"p_daemon","expires_at":1794085318395,"server_id":"osrv_7eff4af6-7229-40d0-933c-f26373af3a9d","status":"pending"}
+select poll 1: 200 failed directory_read_failed
+select body: {"ok":true,"request_id":"srcdir_e2ff9b5c-0af1-461f-9976-5002c3faf212","network_id":"net_2244326784fb","source_node_id":"p_source","daemon_node_id":"p_daemon","expires_at":1794085318395,"server_id":"osrv_7eff4af6-7229-40d0-933c-f26373af3a9d","status":"failed","error":"directory_read_failed"}

@@ -9,16 +9,20 @@ const { chromium } = await import(process.env.PLAYWRIGHT_MODULE || 'playwright')
 const web = await serveExport(process.env.WEB_DIR);
 const browser = await chromium.launch({ headless: true, executablePath: findChromium() });
 const fixture = () => {
-  window.__modelCalls = []; window.__modelApplied = false;
+  window.__modelCalls = []; window.__modelApplied = false; window.__modelSelectedOnly = false;
+  // This drive exercises the legacy restart observation window, not V2 hot ACKs.
+  // Untagged OpenCode runtimes use the V2 path; never fake a V2 restart receipt.
   const node = { node_id: 'n_model_fixture', alias: 'model-fixture', runtime: 'opencode-cli',
+    opencode_generation: 'v1',
     status: 'idle', lifecycle_state: 'running', config_revision: 0, model: 'stub/old',
-    config_snapshot: { model: 'stub/old' }, network_id: 'net-sweep' };
+    config_snapshot: { model: 'stub/old', flags: { opencodeGeneration: 'v1' } }, network_id: 'net-sweep' };
   window.__routeOverride = (u, bodyText) => {
     if (u.pathname === '/api/status') return { ok: true, sessions: [node] };
     if (u.pathname === '/api/nodes') return { ok: true, nodes: [node] };
     if (u.pathname === '/api/nodes/n_model_fixture/config') return { ...node,
-      config_update_capable: true, config_revision: window.__modelApplied ? 1 : 0,
-      model: window.__modelApplied ? 'stub/next' : 'stub/old' };
+      config_update_capable: true, config_revision: window.__modelApplied || window.__modelSelectedOnly ? 1 : 0,
+      model: window.__modelApplied || window.__modelSelectedOnly ? 'stub/next' : 'stub/old',
+      model_effective: window.__modelApplied ? 'stub/next' : 'stub/old' };
     if (u.pathname === '/mcp') {
       const params = JSON.parse(bodyText || '{}').params;
       if (params?.name !== 'update_node_config') return undefined;
@@ -46,6 +50,11 @@ try {
     await page.getByText(/已下发,节点正在以新模型重启/).waitFor();
     assert.deepEqual(await page.evaluate(() => window.__modelCalls), [{ node_id: 'n_model_fixture', base_revision: 0, patch: { model: 'stub/next' }, network_id: 'net-sweep' }]);
     if (!slow) {
+      // A selected model + revision bump must NOT masquerade as effective readback.
+      await page.evaluate(() => { window.__modelSelectedOnly = true; });
+      await page.getByText(/已下发,节点正在以新模型重启.*已等 [1-9]\d*s/).waitFor({ timeout: 7000 });
+      assert.equal(await page.getByText('已切换到 stub/next', { exact: true }).count(), 0);
+      console.log('PASS selected model + bumped revision is not effective readback');
       await page.evaluate(() => { window.__modelApplied = true; });
       await page.getByText('已切换到 stub/next', { exact: true }).waitFor({ timeout: 7000 });
       console.log('PASS fast model change: exact payload and matching revision readback');

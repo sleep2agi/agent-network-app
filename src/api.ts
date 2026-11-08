@@ -1,6 +1,10 @@
 import type { RuntimeReadinessMap } from './runtime-readiness';
 import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
+import { buildConfigPatch } from './node-variant-patch';
+import { buildDirectoryBody, buildDirectorySelectBody, parseDirectoryResponse, validateDirectoryRequest, validateDirectorySelect, type DirectoryRequest, type DirectoryResult } from './session-source-directory';
+import { buildProjectCreateBody, validateProjectCreateSelection, type ProjectCreateSelection } from './session-project-create';
+import { buildSourceForkBody, classifyStatus, type SourceForkReceipt, type SourceForkSelection, type SourceForkStatus } from './session-source-fork';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
@@ -1561,6 +1565,25 @@ export interface NodeConfigRead {
   model: string | null;
   flags?: Record<string, unknown>;
   config_update_capable: boolean;
+  /** #4099：会话/节点**实际生效**的模型（server GET 顶层 model_effective；缺省 = unknown，绝不用配置 model 顶替）。 */
+  model_effective?: string;
+  /** #4099：当前档位（server 顶层 modelVariant；**null = 明确清除**，缺省 = unknown）。 */
+  modelVariant?: string | null;
+  /** #4099：节点是否显式声明可写档位（server 顶层 opencode_variant_config_capable）。 */
+  opencode_variant_config_capable?: boolean;
+  /** #4099：最近一次下发终局（null = 从未下发）。res.ok 只是 pending，不是 ack。 */
+  last_update?: {
+    update_id?: string | null;
+    status?: string | null;
+    observed_status?: string | null;
+    terminal?: boolean;
+    requested_model?: string | null;
+    error?: string | null;
+  } | null;
+  /** #4099：节点当前档位（server：config_snapshot.modelVariant，兼容顶层 model_variant 投影）。 */
+  model_variant?: string | null;
+  /** #4099：节点是否显式声明可写档位（server gate：config_snapshot.opencode_variant_config_capable === true）。 */
+  variant_capable?: boolean;
 }
 
 /** null = hub 没有这个接口(404/501/非 JSON);其它失败抛错(调用方按「读失败」处理)。 */
@@ -1581,13 +1604,44 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
     model: typeof d.model === 'string' ? d.model : null,
     flags: d.flags && typeof d.flags === 'object' ? d.flags : undefined,
     config_update_capable: d.config_update_capable === true,
+    // 读回只认 server GET 顶层字段（server.ts:6478-6480）：
+    // model_effective 缺省 = unknown；modelVariant 只接 string/null，缺省或其它类型 = unknown。
+    model_effective: typeof d.model_effective === 'string' ? d.model_effective : undefined,
+    modelVariant: typeof d.modelVariant === 'string' || d.modelVariant === null ? d.modelVariant : undefined,
+    opencode_variant_config_capable: (d as any).opencode_variant_config_capable === true,
+    // 真实形状见 server/src/node-config-last-update.ts（update_id / status / terminal / requested_model / error）
+    last_update: (d as any).last_update && typeof (d as any).last_update === 'object'
+      ? {
+          update_id: (d as any).last_update.update_id ?? null,
+          status: (d as any).last_update.status ?? null,
+          observed_status: (d as any).last_update.observed_status ?? null,
+          terminal: (d as any).last_update.terminal === true,
+          requested_model: (d as any).last_update.requested_model ?? null,
+          error: (d as any).last_update.error ?? null,
+        }
+      : ((d as any).last_update === null ? null : undefined),
+    // 读回来源：顶层投影优先，其次 config_snapshot（server 的真实存放处）
+    model_variant: (() => {
+      const top = (d as { model_variant?: unknown }).model_variant;
+      if (typeof top === 'string' || top === null) return top;
+      const snap = (d as { config_snapshot?: { modelVariant?: unknown } }).config_snapshot;
+      const v = snap?.modelVariant;
+      return typeof v === 'string' || v === null ? v : undefined;
+    })(),
+    variant_capable: (() => {
+      const top = (d as { variant_capable?: unknown }).variant_capable;
+      if (typeof top === 'boolean') return top;
+      const snap = (d as { config_snapshot?: { opencode_variant_config_capable?: unknown } }).config_snapshot;
+      return snap?.opencode_variant_config_capable === true;
+    })(),
   };
 };
 
 export interface UpdateNodeConfigRequest {
   nodeId: string;
   baseRevision: number;
-  patch: { model?: string; flags?: Record<string, unknown> };
+  /** #4099：modelVariant 省略=不改档、null=清除、string=选档（序列化见 node-variant-patch.buildConfigPatch）。 */
+  patch: { model?: string; flags?: Record<string, unknown>; modelVariant?: string | null };
 }
 
 export type UpdateNodeConfigResult =
@@ -1600,6 +1654,11 @@ export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequ
   const patch: Record<string, unknown> = {};
   if (typeof req.patch.model === 'string') patch.model = req.patch.model;
   if (req.patch.flags && typeof req.patch.flags === 'object') patch.flags = req.patch.flags;
+  // #4099：只有显式给出 modelVariant 才写（省略=不改档，null=清除）—— 语义集中在 buildConfigPatch
+  if (Object.prototype.hasOwnProperty.call(req.patch, 'modelVariant')) {
+    const variantPatch = buildConfigPatch(req.patch);
+    if ('modelVariant' in variantPatch) patch.modelVariant = variantPatch.modelVariant;
+  }
   const args = {
     node_id: req.nodeId,
     base_revision: req.baseRevision,
@@ -1638,6 +1697,158 @@ export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequ
   } catch (error) {
     return { ok: false, error: error instanceof Error ? error.message : String(error) };
   }
+};
+
+// ── #4150 受管 source 独立 fork（gated preview）────────────────────────────
+// 合同：docs/runbooks/session-source-transport.md（db2ea154）。只 managed source → independent fork。
+// 404 = gate 未开启 → unavailable（调用方显示「未开放」，绝不 fallback 普通 create）。
+export type SourceForkPostResult =
+  | { ok: true; receipt: SourceForkReceipt }
+  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; invalid?: string; error: string };
+
+export const postSessionSourceFork = async (cfg: HubConfig, sel: SourceForkSelection): Promise<SourceForkPostResult> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source`, {
+      method: 'POST',
+      headers: { ...headers(cfg), 'content-type': 'application/json' },
+      body: JSON.stringify(buildSourceForkBody(sel)),
+      signal,
+    }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'source_fork_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (res.status === 409) return { ok: false, conflict: true, error: 'conflict' };
+    if (res.status === 400) return { ok: false, invalid: String((await res.json().catch(() => null) as any)?.error ?? 'invalid'), error: 'invalid' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true || typeof d.request_id !== 'string') {
+      const e = String(d?.error ?? '');
+      // 契约：gate 关闭返回 {ok:false,error:'source_fork_unavailable'}（404）；冲突是 409/conflict。
+      if (/source_fork_unavailable|unavailable/i.test(e)) return { ok: false, unavailable: true, error: e || 'source_fork_unavailable' };
+      if (/conflict|409/i.test(e)) return { ok: false, conflict: true, error: e || 'conflict' };
+      return { ok: false, error: e || 'Hub 返回空响应' };
+    }
+    return { ok: true, receipt: mapSourceForkReceipt(d) };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) };
+  }
+};
+
+const mapSourceForkReceipt = (d: any): SourceForkReceipt => ({
+  ok: true,
+  requestId: d.request_id,
+  intentId: d.intent_id,
+  networkId: d.network_id,
+  sourceNodeId: d.source_node_id,
+  daemonNodeId: typeof d.daemon_node_id === 'string' ? d.daemon_node_id : undefined,
+  sessionId: d.session_id,
+  mode: d.mode,
+  childName: d.child_name,
+  status: d.status as SourceForkStatus,
+  expiresAt: typeof d.expires_at === 'number' ? d.expires_at : undefined,
+  nativeAcceptance: typeof d.native_acceptance === 'string' ? d.native_acceptance : undefined,
+  dispatchScope: typeof d.dispatch_scope === 'string' ? d.dispatch_scope : undefined,
+  childSessionId: typeof d.child_session_id === 'string' ? d.child_session_id : undefined,
+  childNodeId: typeof d.child_node_id === 'string' ? d.child_node_id : undefined,
+});
+
+/** GET 用同一 request_id + 选中网络轮询；只收敛已知 ID，不做重放。 */
+export const getSessionSourceFork = async (cfg: HubConfig, requestId: string, networkId: string): Promise<SourceForkPostResult> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/${encodeURIComponent(requestId)}?network_id=${encodeURIComponent(networkId)}`, { headers: headers(cfg), signal }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'source_fork_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true) return { ok: false, error: String(d?.error ?? 'Hub 返回空响应') };
+    return { ok: true, receipt: mapSourceForkReceipt(d) };
+  } catch (e) {
+    return { ok: false, error: String((e as Error)?.message ?? e) };
+  }
+};
+
+/** 轮询语义：registration_confirmed 只作注册回执；unknown 走 retryPlan（不新开 intent）。 */
+export const classifySourceFork = (status: SourceForkStatus) => classifyStatus(status);
+
+// ── #46bf69cd 现有 OpenCode 项目/Session 目录（只读 preview）──────────────
+// 合同：docs/runbooks/session-source-directory.md。ready 之外无 snapshot；404=gate 未开放，不 fallback。
+export type DirectoryPostResult =
+  | { ok: true; requestId: string }
+  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; error: string };
+
+export const postSourceDirectory = async (cfg: HubConfig, req: DirectoryRequest, serverId?: string, selectionScope?: string): Promise<DirectoryPostResult> => {
+  const v = validateDirectoryRequest(req);
+  if (!v.ok) return { ok: false, error: v.error };
+  if (serverId !== undefined) {
+    const s = validateDirectorySelect(serverId, selectionScope ?? '');
+    if (!s.ok) return { ok: false, error: s.error };
+  }
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/directory`, {
+      method: 'POST', headers: { ...headers(cfg), 'content-type': 'application/json' }, body: JSON.stringify(serverId ? buildDirectorySelectBody(req, serverId, selectionScope ?? '') : buildDirectoryBody(req)), signal,
+    }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'source_directory_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (res.status === 409) return { ok: false, conflict: true, error: 'conflict' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true || typeof d.request_id !== 'string') {
+      const e = String(d?.error ?? '');
+      if (/unavailable/i.test(e)) return { ok: false, unavailable: true, error: e };
+      return { ok: false, error: e || 'Hub 返回空响应' };
+    }
+    return { ok: true, requestId: d.request_id };
+  } catch (e) { return { ok: false, error: String((e as Error)?.message ?? e) }; }
+};
+
+export const getSourceDirectory = async (cfg: HubConfig, requestId: string, networkId: string): Promise<DirectoryResult> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/directory/${encodeURIComponent(requestId)}?network_id=${encodeURIComponent(networkId)}`, { headers: headers(cfg), signal }));
+    if (res.status === 404) return { kind: 'unavailable', error: 'source_directory_unavailable' };
+    if (res.status === 401 || res.status === 403) return { kind: 'denied', error: `HTTP ${res.status}` };
+    if (res.status === 400) return { kind: 'invalid', error: 'invalid' };
+    if (!res.ok) return { kind: 'failed', requestId, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null);
+    return parseDirectoryResponse(d, requestId);
+  } catch (e) { return { kind: 'failed', requestId, error: String((e as Error)?.message ?? e) }; }
+};
+
+// ── #4150 现有项目 → 新空 Session（gated preview）──────────────────────────
+export type ProjectCreatePostResult =
+  | { ok: true; requestId: string; status: string; sessionCreation?: string; label: string }
+  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; error: string };
+
+const projectCreateLabelOf = (d: any): string => String(d?.status ?? '');
+
+export const postSourceProjectCreate = async (cfg: HubConfig, sel: ProjectCreateSelection): Promise<ProjectCreatePostResult> => {
+  const v = validateProjectCreateSelection(sel);
+  if (!v.ok) return { ok: false, error: v.error };
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/project-create`, {
+      method: 'POST', headers: { ...headers(cfg), 'content-type': 'application/json' }, body: JSON.stringify(buildProjectCreateBody(sel)), signal,
+    }));
+    if (res.status === 404) return { ok: false, unavailable: true, error: 'project_create_unavailable' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
+    if (res.status === 409) return { ok: false, conflict: true, error: 'conflict' };
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true || typeof d.request_id !== 'string') {
+      const e = String(d?.error ?? '');
+      if (/unavailable/i.test(e)) return { ok: false, unavailable: true, error: e };
+      if (/conflict|409/i.test(e)) return { ok: false, conflict: true, error: e };
+      return { ok: false, error: e || 'Hub 返回空响应' };
+    }
+    return { ok: true, requestId: d.request_id, status: projectCreateLabelOf(d), sessionCreation: d.session_creation, label: projectCreateLabelOf(d) };
+  } catch (e) { return { ok: false, error: String((e as Error)?.message ?? e) }; }
+};
+
+export const getSourceProjectCreate = async (cfg: HubConfig, requestId: string, networkId: string): Promise<{ ok: true; status: string; sessionCreation?: string; childNodeId?: string } | { ok: false; error: string }> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/node-session-control/source/project-create/${encodeURIComponent(requestId)}?network_id=${encodeURIComponent(networkId)}`, { headers: headers(cfg), signal }));
+    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    const d = await res.json().catch(() => null) as any;
+    if (!d || d.ok !== true) return { ok: false, error: String(d?.error ?? 'Hub 返回空响应') };
+    return { ok: true, status: String(d.status ?? ''), sessionCreation: d.session_creation, childNodeId: d.child_node_id };
+  } catch (e) { return { ok: false, error: String((e as Error)?.message ?? e) }; }
 };
 
 // ── app#225 —— 节点规则文件（CLAUDE.md / AGENTS.md）读写 ────────────────

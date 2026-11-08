@@ -115,6 +115,7 @@ import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
 import { elevated } from './elevation';
 import { actionMessageTone, dangerActions, START_OUTCOME_MESSAGE, START_SUBMITTED_MESSAGE, START_WAIT_MS, startErrorMessage, startWatchOutcome } from './node-danger-actions';
 import CloneNodeDialog, { CloneNodeButton } from './CloneNodeDialog';
+import SourceForkDialog from './SourceForkDialog';
 import { cloneAvailability, cloneNoticeMessage } from './node-clone';
 import { isHostSupervisorNode } from './daemon-node';
 import './i18n-node-clone';
@@ -372,6 +373,7 @@ export default function NodeDetailScreen({
   const [adoptOpen, setAdoptOpen] = useState(false);
   const [knownNames, setKnownNames] = useState<string[]>([]);
   const [cloneOpen, setCloneOpen] = useState(false);
+  const [sourceForkOpen, setSourceForkOpen] = useState(false);
   const [cloneNotice, setCloneNotice] = useState<{ demo: boolean; pending: boolean; text: string } | null>(null);
   const onOverviewTab = activeSection === 'overview';
   useEffect(() => {
@@ -709,6 +711,7 @@ export default function NodeDetailScreen({
               <Text style={{ color: colors.textSecondary, fontSize: typeScale.body, lineHeight: 20 }}>{t('nodeClone.cardBody')}</Text>
               <View style={{ flexDirection: 'row' }}>
                 <CloneNodeButton testID="node-clone-open" disabled={!cloneGate.enabled} onPress={() => { setCloneNotice(null); setCloneOpen(true); }} />
+                <CloneNodeButton testID="node-clone-fork-open" disabled={false} onPress={() => setSourceForkOpen(true)} />
               </View>
               {cloneGate.reasonKey ? (
                 <Text testID="node-clone-reason" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t(cloneGate.reasonKey)}</Text>
@@ -1029,6 +1032,15 @@ export default function NodeDetailScreen({
         </ModalKeyboardAvoider>
       </Modal>
 
+      {sourceForkOpen && node && s?.session_id ? (
+        <SourceForkDialog
+          cfg={cfg}
+          sourceNodeId={node.node_id}
+          networkId={cfg.networkId ?? null}
+          sessionId={s.session_id}
+          onClose={() => setSourceForkOpen(false)}
+        />
+      ) : null}
       {cloneOpen && cloneSource ? (
         <CloneNodeDialog
           cfg={cfg}

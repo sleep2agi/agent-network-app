@@ -1,0 +1,133 @@
+PR 1319: two synthetic drive regressions, local-only followup
+
+Worktree /tmp/opencode/app-1319-ci-followup
+Branch fix/1319-composer-ci
+Base 4505e53f74e4d7d54d3259084dd30ebcbe089927
+Only two drive files and this report change. No production source, native source,
+workflow, registry, dependency, version, ACK/readback guard, tolerance or existing
+deadline budget changes. Main node remains sole push/release owner.
+
+Observed remote symptoms
+  /tmp/opencode/ci-1319-job-128648666480.log: model-change-deadline TimeoutError,
+  16s, shard 13/14 otherwise green.
+  /tmp/opencode/ci-1319-job-128648666517.log: keyboard chat row bottom=825 vs
+  viewport=844 and 445 vs keyboardTop=464; delta -19. DM unaffected.
+
+Before-red reproduction on exact 4505 product export
+  /tmp/opencode/1319-deadline-before.log: exit 1; same 15000ms wait at original
+  drive line 46, waiting for restart text AFTER input fill and submit succeeded.
+  /tmp/opencode/1319-keyboard-before.log: exit 1; font-dependent local footer 17px
+  gives input row 827 vs viewport844 / row447 vs keyboard464, not missing pixels.
+  /tmp/opencode/1319-root-cause-probe.log: original failing driver instrumented
+  outside repo. Exactly one expected update_node_config call. Actual rendered UI:
+  "失败:已接受，但生效模型未确认". Not a click/title/selector timeout.
+  Geometry probe:
+    rest row762..827, footer827..844, viewport844
+    keyboard row382..447, footer447..464, keyboardTop464
+  Diagnostic script /tmp/opencode/1319-probe.mjs retained, not committed.
+
+Real old-main comparison (not a reconstructed hybrid)
+  Local main c7f637a6cb8ee7acf494870121edd6a850974f39, detached independent tree
+  /tmp/opencode/app-1319-main-baseline; no frozen tree changed.
+  Offline export /tmp/opencode/1319-main-web:
+    /tmp/opencode/1319-main-export.log, exit 0.
+  Old main's unchanged deadline drive on its own product:
+    /tmp/opencode/1319-main-deadline.log, fast + full90s slow checks, exit 0.
+  Old main's keyboard drive on its own product:
+    /tmp/opencode/1319-main-keyboard.log, 33/33, exit 0.
+  git diff main..4505 shows footer introduced as sibling below input row, and
+  canonical model_effective observation + strict V2 hot ACK path introduced.
+  Deadline drive itself was unchanged since old main. Its untagged opencode-cli
+  fixture now selects V2, yet supplies a legacy restart receipt, no update_id,
+  no terminal ACK and no model_effective. Product correctly refuses success.
+
+Minimal fix
+  tests/model-change-deadline/drive.mjs:
+    Explicit opencode_generation=v1 + matching snapshot flag identifies the actual
+    legacy restart scenario this drive always claimed to test. Config fixture now
+    includes canonical model_effective. No production fallback/guard changed.
+    Added selected-only negative control: revision bumps and selected model is
+    target, effective model stays old; actual UI must remain observing, not applied.
+    Then canonical effective model changes and original success assertion passes.
+    Original15s default / 7s fast / 95s slow timeouts, 90s real wall-clock window,
+    2s slow HTTP fixture delay, late-revival and exactly-one-submit checks retained.
+    No new sleep, no accelerated clock, no weakened V2 ACK. composer-variant drive
+    independently still checks wrong ACK IDs, nonterminal reads and singleflight.
+  tests/test-composer-keyboard-inset/drive.mjs:
+    Full chat composer extent = textarea's input row TOP through the existing
+    composer-model-entry footer marker BOTTOM. DM still measures its only input
+    row. Query textarea in the same pane; footer must be visible, same-pane direct
+    child and contiguous with the row. Do not use pane/viewport bottom as result,
+    hardcode17/19px, alter padding, or widen NEAR=2.
+    Added missing-marker and displaced-footer negative controls per phone viewport;
+    both must fail closed. Original real clipping-ancestor Range intersections,
+    user-scrollable negative witness, reveal budget, draft, noX, seat/hide/desktop
+    and keyboard frame sequences remain intact.
+
+Verification environment and exact commands
+  PATH=/tmp/opencode/4130-browser-bin:/home/vansin/.nvm/versions/node/v22.22.2/bin:$PATH
+  HOME=/tmp/opencode/1319-synthetic-home
+  PLAYWRIGHT_MODULE=/tmp/opencode/pw/node_modules/playwright/index.mjs
+  CHROMIUM_PATH=/home/vansin/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome
+  WEB_DIR=/tmp/opencode/integrated-web
+  SOURCE_COMMIT=4505e53f74e4d7d54d3259084dd30ebcbe089927
+  EXPECTED_SOURCE_COMMIT=$SOURCE_COMMIT
+  node_modules -> /home/vansin/agent-network-app/node_modules (existing, no install)
+  Synthetic HOME/.cache/ms-playwright -> existing browser cache only, no real
+  HOME configuration or secrets accessed. findChromium uses that existing binary.
+  Node22.22.2, npm10.9.7, Bun1.3.14, TypeScript6.0.3, Expo56.0.9,
+  Playwright1.59.1, Chrome151.0.7922.34, same tools as accepted4505.
+
+  Exact product export reused, because ALL product source remains byte-identical
+  to4505. No modified-production/unrebuilt-export mismatch. Baseline old-main export
+  was executed in background, with EXPO_OFFLINE=1 EXPO_NO_TELEMETRY=1:
+    node node_modules/expo/bin/cli export --platform web --output-dir /tmp/opencode/1319-main-web
+
+  node tests/model-change-deadline/drive.mjs
+    /tmp/opencode/1319-deadline-final.log:exit0. Selected-only negative control,
+    fast canonical effective readback and original real90s slow-read deadline,
+    late-revival rejection and exactly-one-submit assertions all passed.
+    Intermediate1319-deadline-after.log: additional negative witness initially used
+    obsolete "已检查N次" copy. Actual phaseText uses "已等Ns"; fixed ONLY that new
+    observable wait. No time budget increase. Intermediate red log retained.
+  node tests/test-composer-keyboard-inset/drive.mjs
+    /tmp/opencode/1319-keyboard-final.log:36/36 rows, exit0. Original33 rows plus
+    three per-viewport missing/displaced marker negative-control rows all green.
+    Real scroll-container negative controls also passed in landscape, revealing
+    newest line within4/70px and9/61px measured scroll budget; drafts preserved.
+    Intermediate1319-keyboard-after.log:35/36, all phone/DM/negative-control rows
+    green, desktop still red because desktop's footer is nested INSIDE the input
+    card rather than a sibling. Final measurement preserves original desktop row
+    extent using existing desktop-composer-card marker; only mobile adds sibling
+    footer extent. Desktop is not skipped, its original assertion remains.
+  node tests/composer-variant/drive.mjs
+    /tmp/opencode/1319-variant-after.log:13/13 mounted checks, zero page errors,
+    exit0. ACK/readback gate unchanged and still exercised.
+  npm run typecheck
+    /tmp/opencode/1319-typecheck.log:exit0 (CI's tsconfig.build.json command).
+  TEST_DIR=/tmp/opencode/1319-focused npm test
+    /tmp/opencode/1319-focused.log:13/13 test files, exit0.
+    Focused files: composer-model-label, composer-model-scope,
+    composer-model-mobile-wiring, composer-model-sheet, composer-variant-ack,
+    composer-row-layout, composer-row-alignment, composer-resize, keyboard-inset,
+    keyboard-visibility, node-model-change, node-variant-patch, drive-registry.
+    (src/<name>.test.ts symlinks, unmodified repository runner.)
+
+Acceptance boundary
+  Synthetic actual exported React/Web UI + page-local controlled HTTP/IPC only.
+  Not native macOS/Windows/iOS/Android acceptance or a real Hub/OpenCode session.
+  No product changes: conditional full-unit rerun not needed; fresh focused+type and
+  the three actual requested drives recorded above. Remote unit471/Rust/metadata/
+  Provider greens are supplied PR context, not claimed as local reruns here.
+  No bump/push/release, no credentials or secret reads/writes, no dependencies or
+  browser downloads, no test skipping, no workflow/registry changes. Original
+  integrated4505/68/4726/c7 trees and their evidence remain frozen and unchanged.
+
+Final hygiene
+  git diff --quiet 4505e53f -- App.tsx src package.json package-lock.json .github tests/drives.json
+    exit0:production/dependencies/workflows/registry byte-identical to4505.
+  git diff --check:exit0. Frozen integrated/68/4726/c7 git status all clean.
+  Changed files are exactly:
+    tests/model-change-deadline/drive.mjs
+    tests/test-composer-keyboard-inset/drive.mjs
+    docs/tests/report-pr1319-ci-followup.txt

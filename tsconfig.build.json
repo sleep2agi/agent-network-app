@@ -6,6 +6,7 @@
     "tests/requirement-details/**",
     "tests/bundled-hub-v2-contract/**",
     "tests/opencode-launch-window/**",
+    "tests/evidence/4150/**",
     "node_modules",
     "src-tauri/target",
     "src/test-support/**"

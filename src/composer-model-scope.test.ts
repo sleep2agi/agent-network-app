@@ -1,0 +1,42 @@
+// Executes the actual render expression with synthetic scopes, not a React mount.
+import { readFileSync } from 'node:fs';
+import { strict as assert } from 'node:assert';
+import * as labels from './composer-model-label';
+import { t, setLanguagePreference } from './i18n';
+setLanguagePreference('zh');
+
+const source = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
+const expression = source.match(/const composerModelLine = (.+);/)?.[1];
+assert(expression, 'actual composer render expression exists');
+const render = new Function('reportedModel', 'modelScopeKey', 'composerModelScope', 'composerModelLabel', 'readComposerModelSnapshot', 'effectiveModel', 'effectiveScope', 'readEffectiveComposerModel', `return ${expression}`);
+const scopeA = {}, scopeB = {}, scopeASecondVisit = {};
+const key = JSON.stringify(['https://fixture.invalid', 'net_fixture', 'fixture']);
+const snapshot = { key, scope: scopeA, expiresAt: Date.now() + 35_000, value: { model: 'provider/model-a' } };
+const show = (scope: object, record: unknown = snapshot, effective: unknown = null) => render(record, key, scope, labels.composerModelLabel, labels.readComposerModelSnapshot, effective, scope, labels.readEffectiveComposerModel);
+let checks = 0;
+function ck(name: string, ok: boolean) { assert(ok, name); checks++; }
+ck('same scope can display its own reported model', show(scopeA) === 'provider/model-a · 档位 未知');
+ck('account switch hides old model before effects run', show(scopeB) === null);
+ck('A-B-A return cannot revive a first-visit model', show(scopeASecondVisit) === null);
+ck('fresh account read is visible', show(scopeB, { ...snapshot, scope: scopeB }) === 'provider/model-a · 档位 未知');
+ck('expired snapshot cannot paint even if timer was suspended', show(scopeA, { ...snapshot, expiresAt: Date.now() - 1 }) === null);
+ck('missing snapshot is unknown', show(scopeA, null) === null);
+const effective = { ...snapshot, value: { model: 'provider/effective', modelVariant: 'high' } };
+ck('config model and variant override status together', show(scopeA, snapshot, effective) === 'provider/effective · 档位 high');
+ck('effective snapshot cannot cross scope', show(scopeB, null, effective) === null);
+ck('effective expiry cannot revive variant', show(scopeA, snapshot, { ...effective, expiresAt: Date.now() - 1 }) === 'provider/model-a · 档位 未知');
+ck('offline semantics survive effective config priority', show(scopeA, { ...snapshot, value: { model: 'old', status: 'offline' } }, effective) === 'provider/effective · 档位 high · 离线');
+ck('render scope is recreated on config and alias changes', /const composerModelScope = useMemo\(\(\) => \(\{\}\), \[cfg, alias\]\);/.test(source));
+ck('request captures the same scope used by render', source.includes('scope: composerModelScope'));
+ck('scope does not serialize credentials into keys', !source.includes('const modelScopeKey ='));
+ck('unknown and stale states are visible rather than silently disappearing', source.includes(": t('chat.modelUnknown')"));
+setLanguagePreference('en');
+ck('effective variant English copy', labels.composerModelLabel({ model: 'p/m', modelVariant: 'high' }) === 'p/m · variant high');
+ck('explicit default English copy', labels.composerModelLabel({ model: 'p/m', modelVariant: null }) === 'p/m · variant default');
+ck('unknown variant English copy', labels.composerModelLabel({ model: 'p/m' }) === 'p/m · variant unknown');
+ck('reported provenance has English copy', t('chat.reportedModel', { model: 'provider/model-a' }) === 'Node-reported: provider/model-a');
+ck('unknown has English copy', t('chat.modelUnknown') === 'Model unknown or stale');
+setLanguagePreference('zh');
+ck('reported provenance has Chinese copy', t('chat.reportedModel', { model: 'provider/model-a' }) === '节点上报：provider/model-a');
+ck('unknown has Chinese copy', t('chat.modelUnknown') === '模型未知或已过期');
+console.log(`${checks} composer model render-scope checks passed`);

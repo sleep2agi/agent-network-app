@@ -25,16 +25,16 @@ check('other failure → error with message', (() => { const p = afterSubmit('m2
 
 // polling
 const restarting = { kind: 'restarting' as const, requested: 'm2', baseRevision: 3, polls: 0 };
-check('revision bumped + model matches → applied', afterPoll(restarting, { config_revision: 4, model: 'm2', config_update_capable: true }).kind === 'applied');
-check('revision bumped but model differs → still restarting', afterPoll(restarting, { config_revision: 4, model: 'm1', config_update_capable: true }).kind === 'restarting');
-check('same revision with requested model → still restarting (hub not yet finalized)', afterPoll(restarting, { config_revision: 3, model: 'm2', config_update_capable: true }).kind === 'restarting');
+check('revision bumped + model matches → applied', afterPoll(restarting, { config_revision: 4, model: 'm2', model_effective: 'm2', config_update_capable: true } as any).kind === 'applied');
+check('revision bumped but model differs → still restarting', afterPoll(restarting, { config_revision: 4, model: 'm1', model_effective: 'm1', config_update_capable: true } as any).kind === 'restarting');
+check('same revision with requested model → still restarting (hub not yet finalized)', afterPoll(restarting, { config_revision: 3, model: 'm2', model_effective: 'm2', config_update_capable: true } as any).kind === 'restarting');
 // 2026-11-05 通信欧2号:热变更(v2 纯 model)Hub 已 applied、客户端却等到 90s 超时(假超时)。
 check('hot: revision unchanged but model already target → applied (no false 90s timeout)',
-  afterPoll(restarting, { config_revision: 3, model: 'm2', config_update_capable: true }, undefined, { hot: true }).kind === 'applied');
+  afterPoll(restarting, { config_revision: 3, model: 'm2', model_effective: 'm2', config_update_capable: true } as any, undefined, { hot: true }).kind === 'applied');
 check('hot: still not applied while the node reports the old model',
-  afterPoll(restarting, { config_revision: 3, model: 'm1', config_update_capable: true }, undefined, { hot: true }).kind === 'restarting');
+  afterPoll(restarting, { config_revision: 3, model: 'm1', model_effective: 'm1', config_update_capable: true } as any, undefined, { hot: true }).kind === 'restarting');
 check('non-hot keeps requiring a bumped revision even if model matches',
-  afterPoll(restarting, { config_revision: 3, model: 'm2', config_update_capable: true }).kind === 'restarting');
+  afterPoll(restarting, { config_revision: 3, model: 'm2', model_effective: 'm2', config_update_capable: true } as any).kind === 'restarting');
 check('hot phase text says "等节点确认新模型", not "重启"(it does not restart)',
   phaseText({ kind: 'restarting', requested: 'm2', baseRevision: 3, polls: 2, hot: true }).includes('确认新模型')
   && !phaseText({ kind: 'restarting', requested: 'm2', baseRevision: 3, polls: 2, hot: true }).includes('重启'));
@@ -166,10 +166,13 @@ check('点「当前」复制后给可见反馈（不然不知道复制没复制�
 check('生效后记住上一模型并给「切回」入口', (() => {
   const submitted = afterSubmit('deepseek/next', 5, { ok: true }, 'deepseek/old');
   if (submitted.kind !== 'restarting') return false;
-  const applied = afterPoll(submitted, { config_revision: 6, model: 'deepseek/next' } as any);
+  const applied = afterPoll(submitted, { config_revision: 6, model: 'deepseek/next', model_effective: 'deepseek/next' } as any);
   return applied.kind === 'applied' && applied.previous === 'deepseek/old' && section.includes('node-model-revert');
 })());
-check('切换生效后清空筛选（避免下次进来看不到新模型）', section.includes("if (next.kind === 'applied') setFilter('')"));
+check('切换生效后清空筛选（避免下次进来看不到新模型）',
+  // Strict matching terminal ack + effective readback still gate the clear.
+  section.includes('lastUpdateApplied(after?.last_update, res.update_id, model).applied && after?.model_effective === model')
+    && section.includes("if (confirmed) setFilter('')"));
 check('失败时给「再试一次」且先校验候选', section.includes('node-model-retry-error') && section.includes('validateModelId(candidate).ok') && section.includes('void submit()'));
 check('超时后给出「再下发一次」且复用 applyModel', section.includes('node-model-retry-timeout') && section.includes('applyModel(phase.requested)') && section.includes('const applyModel = async'));
 check('斜杠两侧的空白被吃掉（粘贴场景）', (() => {

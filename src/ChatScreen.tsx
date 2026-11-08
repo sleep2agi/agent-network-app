@@ -64,6 +64,10 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
+import { readComposerModelSnapshot, readEffectiveComposerModel, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import type { HubNode } from './api';
+import { modelSheet } from './composer-model-sheet';
+import NodeModelSection from './NodeModelSection';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -1978,12 +1982,111 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
   const [sessionModel, setSessionModel] = useState('');
+  // #4130:模型来自定向全量行,不能使用 light 列表或其他节点的候选。
+  const [reportedModel, setReportedModel] = useState<ComposerModelSnapshot | null>(null);
+  // cfg is memoized from the account, alias and network above. A new opaque scope
+  // rejects old cached text during render, before effect cleanup can run.
+  // A-B-A gets a fresh scope as well; no credentials enter a serialized key.
+  const composerModelScope = useMemo(() => ({}), [cfg, alias]);
   // 聊天信息里「规则文件」「技能」出不出现,口径同节点信息页(visibleNodeSections)。
   // 能力位只在全量 /api/status 里有(chat-info-model.ts chatInfoCaps 顶部):下面 30s 的 light 轮询
   // 只给得出 agent-node 那一半(lightCaps,兜底);全量行在进聊天和每次打开聊天信息时取一次(fullCaps)。
   const [lightCaps, setLightCaps] = useState<ChatInfoCaps>({ rules: false, skills: false });
   const [fullCaps, setFullCaps] = useState<ChatInfoCaps | null>(null);
   const sessionCaps = fullCaps ?? lightCaps;
+  // 输入框底部：同 scope 受权 config 的有效模型/档位优先；否则只显示会话上报模型、档位未知。
+  // 未知/过期明确提示，不冒充此刻原生模型回读。点击复用现有节点模型面板。
+  const [modelSheetOpen, setModelSheetOpen] = useState(false);
+  // 切换：复用现有节点设置路径（fetchNodeConfig / updateNodeConfig(baseRevision) / 回读）。
+  // 解析出来的目标绑定：**连同作用域一起存**，渲染时再校验一次当前 scope（key 只能保证 remount，
+  // 不能替代首帧门：换账号/网络后第一帧就可能拿到旧 state）。
+  const [resolvedTarget, setResolvedTarget] = useState<{ scope: object; node: HubNode } | null>(null);
+  // 作用域 token：**同步、稳定**，含账号/网络/会话/目标 node_id；不含任何凭据值。
+  // 用 useMemo 而不是"effect 里自增 ref"——后者在同一 render 里读到旧值，正是审查指出的错版本。
+  const wantedNodeId = controlSession?.node_id ?? null;
+  const scopeToken = useMemo(() => ({}), [cfg.profileId, cfg.serverUrl, cfg.networkId, alias, wantedNodeId]);
+  const effectiveScope = useMemo(() => ({}), [composerModelScope, scopeToken]);
+  const effectiveScopeRef = useRef(effectiveScope);
+  effectiveScopeRef.current = effectiveScope;
+  const [effectiveModel, setEffectiveModel] = useState<ComposerModelSnapshot | null>(null);
+  const composerModelLine = readEffectiveComposerModel(effectiveModel, effectiveScope, reportedModel, composerModelScope) ?? readComposerModelSnapshot(reportedModel, composerModelScope);
+  const receiveEffectiveConfig = useCallback((value: import('./api').NodeConfigRead | null) => {
+    if (effectiveScopeRef.current !== effectiveScope) return;
+    setEffectiveModel(value?.model_effective?.trim() ? {
+      scope: effectiveScope, expiresAt: Date.now() + 35_000,
+      value: { model: value.model_effective, modelVariant: value.modelVariant },
+    } : null);
+  }, [effectiveScope]);
+  // No extra config/catalog request: the panel publishes its existing authorized read.
+  // Expire even after the panel unmounts; render also checks age after suspended timers.
+  useEffect(() => {
+    if (!effectiveModel) return;
+    const timer = setTimeout(() => setEffectiveModel(old => old === effectiveModel ? null : old), Math.max(0, effectiveModel.expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [effectiveModel]);
+  // 缺 node_id 或 scope 不匹配 → 立即不显示旧 target（同一个 render 内判定，不依赖后续 effect）。
+  const targetNode = wantedNodeId && resolvedTarget && resolvedTarget.scope === scopeToken ? resolvedTarget.node : null;
+  const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'unsupported' | 'error'; message?: string }>({ kind: 'idle' });
+  const sheet = modelSheet({
+    reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
+    catalog: null,
+    // 目录不再由聊天页查询：直接复用下方节点模型区（NodeModelSection）的目录与可用性。
+    catalogError: t('chat.modelCatalogSeeBelow'),
+  });
+  // 账号/网络身份一变，就作废旧作用域（下一帧起 targetNode 为 null，不展示旧节点）。
+  // 目标绑定：controlSession.node_id 在当前账号/network 的受权 nodes 里**唯一**匹配；
+  // 缺 ID 或歧义 → 零写（不做 .find(alias) 取首个，也不猜 daemon）。
+  useEffect(() => {
+    if (!modelSheetOpen) return;
+    let live = true;
+    setResolvedTarget(null);
+    setSwitchState({ kind: 'idle' });
+    const wanted = wantedNodeId;
+    if (!wanted) { setSwitchState({ kind: 'unsupported', message: t('chat.forkNoNodeId') }); return () => { live = false; }; }
+    (async () => {
+      try {
+        const { nodes } = await fetchHubNodes(cfg);
+        if (!live) return;
+        // fetchHubNodes(cfg) 已按当前账号/network 取；这里只按 node_id 唯一匹配（HubNode 无 network_id 字段）。
+        const matches = (nodes ?? []).filter(n => n.node_id === wanted);
+        if (matches.length !== 1) {
+          setSwitchState({ kind: 'unsupported', message: matches.length === 0 ? t('chat.forkNodeMissing') : t('chat.forkNodeAmbiguous', { count: matches.length }) });
+          return;
+        }
+        setResolvedTarget({ scope: scopeToken, node: matches[0] });
+      } catch (e) {
+        if (live) setSwitchState({ kind: 'error', message: String((e as Error)?.message ?? e).slice(0, 120) });
+      }
+    })();
+    return () => { live = false; };
+  }, [modelSheetOpen, cfg, scopeToken, wantedNodeId]);
+
+  // 手机复用页头空间，但来源与桌面一致：只展示当前 scope 内未过期的上报。
+  useEffect(() => {
+    let live = true;
+    let generation = 0;
+    let expiry: ReturnType<typeof setTimeout> | undefined;
+    const poll = async () => {
+      const current = ++generation;
+      try {
+        const data = await fetchNodeStatus(cfg, alias);
+        const value = reportedComposerModel(data.sessions ?? [], cfg.networkId, alias);
+        if (live && current === generation) {
+          if (expiry) clearTimeout(expiry);
+          setReportedModel(value ? { scope: composerModelScope, value, expiresAt: Date.now() + 35_000 } : null);
+          if (value) expiry = setTimeout(() => { if (live) setReportedModel(null); }, 35_000);
+        }
+      } catch {
+        if (live && current === generation) {
+          if (expiry) clearTimeout(expiry);
+          setReportedModel(null);
+        }
+      }
+    };
+    void poll();
+    const timer = setInterval(poll, 30_000);
+    return () => { live = false; clearInterval(timer); if (expiry) clearTimeout(expiry); };
+  }, [cfg, alias, composerModelScope]);
   // Deliberately a slower, separate poll than the 5s message poll above:
   // an agent's online/offline state changes far less often than messages
   // do, so 30s keeps the status badge fresh without doubling the chat's
@@ -2180,11 +2283,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        {sessionModel ? (
-          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-            {sessionModel}
-          </Text>
-        ) : null}
+        <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+        </Text>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.info')}
@@ -2197,6 +2298,32 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
         </Pressable>
       </View>
+        {modelSheetOpen ? (
+          <View style={[styles.modelSheet, { maxHeight: Math.max(240, Math.round((rootHeight || 600) * 0.72)) }]} testID="composer-model-sheet">
+            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
+            {sheet.rows.map(r => (
+              <View key={r.key} style={styles.modelSheetRow} testID={`model-sheet-row-${r.key}`}>
+                <Text style={styles.modelSheetLabel}>{r.label}</Text>
+                <Text style={styles.modelSheetValue} numberOfLines={2}>{r.value}</Text>
+              </View>
+            ))}
+            {targetNode ? (
+              // 直接复用节点页的模型区（同一份 availability / hot V2 语义 / revision 写与回读），不另造会话写。
+              <NodeModelSection
+                key={`${cfg.profileId ?? cfg.serverUrl}|${cfg.networkId ?? ''}|${targetNode.node_id}`}
+                cfg={cfg}
+                node={targetNode}
+                runtimeVersion={controlSession?.version ?? undefined}
+                onEffectiveConfig={receiveEffectiveConfig}
+              />
+            ) : (
+              <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
+                {switchState.kind === 'unsupported' ? t('chat.switchDisabled', { reason: switchState.message ?? '' }) : t('chat.switchLoading')}
+              </Text>
+            )}
+            </ScrollView>
+          </View>
+        ) : null}
 
       {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
       {searchOpen ? (
@@ -2824,6 +2951,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>{t('chat.priority')}</Text>
                 </Pressable>
               ) : null}
+              <Pressable accessibilityRole="button" accessibilityLabel={t('chat.modelSheetOpen')} testID="composer-model-entry" onPress={() => setModelSheetOpen(v => !v)}>
+              <Text style={[styles.desktopModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
+                {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+              </Text>
+              </Pressable>
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
@@ -2940,6 +3072,17 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onPlus={() => plusEvent('toggle')}
         />
       </View>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel={t('chat.modelSheetOpen')}
+        onPress={() => setModelSheetOpen(v => !v)}
+        style={({ pressed }) => [styles.composerModelEntry, pressed && { opacity: 0.6 }]}
+        testID="composer-model-entry"
+      >
+        <Text style={[styles.composerModelEntryText, { color: colors.textMuted }]} numberOfLines={1}>
+          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
+        </Text>
+      </Pressable>
       {plusMenuOpen ? (
         // Inline, in the chat pane only (two-pane: never over the agent list). It is a
         // sibling after the input row inside the root column, so the inverted message
@@ -3053,6 +3196,15 @@ const makeStyles = (B = bubbleLayout()) =>
   // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   // Model id chip: secondary, one line, never steals width from the name column.
+  // 浮层：面板挂在页头行内，用绝对定位铺满聊天区宽度（左/右 8），避免被页头行的布局裁掉右半。
+  modelSheet: { position: 'absolute', top: 54, left: 8, right: 8, zIndex: 9999, elevation: 12, padding: 10, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
+  modelSheetRow: { flexDirection: 'row', gap: 8, paddingVertical: 3 },
+  modelSheetLabel: { width: 84, fontSize: ds(11), color: colors.textMuted },
+  modelSheetValue: { flex: 1, fontSize: ds(11), color: colors.text },
+  modelSheetOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
+  modelSheetOption: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.item, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
+  modelSheetOptionText: { fontSize: ds(11), color: colors.text },
+  modelSheetDisabled: { marginTop: 6, fontSize: ds(11), color: colors.textMuted },
   modelChip: {
     maxWidth: 132, marginRight: 6, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
@@ -3300,6 +3452,13 @@ const makeStyles = (B = bubbleLayout()) =>
     userSelect: 'none',
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
+  // #4130:输入框上方右对齐的一行「runtime · model」,只在会话上报了模型时出现(不占位、不撑高)。
+  composerModelLine: { paddingHorizontal: spacing.md, alignItems: 'flex-end' },
+  composerModelEntry: { alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: 2 },
+  composerModelEntryText: { fontSize: ds(11) },
+  composerModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: '80%' },
+  // 桌面:同一句文案挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
+  desktopModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: 200, marginRight: 8 },
   // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
   // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
   desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
