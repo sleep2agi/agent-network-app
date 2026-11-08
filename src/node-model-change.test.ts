@@ -170,9 +170,11 @@ check('生效后记住上一模型并给「切回」入口', (() => {
   return applied.kind === 'applied' && applied.previous === 'deepseek/old' && section.includes('node-model-revert');
 })());
 check('切换生效后清空筛选（避免下次进来看不到新模型）',
-  // Strict matching terminal ack + effective readback still gate the clear.
-  section.includes('lastUpdateApplied(after?.last_update, res.update_id, model).applied && after?.model_effective === model')
-    && section.includes("if (confirmed) setFilter('')"));
+  // 2026-11-08: V2 也走同一条观测窗口。提交后不再单次读回即判死，而是 afterSubmit
+  // 进入 restarting，由 afterPoll 在 90s 内要求 model_effective === 目标才算 applied；
+  // 生效那次仍然清空筛选。
+  section.includes('afterSubmit(model, view.config_revision, res, currentModel, { hot: true })')
+    && section.includes("if (next.kind === 'applied') setFilter('')"));
 check('失败时给「再试一次」且先校验候选', section.includes('node-model-retry-error') && section.includes('validateModelId(candidate).ok') && section.includes('void submit()'));
 check('超时后给出「再下发一次」且复用 applyModel', section.includes('node-model-retry-timeout') && section.includes('applyModel(phase.requested)') && section.includes('const applyModel = async'));
 check('斜杠两侧的空白被吃掉（粘贴场景）', (() => {
@@ -223,3 +225,28 @@ check('点状态行会复制（含 node_id/runtime）', section.includes('setStr
 check('section 渲染可复制的诊断行（0.486）', section.includes('node-model-diag-copy') && section.includes('modelChangeDiag(phase'));
 console.log(`node model change: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
+
+// 2026-11-08 回归：V2 共存节点改模型是 apply_mode=restart（节点以新模型重启，
+// 实测 5–45s）。组件曾在提交后只 reload 一次就判失败，于是必然报
+// 「已接受，但生效模型未确认」—— 用户截图里那个 red。观测必须跨多次轮询，
+// 中途读回旧值不算失败，只有真的读到目标 model_effective 才 applied。
+{
+  let p = afterSubmit('openai/gpt-6.1-terra', 7, { ok: true, update_id: 'cu_x' }, 'deepseek/deepseek-flash', { hot: true });
+  check('V2 accepted change enters the observation window, never an immediate failure', p.kind === 'restarting');
+  const oldView = { config_revision: 7, model: 'deepseek/deepseek-flash', model_effective: 'deepseek/deepseek-flash', config_update_capable: true } as any;
+  let sawError = false;
+  for (let i = 0; i < 5 && p.kind === 'restarting'; i++) {
+    p = afterPoll(p as any, oldView);
+    if (p.kind === 'error') sawError = true;
+  }
+  check('five polls of the old effective model are still in flight, not an error', !sawError && p.kind === 'restarting');
+  const newView = { config_revision: 8, model: 'openai/gpt-6.1-terra', model_effective: 'openai/gpt-6.1-terra', config_update_capable: true } as any;
+  p = afterPoll(p as any, newView);
+  check('the restart lands and the read-back confirms it', p.kind === 'applied' && (p as any).model === 'openai/gpt-6.1-terra');
+}
+{
+  // 读不回就永远不冒充成功：窗口耗尽仍是 timeout。
+  let p = afterSubmit('x/y', 1, { ok: true }, 'a/b', { hot: true }) as any;
+  for (let i = 0; i < RESTART_MAX_POLLS; i++) p = afterPoll(p, { config_revision: 1, model: 'a/b', model_effective: 'a/b', config_update_capable: true } as any);
+  check('no read-back inside the window stays a timeout, never applied', p.kind === 'timeout');
+}

@@ -302,12 +302,11 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
       const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
       if (currentScope.current !== token) return;
       if (v2 && res.ok) {
-        const after = await reload(false);
-        if (currentScope.current !== token) return;
-        const confirmed = lastUpdateApplied(after?.last_update, res.update_id, model).applied && after?.model_effective === model;
-        callback.current?.(confirmed ? after : null);
-        if (confirmed) setFilter('');
-        setPhase(confirmed ? { kind: 'applied', model, previous: currentModel } : { kind: 'error', message: '已接受，但生效模型未确认' });
+        // 改模型在 V2 共存节点上要么热切、要么以新模型重启;两种都不是「立刻」能读到的。
+        // 以前这里只 reload 一次就判失败,于是必然报“已接受,但生效模型未确认” ——
+        // 明明已下发、节点还在重启。交给下面那条统一的 90s 观测窗口去确认,
+        // 只有真的读到 model_effective === 目标才算成功(读不回就不冒充成功)。
+        setPhase(afterSubmit(model, view.config_revision, res, currentModel, { hot: true }));
         return;
       }
       // Legacy restart controls keep their existing revision observation path.
