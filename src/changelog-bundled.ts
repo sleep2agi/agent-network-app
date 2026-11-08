@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.492:",
+  "- 修掉切模型必现的「已接受，但生效模型未确认」：V2 节点改模型后要重启才生效，",
+  "  客户端以前只读一次就判失败；现在会和旧路径一样在 90 秒内持续读回，",
+  "  只有真的读到生效模型才显示成功，读不回仍然报失败，不冒充。",
+  "",
   "What's new in 0.2.491:",
   "- 新建节点、copy、fork 全部改成同一套命令面板：搜索、按工作路径分组带数量、当前项打勾；",
   "  空态与真实错误分离（未开放/无权限原样显示，不兜底成“暂无数据”）。",
