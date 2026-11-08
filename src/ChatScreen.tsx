@@ -59,6 +59,7 @@ import { colors, onThemeChange, radius, spacing } from './theme';
 import { bubbleInk, MineBubble } from './bubble-ink';
 import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
 import NodeSessionControl from './NodeSessionControl';
+import ChatForkPalette from './ChatForkPalette';
 import { sessionControlTarget } from './node-session-control';
 import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
@@ -540,6 +541,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const { height: plusWindowHeight } = useWindowDimensions();
   // 聊天信息(chat-info-model.ts):页头右侧只剩「⋯」,搜索 / 置顶 / 免打扰 / 窗口置顶 / 节点设置都在里面。
   const [infoOpen, setInfoOpen] = useState(false);
+  const [forkOpenScope, setForkOpenScope] = useState<object | null>(null);
   const [paneWidth, setPaneWidth] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
   const windowPin = useDesktopWindowPin();
@@ -2205,6 +2207,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     mute: onToggleMute ? { value: muted } : null,
     windowPin: desktop && windowPin.available ? { value: windowPin.pinned } : null,
     btw: SHOW_BTW_ENTRY,
+    fork: true,
     hasRulesTarget: sessionCaps.rules,
     skillsCapable: sessionCaps.skills,
   });
@@ -2215,6 +2218,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       case 'windowPin': windowPin.toggle(); return;
       case 'search': setInfoOpen(false); openSearch(); return;
       case 'btw': setInfoOpen(false); runPlusItem('btw'); return;
+      case 'fork': setInfoOpen(false); setForkOpenScope(composerModelScope); return;
       default:
         // 头像行(概览)和各分区行:打开节点信息页的那个分区。
         setInfoOpen(false);
@@ -3169,6 +3173,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         onClose={() => setInfoOpen(false)}
         onRow={onInfoRow}
       />
+      {forkOpenScope === composerModelScope ? <ChatForkPalette cfg={cfg} alias={alias} onClose={() => setForkOpenScope(null)} /> : null}
     </KeyboardAvoidingView>
   );
 }

@@ -13,6 +13,7 @@ export type ChatInfoRowKey =
   | 'node'
   | 'search'
   | 'btw'
+  | 'fork'
   | 'pin'
   | 'mute'
   | 'windowPin'
@@ -41,6 +42,7 @@ export interface ChatInfoInput {
   windowPin?: { value: boolean } | null;
   /** BTW 旁路入口(chat-entry-flags.ts SHOW_BTW_ENTRY,当前隐藏)。 */
   btw?: boolean;
+  fork?: boolean;
   /** 节点分区是否出现,口径同 NodeDetailScreen 的只读页(visibleNodeSections)。 */
   hasRulesTarget: boolean;
   skillsCapable: boolean;
@@ -56,6 +58,7 @@ export function chatInfoGroups(input: ChatInfoInput): ChatInfoRow[][] {
 
   const tools: ChatInfoRow[] = [{ key: 'search', kind: 'link', label: '查找聊天内容' }];
   if (input.btw) tools.push({ key: 'btw', kind: 'link', label: 'BTW 旁路提问' });
+  if (input.fork) tools.push({ key: 'fork', kind: 'link', label: 'Fork 当前节点' });
   groups.push(tools);
 
   const toggles: ChatInfoRow[] = [];
