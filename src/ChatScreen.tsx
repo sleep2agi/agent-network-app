@@ -64,10 +64,9 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
-import { readComposerModelSnapshot, readEffectiveComposerModel, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
-import { modelSheet } from './composer-model-sheet';
-import NodeModelSection from './NodeModelSection';
+import ComposerModelPalette from './ComposerModelPalette';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -2027,12 +2026,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 缺 node_id 或 scope 不匹配 → 立即不显示旧 target（同一个 render 内判定，不依赖后续 effect）。
   const targetNode = wantedNodeId && resolvedTarget && resolvedTarget.scope === scopeToken ? resolvedTarget.node : null;
   const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'unsupported' | 'error'; message?: string }>({ kind: 'idle' });
-  const sheet = modelSheet({
-    reported: reportedModel?.scope === composerModelScope ? reportedModel.value : null,
-    catalog: null,
-    // 目录不再由聊天页查询：直接复用下方节点模型区（NodeModelSection）的目录与可用性。
-    catalogError: t('chat.modelCatalogSeeBelow'),
-  });
+  // footer 的模型/档位：同 scope 未过期的受权 config 优先，否则只信定向会话上报；都没有就是未知。
+  // 分开展示（模型 / 档位两个控件），未知就是未知，不拿默认值冒充。
+  const effectiveValue = activeComposerModelValue(effectiveModel, effectiveScope);
+  const reportedValue = activeComposerModelValue(reportedModel, composerModelScope);
+  const footerModel = (effectiveValue?.model ?? reportedValue?.model ?? '').trim();
+  const footerVariant = effectiveValue && Object.prototype.hasOwnProperty.call(effectiveValue, 'modelVariant')
+    ? effectiveValue.modelVariant
+    : undefined;
   // 账号/网络身份一变，就作废旧作用域（下一帧起 targetNode 为 null，不展示旧节点）。
   // 目标绑定：controlSession.node_id 在当前账号/network 的受权 nodes 里**唯一**匹配；
   // 缺 ID 或歧义 → 零写（不做 .find(alias) 取首个，也不猜 daemon）。
@@ -2217,6 +2218,23 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     }
   };
 
+  // 浮层只挂一次：桌面挂在输入卡片上方，手机挂在输入行 + 模型行上方（bottom:100%），
+  // 两种布局都贴着 composer，不盖住聊天记录的最新一条。
+  const modelPaletteOverlay = modelSheetOpen ? (
+    <View style={styles.composerPaletteAnchor} pointerEvents="box-none">
+      <ComposerModelPalette
+        key={`${cfg.profileId ?? cfg.serverUrl}|${cfg.networkId ?? ''}|${alias}|${targetNode?.node_id ?? 'none'}`}
+        cfg={cfg}
+        node={targetNode}
+        targetError={switchState.kind === 'unsupported' || switchState.kind === 'error' ? switchState.message ?? '' : null}
+        currentModel={footerModel || null}
+        currentVariant={footerVariant}
+        onReadback={receiveEffectiveConfig}
+        onClose={() => setModelSheetOpen(false)}
+      />
+    </View>
+  ) : null;
+
   if (composerKind === 'daemon') {
     return (
       <DaemonManagementScreen
@@ -2298,32 +2316,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
         </Pressable>
       </View>
-        {modelSheetOpen ? (
-          <View style={[styles.modelSheet, { maxHeight: Math.max(240, Math.round((rootHeight || 600) * 0.72)) }]} testID="composer-model-sheet">
-            <ScrollView keyboardShouldPersistTaps="handled" nestedScrollEnabled>
-            {sheet.rows.map(r => (
-              <View key={r.key} style={styles.modelSheetRow} testID={`model-sheet-row-${r.key}`}>
-                <Text style={styles.modelSheetLabel}>{r.label}</Text>
-                <Text style={styles.modelSheetValue} numberOfLines={2}>{r.value}</Text>
-              </View>
-            ))}
-            {targetNode ? (
-              // 直接复用节点页的模型区（同一份 availability / hot V2 语义 / revision 写与回读），不另造会话写。
-              <NodeModelSection
-                key={`${cfg.profileId ?? cfg.serverUrl}|${cfg.networkId ?? ''}|${targetNode.node_id}`}
-                cfg={cfg}
-                node={targetNode}
-                runtimeVersion={controlSession?.version ?? undefined}
-                onEffectiveConfig={receiveEffectiveConfig}
-              />
-            ) : (
-              <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
-                {switchState.kind === 'unsupported' ? t('chat.switchDisabled', { reason: switchState.message ?? '' }) : t('chat.switchLoading')}
-              </Text>
-            )}
-            </ScrollView>
-          </View>
-        ) : null}
 
       {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
       {searchOpen ? (
@@ -2900,6 +2892,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           />
         ) : null}
         <View style={styles.desktopComposerWrap}>
+        {modelPaletteOverlay}
         <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]} testID="desktop-composer-card">
           {/* 内容高度量尺:同宽、同字号行高的隐形文字。不用 TextInput 的 onContentSizeChange —— web 上那是
               textarea.scrollHeight,永远 ≥ 自身高度,卡片只会长不会缩(删掉文字后回不去)。 */}
@@ -2951,10 +2944,23 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>{t('chat.priority')}</Text>
                 </Pressable>
               ) : null}
-              <Pressable accessibilityRole="button" accessibilityLabel={t('chat.modelSheetOpen')} testID="composer-model-entry" onPress={() => setModelSheetOpen(v => !v)}>
-              <Text style={[styles.desktopModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
-                {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-              </Text>
+              <Pressable accessibilityRole="button" accessibilityLabel={t('chat.modelSheetOpen')} testID="composer-model-entry" onPress={() => setModelSheetOpen(v => !v)} style={({ pressed }) => [styles.desktopModelPill, pressed && { opacity: 0.7 }]}>
+                <Text style={styles.desktopModelPillText} numberOfLines={1} testID="composer-model">
+                  {footerModel || t('chat.modelUnknown')}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+              </Pressable>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
+                testID="composer-variant-entry"
+                onPress={() => setModelSheetOpen(true)}
+                style={({ pressed }) => [styles.desktopVariantPill, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={styles.desktopVariantPillText} numberOfLines={1} testID="composer-variant">
+                  {composerVariantLabel(footerVariant)}
+                </Text>
+                <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
               </Pressable>
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
@@ -3005,6 +3011,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             onPick={pickSuggest}
           />
         ) : null}
+      <View style={styles.composerFooterBlock}>
+      {modelPaletteOverlay}
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
@@ -3072,17 +3080,33 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onPlus={() => plusEvent('toggle')}
         />
       </View>
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel={t('chat.modelSheetOpen')}
-        onPress={() => setModelSheetOpen(v => !v)}
-        style={({ pressed }) => [styles.composerModelEntry, pressed && { opacity: 0.6 }]}
-        testID="composer-model-entry"
-      >
-        <Text style={[styles.composerModelEntryText, { color: colors.textMuted }]} numberOfLines={1}>
-          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-        </Text>
-      </Pressable>
+      <View style={styles.composerModelRow}>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelSheetOpen')}
+          onPress={() => setModelSheetOpen(v => !v)}
+          style={({ pressed }) => [styles.composerModelPill, pressed && { opacity: 0.6 }]}
+          testID="composer-model-entry"
+        >
+          <Text style={[styles.composerModelPillText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
+            {footerModel || t('chat.modelUnknown')}
+          </Text>
+          <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
+          onPress={() => setModelSheetOpen(true)}
+          style={({ pressed }) => [styles.composerVariantPill, pressed && { opacity: 0.6 }]}
+          testID="composer-variant-entry"
+        >
+          <Text style={[styles.composerVariantPillText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-variant">
+            {composerVariantLabel(footerVariant)}
+          </Text>
+          <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      </View>
       {plusMenuOpen ? (
         // Inline, in the chat pane only (two-pane: never over the agent list). It is a
         // sibling after the input row inside the root column, so the inverted message
@@ -3196,15 +3220,17 @@ const makeStyles = (B = bubbleLayout()) =>
   // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   // Model id chip: secondary, one line, never steals width from the name column.
-  // 浮层：面板挂在页头行内，用绝对定位铺满聊天区宽度（左/右 8），避免被页头行的布局裁掉右半。
-  modelSheet: { position: 'absolute', top: 54, left: 8, right: 8, zIndex: 9999, elevation: 12, padding: 10, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
-  modelSheetRow: { flexDirection: 'row', gap: 8, paddingVertical: 3 },
-  modelSheetLabel: { width: 84, fontSize: ds(11), color: colors.textMuted },
-  modelSheetValue: { flex: 1, fontSize: ds(11), color: colors.text },
-  modelSheetOptions: { flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 6 },
-  modelSheetOption: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.item, backgroundColor: colors.bg, borderWidth: 1, borderColor: colors.border },
-  modelSheetOptionText: { fontSize: ds(11), color: colors.text },
-  modelSheetDisabled: { marginTop: 6, fontSize: ds(11), color: colors.textMuted },
+  // #4130 follow-up：模型命令面板贴着输入卡片上沿浮出（OpenCode 风格），
+  // 桌面挂在 desktopComposerWrap、手机挂在输入行 + 模型行所在块的上方。
+  composerPaletteAnchor: { position: 'absolute', left: 0, right: 0, bottom: '100%', zIndex: 9999, elevation: 14, alignItems: 'center', paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: 8 },
+  composerFooterBlock: { position: 'relative' },
+  // 手机：输入行下面一行「模型 + 思考档位」控件；未知就写未知，不摆默认值。
+  // Build/agent 下拉没有可信数据源（catalog 不含 agent 列表），按需求不显示，不造假。
+  composerModelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 2 },
+  composerModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '60%', height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
+  composerModelPillText: { fontSize: ds(11), flexShrink: 1 },
+  composerVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 8, borderRadius: radius.pill },
+  composerVariantPillText: { fontSize: ds(11) },
   modelChip: {
     maxWidth: 132, marginRight: 6, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
@@ -3452,13 +3478,11 @@ const makeStyles = (B = bubbleLayout()) =>
     userSelect: 'none',
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
-  // #4130:输入框上方右对齐的一行「runtime · model」,只在会话上报了模型时出现(不占位、不撑高)。
-  composerModelLine: { paddingHorizontal: spacing.md, alignItems: 'flex-end' },
-  composerModelEntry: { alignSelf: 'flex-start', paddingHorizontal: spacing.md, paddingVertical: 2 },
-  composerModelEntryText: { fontSize: ds(11) },
-  composerModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: '80%' },
-  // 桌面:同一句文案挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
-  desktopModelText: { fontSize: ds(11), overflow: 'hidden', maxWidth: 200, marginRight: 8 },
+  // 桌面:模型 + 档位两个下拉控件挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
+  desktopModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200, height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
+  desktopModelPillText: { fontSize: ds(11), color: colors.text, flexShrink: 1 },
+  desktopVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 8, borderRadius: radius.pill },
+  desktopVariantPillText: { fontSize: ds(11), color: colors.textMuted },
   // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
   // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
   desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
