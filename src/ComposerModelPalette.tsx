@@ -28,6 +28,8 @@ import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { variantValueError, variantWritable } from './node-variant-patch';
 import { composerVariantLabel } from './composer-model-label';
+import { composerAgents, confirmComposerAgentSwitch } from './composer-agent';
+import './i18n-composer-agent';
 import {
   confirmComposerModelSwitch,
   confirmComposerVariantSwitch,
@@ -72,12 +74,25 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   const lock = useRef(false);
+  const scope = useMemo(() => ({}), [node?.node_id, cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
+  const scopeRef = useRef<object | null>(scope);
+  const [agentConfigScope, setAgentConfigScope] = useState<object | null>(null);
+  scopeRef.current = scope;
+  useEffect(() => () => { if (scopeRef.current === scope) scopeRef.current = null; }, [scope]);
   const cfgRef = useRef(cfg);
   cfgRef.current = cfg;
   const readbackRef = useRef(onReadback);
   readbackRef.current = onReadback;
   const closeRef = useRef(onClose);
   closeRef.current = onClose;
+  useEffect(() => {
+    if (Platform.OS !== 'web' || typeof document === 'undefined') return;
+    const escape = (event: KeyboardEvent) => {
+      if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); }
+    };
+    document.addEventListener('keydown', escape);
+    return () => document.removeEventListener('keydown', escape);
+  }, []);
 
   // 打开面板就读一次受权配置：footer 的基准值与写入用的 baseRevision 都来自它。
   // 这不是「乐观值」：它只是节点当前真实配置，切没切成仍由写后的 ACK+读回决定。
@@ -89,6 +104,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       .then(value => {
         if (!live) return;
         setConfig(value);
+        setAgentConfigScope(scope);
         readbackRef.current(value);
       })
       .catch(() => {
@@ -97,7 +113,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         readbackRef.current(null);
       });
     return () => { live = false; };
-  }, [node?.node_id, cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
+  }, [node?.node_id, cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token, scope]);
 
   // 目录：只读这台节点的 OpenCode V2 服务器。没有 daemon 绑定 / 不是 V2 / 超时
   // 都显示真实原因，不换别的节点目录、不退回内置清单。
@@ -169,7 +185,50 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     variantCapable: config?.opencode_variant_config_capable === true || config?.variant_capable === true,
     runtime: node?.runtime ?? null,
   });
-  const listMax = Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
+  const agents = composerAgents(agentConfigScope === scope ? config : null);
+  const listMax = agents.length ? Math.max(100, Math.min(220, Math.round((windowHeight || 800) * 0.25))) : Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
+  const [activeAgent, setActiveAgent] = useState<string | null>(null);
+
+  const applyAgent = async (agent: string) => {
+    if (!node || !config || lock.current || !agents.includes(agent) || config.agent === agent) return;
+    const requestScope = scope;
+    const requestCfg = cfg;
+    const live = () => scopeRef.current === requestScope;
+    lock.current = true;
+    setBusy(true);
+    setErrorText(null);
+    setErrorDetail(null);
+    setNotice(null);
+    try {
+      const res = await updateNodeConfig(requestCfg, { nodeId: node.node_id, baseRevision: config.config_revision, patch: { agent } });
+      if (!live()) return;
+      if (!res.ok) { setErrorText(res.error); return; }
+      // Acceptance is not application. Read only, never replay a timed-out write.
+      for (let i = 0; i < 12; i++) {
+        if (!live()) return;
+        const after = await fetchNodeConfig(requestCfg, node.node_id);
+        if (!live()) return;
+        const verdict = confirmComposerAgentSwitch({ after, updateId: res.update_id, requested: agent });
+        if (verdict.confirmed) {
+          setConfig(after);
+          readbackRef.current(after);
+          setNotice(t('composerAgent.applied', { value: agent }));
+          return;
+        }
+        const ack = after?.last_update;
+        if (!res.update_id || (ack?.update_id === res.update_id && (ack.terminal || ack.status === 'applied' || ack.status === 'failed' || ack.status === 'timeout'))) {
+          setErrorText(verdict.reason); return;
+        }
+        if (i < 11) await new Promise(resolve => setTimeout(resolve, 500));
+      }
+      if (live()) setErrorText('timeout');
+    } catch (error) {
+      if (live()) setErrorText(error instanceof Error ? error.message : String(error));
+    } finally {
+      lock.current = false;
+      if (live()) setBusy(false);
+    }
+  };
 
   const applyModel = async (row: PaletteRow) => {
     if (!node || lock.current) return;
@@ -408,6 +467,36 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
               ) : null}
             </>
           )}
+        </View>
+      ) : null}
+
+      {agents.length > 0 ? (
+        <View testID="composer-agent-section" style={styles.variantRow}>
+          <Text style={styles.variantTitle}>{t('composerAgent.title')}</Text>
+          {config?.agent === undefined ? <Text testID="composer-agent-unknown" style={styles.variantNote}>{t('composerAgent.unknown')}</Text> : null}
+          <ScrollView style={{ maxHeight: 120, width: '100%' }} nestedScrollEnabled keyboardShouldPersistTaps="handled" testID="composer-agent-list"
+            {...(Platform.OS === 'web' ? { onKeyDown: (event: { key: string; preventDefault: () => void }) => {
+              if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
+              if (busy) return;
+              if (event.key === 'Enter') { event.preventDefault(); if (activeAgent) void applyAgent(activeAgent); return; }
+              if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return;
+              event.preventDefault();
+              const index = agents.indexOf(activeAgent ?? config?.agent ?? '');
+              const next = agents[(index + (event.key === 'ArrowDown' ? 1 : -1) + agents.length) % agents.length];
+              setActiveAgent(next);
+              if (typeof document !== 'undefined') {
+                const el = document.querySelector<HTMLElement>(`[data-testid="composer-agent-row-${encodeURIComponent(next)}"]`);
+                el?.focus(); el?.scrollIntoView({ block: 'nearest' });
+              }
+            } } : {})}>
+            {agents.map(agent => <Pressable key={agent} testID={`composer-agent-row-${encodeURIComponent(agent)}`} accessibilityRole="button"
+              accessibilityLabel={agent} accessibilityState={{ selected: config?.agent === agent, disabled: busy }} disabled={busy}
+              onFocus={() => setActiveAgent(agent)} onPress={() => void applyAgent(agent)}
+              style={[styles.row, (config?.agent === agent || activeAgent === agent) && styles.rowCurrent]}>
+              <Text style={styles.rowLabel} numberOfLines={1}>{agent}</Text>
+              {config?.agent === agent ? <Ionicons testID={`composer-agent-check-${encodeURIComponent(agent)}`} name="checkmark" size={18} color={colors.textSecondary} /> : null}
+            </Pressable>)}
+          </ScrollView>
         </View>
       ) : null}
 
