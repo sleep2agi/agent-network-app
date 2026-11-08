@@ -52,15 +52,23 @@ const chatFixture = () => {
   return out;
 };
 
-// Geometry read in the page. Composer = the direct child of the screen root that contains the visible textarea.
+// Geometry read in the page. Chat composer = input row + its adjacent model footer;
+// DM has no footer. Use the existing footer marker, not pane/viewport bottom or a
+// hardcoded footer height. Missing/displaced footer fails closed.
 const measure = (page, paneId, newest = null) => page.evaluate(([paneId, newest]) => {
   const pane = document.querySelector(`[data-testid="${paneId}"]`);
-  const ta = [...document.querySelectorAll('textarea')].find(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
+  const ta = pane && [...pane.querySelectorAll('textarea')].find(e => e.getClientRects().length && getComputedStyle(e).visibility !== 'hidden');
   if (!pane || !ta) return null;
   let row = ta;
   while (row.parentElement && row.parentElement !== pane) row = row.parentElement;
   if (row.parentElement !== pane) return null;
   const rb = row.getBoundingClientRect();
+  // Desktop's model marker is already INSIDE the textarea's ancestor row/card.
+  // Only mobile chat renders it as a sibling below that row.
+  const mobileChat = paneId === 'chat-pane' && !row.querySelector('[data-testid="desktop-composer-card"]');
+  const footer = mobileChat ? pane.querySelector('[data-testid="composer-model-entry"]') : null;
+  const fb = footer?.getBoundingClientRect();
+  if (mobileChat && (!footer || footer.parentElement !== pane || !fb?.height || Math.abs(fb.top - rb.bottom) > 0.5)) return null;
   const pb = pane.getBoundingClientRect();
   const header = pane.querySelector('[data-testid="chat-header"], [data-testid="dm-header"]')?.getBoundingClientRect();
   // 🔴 fail closed：末行只认 Range 行盒；拿不到 rect 就是「不可判定」，不用元素盒兜底。
@@ -106,7 +114,7 @@ const measure = (page, paneId, newest = null) => page.evaluate(([paneId, newest]
     }
   }
   return {
-    composerTop: rb.top, composerBottom: rb.bottom, paneBottom: pb.bottom,
+    composerTop: rb.top, composerBottom: fb?.bottom ?? rb.bottom, inputRowBottom: rb.bottom, footerHeight: fb?.height ?? 0, paneBottom: pb.bottom,
     headerBottom: header?.bottom ?? pb.top, last, lastLines, clip, list,
     overflowX: document.documentElement.scrollWidth > window.innerWidth + 1,
   };
@@ -271,7 +279,24 @@ for (const v of VIEWPORTS) for (const sc of SCREENS) {
     continue;
   }
   const rest = await measure(page, sc.pane, sc.newest);
-  record(vp, 'rest', { measured: !!rest, atBottom: !!rest && Math.abs(rest.composerBottom - v.h) <= NEAR }, { composerBottom: r1(rest?.composerBottom) });
+  record(vp, 'rest', { measured: !!rest, atBottom: !!rest && Math.abs(rest.composerBottom - v.h) <= NEAR }, { composerBottom: r1(rest?.composerBottom), inputRowBottom: r1(rest?.inputRowBottom), footerHeight: r1(rest?.footerHeight) });
+  if (sc.name === 'chat') {
+    const footer = page.locator('[data-testid="chat-pane"] [data-testid="composer-model-entry"]');
+    const style = await footer.getAttribute('style');
+    let displacedRejected, missingRejected;
+    try {
+      await footer.evaluate(e => { e.style.transform = 'translateY(-8px)'; });
+      displacedRejected = (await measure(page, sc.pane, sc.newest)) === null;
+      await footer.evaluate(e => { e.dataset.testid = 'composer-model-entry-negative-control'; });
+      missingRejected = (await measure(page, sc.pane, sc.newest)) === null;
+    } finally {
+      await page.locator('[data-testid="composer-model-entry"], [data-testid="composer-model-entry-negative-control"]').evaluate((e, style) => {
+        e.dataset.testid = 'composer-model-entry';
+        if (style === null) e.removeAttribute('style'); else e.setAttribute('style', style);
+      }, style);
+    }
+    record(vp, 'full composer marker negative controls', { displacedRejected, missingRejected });
+  }
   const ta = page.locator('textarea').filter({ visible: true }).first();
   await ta.click();
   let i = 0;
