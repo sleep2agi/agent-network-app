@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.494:",
+  "- 模型面板里新增「Build / Agent」：显示当前会话真实的 agent（例如 build），",
+  "  节点上报可切换能力后才会变成可点选；读不到就不显示，不用默认值代替。",
+  "",
   "What's new in 0.2.493:",
   "- 聊天页「Fork 当前节点」现在也认 `opencode-sdk` 这类 V2 节点（仍要求 generation=v2）；之前只认 `opencode-cli`，导致真节点被误报 fork_requires_opencode_v2。",
   "",
