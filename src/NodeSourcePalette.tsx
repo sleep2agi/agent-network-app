@@ -85,6 +85,9 @@ interface Props {
   title?: string;
   onClose: () => void;
   daemonNodeId?: string;
+  /** Chat entry is scoped to its real current session, not directory/create. */
+  forkOnly?: boolean;
+  forkSourceError?: string | null;
 }
 
 type DirectoryState =
@@ -101,7 +104,7 @@ interface ForkState {
 const DIRECTORY_POLL_MS = 1500;
 const FORK_POLL_MS = 2000;
 
-export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessionId, forkSessions, title, onClose, daemonNodeId: suppliedDaemon }: Props) {
+export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessionId, forkSessions, title, onClose, daemonNodeId: suppliedDaemon, forkOnly = false, forkSourceError }: Props) {
   const styles = makePaletteStyles();
   const [query, setQuery] = useState('');
   const [fork, setFork] = useState<ForkState>({ kind: 'loading', candidates: [], error: null });
@@ -126,6 +129,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   useEffect(() => { liveRef.current = true; return () => { liveRef.current = false; }; }, []);
 
   useEffect(() => {
+    if (forkOnly) return;
     let live = true;
     setDaemonId(suppliedDaemon ?? null);
     setDaemonError(null);
@@ -137,12 +141,12 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
       if (!id) setDaemonError('source_daemon_unavailable');
     }).catch(error => { if (live) setDaemonError(String(error?.message ?? error)); });
     return () => { live = false; };
-  }, [cfg, sourceNodeId, suppliedDaemon]);
+  }, [cfg, sourceNodeId, suppliedDaemon, forkOnly]);
 
   // ── fork 名单：调用方给了就用；否则读 full /api/status（只保留 ses_ + 本网络）──
   useEffect(() => {
-    if (forkSessions && forkSessions.length) {
-      setFork({ kind: 'ready', candidates: [...forkSessions], error: null });
+    if (forkSessions !== undefined) {
+      setFork({ kind: 'ready', candidates: [...forkSessions], error: forkSourceError ?? null });
       return;
     }
     let live = true;
@@ -166,10 +170,11 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
         setFork({ kind: 'error', candidates: [], error: String((e as Error)?.message ?? e) });
       });
     return () => { live = false; };
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, forkSessions, networkId]);
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, forkSessions, networkId, forkSourceError]);
 
   // ── 目录（只读）：POST → 轮询 GET；单 Server 时自动选一次拿 selection_scope ──
   useEffect(() => {
+    if (forkOnly) { setDirectory({ kind: 'idle' }); return; }
     if (!networkId || !sourceNodeId || !daemonId) {
       setDirectory(daemonError ? { kind: 'failed', error: daemonError } : { kind: 'pending' }); return;
     }
@@ -232,7 +237,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
       timer = setInterval(() => { void tick(); }, DIRECTORY_POLL_MS);
     })();
     return () => { live = false; if (timer) clearInterval(timer); };
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, networkId, sourceNodeId, daemonId, daemonError]);
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, networkId, sourceNodeId, daemonId, daemonError, forkOnly]);
 
   // ── fork 回执轮询：unknown 继续用同一 request_id 收敛（不新开意图）──
   useEffect(() => {
@@ -277,11 +282,11 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     snapshot,
     query,
     selectedKey,
-    directoryLoading: directory.kind === 'idle' || directory.kind === 'pending',
+    directoryLoading: !forkOnly && (directory.kind === 'idle' || directory.kind === 'pending'),
     directoryError: directory.kind === 'failed' || directory.kind === 'unavailable' || directory.kind === 'denied' ? directory.error : null,
     forkLoading: fork.kind === 'loading',
     forkError: fork.kind === 'error' ? fork.error : null,
-  }), [forkRowList, directoryRowList, snapshot, query, selectedKey, directory, fork]);
+  }), [forkRowList, directoryRowList, snapshot, query, selectedKey, directory, fork, forkOnly]);
 
   const selectedRow = rows.find(row => row.key === selectedKey) ?? null;
   const target: PaletteTarget | null = selectedRow ? targetOfRow(selectedRow) : null;
@@ -448,6 +453,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
       />
 
       {busy ? <PaletteLoading text={t('sourcePalette.submitting')} testID="source-palette-busy" /> : null}
+      {forkOnly && forkSourceError ? <PaletteError text={forkSourceError} testID="chat-fork-source-error" /> : null}
 
       <View testID="source-directory-section" style={{ flexShrink: 1, minHeight: 0 }}>
         {view.status === 'loading' ? <PaletteLoading text={t('sourcePalette.loading')} testID="source-palette-loading" /> : null}
@@ -599,16 +605,16 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
 
       {view.status === 'ready' && view.catalogTotal > 0 ? (
         <Text style={styles.source} numberOfLines={2} testID="source-palette-source">
-          {fork.kind === 'ready' && fork.candidates.length
+          {forkOnly ? 'fork 源：当前节点的实时 /api/status 上报' : fork.kind === 'ready' && fork.candidates.length
             ? `fork 源：full /api/status 的受管会话（${fork.candidates.length}）· 目录：只读快照 ${snapshot?.snapshotId ?? '—'}`
             : `目录：只读快照 ${snapshot?.snapshotId ?? '—'}（${snapshot?.completeness ?? 'authorized_scope_only'}）`}
         </Text>
       ) : null}
-      {!snapshot ? (
+      {!snapshot && !forkOnly ? (
         <Text style={styles.source} testID="source-fork-gate">
           没有目录快照：只能 fork 当前受管会话（新建/接入需要只读目录授权）
         </Text>
-      ) : !newSessionUsable ? (
+      ) : !forkOnly && !newSessionUsable ? (
         <Text style={styles.source} testID="source-fork-gate">
           {newSessionReason}
         </Text>

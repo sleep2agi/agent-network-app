@@ -158,7 +158,7 @@ for (const L of LAYOUTS) {
       check(tag, 'drawer title bar ends on the chat header line (±1px)', Math.abs(bottoms[0] - bottoms[1]) <= 1, bottoms.map(r1).join(' / '));
     }
     const ids = pm.rows.map(r => r.id);
-    const expected = ['chat-info-row-node', 'chat-info-row-search', 'chat-info-row-pin', 'chat-info-row-mute', ...(L.name === 'desktop' ? ['chat-info-row-windowPin'] : []),
+    const expected = ['chat-info-row-node', 'chat-info-row-search', 'chat-info-row-fork', 'chat-info-row-pin', 'chat-info-row-mute', ...(L.name === 'desktop' ? ['chat-info-row-windowPin'] : []),
       'chat-info-row-section-model', 'chat-info-row-section-secrets', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks', 'chat-info-row-section-schedules',
       'chat-info-row-section-logs'];  // 运行日志 (#493)
     check(tag, 'rows in order', JSON.stringify(ids) === JSON.stringify(expected), ids.join(','));
