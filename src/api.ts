@@ -1605,7 +1605,7 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
     flags: d.flags && typeof d.flags === 'object' ? d.flags : undefined,
     config_update_capable: d.config_update_capable === true,
     // 读回只认 server GET 顶层字段（server.ts:6478-6480）：
-    // model_effective 缺省 = unknown；modelVariant 用 hasOwnProperty 区分「键不存在(unknown)」与「null(明确清除)」。
+    // model_effective 缺省 = unknown；modelVariant 只接 string/null，缺省或其它类型 = unknown。
     model_effective: typeof d.model_effective === 'string' ? d.model_effective : undefined,
     modelVariant: typeof d.modelVariant === 'string' || d.modelVariant === null ? d.modelVariant : undefined,
     opencode_variant_config_capable: (d as any).opencode_variant_config_capable === true,
