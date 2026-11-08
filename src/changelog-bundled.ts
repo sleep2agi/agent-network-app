@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.491:",
+  "- 新建节点、copy、fork 全部改成同一套命令面板：搜索、按工作路径分组带数量、当前项打勾；",
+  "  空态与真实错误分离（未开放/无权限原样显示，不兜底成“暂无数据”）。",
+  "- fork 保持六字段合同（network_id/source_node_id/session_id/mode/child_name/intent_id），",
+  "  不覆盖原生 session，不支持跨目录 fork。",
+  "",
   "What's new in 0.2.490:",
   "- 聊天输入框下方的模型入口改成命令面板：搜索、按 provider 分组带数量、当前模型打勾；",
   "  切换仍要本次确认并读回生效值，失败/迟到/换错会话都不会假装成功。",
