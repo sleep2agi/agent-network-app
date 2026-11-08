@@ -1,0 +1,99 @@
+Composer effective variant follow-up (local only)
+================================================
+Base: 68c4de808cdd1cd6f5897f57229e32d3b4092ea5, app 0.2.489 unchanged.
+Worktree: /tmp/opencode/app-composer-variant-followup
+Branch: feat/composer-variant-followup
+Frozen candidate/full/handoff trees were read only. No push, remote credentials,
+release/version bump, server change, dependency installation or download.
+
+Read AGENTS.md / CLAUDE.md and https://docs.expo.dev/versions/v56.0.0/ first.
+Dependencies: existing node_modules symlink reused without installing into it.
+Synthetic fixture and Expo commands use /tmp/opencode/composer-variant-synthetic-home.
+
+Tools
+-----
+Node v22.22.2; npm 10.9.7; Bun 1.3.14 (Linux x64 baseline).
+TypeScript 6.0.3; Expo 56.0.9; Playwright 1.59.1.
+Google Chrome for Testing 151.0.7922.34 (headless, fresh synthetic context).
+PATH=/tmp/opencode/4130-browser-bin:/home/vansin/.nvm/versions/node/v22.22.2/bin:$PATH
+
+Product scope (six files, no generic framework)
+----------------------------------------------
+src/ChatScreen.tsx: optional panel callback consumption; same-scope TTL snapshots;
+  desktop footer opens the existing panel (it was a non-clickable Text).
+src/NodeModelSection.tsx: optional callback, stale/unmounted read rejection,
+  model/variant singleflight, effective model and exact terminal ack readback.
+src/composer-model-label.ts: effective model+variant from one source; explicit
+  null=default, missing=unknown; preserve status offline warning and TTL checks.
+Additional necessary contract/copy files beyond the initial 2-4 estimate:
+src/api.ts: expose canonical GET model_effective/modelVariant/capability/last_update;
+  retain legacy aliases/API types for other callers.
+src/node-model-change.ts: exact update_id/status/terminal ack predicate; do not
+  alter the existing legacy revision polling state machine.
+src/i18n.ts: explicit default copy in Chinese/English (existing unknown/variant copy reused).
+No #4150 source/directory/create/fork changes were imported from the full tree.
+
+Commands and evidence
+---------------------
+1. npm run typecheck
+   = tsc --noEmit -p tsconfig.build.json (the repository CI command).
+   Final exit 0; /tmp/opencode/composer-variant-typecheck-verified.log.
+   First attempt found two introduced applied-phase type errors (hot property),
+   corrected without any cast; not a baseline failure.
+
+2. HOME=/tmp/opencode/composer-variant-synthetic-home
+   TEST_DIR=/tmp/opencode/composer-variant-focused npm test
+   The test directory contains symlinks to these current worktree tests:
+   composer-model-label, composer-model-scope, composer-model-sheet,
+   composer-model-mobile-wiring, composer-variant-ack, node-model-change,
+   node-variant-patch, opencode-v2-model-list (all .test.ts).
+   Repository scripts/run-tests.mjs, 8/8 test files passed, exit 0.
+   /tmp/opencode/composer-variant-focused-verified.log.
+   No claim of a full 467-file replay is made.
+
+3. HOME=/tmp/opencode/composer-variant-synthetic-home EXPO_OFFLINE=1
+   EXPO_NO_TELEMETRY=1 node node_modules/expo/bin/cli export --platform web
+   --output-dir /tmp/opencode/composer-variant-web-verified
+   Exit 0; /tmp/opencode/composer-variant-export-verified.log.
+   Product source SHA-256 (same sources used by the verified export):
+   ChatScreen.tsx 09b3191ebf96b565b46026dd8230ce9468b1a950a2bfcbd7bef9910ee839a947
+   NodeModelSection.tsx dd7ff68e3953bc9fe48b11c9c171dcc29198c5386474d8826f09b5ddcfb93508
+   api.ts adfb02561e382cc0f49294e8be88b1b0bb9d7f0a378f202cadce4b679312e019
+   composer-model-label.ts 63a2b11605bcc6ac83cf41f02064a54f6f6f9da04d775aa7a928349aae3c7603
+   i18n.ts 2a591e2f778ac4ab23696b15d47dc287bba1981163df5adfcc0308853a3c7141
+   node-model-change.ts 84c29c70d800d361adb7db6fe0eac0e4dd4e46f276dbae39d3c5640c0768fc1d
+
+4. WEB_DIR=/tmp/opencode/composer-variant-web-verified
+   PLAYWRIGHT_MODULE=/tmp/opencode/pw/node_modules/playwright/index.mjs
+   CHROMIUM_PATH=/home/vansin/.cache/ms-playwright/chromium-1234/chrome-linux64/chrome
+   node tests/composer-variant/drive.mjs
+   Final exit 0, 13/13 mounted checks, zero page errors.
+   /tmp/opencode/composer-variant-ui-final-acceptance-v2.log.
+   Proves same-model high and null-clear publish to the real footer after matching
+   ack/readback; selected/status old model is not combined with the new variant;
+   double press is singleflight; failed/wrong-id/nonterminal writes do not publish;
+   expired/late old-A/missing-variant responses cannot claim a current variant.
+   Earlier fixture attempts used the desktop Text instead of its entry, an
+   ambiguous error locator (diagnostic and error both contain the same text),
+   and a panel-reopen expiry probe which legitimately refreshed config TTL.
+   Final expiry probe closes the panel and re-renders via draft input, with Date
+   advanced but expiry timers not advanced. These fixture corrections did not
+   weaken the product's scope, ack, or freshness assertions.
+
+Changed test/evidence files
+--------------------------
+src/composer-model-label.test.ts
+src/composer-model-scope.test.ts
+src/composer-variant-ack.test.ts
+tests/composer-variant/drive.mjs
+tests/composer-variant/README.md
+docs/tests/report-composer-variant-followup.txt
+
+Boundary
+--------
+The footer never adds config/catalog polling or keeps the panel mounted. Initial
+variant is unknown until the existing panel's authorized GET succeeds; snapshots
+expire after 35s. Pending/failed/wrong-id/nonterminal/mismatched readback is not
+success. Reopen the panel to refresh an expired or unconfirmed snapshot.
+Only local synthetic Linux Chromium acceptance: no actual macOS/Windows/mobile
+native runtime, native OpenCode session, production login, or deployed app proof.

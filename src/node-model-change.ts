@@ -303,7 +303,7 @@ export function modelChangeDiag(
 }
 
 /** #4099：last_update 是否真的「已应用」——按 server/src/node-config-last-update.ts 的真实形状判定。
- *  status 必须 applied；update_id 与本次 update_id 对齐（双方都有时）；requested_model 与期望模型一致。
+ *  status 必须 applied；update_id 必须存在且与本次提交对齐；requested_model 与期望模型一致。
  *  terminal=false 或 status='unknown' 一律不算 applied（「不知道结没结束」≠「结束了」）。 */
 export function lastUpdateApplied(
   last: { update_id?: string | null; status?: string | null; terminal?: boolean; requested_model?: string | null } | null | undefined,
@@ -311,8 +311,9 @@ export function lastUpdateApplied(
   expectedModel: string | null | undefined,
 ): { applied: boolean; reason: string } {
   if (!last) return { applied: false, reason: 'last_update 缺失（节点从未下发过配置或不可读）' };
+  if (!updateId || last.update_id !== updateId) return { applied: false, reason: 'last_update.update_id 缺失或与本次提交不一致' };
+  if (last.terminal !== true) return { applied: false, reason: 'last_update 尚未明确终局' };
   if (last.status !== 'applied') return { applied: false, reason: `last_update.status=${last.status ?? 'unknown'}` };
-  if (last.update_id && updateId && last.update_id !== updateId) return { applied: false, reason: 'last_update.update_id 与本次提交不一致' };
   if (expectedModel && last.requested_model && last.requested_model !== expectedModel) {
     return { applied: false, reason: `last_update.requested_model=${last.requested_model} 与期望不一致` };
   }

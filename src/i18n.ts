@@ -29,6 +29,7 @@ const tables: TranslationTable = {
   'chat.switchLoading': ['切换未启用：正在读取该节点的受权详情…', 'Switch disabled: reading this node authorized detail…'],
   'chat.variantSuffix': [' · 档位 {value}', ' · variant {value}'],
   'chat.variantUnknownShort': ['未知', 'unknown'],
+  'chat.variantDefaultShort': ['默认', 'default'],
   'chat.modelSheetOpen': ['查看当前模型与可用模型目录', 'Show current model and catalog'],
   'chat.modelUnknown': ['模型未知或已过期', 'Model unknown or stale'],
   'server.overview': ['概览', 'Overview'],

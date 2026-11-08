@@ -64,7 +64,7 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
-import { readComposerModelSnapshot, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import { readComposerModelSnapshot, readEffectiveComposerModel, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
 import { modelSheet } from './composer-model-sheet';
 import NodeModelSection from './NodeModelSection';
@@ -1994,11 +1994,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [lightCaps, setLightCaps] = useState<ChatInfoCaps>({ rules: false, skills: false });
   const [fullCaps, setFullCaps] = useState<ChatInfoCaps | null>(null);
   const sessionCaps = fullCaps ?? lightCaps;
-  // #4130 显示段(admin 2026-11-07):输入框底部显示这个会话自己的模型。
-  // 只认会话行上报的值;未知/过期明确提示,不冒充此刻原生模型回读。
-  const composerModelLine = readComposerModelSnapshot(reportedModel, composerModelScope);
-  // #4130 第一主线（只读）：点模型行 → 打开面板，展示当前模型 / Provider / 目录 / 档位。
-  // 聊天页目前拿不到该节点的 daemon_node_id，所以目录显式 unsupported，不猜、不拿别节点候选。
+  // 输入框底部：同 scope 受权 config 的有效模型/档位优先；否则只显示会话上报模型、档位未知。
+  // 未知/过期明确提示，不冒充此刻原生模型回读。点击复用现有节点模型面板。
   const [modelSheetOpen, setModelSheetOpen] = useState(false);
   // 切换：复用现有节点设置路径（fetchNodeConfig / updateNodeConfig(baseRevision) / 回读）。
   // 解析出来的目标绑定：**连同作用域一起存**，渲染时再校验一次当前 scope（key 只能保证 remount，
@@ -2008,6 +2005,25 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 用 useMemo 而不是"effect 里自增 ref"——后者在同一 render 里读到旧值，正是审查指出的错版本。
   const wantedNodeId = controlSession?.node_id ?? null;
   const scopeToken = useMemo(() => ({}), [cfg.profileId, cfg.serverUrl, cfg.networkId, alias, wantedNodeId]);
+  const effectiveScope = useMemo(() => ({}), [composerModelScope, scopeToken]);
+  const effectiveScopeRef = useRef(effectiveScope);
+  effectiveScopeRef.current = effectiveScope;
+  const [effectiveModel, setEffectiveModel] = useState<ComposerModelSnapshot | null>(null);
+  const composerModelLine = readEffectiveComposerModel(effectiveModel, effectiveScope, reportedModel, composerModelScope) ?? readComposerModelSnapshot(reportedModel, composerModelScope);
+  const receiveEffectiveConfig = useCallback((value: import('./api').NodeConfigRead | null) => {
+    if (effectiveScopeRef.current !== effectiveScope) return;
+    setEffectiveModel(value?.model_effective?.trim() ? {
+      scope: effectiveScope, expiresAt: Date.now() + 35_000,
+      value: { model: value.model_effective, modelVariant: value.modelVariant },
+    } : null);
+  }, [effectiveScope]);
+  // No extra config/catalog request: the panel publishes its existing authorized read.
+  // Expire even after the panel unmounts; render also checks age after suspended timers.
+  useEffect(() => {
+    if (!effectiveModel) return;
+    const timer = setTimeout(() => setEffectiveModel(old => old === effectiveModel ? null : old), Math.max(0, effectiveModel.expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [effectiveModel]);
   // 缺 node_id 或 scope 不匹配 → 立即不显示旧 target（同一个 render 内判定，不依赖后续 effect）。
   const targetNode = wantedNodeId && resolvedTarget && resolvedTarget.scope === scopeToken ? resolvedTarget.node : null;
   const [switchState, setSwitchState] = useState<{ kind: 'idle' | 'unsupported' | 'error'; message?: string }>({ kind: 'idle' });
@@ -2298,6 +2314,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 cfg={cfg}
                 node={targetNode}
                 runtimeVersion={controlSession?.version ?? undefined}
+                onEffectiveConfig={receiveEffectiveConfig}
               />
             ) : (
               <Text style={styles.modelSheetDisabled} testID="model-sheet-row-switch">
@@ -2934,9 +2951,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>{t('chat.priority')}</Text>
                 </Pressable>
               ) : null}
+              <Pressable accessibilityRole="button" accessibilityLabel={t('chat.modelSheetOpen')} testID="composer-model-entry" onPress={() => setModelSheetOpen(v => !v)}>
               <Text style={[styles.desktopModelText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
                 {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
               </Text>
+              </Pressable>
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
@@ -3062,7 +3081,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       >
         <Text style={[styles.composerModelEntryText, { color: colors.textMuted }]} numberOfLines={1}>
           {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-          {t('chat.variantSuffix', { value: sheet.variantsKnown ? (sheet.rows.find(r => r.key === 'variants')?.value ?? '').slice(0, 24) : t('chat.variantUnknownShort') })}
         </Text>
       </Pressable>
       {plusMenuOpen ? (

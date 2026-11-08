@@ -1580,6 +1580,10 @@ export interface NodeConfigRead {
     requested_model?: string | null;
     error?: string | null;
   } | null;
+  /** #4099：节点当前档位（server：config_snapshot.modelVariant，兼容顶层 model_variant 投影）。 */
+  model_variant?: string | null;
+  /** #4099：节点是否显式声明可写档位（server gate：config_snapshot.opencode_variant_config_capable === true）。 */
+  variant_capable?: boolean;
 }
 
 /** null = hub 没有这个接口(404/501/非 JSON);其它失败抛错(调用方按「读失败」处理)。 */
@@ -1602,10 +1606,8 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
     config_update_capable: d.config_update_capable === true,
     // 读回只认 server GET 顶层字段（server.ts:6478-6480）：
     // model_effective 缺省 = unknown；modelVariant 用 hasOwnProperty 区分「键不存在(unknown)」与「null(明确清除)」。
-    model_effective: typeof (d as any).model_effective === 'string' ? (d as any).model_effective : undefined,
-    modelVariant: Object.prototype.hasOwnProperty.call(d ?? {}, 'modelVariant')
-      ? ((d as any).modelVariant === null ? null : String((d as any).modelVariant))
-      : undefined,
+    model_effective: typeof d.model_effective === 'string' ? d.model_effective : undefined,
+    modelVariant: typeof d.modelVariant === 'string' || d.modelVariant === null ? d.modelVariant : undefined,
     opencode_variant_config_capable: (d as any).opencode_variant_config_capable === true,
     // 真实形状见 server/src/node-config-last-update.ts（update_id / status / terminal / requested_model / error）
     last_update: (d as any).last_update && typeof (d as any).last_update === 'object'
@@ -1618,6 +1620,20 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
           error: (d as any).last_update.error ?? null,
         }
       : ((d as any).last_update === null ? null : undefined),
+    // 读回来源：顶层投影优先，其次 config_snapshot（server 的真实存放处）
+    model_variant: (() => {
+      const top = (d as { model_variant?: unknown }).model_variant;
+      if (typeof top === 'string' || top === null) return top;
+      const snap = (d as { config_snapshot?: { modelVariant?: unknown } }).config_snapshot;
+      const v = snap?.modelVariant;
+      return typeof v === 'string' || v === null ? v : undefined;
+    })(),
+    variant_capable: (() => {
+      const top = (d as { variant_capable?: unknown }).variant_capable;
+      if (typeof top === 'boolean') return top;
+      const snap = (d as { config_snapshot?: { opencode_variant_config_capable?: unknown } }).config_snapshot;
+      return snap?.opencode_variant_config_capable === true;
+    })(),
   };
 };
 

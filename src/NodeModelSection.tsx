@@ -73,25 +73,25 @@ async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string
   }
 }
 
-export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: HubConfig; node: HubNode; runtimeVersion?: string | null }) {
+export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiveConfig }: { cfg: HubConfig; node: HubNode; runtimeVersion?: string | null; onEffectiveConfig?: (value: NodeConfigRead | null) => void }) {
+  const scope = useMemo(() => ({}), [cfg, node.node_id]);
+  const currentScope = useRef<object | null>(scope);
+  currentScope.current = scope;
+  useEffect(() => { currentScope.current = scope; return () => { currentScope.current = null; }; }, [scope]);
+  const writeLock = useRef<object | null>(null);
+  const readGeneration = useRef(0);
+  const callback = useRef(onEffectiveConfig);
+  callback.current = onEffectiveConfig;
   // undefined = 还没读到;null = hub 没有这个接口
-  const [view, setView] = useState<NodeConfigRead | null | undefined>(undefined);
+  const [record, setRecord] = useState<{ scope: object; value: NodeConfigRead | null } | null>(null);
+  const view = record?.scope === scope ? record.value : undefined;
+  const setView = (value: NodeConfigRead | null) => setRecord({ scope, value });
   const [readFailed, setReadFailed] = useState(false);
   const [picked, setPicked] = useState<string>('');
   // 点了「当前：provider / model」会复制,但以前没有任何反馈 —— 用户不知道到底复制没复制。
   const [currentCopied, setCurrentCopied] = useState(false);
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
-  // 同步单飞：state 更新是异步的，连点两次可能在同一个 render 里都看到 busy=false；
-  // 用 ref 在发请求前**同步**置位，覆盖 model 与 variant 两条提交路径。
-  // 同步 render scope token + 每 scope 独立锁（旧 finally 无法解开新 scope 的锁）
-  const scopeToken = useMemo(() => ({}), [cfg.profileId, cfg.serverUrl, cfg.networkId, node.node_id]);
-  const scopeTokenRef = useRef(scopeToken);
-  scopeTokenRef.current = scopeToken;
-  const locksRef = useRef<WeakMap<object, boolean>>(new WeakMap());
-  const isCurrent = (t: object) => scopeTokenRef.current === t;
-  const acquire = (t: object) => { if (!locksRef.current.has(t)) locksRef.current.set(t, false); if (locksRef.current.get(t)) return false; locksRef.current.set(t, true); return true; };
-  const release = (t: object) => { locksRef.current.set(t, false); };
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
@@ -109,32 +109,31 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 换节点要重置「自动重试已用过」的标记:否则从 A 节点切到 B 节点时,B 永远不会自动重试。
   useEffect(() => { autoRetried.current = false; }, [node.node_id]);
 
-  // 作用域代际：账号/Hub/网络/节点任一变化即 +1；所有 await 回来都要比对，
-  // 旧 scope 的回包不得 setView/setPhase，也不得释放新 scope 的锁。
-  // scope 变化：清掉旧 scope 的展示状态（旧回包另由 token 判定，不会写回）
-  useEffect(() => {
-    setView(undefined);
-    setPhase({ kind: 'idle' });
-    setV2Models(null);
-    setV2VariantMap(null);
-    setReadFailed(false);
-  }, [scopeToken]);
-
-  const reload = useCallback(async () => {
-    const token = scopeTokenRef.current;
+  const reload = useCallback(async (publish = true) => {
+    const token = scope;
+    const generation = ++readGeneration.current;
     try {
       const v = await fetchNodeConfig(cfg, node.node_id);
-      if (!isCurrent(token)) return null;             // 旧 scope 回包丢弃
-      setView(v);
+      if (currentScope.current !== token || generation !== readGeneration.current) return null;
+      if (v && v.node_id !== node.node_id) { setReadFailed(true); callback.current?.(null); return null; }
+      setRecord({ scope: token, value: v });
       setReadFailed(false);
+      if (publish && writeLock.current !== token) callback.current?.(v);
       return v;
     } catch {
-      if (isCurrent(token)) setReadFailed(true);
+      if (currentScope.current === token && generation === readGeneration.current) {
+        setReadFailed(true);
+        if (publish) callback.current?.(null);
+      }
       return null;
     }
-  }, [cfg, node.node_id]);
+  }, [cfg, node.node_id, scope]);
 
   useEffect(() => { void reload(); }, [reload]);
+  useEffect(() => {
+    setPhase({ kind: 'idle' }); setV2Models(null); setV2VariantMap(null); setReadFailed(false);
+    setPicked(''); setCustom(''); setFilter('');
+  }, [scope]);
 
   useEffect(() => {
     if (!v2) return;
@@ -215,24 +214,25 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // the server-side change. Poll counts must not reset the deadline.
   useEffect(() => {
     if (requested === null || baseRevision === null) return;
+    const token = scope;
     let active = true;
     let current: Extract<ModelChangePhase, { kind: 'restarting' }> = { kind: 'restarting', requested, baseRevision, polls: 0 };
     let timer: ReturnType<typeof setTimeout>;
     const deadline = Date.now() + RESTART_TIMEOUT_MS;
     const expire = () => {
-      if (!active) return;
+      if (!active || currentScope.current !== token) return;
       active = false;
       clearTimeout(timer);
       setPhase({ kind: 'timeout', requested });
     };
     const deadlineTimer = setTimeout(expire, RESTART_TIMEOUT_MS);
     const tick = async () => {
-      if (!active) return;
+      if (!active || currentScope.current !== token) return;
       if (Date.now() >= deadline) { expire(); return; }
       let v: NodeConfigRead | null = null;
       let failed = false;
       try { v = await fetchNodeConfig(cfg, node.node_id); } catch { failed = true; }
-      if (!active) return;
+      if (!active || currentScope.current !== token) return;
       if (Date.now() >= deadline) { expire(); return; }
       if (!failed) setView(v);
       setReadFailed(failed);
@@ -248,7 +248,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     };
     timer = setTimeout(tick, RESTART_POLL_MS);
     return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
-  }, [requested, baseRevision, cfg, node.node_id]);
+  }, [requested, baseRevision, cfg, node.node_id, scope]);
 
   // V2 共存节点上纯 model 是 hot 变更:不受 config_update_capable 限制(它只挡重启级).
   const availability = modelControlAvailability(view === undefined ? null : view, { hotModel: v2 });
@@ -261,7 +261,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     : (v2 && peerModels.length > 0 ? peerModels : suggestedModels(node.runtime));
   const usingBuiltinFallback = v2 && v2Catalog.length === 0 && peerModels.length === 0;
   const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
-  const currentModel = view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
+  const currentModel = view?.model_effective ?? view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
   // 只在「opencode 系 runtime 却没写代际」时提示;写了 v1/v2 或不是 opencode 都不打扰。
   const isOpenCodeRuntime = /opencode/i.test(node.runtime ?? '');
@@ -293,29 +293,29 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   // 真正下发一次配置变更。抽出来是为了让「超时后再下发一次」复用同一条路径,
   // 而不是让用户重新在列表/输入框里把同一个模型再选一遍。
   const applyModel = async (model: string) => {
-    if (!view || busy) return;
-    const token = scopeTokenRef.current;
-    if (!acquire(token)) return;
+    if (!view || busy || writeLock.current === scope) return;
+    const token = scope;
+    writeLock.current = token;
+    ++readGeneration.current;
     setPhase({ kind: 'submitting', requested: model });
     try {
       const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
-      if (!isCurrent(token)) return;
-      if (!res.ok) {
-        if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); }
-        else setPhase({ kind: 'error', message: res.error });
+      if (currentScope.current !== token) return;
+      if (v2 && res.ok) {
+        const after = await reload(false);
+        if (currentScope.current !== token) return;
+        const confirmed = lastUpdateApplied(after?.last_update, res.update_id, model).applied && after?.model_effective === model;
+        callback.current?.(confirmed ? after : null);
+        if (confirmed) setFilter('');
+        setPhase(confirmed ? { kind: 'applied', model, previous: currentModel } : { kind: 'error', message: '已接受，但生效模型未确认' });
         return;
       }
-      const after = await reload();
-      if (!isCurrent(token)) return;
-      const updateId = (res as { update_id?: string }).update_id;
-      const lastJudgement = lastUpdateApplied(after?.last_update, updateId, model);
-      const lastOk = lastJudgement.applied;
-      if (!after) { setPhase({ kind: 'error', message: '已接受，但读回失败：生效模型未确认（不当作已生效）' }); return; }
-      if (lastOk && after.model_effective === model) { setFilter(''); setPhase({ kind: 'applied', model, previous: currentModel ?? null } as any); return; }
-      setPhase({ kind: 'error', message: `已接受，但未确认：last_update=${after.last_update?.status ?? 'unknown'} · 生效模型 ${after.model_effective ?? 'unknown'}` });
-    } finally {
-      if (isCurrent(token)) release(token);
-    }
+      // Legacy restart controls keep their existing revision observation path.
+      const next = afterSubmit(model, view.config_revision, res, currentModel, { hot: v2 });
+      if (next.kind === 'conflict') void reload();
+      if (next.kind === 'applied') setFilter('');
+      setPhase(next);
+    } finally { if (writeLock.current === token) writeLock.current = null; }
   };
 
   // #4099 档位：能力门 = 节点显式声明；写 = 同 model + modelVariant（hot）。不拼后缀、不硬编码档位。
@@ -323,9 +323,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
   const variantOpts = (() => {
     // 目录里的 per-model variants（接口就绪后由 catalog 快照提供）；当前未提供 → 未知，绝不编造
     const perModel = (v2VariantMap as Record<string, unknown> | null) ?? null;
-    return variantChoices(perModel ? perModel[currentModel ?? ''] : undefined);
+    return variantChoices(perModel ? perModel[view?.model_effective ?? ''] : undefined);
   })();
-  const currentVariant = view?.modelVariant;   // undefined = unknown；null = 明确清除
+  const currentVariant = view?.modelVariant;
 
   // #4099：切模型时原档位是否适配（keep / clear / must-reselect）——只提示，不自动改配置。
   const pendingModel = (() => {
@@ -342,38 +342,33 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
     : null;
 
   const applyVariant = async (nextVariant: string | null) => {
-    if (!view || busy || !variantGate.ok) return;
+    if (!view || busy || !variantGate.ok || writeLock.current === scope) return;
     const err = variantValueError(nextVariant);
     if (err) { setPhase({ kind: 'error', message: err }); return; }
-    const expectedModel = view.model_effective;
-    if (!expectedModel) { setPhase({ kind: 'error', message: '生效模型 unknown：禁止写档位（先让节点上报 model_effective）' }); return; }
-    const token = scopeTokenRef.current;
-    if (!acquire(token)) return;
-    setPhase({ kind: 'submitting', requested: expectedModel });
+    const effectiveModel = view.model_effective;
+    if (!effectiveModel) { setPhase({ kind: 'error', message: '生效模型未知，不能写档位' }); return; }
+    const token = scope;
+    writeLock.current = token;
+    ++readGeneration.current;
+    setPhase({ kind: 'submitting', requested: effectiveModel });
     try {
       const res = await updateNodeConfig(cfg, {
-        nodeId: node.node_id, baseRevision: view.config_revision,
-        patch: { model: expectedModel, modelVariant: nextVariant },
+        nodeId: node.node_id,
+        baseRevision: view.config_revision,
+        // 同 model 只改档位：显式带 modelVariant（=hot），不传 flags/channels
+        patch: { model: effectiveModel, modelVariant: nextVariant },
       });
-      if (!isCurrent(token)) return;
-      if (!res.ok) {
-        if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); }
-        else setPhase({ kind: 'error', message: res.error });
-        return;
-      }
-      const after = await reload();
-      if (!isCurrent(token)) return;
-      const updateId = (res as { update_id?: string }).update_id;
-      const lastJudgement = lastUpdateApplied(after?.last_update, updateId, expectedModel);
-      const lastOk = lastJudgement.applied;
-      const modelOk = after?.model_effective === expectedModel;
-      const variantOk = after?.modelVariant !== undefined && (after.modelVariant ?? null) === (nextVariant ?? null);
-      if (!after) setPhase({ kind: 'error', message: '已接受，但读回失败：当前档位未确认（不当作已生效）' });
-      else if (lastOk && modelOk && variantOk) setPhase({ kind: 'applied', model: after.model_effective ?? '', hot: true } as any);
-      else setPhase({ kind: 'error', message: `已接受，但未确认：last_update=${after.last_update?.status ?? 'unknown'} · 生效模型 ${after.model_effective ?? 'unknown'} · 档位 ${after.modelVariant === undefined ? 'unknown' : (after.modelVariant ?? 'null')}` });
-    } finally {
-      if (isCurrent(token)) release(token);
-    }
+      if (currentScope.current !== token) return;
+      if (res.ok) {
+        const after = await reload(false);
+        if (currentScope.current !== token) return;
+        const confirmed = lastUpdateApplied(after?.last_update, res.update_id, effectiveModel).applied
+          && after?.model_effective === effectiveModel && after?.modelVariant !== undefined && after.modelVariant === nextVariant;
+        callback.current?.(confirmed ? after : null);
+        setPhase(confirmed ? { kind: 'applied', model: effectiveModel } : { kind: 'error', message: '已接受，但当前档位未确认' });
+      } else if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); }
+      else setPhase({ kind: 'error', message: res.error });
+    } finally { if (writeLock.current === token) writeLock.current = null; }
   };
 
   const submit = async () => {
@@ -638,13 +633,15 @@ export default function NodeModelSection({ cfg, node, runtimeVersion }: { cfg: H
             <Pressable accessibilityRole="button" testID="node-model-recheck"
               onPress={async () => {
                 const before = phase;
+                const token = scope;
                 try {
                   const v = await fetchNodeConfig(cfg, node.node_id);
+                  if (currentScope.current !== token) return;
                   const next = recheckAfterTimeout(before, v);
                   setPhase(next);
                   if (next.kind === 'restarting') setPhase({ kind: 'timeout', requested: before.requested, previous: before.previous, hot: before.hot });
                 } catch {
-                  setPhase(before);
+                  if (currentScope.current === token) setPhase(before);
                 }
               }}
               style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
