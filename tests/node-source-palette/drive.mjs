@@ -322,7 +322,10 @@ try {
     await page.getByTestId('project-create-submit').click();
     await page.getByTestId('project-create-status').waitFor();
     ck('unknown: UI retains the unknown outcome', (await text(page, 'project-create-status')).includes('结果未知'));
-    ck('unknown: submit stays disabled, not a fresh intent', await page.getByTestId('project-create-submit').isDisabled());
+    // RN Web 的 Pressable 是 div：禁用态落在 aria-disabled/tabindex 上，不是 <button disabled>。
+    const submitEl = page.getByTestId('project-create-submit');
+    await page.waitForFunction(() => document.querySelector('[data-testid="project-create-submit"]')?.getAttribute('aria-disabled') === 'true');
+    ck('unknown: submit stays disabled, not a fresh intent', (await submitEl.getAttribute('aria-disabled')) === 'true' && (await submitEl.getAttribute('tabindex')) !== '0');
     await page.getByTestId('project-create-pick-oprj_2').click();
     ck('unknown: choosing another project cannot replay the uncertain request', (await text(page, 'source-palette-selected')).includes('oprj_1') && (await page.evaluate(() => window.__fp.calls.project.length)) === 1);
     await ctx.close();
@@ -361,7 +364,6 @@ try {
     const { ctx: c7, page: p7 } = await mount({ width: 1280, height: 900 });
     await p7.getByTestId('source-palette-search').click();
     await p7.keyboard.press('ArrowDown');
-    console.log('DEBUG active1 >>>', await p7.evaluate(() => document.activeElement?.getAttribute('data-testid')));
     await p7.keyboard.press('Enter');
     const selected = await text(p7, 'source-palette-selected');
     ck('keyboard: ↓ then Enter moves the selection off the default row', selected.includes('ses_B'), selected);
