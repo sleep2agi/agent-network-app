@@ -26,9 +26,21 @@ export interface ComposerModelSnapshot {
 
 /** A render-scope object is never reused across account/chat transitions.
  * Check age during render too: mobile/background timers may be suspended. */
-export function readComposerModelSnapshot(snapshot: ComposerModelSnapshot | null, scope: object, now = Date.now()): string | null {
+export function activeComposerModelValue(snapshot: ComposerModelSnapshot | null, scope: object, now = Date.now()): ComposerModelInput | null {
   if (!snapshot || snapshot.scope !== scope || !Number.isFinite(snapshot.expiresAt) || now >= snapshot.expiresAt) return null;
-  return composerModelLabel(snapshot.value);
+  return snapshot.value;
+}
+
+export function readComposerModelSnapshot(snapshot: ComposerModelSnapshot | null, scope: object, now = Date.now()): string | null {
+  const value = activeComposerModelValue(snapshot, scope, now);
+  return value ? composerModelLabel(value) : null;
+}
+
+/** Footer variant control: undefined = unknown, null = explicit default, string = selected. */
+export function composerVariantLabel(variant: string | null | undefined): string {
+  if (variant === undefined) return t('chat.variantUnknownShort');
+  if (variant === null) return t('chat.variantDefaultShort');
+  return variant;
 }
 
 /** Never combine a config variant with the independently cached status model. */

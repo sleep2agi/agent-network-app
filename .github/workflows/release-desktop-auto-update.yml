@@ -591,6 +591,11 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.490:
+            - 聊天输入框下方的模型入口改成命令面板：搜索、按 provider 分组带数量、当前模型打勾；
+              切换仍要本次确认并读回生效值，失败/迟到/换错会话都不会假装成功。
+            - 底部拆成「模型」和「思考档位」两个控件；目录没给档位时显示「未知」，不编造 High/Low。
+
             What's new in 0.2.489:
             - 聊天输入框底部会显示这个会话正在用的模型（形如「codex-tui · gpt-5-codex」）；
               没上报就什么都不显示，不会拿默认配置冒充；会话离线时标出「离线」。

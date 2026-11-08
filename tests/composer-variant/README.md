@@ -1,7 +1,8 @@
 # Composer effective variant fixture
 
 Uses the existing `test-layout-sweep/harness.mjs` synthetic IPC fixture and a
-production Expo web export. It mounts the real ChatScreen and NodeModelSection.
+production Expo web export. It mounts the real ChatScreen and the composer model
+command palette (which owns the same canonical config write/readback path).
 No production credentials, Hub, daemon, or native OpenCode session are used.
 
 Follow root `AGENTS.md`: Node 22, Bun 1.3.14; read Expo SDK 56 versioned docs.
@@ -19,8 +20,8 @@ wrong update ID and nonterminal readback, suspended-timer expiry, late A respons
 after changing to B, and missing variant fields on old nodes. The ck-style tests
 under `src/` cover label/i18n, scope identity/expiry and exact ack matching.
 
-The footer does **not** fetch config itself or keep the panel mounted. Until the
-existing panel reads config, its variant is unknown. Snapshots expire after 35s;
+The footer does **not** fetch config itself or keep the palette mounted. The
+palette reads config once when opened; until then the variant is unknown. Snapshots expire after 35s;
 reopen the panel to refresh. An accepted write without a matching terminal ack
 and matching effective readback is unconfirmed, not success.
 

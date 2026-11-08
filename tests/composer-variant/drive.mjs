@@ -63,22 +63,29 @@ try {
   await page.waitForFunction(() => !!window.__anetLayoutSweep);
   const chat = alias => page.evaluate(alias => window.__anetLayoutSweep.setScreen({ name: 'chat', alias }), alias);
   const footer = page.getByTestId('composer-model-entry');
-  const text = () => footer.innerText();
+  // Footer now has two controls (model + variant), so read both: the old single
+  // composer-model entry only carries the model name.
+  const text = () => page.evaluate(() => ['composer-model', 'composer-variant']
+    .map(id => document.querySelector(`[data-testid="${id}"]`)?.textContent || '')
+    .join(' '));
+  const waitFooter = value => page.waitForFunction(v => ['composer-model', 'composer-variant']
+    .map(id => document.querySelector(`[data-testid="${id}"]`)?.textContent || '')
+    .join(' ').includes(v), value);
   const open = () => footer.click();
   await chat('A');
   await footer.waitFor();
   ck('initial footer does not guess default', !(await text()).includes('默认'));
   await open();
   await page.getByTestId('node-variant-chip-high').waitFor();
-  await page.waitForFunction(() => document.querySelector('[data-testid="composer-model"]')?.textContent.includes('默认'));
+  await waitFooter('默认');
   ck('initial config uses effective model, never selected/status mixture', (await text()).includes('stub/effective') && !(await text()).includes('selected') && !(await text()).includes('status-old'));
   await page.getByTestId('node-variant-chip-high').evaluate(el => { el.click(); el.click(); });
-  await page.waitForFunction(() => document.querySelector('[data-testid="composer-model"]')?.textContent.includes('high'));
+  await waitFooter('high');
   ck('same-model change reaches footer after ack readback', (await text()).includes('high'));
   ck('same-turn double press is singleflight', await page.evaluate(() => window.__variantWrites.length === 1));
   ck('write uses effective model', await page.evaluate(() => window.__variantWrites[0].patch.model === 'stub/effective'));
   await page.getByTestId('node-variant-clear').click();
-  await page.waitForFunction(() => document.querySelector('[data-testid="composer-model"]')?.textContent.includes('默认'));
+  await waitFooter('默认');
   ck('explicit clear reaches footer after matching ack', (await text()).includes('默认'));
   await open();
   await page.getByTestId('composer-model-sheet').waitFor({ state: 'detached' });
@@ -90,7 +97,8 @@ try {
   // config response would otherwise refresh its TTL during this assertion.
   await page.locator('[data-testid="desktop-composer-card"] textarea').fill('synthetic expiry probe');
   await page.waitForFunction(() => {
-    const text = document.querySelector('[data-testid="composer-model-entry"]')?.textContent || '';
+    const text = ['composer-model', 'composer-variant']
+      .map(id => document.querySelector(`[data-testid="${id}"]`)?.textContent || '').join(' ');
     return !text.includes('默认') && !text.includes('high');
   });
   ck('expired snapshot is unknown even with suspended expiry timers', !(await text()).includes('默认') && !(await text()).includes('high'));
@@ -98,7 +106,7 @@ try {
   await page.locator('[data-testid="desktop-composer-card"] textarea').fill('');
   await open();
   await page.getByTestId('node-variant-chip-high').waitFor();
-  await page.waitForFunction(() => document.querySelector('[data-testid="composer-model-entry"]')?.textContent.includes('默认'));
+  await waitFooter('默认');
   await page.evaluate(() => { window.__variantMode = 'failure'; });
   await page.getByTestId('node-variant-chip-high').click();
   await page.getByText('失败:synthetic refusal', { exact: true }).waitFor();
@@ -121,13 +129,14 @@ try {
   await chat('B');
   await page.waitForFunction(() => document.querySelector('[data-testid="desktop-composer-card"] textarea')?.getAttribute('placeholder')?.includes('B'));
   await page.evaluate(() => window.__releaseConfig());
-  await page.waitForFunction(() => document.querySelector('[data-testid="composer-model-entry"]')?.textContent.includes('默认'));
+  await waitFooter('默认');
   ck('late A config cannot populate B footer', !(await text()).includes('low') && !(await text()).includes('high'));
   if (await page.getByTestId('composer-model-sheet').isVisible()) await open();
   await page.evaluate(() => { delete window.__variantNodes.B.modelVariant; });
   await open();
   await page.waitForFunction(() => {
-    const text = document.querySelector('[data-testid="composer-model-entry"]')?.textContent || '';
+    const text = ['composer-model', 'composer-variant']
+      .map(id => document.querySelector(`[data-testid="${id}"]`)?.textContent || '').join(' ');
     return text.includes('stub/effective') && text.includes('未知');
   });
   ck('missing variant on older config is unknown, not explicit default', !(await text()).includes('默认'));
