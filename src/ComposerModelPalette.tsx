@@ -111,7 +111,20 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     }
     const daemonNodeId = nodeProviderDaemon(node);
     if (!daemonNodeId) {
-      setCatalog({ snapshot: null, loading: false, error: catalogErrorText('daemon_not_found') });
+      // A node started by hand (`anet node start`, opencode-cli co-presence) has no daemon
+      // binding, so the daemon relay cannot read its catalogue. The Hub still carries what the
+      // node itself reported (`opencode_catalog` on GET /api/nodes); that is a real source and
+      // previously the only thing the settings panel could use. Show it, never a builtin list.
+      const reported = (node.opencode_catalog ?? []).filter((id): id is string => typeof id === 'string' && id.includes('/'));
+      setCatalog(reported.length
+        ? {
+            snapshot: {
+              models: reported.map((id) => ({ providerId: id.slice(0, id.indexOf('/')), id: id.slice(id.indexOf('/') + 1) })),
+            } as PaletteCatalogSnapshot,
+            loading: false,
+            error: null,
+          }
+        : { snapshot: null, loading: false, error: catalogErrorText('daemon_not_found') });
       return () => { live = false; };
     }
     void (async () => {
@@ -138,7 +151,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       if (live) setCatalog({ snapshot: null, loading: false, error: catalogErrorText('unavailable') });
     })();
     return () => { live = false; };
-  }, [node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
+  }, [node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, (node?.opencode_catalog ?? []).join('|'), cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
 
   const view = paletteView({
     snapshot: catalog.snapshot,

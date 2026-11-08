@@ -12,6 +12,9 @@ import { STEP_DESCRIPTIONS, STEP_TITLES, skippedStepsLine, stepAfter, stepBefore
 import { defaultWorkdir, describeWorkdirError, randomHex6, workdirError, workdirForRequest, workdirRootOf, workdirSlug } from './create-node-workdir';
 import { checkNodeName, describeNodeNameRejection, folderError, normalizeNodeName, NODE_NAME_HINT } from './node-name';
 import { buttonStyle, buttonTextStyle, elevated } from './elevation';
+import { PaletteEmpty, PaletteSearch, PaletteSectionLabel } from './palette-kit';
+import { filteredModelGroups, runtimeMatchesQuery } from './wizard-choice-filter';
+import NodeSourceLauncher from './NodeSourceLauncher';
 import { readinessFor, readinessSelectable } from './runtime-readiness';
 import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_GENERATION_LABELS, OPENCODE_V1_NOTE, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
 import CodexProviderFields from './CodexProviderFields';
@@ -134,6 +137,9 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   const [model, setModel] = useState(() => initialRuntime(daemon).models[0] || '');
   // 「高级」折叠(目前只有 Grok 行有:共存模式·实验性)。默认收起。
   const [advancedOpen, setAdvancedOpen] = useState(false);
+  // 选择步骤的搜索口径(与模型命令面板一致:大小写不敏感,只看当前步骤的可选项)。
+  const [choiceQuery, setChoiceQuery] = useState('');
+  const [sourceOpen, setSourceOpen] = useState(false);
   const [permissionMode, setPermissionMode] = useState('default');
   const [maxTurns, setMaxTurns] = useState('');
   const [budget, setBudget] = useState('');
@@ -593,12 +599,23 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
 
         {cur === 'runtime' && (
           <View style={styles.section}>
+            <PaletteSearch
+              value={choiceQuery}
+              onChangeText={setChoiceQuery}
+              placeholder="搜索 runtime"
+              accessibilityLabel="搜索 runtime"
+              testID="create-runtime-search"
+            />
+            <PaletteSectionLabel title={`主要 runtime · ${primaryRuntimes(RUNTIMES).length}`} testID="create-runtime-group-main" />
             {primaryRuntimes(RUNTIMES).map(r => {
               // 「高级」折叠:只挂在有折叠项的行下面(目前是 Grok → 共存模式·实验性),
               // 且只在该行(或其折叠项)被选中时出现,不给其他 runtime 添噪音。
               const kids = advancedRuntimesOf(RUNTIMES, r.id);
               const toggle = showsAdvancedToggle(RUNTIMES, r.id, runtimeId);
               const open = advancedExpanded(RUNTIMES, r.id, runtimeId, advancedOpen);
+              // 搜索：本行或折叠项命中才画；都不命中就整行收起（不把选中的 runtime 换成别的）。
+              const anyVisible = runtimeMatchesQuery(r, choiceQuery) || (open && kids.some(k => runtimeMatchesQuery(k, choiceQuery)));
+              if (!anyVisible) return null;
               return (
                 <Fragment key={r.id}>
                   {renderRuntimeRow(r, false)}
@@ -694,25 +711,40 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
 
         {cur === 'model' && (
           <View style={styles.section}>
-            {/* #614 —— 只有 ≥ 2 个可选模型时才有这一步;0 个(跟随宿主登录)/ 1 个写在确认页那一行里。 */}
-            <View style={styles.choiceList}>
-              {runtime.models.map(m => (
-                <Pressable
-                  key={m}
-                  onPress={() => setModel(m)}
-                  style={({ pressed }) => [
-                    styles.choiceRow,
-                    model === m && styles.choiceRowSelected,
-                    pressed && { opacity: 0.85 },
-                  ]}
-                >
-                  <Text style={[styles.choiceText, model === m && styles.choiceTextSelected]}>
-                    {m}
-                  </Text>
-                  {model === m ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
-                </Pressable>
-              ))}
-            </View>
+            {/* #614 —— 只有 ≥ 2 个可选模型时才有这一步;0 个(跟随宿主登录)/ 1 个写在确认页那一行里。
+                版式与模型命令面板一致:搜索 + provider 分组(带计数) + 当前项 ✓。 */}
+            <PaletteSearch
+              value={choiceQuery}
+              onChangeText={setChoiceQuery}
+              placeholder="搜索模型"
+              accessibilityLabel="搜索模型"
+              testID="create-model-search"
+            />
+            {filteredModelGroups(runtime.models, choiceQuery).length === 0 ? (
+              <PaletteEmpty title={`没有匹配「${choiceQuery}」的模型`} testID="create-model-empty" />
+            ) : null}
+            {filteredModelGroups(runtime.models, choiceQuery).map(group => (
+              <View key={group.provider} style={styles.choiceList}>
+                <PaletteSectionLabel title={`${group.provider} · ${group.count}`} testID={`create-model-group-${group.provider}`} />
+                {group.models.map(m => (
+                  <Pressable
+                    key={m}
+                    testID={`create-model-pick-${m}`}
+                    onPress={() => setModel(m)}
+                    style={({ pressed }) => [
+                      styles.choiceRow,
+                      model === m && styles.choiceRowSelected,
+                      pressed && { opacity: 0.85 },
+                    ]}
+                  >
+                    <Text style={[styles.choiceText, model === m && styles.choiceTextSelected]}>
+                      {m}
+                    </Text>
+                    {model === m ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+                  </Pressable>
+                ))}
+              </View>
+            ))}
             {surface.kind === 'opencode-native' ? <OpenCodeProviderNote /> : null}
             {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
               <View style={styles.section}>
@@ -986,12 +1018,22 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     </>
   );
 
+  // The "已有项目 / 已有会话 / 新会话" entry used to sit above the header, which pushed the
+  // header 42px below the status-bar inset and failed the app-wide layout sweep (case
+  // "wizard", column b). It belongs in the body: the header must stay at the top.
+  const sourceEntry = phase === 'form' ? (
+    <Pressable testID="create-source-open" accessibilityRole="button" onPress={() => setSourceOpen(true)} style={{ padding: spacing.md }}>
+      <Text style={{ color: colors.accent }}>OpenCode V2 · 已有项目 / 已有会话 / 新会话</Text>
+    </Pressable>
+  ) : null;
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header */}
+      {sourceOpen ? <NodeSourceLauncher cfg={cfg} daemonNodeId={daemon.daemon_node_id} onClose={() => setSourceOpen(false)} /> : null}
       {paneShowsBack(desktop) ? (
         <View style={styles.header} testID="screen-header">
           <Pressable
@@ -1025,6 +1067,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
               {stepper}
             </View>
             <View style={styles.cardBody} testID="create-step-body">
+              {sourceEntry}
               {stepHead}
               {body}
             </View>
@@ -1046,6 +1089,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             keyboardShouldPersistTaps="handled"
           >
             <View testID="create-step-body">
+              {sourceEntry}
               {stepHead}
               {body}
             </View>
@@ -1190,22 +1234,21 @@ const makeStyles = () => StyleSheet.create({
     fontSize: 14,
   },
 
-  choiceList: { gap: spacing.sm },
+  choiceList: { gap: 2 },
+  // 与模型命令面板同一套行:默认无底色、无边框,当前项 = 浅灰底 + 右侧 ✓。
   choiceRow: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    backgroundColor: colors.inputBg,
-    borderColor: colors.border,
-    borderWidth: 1,
-    borderRadius: radius.control,
-    paddingHorizontal: spacing.md,
-    paddingVertical: spacing.sm + 2,
+    minHeight: 38,
+    borderRadius: radius.item,
+    paddingHorizontal: 10,
+    paddingVertical: spacing.xs,
   },
-  choiceRowSelected: { borderColor: colors.accent, backgroundColor: colors.card },
+  choiceRowSelected: { backgroundColor: colors.inputBg },
   choiceRowDisabled: { opacity: 0.55, backgroundColor: colors.bg },
   choiceText: { color: colors.text, fontSize: 14 },
-  choiceTextSelected: { color: colors.accent, fontWeight: '600' },
+  choiceTextSelected: { color: colors.text, fontWeight: '600' },
   choiceTextDisabled: { color: colors.textMuted },
   choiceUnsupported: { color: colors.textMuted, fontSize: 11 },
   // #623 —— 被 runtime_readiness 判为建不了:灰底、名字弱化,但原因那行用语义红、不跟着变淡(要看得清修法)。
