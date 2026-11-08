@@ -1018,15 +1018,21 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     </>
   );
 
+  // The "已有项目 / 已有会话 / 新会话" entry used to sit above the header, which pushed the
+  // header 42px below the status-bar inset and failed the app-wide layout sweep (case
+  // "wizard", column b). It belongs in the body: the header must stay at the top.
+  const sourceEntry = phase === 'form' ? (
+    <Pressable testID="create-source-open" accessibilityRole="button" onPress={() => setSourceOpen(true)} style={{ padding: spacing.md }}>
+      <Text style={{ color: colors.accent }}>OpenCode V2 · 已有项目 / 已有会话 / 新会话</Text>
+    </Pressable>
+  ) : null;
+
   return (
     <KeyboardAvoidingView
       style={styles.root}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header */}
-      {phase === 'form' ? <Pressable testID="create-source-open" accessibilityRole="button" onPress={() => setSourceOpen(true)} style={{ padding: spacing.md }}>
-        <Text style={{ color: colors.accent }}>OpenCode V2 · 已有项目 / 已有会话 / 新会话</Text>
-      </Pressable> : null}
       {sourceOpen ? <NodeSourceLauncher cfg={cfg} daemonNodeId={daemon.daemon_node_id} onClose={() => setSourceOpen(false)} /> : null}
       {paneShowsBack(desktop) ? (
         <View style={styles.header} testID="screen-header">
@@ -1061,6 +1067,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
               {stepper}
             </View>
             <View style={styles.cardBody} testID="create-step-body">
+              {sourceEntry}
               {stepHead}
               {body}
             </View>
@@ -1082,6 +1089,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             keyboardShouldPersistTaps="handled"
           >
             <View testID="create-step-body">
+              {sourceEntry}
               {stepHead}
               {body}
             </View>
