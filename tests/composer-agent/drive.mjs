@@ -79,10 +79,26 @@ try {
   }
   for (const mode of ['missing', 'unsupported', 'empty', 'unknown']) {
     const { page } = await mount({ width: 390, height: 844 }, mode);
-    if (mode === 'unknown') {
+    if (mode === 'missing') {
+      // Nothing reported at all — nothing to say.
+      ck('missing: complete section hidden', await page.getByTestId('composer-agent-section').count() === 0);
+    } else if (mode === 'unknown') {
+      // Capability + list present, current agent not reported.
       await page.getByTestId('composer-agent-unknown').waitFor();
       ck('missing current is unknown, never build', await check(page).count() === 0);
-    } else ck(`${mode}: complete section hidden`, await page.getByTestId('composer-agent-section').count() === 0);
+      ck('unknown: list still offered when the node can switch', await row(page, 'build').count() === 1);
+    } else if (mode === 'unsupported') {
+      // No capability ⇒ read-only current value; no rows, no checkmark.
+      await page.getByTestId('composer-agent-readonly').waitFor();
+      ck('unsupported: current value shown read-only', (await page.getByTestId('composer-agent-readonly').innerText()).includes('build'));
+      ck('unsupported: no interactive rows', await page.locator('[data-testid^="composer-agent-row-"]').count() === 0);
+      ck('unsupported: no checkmark', await check(page).count() === 0);
+    } else {
+      // Empty list but a reported current value ⇒ still worth showing.
+      await page.getByTestId('composer-agent-readonly').waitFor();
+      ck('empty: current value shown read-only', (await page.getByTestId('composer-agent-readonly').innerText()).includes('build'));
+      ck('empty: no interactive rows', await page.locator('[data-testid^="composer-agent-row-"]').count() === 0);
+    }
     await page.screenshot({ path: `${out}/phone-${mode}.png` });
     await page.close();
   }

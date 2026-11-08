@@ -28,7 +28,7 @@ import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { variantValueError, variantWritable } from './node-variant-patch';
 import { composerVariantLabel } from './composer-model-label';
-import { composerAgents, confirmComposerAgentSwitch } from './composer-agent';
+import { composerAgentCurrent, composerAgentSectionVisible, composerAgentSwitchable, composerAgents, confirmComposerAgentSwitch } from './composer-agent';
 import './i18n-composer-agent';
 import {
   confirmComposerModelSwitch,
@@ -185,12 +185,16 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     variantCapable: config?.opencode_variant_config_capable === true || config?.variant_capable === true,
     runtime: node?.runtime ?? null,
   });
-  const agents = composerAgents(agentConfigScope === scope ? config : null);
+  const agentConfig = agentConfigScope === scope ? config : null;
+  const agents = composerAgents(agentConfig);
+  const agentWritable = composerAgentSwitchable(agentConfig);
+  const currentAgent = composerAgentCurrent(agentConfig);
+  const showAgentSection = composerAgentSectionVisible(agentConfig);
   const listMax = agents.length ? Math.max(100, Math.min(220, Math.round((windowHeight || 800) * 0.25))) : Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
 
   const applyAgent = async (agent: string) => {
-    if (!node || !config || lock.current || !agents.includes(agent) || config.agent === agent) return;
+    if (!node || !config || !agentWritable || lock.current || !agents.includes(agent) || config.agent === agent) return;
     const requestScope = scope;
     const requestCfg = cfg;
     const live = () => scopeRef.current === requestScope;
@@ -460,11 +464,14 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         </View>
       ) : null}
 
-      {agents.length > 0 ? (
+      {showAgentSection ? (
         <View testID="composer-agent-section" style={styles.variantRow}>
           <Text style={styles.variantTitle}>{t('composerAgent.title')}</Text>
-          {config?.agent === undefined ? <Text testID="composer-agent-unknown" style={styles.variantNote}>{t('composerAgent.unknown')}</Text> : null}
-          <ScrollView style={{ maxHeight: 120, width: '100%' }} nestedScrollEnabled keyboardShouldPersistTaps="handled" testID="composer-agent-list"
+          {currentAgent === undefined ? <Text testID="composer-agent-unknown" style={styles.variantNote}>{t('composerAgent.unknown')}</Text> : null}
+          {!agentWritable ? (
+            <Text testID="composer-agent-readonly" style={styles.variantNote}>{t('composerAgent.readOnly', { value: currentAgent ?? t('composerAgent.unknownShort') })}</Text>
+          ) : null}
+          {agentWritable ? <ScrollView style={{ maxHeight: 120, width: '100%' }} nestedScrollEnabled keyboardShouldPersistTaps="handled" testID="composer-agent-list"
             {...(Platform.OS === 'web' ? { onKeyDown: (event: { key: string; preventDefault: () => void }) => {
               if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
               if (busy) return;
@@ -486,7 +493,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
               <Text style={styles.rowLabel} numberOfLines={1}>{agent}</Text>
               {config?.agent === agent ? <Ionicons testID={`composer-agent-check-${encodeURIComponent(agent)}`} name="checkmark" size={18} color={colors.textSecondary} /> : null}
             </Pressable>)}
-          </ScrollView>
+          </ScrollView> : null}
         </View>
       ) : null}
 
