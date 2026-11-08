@@ -487,7 +487,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // app#237 —— 桌面端输入区高度可拖拽:根容器高度决定上界(消息区至少留 200px),
   // 值全局持久化(切会话 / 重启保持)。分隔条在输入区上沿,向上拖变高。
   const [rootHeight, setRootHeight] = useState(0);
-  const [inputRowTop, setInputRowTop] = useState(0);
+  // 输入行相对聊天根视图的 y：手机输入区现在包在 composerFooterBlock 里
+  // （模型/档位控件 + 浮层锚点），子节点 onLayout.y 只相对这个块，
+  // 必须加上块的 y 才是 holdOverlayLayout 需要的根坐标。
+  const [composerFooterTop, setComposerFooterTop] = useState(0);
+  const [inputRowLocalTop, setInputRowLocalTop] = useState(0);
+  const inputRowTop = composerFooterTop + inputRowLocalTop;
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
   // iOS: the composer's keyboard inset, measured in window coordinates (#547, screen-keyboard-inset.tsx).
   const iosKeyboard = useScreenKeyboardInset();
@@ -3011,9 +3016,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             onPick={pickSuggest}
           />
         ) : null}
-      <View style={styles.composerFooterBlock}>
+      <View style={styles.composerFooterBlock} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
       {modelPaletteOverlay}
-      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowTop(event.nativeEvent.layout.y)}>
+      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
         {voice.available || showExpand ? (
@@ -3080,7 +3085,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onPlus={() => plusEvent('toggle')}
         />
       </View>
-      <View style={styles.composerModelRow}>
+      <View style={styles.composerModelRow} testID="composer-model-row">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.modelSheetOpen')}

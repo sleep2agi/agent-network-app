@@ -64,11 +64,12 @@ const measure = (page, paneId, newest = null) => page.evaluate(([paneId, newest]
   if (row.parentElement !== pane) return null;
   const rb = row.getBoundingClientRect();
   // Desktop's model marker is already INSIDE the textarea's ancestor row/card.
-  // Only mobile chat renders it as a sibling below that row.
+  // Mobile chat now wraps the input row and the model/variant footer row in one
+  // bottom block; the block (not just the textarea row) is the composer.
   const mobileChat = paneId === 'chat-pane' && !row.querySelector('[data-testid="desktop-composer-card"]');
-  const footer = mobileChat ? pane.querySelector('[data-testid="composer-model-entry"]') : null;
+  const footer = mobileChat ? pane.querySelector('[data-testid="composer-model-row"]') : null;
   const fb = footer?.getBoundingClientRect();
-  if (mobileChat && (!footer || footer.parentElement !== pane || !fb?.height || Math.abs(fb.top - rb.bottom) > 0.5)) return null;
+  if (mobileChat && (!footer || footer.parentElement !== row || !fb?.height || Math.abs(fb.bottom - rb.bottom) > 0.5)) return null;
   const pb = pane.getBoundingClientRect();
   const header = pane.querySelector('[data-testid="chat-header"], [data-testid="dm-header"]')?.getBoundingClientRect();
   // 🔴 fail closed：末行只认 Range 行盒；拿不到 rect 就是「不可判定」，不用元素盒兜底。
@@ -281,17 +282,17 @@ for (const v of VIEWPORTS) for (const sc of SCREENS) {
   const rest = await measure(page, sc.pane, sc.newest);
   record(vp, 'rest', { measured: !!rest, atBottom: !!rest && Math.abs(rest.composerBottom - v.h) <= NEAR }, { composerBottom: r1(rest?.composerBottom), inputRowBottom: r1(rest?.inputRowBottom), footerHeight: r1(rest?.footerHeight) });
   if (sc.name === 'chat') {
-    const footer = page.locator('[data-testid="chat-pane"] [data-testid="composer-model-entry"]');
+    const footer = page.locator('[data-testid="chat-pane"] [data-testid="composer-model-row"]');
     const style = await footer.getAttribute('style');
     let displacedRejected, missingRejected;
     try {
       await footer.evaluate(e => { e.style.transform = 'translateY(-8px)'; });
       displacedRejected = (await measure(page, sc.pane, sc.newest)) === null;
-      await footer.evaluate(e => { e.dataset.testid = 'composer-model-entry-negative-control'; });
+      await footer.evaluate(e => { e.dataset.testid = 'composer-model-row-negative-control'; });
       missingRejected = (await measure(page, sc.pane, sc.newest)) === null;
     } finally {
-      await page.locator('[data-testid="composer-model-entry"], [data-testid="composer-model-entry-negative-control"]').evaluate((e, style) => {
-        e.dataset.testid = 'composer-model-entry';
+      await page.locator('[data-testid="composer-model-row"], [data-testid="composer-model-row-negative-control"]').evaluate((e, style) => {
+        e.dataset.testid = 'composer-model-row';
         if (style === null) e.removeAttribute('style'); else e.setAttribute('style', style);
       }, style);
     }
