@@ -6,6 +6,7 @@ export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
   "What's new in 0.2.492:",
+  "- 聊天页节点菜单新增「Fork 当前节点」：点开时才读当前节点上报，缺真实会话只说明原因，不预选别的节点、不发起创建。",
   "- 修掉切模型必现的「已接受，但生效模型未确认」：V2 节点改模型后要重启才生效，",
   "  客户端以前只读一次就判失败；现在会和旧路径一样在 90 秒内持续读回，",
   "  只有真的读到生效模型才显示成功，读不回仍然报失败，不冒充。",
