@@ -16,7 +16,9 @@ export const PALETTE_MAX_WIDTH = 560;
 /** 每次都重新读 colors（主题是原地 mutate 的），与 ComposerModelPalette 的 makeStyles 同一口径。 */
 export const makePaletteStyles = () => ({
   overlay: {
-    position: 'absolute' as const,
+    // Web focus may scroll the underlying page. Keep the palette attached to
+    // the viewport so an error/name input cannot push its header off screen.
+    position: (Platform.OS === 'web' ? 'fixed' : 'absolute') as 'absolute',
     top: 0,
     left: 0,
     right: 0,
@@ -181,7 +183,7 @@ export function PaletteList({ children, testID }: { children: ReactNode; testID:
   const listMax = Math.max(140, Math.min(430, Math.round((height || 800) - 380)));
   return (
     <ScrollView
-      style={{ maxHeight: listMax, flexGrow: 0 }}
+      style={{ maxHeight: listMax, flexGrow: 0, flexShrink: 1, minHeight: 0 }}
       keyboardShouldPersistTaps="handled"
       nestedScrollEnabled
       showsVerticalScrollIndicator

@@ -93,6 +93,7 @@ const fixture = (arg) => {
       return { ok: true, request_id: 'prjc_1', status: 'create_pending', session_creation: 'not_started' };
     }
     if (/^\/api\/node-session-control\/source\/project-create\/[^/]+$/.test(p)) {
+      if (mode === 'project-unknown') return { ok: true, status: 'unknown_rotation_required', session_creation: 'unknown' };
       return { ok: true, status: 'registration_confirmed', session_creation: 'confirmed', child_node_id: 'node_prjc_1' };
     }
     if (p === '/api/node-session-control/source' && method === 'POST') {
@@ -315,12 +316,26 @@ try {
 
   // ── K 键盘：↓/↑ 移动 + Enter 选中 + Esc 关闭 ─────────────────────────────
   {
+    const { ctx, page } = await mount({ width: 1280, height: 900 }, 'project-unknown');
+    await page.getByTestId('project-create-pick-oprj_1').click();
+    await page.getByTestId('project-create-child-name').fill('unknown-child');
+    await page.getByTestId('project-create-submit').click();
+    await page.getByTestId('project-create-status').waitFor();
+    ck('unknown: UI retains the unknown outcome', (await text(page, 'project-create-status')).includes('结果未知'));
+    ck('unknown: submit stays disabled, not a fresh intent', await page.getByTestId('project-create-submit').isDisabled());
+    await page.getByTestId('project-create-pick-oprj_2').click();
+    ck('unknown: choosing another project cannot replay the uncertain request', (await text(page, 'source-palette-selected')).includes('oprj_1') && (await page.evaluate(() => window.__fp.calls.project.length)) === 1);
+    await ctx.close();
+  }
+  {
     const { ctx, page } = await mount({ width: 390, height: 844 }, 'project-404');
     await page.getByTestId('project-create-pick-oprj_1').click();
     await page.getByTestId('project-create-child-name').fill('phone-error');
     await page.getByTestId('project-create-submit').click();
     await page.getByTestId('source-palette-action-error').waitFor();
     ck('phone: actual error code is visible', (await text(page, 'source-palette-action-error')).includes('project_create_unavailable'));
+    const errorGeometry = await geometry(page);
+    ck('phone: error state keeps the entire card and confirm in viewport', errorGeometry.card.top >= 0 && errorGeometry.card.bottom <= 844 && errorGeometry.confirm.bottom <= errorGeometry.card.bottom + 1, JSON.stringify(errorGeometry));
     await page.screenshot({ path: `${OUT}/phone-error.png` });
     await ctx.close();
   }

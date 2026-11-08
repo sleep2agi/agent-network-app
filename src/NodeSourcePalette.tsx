@@ -110,6 +110,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   const [activeKey, setActiveKey] = useState<string | null>(null);
   const [childName, setChildName] = useState('');
   const [busy, setBusy] = useState(false);
+  const [projectUnresolved, setProjectUnresolved] = useState(false);
   const [daemonId, setDaemonId] = useState<string | null>(suppliedDaemon ?? null);
   const [daemonError, setDaemonError] = useState<string | null>(null);
   const directoryRequestRef = useRef<string | null>(null);
@@ -292,7 +293,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   }, [rows, selectedKey, sessionId, forkCandidates]);
 
   const pick = (row: SourceRow) => {
-    if (busy || (receipt && classifyStatus(receipt.status).kind !== 'registration-receipt')) return;
+    if (busy || projectUnresolved || (receipt && classifyStatus(receipt.status).kind !== 'registration-receipt')) return;
     setNotice(null);
     if (row.disabledReason) {
       setErrorText(row.disabledReason);
@@ -324,7 +325,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   };
 
   const submit = async () => {
-    if (submittingRef.current || busy) return;
+    if (submittingRef.current || busy || projectUnresolved) return;
     if (!selectedRow) { setErrorText(t('sourcePalette.confirmHint')); return; }
     if (selectedRow.kind !== 'fork') {
       const usable = canUseSnapshotForNewSession({ snapshot: { expiresAt: null, selectionExpiresAt: snapshot?.selectionExpiresAt ?? null }, hasProjectCreateCapability: true });
@@ -371,6 +372,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
         return;
       }
       // 只 GET 收敛同一个请求；unknown 不重放、不换 intent。
+      setProjectUnresolved(true);
       let status = result.status;
       let sessionCreation = result.sessionCreation;
       let childNodeId: string | undefined;
@@ -384,6 +386,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
         childNodeId = polled.childNodeId;
       }
       setNotice(projectCreateLabel(classifyProjectCreate(status as Parameters<typeof classifyProjectCreate>[0], sessionCreation, childNodeId)));
+      if (status === 'registration_confirmed') setProjectUnresolved(false);
     } catch (error) {
       if (liveRef.current) setErrorText(String((error as Error)?.message ?? error));
     } finally {
@@ -416,7 +419,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   const newSessionUsable = newSessionGate.ok;
   const newSessionReason = newSessionGate.reason;
   const scopeMissing = !!target && target !== 'fork' && (!(directory.kind === 'ready') || !directory.selectionScope);
-   const canSubmit = !!selectedRow && !selectedRow.disabledReason && !nameIssue && !busy && !scopeMissing && !(target === 'fork' && receipt);
+   const canSubmit = !!selectedRow && !selectedRow.disabledReason && !nameIssue && !busy && !projectUnresolved && !scopeMissing && !(target === 'fork' && receipt);
   const forkOutcome = receipt ? classifyStatus(receipt.status) : null;
   const servers = snapshot?.servers ?? [];
 
@@ -442,7 +445,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
 
       {busy ? <PaletteLoading text={t('sourcePalette.submitting')} testID="source-palette-busy" /> : null}
 
-      <View testID="source-directory-section">
+      <View testID="source-directory-section" style={{ flexShrink: 1, minHeight: 0 }}>
         {view.status === 'loading' ? <PaletteLoading text={t('sourcePalette.loading')} testID="source-palette-loading" /> : null}
         {view.status === 'error' ? <PaletteError text={view.errorText ?? ''} testID="source-palette-error" /> : null}
         {view.status === 'ready' && view.total === 0 ? (
