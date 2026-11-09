@@ -1,9 +1,18 @@
 {
   "//": "Every tests/*/drive.mjs and tests/*/run.mjs, and how CI runs it. stub = needs only the web export + Chromium (run by .github/workflows/drives.yml in shards; secs = measured runtime, used to balance shards); docker = builds its own bundle with its Dockerfile (nightly job); hub / manual = not in CI, with the reason. src/drive-registry.test.ts fails when a drive is missing here.",
   "drives": {
-    "composer-agent/drive.mjs": { "kind": "stub", "secs": 55 },
-    "chat-fork-entry/drive.mjs": { "kind": "stub", "secs": 35 },
-    "node-source-palette/drive.mjs": { "kind": "stub", "secs": 65 },
+    "composer-agent/drive.mjs": {
+      "kind": "stub",
+      "secs": 55
+    },
+    "chat-fork-entry/drive.mjs": {
+      "kind": "stub",
+      "secs": 35
+    },
+    "node-source-palette/drive.mjs": {
+      "kind": "stub",
+      "secs": 65
+    },
     "composer-variant/drive.mjs": {
       "kind": "stub",
       "secs": 12
@@ -122,7 +131,8 @@
     },
     "test-card-progress-activity/drive.mjs": {
       "kind": "stub",
-      "secs": 60
+      "secs": 60,
+      "timeoutSecs": 1800
     },
     "test-change-password/drive.mjs": {
       "kind": "stub",

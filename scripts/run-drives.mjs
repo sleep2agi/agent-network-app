@@ -28,7 +28,12 @@ if (!web || !existsSync(join(web, 'index.html'))) { console.error(`✗ --web <ex
 if (!(shard >= 1 && shard <= shards)) { console.error(`✗ bad --shard ${shard}/${shards}`); process.exit(1); }
 
 const registry = JSON.parse(readFileSync(join(root, 'tests/drives.json'), 'utf8')).drives;
-const stub = Object.entries(registry).filter(([, v]) => v.kind === 'stub').map(([path, v]) => ({ path, secs: v.secs ?? 60 }));
+const stub = Object.entries(registry).filter(([, v]) => v.kind === 'stub')
+  // `timeoutSecs` is an explicit, per-drive budget for sweeps that are legitimately
+  // longer than the shard default (the card-progress drive renders 5 viewport/theme
+  // combinations). It is NOT a way to hide a hang: the budget is still finite and
+  // a hung drive is still SIGKILLed at the boundary.
+  .map(([path, v]) => ({ path, secs: v.secs ?? 60, ...(Number(v.timeoutSecs) > 0 ? { timeoutSecs: Number(v.timeoutSecs) } : {}) }));
 
 /** Greedy longest-first into the lightest shard: deterministic for a given registry. */
 function assignShards(list, n) {
@@ -57,7 +62,8 @@ const run = (d) => new Promise((done) => {
   });
   child.stdout.pipe(log); child.stderr.pipe(log);
   let timedOut = false;
-  const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, timeoutSecs * 1000);
+  const budgetSecs = Number(d.timeoutSecs) > 0 ? Number(d.timeoutSecs) : timeoutSecs;
+  const timer = setTimeout(() => { timedOut = true; child.kill('SIGKILL'); }, budgetSecs * 1000);
   child.on('close', (code) => {
     clearTimeout(timer);
     log.end();
@@ -71,7 +77,7 @@ const results = [];
 for (const d of picked) {
   const r = await run(d);
   results.push(r);
-  console.log(`${r.ok ? 'PASS' : 'FAIL'} ${r.path} (${r.code}, ${r.secs}s)`);
+  console.log(`${r.ok ? 'PASS' : 'FAIL'} ${r.path} (${r.code}, ${r.secs}s, budget ${d.timeoutSecs ?? timeoutSecs}s)`);
   if (!r.ok) {
     // The tail of a red drive's log, so the CI summary says why without downloading the artifact.
     const tail = readFileSync(join(r.dir, 'log.txt'), 'utf8').split('\n').filter(l => /FAIL|Error|"ok":false|✗/.test(l)).slice(0, 8);
