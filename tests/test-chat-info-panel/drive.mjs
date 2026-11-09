@@ -232,7 +232,7 @@ for (const L of LAYOUTS) {
     await page.waitForTimeout(300);
 
     // 6. node rows → node info page on the matching section, ‹ back to the chat
-    const sectionLabel = { node: '概览', 'section-model': '模型与运行时', 'section-secrets': '密钥', 'section-rules': '规则文件', 'section-skills': '技能', 'section-files': '项目文件夹', 'section-tasks': '任务', 'section-schedules': '定时任务' };
+    const sectionLabel = { node: '概览', 'section-model': '模型与运行时', 'section-rules': '规则文件', 'section-skills': '技能', 'section-files': '项目文件夹', 'section-tasks': '任务', 'section-schedules': '定时任务' };
     for (const [key, label] of Object.entries(sectionLabel)) {
       await openPanel();
       await page.locator(tid(`chat-info-row-${key}`)).click();
