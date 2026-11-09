@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { adoptKnownNode, fetchHostSupervisors, fetchNodeLifecycleRequest, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleRequest } from './api';
-import { adoptionError, adoptionOutcome, adoptionSupported, isAdopted } from './node-adoption';
+import { adoptDaemonList, adoptionError, adoptionOutcome, adoptionSupported, isAdopted, type AdoptDaemonList } from './node-adoption';
 import { useTranslation } from './i18n-react';
 import { colors, radius } from './theme';
 import { nodeIsDown } from './node-danger-actions';
@@ -12,7 +12,9 @@ import { nodeIsDown } from './node-danger-actions';
 export default function NodeAdoptionControls({ cfg, node, online, onRefresh, initialDialog }: { cfg: HubConfig; node: HubNode; online: boolean; onRefresh: () => void; initialDialog?: 'adopt' }) {
   const { t } = useTranslation();
   const [dialog, setDialog] = useState<'adopt' | 'start' | 'stop' | null>(initialDialog ?? null);
-  const [daemons, setDaemons] = useState<HostSupervisorDaemon[]>([]);
+  const [list, setList] = useState<AdoptDaemonList>({ kind: 'loading' });
+  const [listAttempt, setListAttempt] = useState(0);
+  const daemons: HostSupervisorDaemon[] = list.kind === 'ready' ? list.daemons : [];
   const [daemon, setDaemon] = useState(''), [path, setPath] = useState('');
   const [message, setMessage] = useState('');
   const [pending, setPending] = useState<{ kind: NodeLifecycleRequest['kind']; id: string } | null>(node.adoption?.status === 'pending' ? { kind: 'adopt', id: node.adoption.request_id } : null);
@@ -23,11 +25,12 @@ export default function NodeAdoptionControls({ cfg, node, online, onRefresh, ini
   useEffect(() => {
     if (dialog !== 'adopt') return;
     let cancelled = false;
+    setList({ kind: 'loading' });
     void fetchHostSupervisors(cfg).then(r => {
-      if (!cancelled) setDaemons(r.ok ? r.daemons.filter(d => d.adopt_capable === true) : []);
-    }).catch(() => { if (!cancelled) setMessage(t('adopt.failed')); });
+      if (!cancelled) setList(adoptDaemonList(r));
+    }).catch((e: unknown) => { if (!cancelled) setList({ kind: 'failed', error: e instanceof Error ? e.message : String(e) }); });
     return () => { cancelled = true; };
-  }, [dialog, cfg.serverUrl, cfg.token, cfg.networkId]);
+  }, [dialog, listAttempt, cfg.serverUrl, cfg.token, cfg.networkId]);
   useEffect(() => {
     if (!pending) return;
     let cancelled = false; let timer: ReturnType<typeof setTimeout>;
@@ -78,7 +81,9 @@ export default function NodeAdoptionControls({ cfg, node, online, onRefresh, ini
     {dialog && <View testID="adopt-confirm-panel" accessibilityRole="alert" style={{ gap: 10 }}>
       <Text style={{ color: colors.text }}>{t(dialog === 'adopt' ? 'adopt.explain' : dialog === 'stop' ? 'adopt.confirmStop' : 'adopt.confirmStart')}</Text>
       {dialog === 'adopt' && <>
-        {daemons.length ? daemons.map(d => button(`adopt-daemon-${d.daemon_node_id}`, `${daemon === d.daemon_node_id ? '✓ ' : ''}${d.alias}`, () => setDaemon(d.daemon_node_id), busy)) : <Text style={{ color: colors.textMuted }}>{t('adopt.empty')}</Text>}
+        {list.kind === 'loading' ? <Text testID="adopt-daemons-loading" style={{ color: colors.textMuted }}>{t('adopt.loadingDaemons')}</Text>
+          : list.kind === 'failed' ? <><Text testID="adopt-daemons-failed" style={{ color: colors.text }}>{t('adopt.listFailed', { error: list.error })}</Text>{button('adopt-daemons-retry', t('adopt.retry'), () => setListAttempt(n => n + 1), busy)}</>
+          : daemons.length ? daemons.map(d => button(`adopt-daemon-${d.daemon_node_id}`, `${daemon === d.daemon_node_id ? '✓ ' : ''}${d.alias}`, () => setDaemon(d.daemon_node_id), busy)) : <Text style={{ color: colors.textMuted }}>{t('adopt.empty')}</Text>}
         <TextInput testID="adopt-workdir" accessibilityLabel={t('adopt.path')} placeholder={t('adopt.path')} value={path} onChangeText={setPath} editable={!busy} style={{ color: colors.text, borderColor: colors.border, borderWidth: 1, borderRadius: radius.item, minHeight: 44, padding: 10 }} />
       </>}
       <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 8 }}>{button('adopt-confirm', t(dialog === 'adopt' ? 'adopt.confirm' : `adopt.${dialog}`), () => void submit(), busy || (dialog === 'adopt' && (!daemon || !path.trim())))}{button('adopt-cancel', t('adopt.cancel'), () => setDialog(null), busy)}</View>
