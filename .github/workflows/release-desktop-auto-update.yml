@@ -591,6 +591,8 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.497:
+            - 修复：输入框模型面板切换模型后误报「已接受，但生效模型未确认」，再选一次一直报「配置在别处被改过了」。现在节点已确认就显示「已切换」，冲突时真正重新加载配置。
             What's new in 0.2.496:
             - 模型面板里新增「Build / Agent」：显示当前会话真实的 agent（例如 build），节点上报可切换能力后才会变成可点选；读不到就不显示，不用默认值代替。
 
