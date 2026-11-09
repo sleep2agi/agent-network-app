@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.495:",
+  "- Fork 被拒时直接写出原因（比如「该节点不归 daemon 管，先接管才能 fork」），不再只显示 conflict。",
+  "- 手动启动、没被 daemon 接管的节点不再出现在「可 fork 的受管会话」里，提交前就拦下并说明原因。",
+  "- 接管对话框：daemon 列表读取失败时如实显示「读取失败」，不再误报成「没有支持接管的 daemon」。",
+  "- 输入框模型面板加了关闭按钮；opencode-sdk 节点也能切换档位；未受管节点的模型目录说明改得更准确。",
+  "",
   "What's new in 0.2.494:",
   "- 聊天信息里的「密钥」行不再显示成原始 key `chat.info.section:secrets`；",
   "  节点没上报 node_secrets_capable 时这一行直接不出现，不会点进一个不支持的空页。",
