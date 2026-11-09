@@ -525,11 +525,7 @@ export default function NodeDetailScreen({
   const { primary, secondary } = splitOverviewFacts(facts);
   const chips = headerChips(facts);
   const skillsCapable = (s as Session & { skills_capable?: boolean }).skills_capable === true;
-  // 密钥分区：节点自报 node_secrets_capable，或它挂在能做 scoped secrets 的 daemon 上。
-  // legacy node-server 节点(version=null)两者都没有 ⇒ 不显示这一区，而不是给一个存不了的表单。
-  const secretsCapable = (s as Session & { node_secrets_capable?: boolean }).node_secrets_capable === true
-    || !!node?.lifecycle_daemon_node_id;
-  const visibleSections = visibleNodeSections({ readOnly, hasRulesTarget: !!rulesTarget, skillsCapable, secretsCapable, permissionsAllowed: canShowPermissionSection(node) });
+  const visibleSections = visibleNodeSections({ readOnly, hasRulesTarget: !!rulesTarget, skillsCapable, permissionsAllowed: canShowPermissionSection(node) });
   const section = resolveActiveSection(activeSection, visibleSections);
   const sectionMeta = NODE_SECTIONS.filter(item => visibleSections.includes(item.key));
   const needConfirm = leaveNeedsConfirm({ section, rulesDirty });

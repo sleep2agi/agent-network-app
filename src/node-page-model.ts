@@ -94,9 +94,9 @@ export interface NodeSectionVisibility {
   hasRulesTarget: boolean;
   /** 会话上报了 skills_capable === true。 */
   skillsCapable: boolean;
-  /** 独立节点密钥：只有节点自报 node_secrets_capable，或它挂在能做 scoped secrets 的
-   *  daemon 上时才有意义。2026-11-09 owner 截图里 legacy node-server 节点
-   *  (version=null) 仍出现「密钥」分区，点进去是个永远保存不了的表单。 */
+  /** 「密钥」分区是否出现。undefined = 保持旧行为（出现）；只有调用方**明确知道**
+   *  节点没有该能力时才传 false（聊天信息面板用会话上报的 node_secrets_capable）。
+   *  节点详情页不传：独立节点密钥在无 daemon 时仍按 node_id 工作，不能一刀切隐藏。 */
   secretsCapable?: boolean;
   /** Hub 说调用者能改这个节点的权限模式(GET /api/nodes 的 viewer_can.permission_mode,Hub ≥ .93)。 */
   permissionsAllowed?: boolean;
@@ -110,7 +110,7 @@ export function visibleNodeSections(v: NodeSectionVisibility): NodeSectionKey[] 
   return NODE_SECTIONS.map(s => s.key).filter(key => {
     if (key === 'rules') return v.hasRulesTarget;
     if (key === 'skills') return v.skillsCapable;
-    if (key === 'secrets') return v.secretsCapable === true;
+    if (key === 'secrets') return v.secretsCapable !== false;
     if (key === 'permissions') return !v.readOnly && v.permissionsAllowed === true;
     if (key === 'danger') return !v.readOnly;
     return true;

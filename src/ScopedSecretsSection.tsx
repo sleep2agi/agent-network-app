@@ -20,7 +20,9 @@ function Page({cfg,daemonId,nodeId,nodeRuntimeVersion}:Props) {
   const active=useRef<AbortController|null>(null), mounted=useRef(true);
   const supported=!!(daemonId||nodeId) && !!cfg.networkId;
   const independent=!!nodeId && !daemonId;
-  const upgradeRequired=independent && nodeSecretsNeedsUpgrade(nodeRuntimeVersion);
+  // legacy node-server（version=null）从来没有 node-secrets lane：给它画表单只会每次都失败。
+  // 自定义/未知字符串仍按原语义交给 nodeSecretsNeedsUpgrade 判断，不误伤 TEST-ONLY fixture。
+  const upgradeRequired=independent && (nodeRuntimeVersion==null || nodeSecretsNeedsUpgrade(nodeRuntimeVersion));
   const run=async(write?:SecretWrite)=>{
     if(!supported||upgradeRequired||active.current)return;
     const ctrl=new AbortController();active.current=ctrl;setBusy(true);setWriting(!!write);setNotice('');setDeleting(null);
