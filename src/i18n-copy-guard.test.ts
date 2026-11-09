@@ -3,6 +3,7 @@ import path from 'node:path';
 import ts from 'typescript';
 import { t as translate } from './i18n';
 import './i18n-chat';
+import './i18n-composer-agent';
 import './i18n-daemon';
 import './i18n-agent-org';
 import './i18n-settings';

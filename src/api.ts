@@ -1565,6 +1565,9 @@ export interface NodeConfigRead {
   model: string | null;
   flags?: Record<string, unknown>;
   config_update_capable: boolean;
+  opencode_agent_config_capable?: boolean;
+  agent?: string;
+  agents?: string[];
   /** #4099：会话/节点**实际生效**的模型（server GET 顶层 model_effective；缺省 = unknown，绝不用配置 model 顶替）。 */
   model_effective?: string;
   /** #4099：当前档位（server 顶层 modelVariant；**null = 明确清除**，缺省 = unknown）。 */
@@ -1604,6 +1607,9 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
     model: typeof d.model === 'string' ? d.model : null,
     flags: d.flags && typeof d.flags === 'object' ? d.flags : undefined,
     config_update_capable: d.config_update_capable === true,
+    opencode_agent_config_capable: d.opencode_agent_config_capable === true,
+    agent: typeof d.agent === 'string' ? d.agent : undefined,
+    agents: Array.isArray(d.agents) ? d.agents.filter((id): id is string => typeof id === 'string') : undefined,
     // 读回只认 server GET 顶层字段（server.ts:6478-6480）：
     // model_effective 缺省 = unknown；modelVariant 只接 string/null，缺省或其它类型 = unknown。
     model_effective: typeof d.model_effective === 'string' ? d.model_effective : undefined,
@@ -1641,7 +1647,7 @@ export interface UpdateNodeConfigRequest {
   nodeId: string;
   baseRevision: number;
   /** #4099：modelVariant 省略=不改档、null=清除、string=选档（序列化见 node-variant-patch.buildConfigPatch）。 */
-  patch: { model?: string; flags?: Record<string, unknown>; modelVariant?: string | null };
+  patch: { model?: string; flags?: Record<string, unknown>; modelVariant?: string | null; agent?: string };
 }
 
 export type UpdateNodeConfigResult =
@@ -1652,6 +1658,10 @@ export type UpdateNodeConfigResult =
 export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequest): Promise<UpdateNodeConfigResult> => {
   const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
   const patch: Record<string, unknown> = {};
+  if (typeof req.patch.agent === 'string') {
+    if (Object.keys(req.patch).some(key => key !== 'agent')) return { ok: false, error: 'invalid_patch' };
+    patch.agent = req.patch.agent;
+  }
   if (typeof req.patch.model === 'string') patch.model = req.patch.model;
   if (req.patch.flags && typeof req.patch.flags === 'object') patch.flags = req.patch.flags;
   // #4099：只有显式给出 modelVariant 才写（省略=不改档，null=清除）—— 语义集中在 buildConfigPatch
