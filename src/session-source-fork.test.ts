@@ -2,7 +2,7 @@
 import { strict as assert } from 'node:assert';
 import {
   buildSourceForkBody, validateSelection, newIntentId, classifyStatus, retryPlan,
-  gateClosedMessage, canStartFork, SOURCE_FORK_MODE,
+  gateClosedMessage, canStartFork, SOURCE_FORK_MODE, describeSourceForkRefusal, SOURCE_FORK_REFUSAL_REASONS,
 } from './session-source-fork';
 
 let n = 0;
@@ -48,6 +48,14 @@ ck('no permission blocked', canStartFork({ hasPermission: false, networkId: 'net
 ck('no network blocked', canStartFork({ hasPermission: true, networkId: null, session: { sessionId: 'ses_A', nodeId: 'n1' } }).ok === false);
 ck('unknown catalog blocked', canStartFork({ hasPermission: true, networkId: 'net_abc', session: null }).ok === false);
 ck('valid enables', canStartFork({ hasPermission: true, networkId: 'net_abc', session: { sessionId: 'ses_A', nodeId: 'n1' } }).ok === true);
+
+// 8) Hub 拒绝时给人看的话：不再显示裸「conflict」
+ck('daemon_offline names the daemon and the fix', /daemon 离线/.test(describeSourceForkRefusal(409, 'daemon_offline')) && /启动/.test(describeSourceForkRefusal(409, 'daemon_offline')));
+ck('every known reason has its own message', new Set(SOURCE_FORK_REFUSAL_REASONS.map(r => describeSourceForkRefusal(409, r))).size === SOURCE_FORK_REFUSAL_REASONS.length);
+ck('old hub 409 without reason is still actionable', !/^conflict$/i.test(describeSourceForkRefusal(409)) && /daemon/.test(describeSourceForkRefusal(409)));
+ck('unknown reason falls back to the generic 409 text', describeSourceForkRefusal(409, 'something_new') === describeSourceForkRefusal(409));
+ck('403 explains permission', /权限/.test(describeSourceForkRefusal(403)));
+ck('401 explains login', /登录/.test(describeSourceForkRefusal(401)));
 
 console.log(`${n}/${n} passed`);
 process.exit(0);

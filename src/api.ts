@@ -4,7 +4,7 @@ import { appFetch, appFetchLoad } from './app-fetch';
 import { buildConfigPatch } from './node-variant-patch';
 import { buildDirectoryBody, buildDirectorySelectBody, parseDirectoryResponse, validateDirectoryRequest, validateDirectorySelect, type DirectoryRequest, type DirectoryResult } from './session-source-directory';
 import { buildProjectCreateBody, validateProjectCreateSelection, type ProjectCreateSelection } from './session-project-create';
-import { buildSourceForkBody, classifyStatus, type SourceForkReceipt, type SourceForkSelection, type SourceForkStatus } from './session-source-fork';
+import { buildSourceForkBody, classifyStatus, describeSourceForkRefusal, type SourceForkReceipt, type SourceForkSelection, type SourceForkStatus } from './session-source-fork';
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
@@ -1704,7 +1704,7 @@ export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequ
 // 404 = gate 未开启 → unavailable（调用方显示「未开放」，绝不 fallback 普通 create）。
 export type SourceForkPostResult =
   | { ok: true; receipt: SourceForkReceipt }
-  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; invalid?: string; error: string };
+  | { ok: false; unavailable?: true; denied?: boolean; conflict?: boolean; invalid?: string; reason?: string; error: string };
 
 export const postSessionSourceFork = async (cfg: HubConfig, sel: SourceForkSelection): Promise<SourceForkPostResult> => {
   try {
@@ -1715,10 +1715,15 @@ export const postSessionSourceFork = async (cfg: HubConfig, sel: SourceForkSelec
       signal,
     }));
     if (res.status === 404) return { ok: false, unavailable: true, error: 'source_fork_unavailable' };
-    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: `HTTP ${res.status}` };
-    if (res.status === 409) return { ok: false, conflict: true, error: 'conflict' };
+    if (res.status === 401 || res.status === 403) return { ok: false, denied: true, error: describeSourceForkRefusal(res.status) };
+    if (res.status === 409) {
+      // Hub 核对完权限后会带 reason（daemon_offline 等）；旧 Hub 不带 → 退回通用说明。
+      const body = await res.json().catch(() => null) as any;
+      const reason = typeof body?.reason === 'string' ? body.reason : undefined;
+      return { ok: false, conflict: true, ...(reason ? { reason } : {}), error: describeSourceForkRefusal(409, reason) };
+    }
     if (res.status === 400) return { ok: false, invalid: String((await res.json().catch(() => null) as any)?.error ?? 'invalid'), error: 'invalid' };
-    if (!res.ok) return { ok: false, error: `HTTP ${res.status}` };
+    if (!res.ok) return { ok: false, error: describeSourceForkRefusal(res.status) };
     const d = await res.json().catch(() => null) as any;
     if (!d || d.ok !== true || typeof d.request_id !== 'string') {
       const e = String(d?.error ?? '');
