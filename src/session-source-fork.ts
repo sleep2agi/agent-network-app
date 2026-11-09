@@ -127,3 +127,27 @@ export function canStartFork(input: {
   if (!NODE_RE.test(s.nodeId)) return { ok: false, reason: '选中的 source node 非法' };
   return { ok: true, reason: '可提交：受管 source 独立 fork' };
 }
+
+/**
+ * Hub 拒绝 fork 时给人看的话。Hub（agent-network #3402 起）在核对完源节点权限后，
+ * 409 会带 `reason`；旧 Hub 不带，就退回一句能让人行动的说明，而不是裸的「conflict」。
+ */
+export const SOURCE_FORK_REFUSAL_REASONS = [
+  'daemon_offline', 'daemon_not_capable', 'hub_busy', 'evidence_unavailable', 'intent_reused',
+] as const;
+export type SourceForkRefusalReason = (typeof SOURCE_FORK_REFUSAL_REASONS)[number];
+
+export function describeSourceForkRefusal(status: number, reason?: string | null): string {
+  switch (reason) {
+    case 'daemon_offline': return '管理这个节点的 daemon 离线。fork 需要它在线：请先在那台机器上启动 daemon，再重试。';
+    case 'daemon_not_capable': return '管理这个节点的 daemon 版本不支持独立 fork，请升级 daemon 后重试。';
+    case 'hub_busy': return 'Hub 当前正在处理的 fork 太多，请稍后重试。';
+    case 'evidence_unavailable': return '暂时读不到源会话，请稍后重试；一直失败的话，检查源节点是否在线。';
+    case 'intent_reused': return '这次 fork 已经用别的参数提交过。请关闭弹窗，重新发起一次。';
+  }
+  if (status === 401) return '登录已过期，请重新登录后再试。';
+  if (status === 403) return '你没有 fork 这个节点的权限（需要对源节点有管理权限）。';
+  if (status === 409) return '源节点当前无法 fork：可能没有被 daemon 管理、管理关系不唯一，或管理它的 daemon 离线。请检查节点的 daemon 状态后重试。';
+  return `fork 失败（HTTP ${status}）`;
+}
+
