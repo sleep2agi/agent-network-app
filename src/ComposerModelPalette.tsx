@@ -124,7 +124,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
             loading: false,
             error: null,
           }
-        : { snapshot: null, loading: false, error: catalogErrorText('daemon_not_found') });
+        : { snapshot: null, loading: false, error: catalogErrorText('catalog_unmanaged_unreported') });
       return () => { live = false; };
     }
     void (async () => {
@@ -295,6 +295,16 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           autoFocus
         />
         <Ionicons name="options-outline" size={16} color={colors.textMuted} />
+        <Pressable
+          testID="model-palette-close"
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelPicker.close')}
+          hitSlop={8}
+          onPress={() => closeRef.current()}
+          style={{ marginLeft: 8, padding: 2 }}
+        >
+          <Ionicons name="close" size={18} color={colors.textMuted} />
+        </Pressable>
       </View>
 
       {busy ? (

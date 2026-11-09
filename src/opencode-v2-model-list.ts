@@ -147,6 +147,7 @@ export function catalogErrorText(error: string | undefined): string {
     case 'daemon_not_found':
     case 'daemon_not_supervisor': return '找不到这个节点所属的 daemon，读不到 OpenCode 服务器。';
     case 'node_not_found': return 'Hub 没有这条节点的 OpenCode V2 创建记录，读不到模型列表。';
+    case 'catalog_unmanaged_unreported': return '这个节点是手动启动的：没有 daemon 能代读它的模型清单，节点自己也还没上报（需要 agent-node ≥ 2.5.0-preview.160）。把它「交给守护进程管理」后即可读取；当前模型不受影响。';
     case 'user_token_required': return '读取模型列表需要登录人类账号，节点令牌不行。';
     case 'unavailable': return '节点上的 OpenCode 服务器没有返回模型列表。';
     case 'unauthorized': return '节点上的 OpenCode 服务器拒绝了这次读取。';

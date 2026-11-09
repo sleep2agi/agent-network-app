@@ -75,4 +75,12 @@ ck('last_update 缺失 → 不算 applied', !lastUpdateApplied(undefined, 'u1', 
 ck('applied 但期望模型为空 → 仅按 last 判定', lastUpdateApplied({ update_id: 'u1', status: 'applied', terminal: true }, 'u1', null).applied);
 
 console.log(`${n}/${n} passed`);
+// Hub reports agent-node OpenCode nodes as opencode-sdk: must not be refused by runtime name.
+{
+  const { variantWritable: vw } = await import('./node-variant-patch');
+  if (!vw({ variantCapable: true, runtime: 'opencode-sdk' }).ok) throw Error('opencode-sdk refused');
+  if (vw({ variantCapable: false, runtime: 'opencode-sdk' }).ok) throw Error('capability bypassed');
+  if (vw({ variantCapable: true, runtime: 'claude-code' }).ok) throw Error('non-opencode accepted');
+  console.log('PASS variant: opencode-sdk writable when capable; capability still required');
+}
 process.exit(0);
