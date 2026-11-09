@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import type { HubNode, Session } from './api';
-import { chatForkSource } from './chat-fork-source';
+import { chatForkSource, describeForkSourceError } from './chat-fork-source';
 import { chatInfoGroups } from './chat-info-model';
 const node = { node_id: 'node_a', runtime: 'opencode-cli', opencode_generation: 'v2' } as HubNode;
 const session = { node_id: 'node_a', alias: 'current', network_id: 'net_a', session_id: 'ses_REAL123', project_dir: '/project' } as Session;
@@ -24,3 +24,14 @@ assert.equal(select([session], [sdkNode]).ok, true);
 const v1Node = { ...node, opencode_generation: 'v1' };
 assert.equal(select([session], [v1Node]).ok, false);
 console.log('PASS chat fork source: opencode-sdk v2 accepted, v1 still refused');
+
+// Hand-started node (no daemon created/adopted it): the Hub always 409s before any reason.
+const unmanaged = select([session], [{ ...node, managed: 'none' } as HubNode]);
+assert.deepEqual(unmanaged, { ok: false, error: 'fork_source_not_managed' });
+assert.match(describeForkSourceError('fork_source_not_managed'), /daemon/);
+assert.equal(select([session], [{ ...node, managed: 'created' } as HubNode]).ok, true);
+assert.equal(select([session], [{ ...node, managed: 'adopted' } as HubNode]).ok, true);
+assert.equal(select([session], [node]).ok, true); // older Hub: no `managed` field
+assert.equal(describeForkSourceError('something_new'), 'something_new');
+assert.doesNotMatch(describeForkSourceError('fork_requires_opencode_v2'), /fork_requires/);
+console.log('PASS chat fork source: unmanaged source refused up front with readable text; old Hub unchanged');
