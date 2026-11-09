@@ -10,6 +10,7 @@ export const chatTranslations = {
   'chat.modelPicker.emptyHint': ['换个关键词试试。目录只来自这台节点的 OpenCode 服务器。', 'Try another keyword. The catalog comes only from this node’s OpenCode server.'],
   'chat.modelPicker.catalogEmpty': ['这台节点的 OpenCode 服务器没有返回任何模型', 'This node’s OpenCode server returned no models'],
   'chat.modelPicker.catalogSource': ['目录来自这台节点的 OpenCode 服务器（只读）', 'Catalog from this node’s OpenCode server (read-only)'],
+  'chat.modelPicker.appliedNoReadback': ['已切换到 {model}（节点已确认；该节点版本不回报会话模型，升级 agent-node 后可显示实时读回）', 'Switched to {model} (the node acknowledged it; this node version does not report its session model)'],
   'chat.modelPicker.acceptedUnconfirmed': ['已接受，但生效模型未确认', 'Accepted, but the effective model is not confirmed'],
   'chat.modelPicker.variantAcceptedUnconfirmed': ['已接受，但当前档位未确认', 'Accepted, but the current variant is not confirmed'],
   'chat.modelPicker.variantApplied': ['已生效：{value}', 'Applied: {value}'],
