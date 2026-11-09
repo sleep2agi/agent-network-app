@@ -57,6 +57,9 @@ interface Props {
 
 const CATALOG_POLL_MS = 1000;
 const CATALOG_MAX_POLLS = 15;
+/** 写后读回：心跳间隔内等 model_effective（约 6s）。 */
+const READBACK_POLLS = 4;
+const READBACK_POLL_MS = 1500;
 
 export default function ComposerModelPalette({ cfg, node, targetError, currentModel, currentVariant, onReadback, onClose }: Props) {
   const styles = makeStyles();
@@ -234,6 +237,13 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     }
   };
 
+  // 冲突提示说「已重新加载」，就得真的重新读：否则下次还拿旧 baseRevision，永远冲突。
+  const reloadConfig = async () => {
+    if (!node) return;
+    const fresh = await fetchNodeConfig(cfgRef.current, node.node_id).catch(() => null);
+    if (fresh) { setConfig(fresh); readbackRef.current(fresh); }
+  };
+
   const applyModel = async (row: PaletteRow) => {
     if (!node || lock.current) return;
     if (row.key === currentKey) { closeRef.current(); return; }
@@ -259,17 +269,30 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         patch: { model: row.key },
       });
       if (!res.ok) {
+        if (res.conflict) await reloadConfig();
         setErrorText(res.conflict ? t('chat.modelPicker.conflict') : t('chat.modelPicker.failed', { message: res.error }));
         return;
       }
-      const after = await fetchNodeConfig(cfgRef.current, node.node_id);
-      const verdict = confirmComposerModelSwitch({ after, updateId: res.update_id, requested: row.key });
-      if (!verdict.confirmed) {
+      // 热切换的 ACK 很快，但 model_effective 跟着下一次心跳才到：短轮询，别拿第一次读回下结论。
+      let after = await fetchNodeConfig(cfgRef.current, node.node_id);
+      let verdict = confirmComposerModelSwitch({ after, updateId: res.update_id, requested: row.key });
+      for (let i = 0; !verdict.confirmed && i < READBACK_POLLS; i += 1) {
+        await new Promise(r => setTimeout(r, READBACK_POLL_MS));
+        after = await fetchNodeConfig(cfgRef.current, node.node_id);
+        verdict = confirmComposerModelSwitch({ after, updateId: res.update_id, requested: row.key });
+      }
+      // 无论结果如何都换上最新配置：revision 已经抬高，留着旧的下次必撞冲突。
+      if (after) setConfig(after);
+      if (!verdict.confirmed && !verdict.ackOnly) {
         setErrorText(t('chat.modelPicker.failed', { message: t('chat.modelPicker.acceptedUnconfirmed') }));
         setErrorDetail(verdict.reason);
         return;
       }
-      setConfig(after);
+      if (verdict.ackOnly) {
+        // 没有会话级读回，footer 不能冒充 model_effective；只给明确的回执提示，不关面板。
+        setNotice(t('chat.modelPicker.appliedNoReadback', { model: row.key }));
+        return;
+      }
       readbackRef.current(after);
       closeRef.current();
     } catch (error) {
@@ -315,10 +338,12 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         patch: { model: effectiveModel, modelVariant: next },
       });
       if (!res.ok) {
+        if (res.conflict) await reloadConfig();
         setErrorText(res.conflict ? t('chat.modelPicker.conflict') : t('chat.modelPicker.failed', { message: res.error }));
         return;
       }
       const after = await fetchNodeConfig(cfgRef.current, node.node_id);
+      if (after) setConfig(after);
       const verdict = confirmComposerVariantSwitch({
         after,
         updateId: res.update_id,

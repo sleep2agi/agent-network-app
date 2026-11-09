@@ -95,7 +95,10 @@ ck('missing ack rejected', !confirmComposerModelSwitch({ after: { model_effectiv
 ck('wrong update id rejected', !confirmComposerModelSwitch({ after: afterOk, updateId: 'u2', requested: 'p/m' }).confirmed);
 ck('nonterminal ack rejected', !confirmComposerModelSwitch({ after: { model_effective: 'p/m', last_update: { ...ack, terminal: false } }, updateId: 'u1', requested: 'p/m' }).confirmed);
 ck('stale readback rejected', !confirmComposerModelSwitch({ after: { model_effective: 'p/old', last_update: ack }, updateId: 'u1', requested: 'p/m' }).confirmed);
-ck('missing model_effective rejected', !confirmComposerModelSwitch({ after: { last_update: ack }, updateId: 'u1', requested: 'p/m' }).confirmed);
+ck('missing model_effective is not confirmed', !confirmComposerModelSwitch({ after: { last_update: ack }, updateId: 'u1', requested: 'p/m' }).confirmed);
+ck('missing model_effective with applied ack is ackOnly', confirmComposerModelSwitch({ after: { last_update: ack }, updateId: 'u1', requested: 'p/m' }).ackOnly === true);
+ck('stale readback is not ackOnly', !confirmComposerModelSwitch({ after: { model_effective: 'p/old', last_update: ack }, updateId: 'u1', requested: 'p/m' }).ackOnly);
+ck('missing ack is not ackOnly', !confirmComposerModelSwitch({ after: {}, updateId: 'u1', requested: 'p/m' }).ackOnly);
 ck('null readback rejected', !confirmComposerModelSwitch({ after: null, updateId: 'u1', requested: 'p/m' }).confirmed);
 
 const variantAck = { update_id: 'u2', status: 'applied', terminal: true, requested_model: 'p/m' };

@@ -174,6 +174,9 @@ export function paletteVariantMap(snapshot: PaletteCatalogSnapshot | null | unde
 export interface ComposerSwitchConfirmation {
   confirmed: boolean;
   reason: string;
+  /** 本次 ACK 已 applied，但节点不回报 model_effective（agent-node 旧版 / 尚未心跳）。
+   *  不是「已确认」，也不是失败：Hub 回执说节点已经换好，只是没有会话级读回。 */
+  ackOnly?: boolean;
 }
 
 /** 模型切换：本次 update_id 的终局 ACK + model_effective 真实读回，两者都匹配才算生效。 */
@@ -186,8 +189,12 @@ export function confirmComposerModelSwitch(input: {
   const ack = lastUpdateApplied(input.after.last_update, input.updateId, input.requested);
   if (!ack.applied) return { confirmed: false, reason: ack.reason };
   const effective = typeof input.after.model_effective === 'string' ? input.after.model_effective.trim() : '';
+  // 2026-11-09 admin 实测（通信客户端欧，agent-node .184）：节点 198ms 内已热切换成功，
+  // 但旧版 agent-node 不上报 model_effective，面板把成功报成失败，再选一次又撞 revision 冲突。
+  // 缺读回 ≠ 读回不一致：只有「读回了另一个模型」才算失败。
+  if (!effective) return { confirmed: false, ackOnly: true, reason: 'last_update=applied；节点未回报 model_effective' };
   if (effective !== input.requested) {
-    return { confirmed: false, reason: `model_effective=${effective || 'unknown'} 与请求 ${input.requested} 不一致` };
+    return { confirmed: false, reason: `model_effective=${effective} 与请求 ${input.requested} 不一致` };
   }
   return { confirmed: true, reason: 'last_update=applied 且 model_effective 读回一致' };
 }
