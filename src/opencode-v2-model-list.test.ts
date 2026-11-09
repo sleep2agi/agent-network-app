@@ -67,3 +67,10 @@ ck('reportsCatalogSince: 看不懂的版本不判断（null）', reportsCatalogS
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);
+
+{
+  const { catalogErrorText: cet } = await import('./opencode-v2-model-list');
+  const txt = cet('catalog_unmanaged_unreported');
+  if (!txt.includes('手动启动') || !txt.includes('交给守护进程管理')) throw Error('unmanaged catalog text');
+  console.log('PASS model list: unmanaged + unreported says what to do, not "daemon missing"');
+}

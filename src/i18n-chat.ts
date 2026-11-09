@@ -2,6 +2,7 @@ import { registerTranslations } from './i18n';
 export const chatTranslations = {
   // #4130 follow-up —— 聊天页「选模型」命令面板（浮层搜索 + provider 分组）。
   'chat.modelPicker.search': ['搜索模型', 'Search models'],
+  'chat.modelPicker.close': ['关闭', 'Close'],
   'chat.modelPicker.searchLabel': ['搜索模型目录', 'Search the model catalog'],
   'chat.modelPicker.loading': ['正在读取这台节点的模型目录…', 'Reading this node’s model catalog…'],
   'chat.modelPicker.switching': ['正在切换模型…', 'Switching model…'],

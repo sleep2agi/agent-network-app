@@ -36,7 +36,10 @@ export function variantValueError(value: unknown): string | null {
 /** 档位可写性：必须节点显式声明能力；runtime 必须是 opencode 系。 */
 export function variantWritable(input: { variantCapable?: boolean | null; runtime?: string | null }): { ok: boolean; reason: string } {
   const rt = (input.runtime ?? '').trim();
-  const opencodeRt = rt === 'opencode' || rt === 'opencode-cli';
+  // The Hub reports agent-node OpenCode nodes as `opencode-sdk` (and hand-started ones as
+  // `opencode-cli`); both are OpenCode. Pinning `opencode-cli` greyed the 档位 picker out
+  // ("未知") on every opencode-sdk node. Capability is still required below.
+  const opencodeRt = rt === 'opencode' || rt.startsWith('opencode-');
   if (!opencodeRt) return { ok: false, reason: `当前 runtime（${rt || '未上报'}）不支持档位写入` };
   if (input.variantCapable !== true) return { ok: false, reason: '该节点未声明 opencode_variant_config_capable，不能写档位' };
   return { ok: true, reason: '可写：带 modelVariant 的 patch 会以 hot 方式应用' };
