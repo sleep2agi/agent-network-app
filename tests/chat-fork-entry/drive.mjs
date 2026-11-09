@@ -95,7 +95,15 @@ try {
     await page.evaluate(() => { window.__chatFork.missing = true; });
     await open(page);
     await page.getByTestId('chat-fork-source-error').waitFor();
-    ck(`${name}: missing native id means explicit error and no preselection`, (await page.getByTestId('chat-fork-source-error').innerText()).includes('fork_native_session_missing') && await page.getByTestId('source-fork-submit').count() === 0 && await page.locator('[data-testid$="-check"]').count() === 0);
+    // #1328 turned the raw codes into human text (describeForkSourceError). The drive
+    // was still asserting the code string, so it went red on a behaviour that was
+    // deliberately changed. Assert what the user sees, and keep the structural parts
+    // (no submit, no preselection) that actually carry the guarantee.
+    const missingText = await page.getByTestId('chat-fork-source-error').innerText();
+    ck(`${name}: missing native id means explicit error and no preselection`,
+      missingText.includes('还没有 OpenCode 会话')
+      && await page.getByTestId('source-fork-submit').count() === 0
+      && await page.locator('[data-testid$="-check"]').count() === 0);
     ck(`${name}: no JS errors`, errors.length === 0);
     await ctx.close();
   }
