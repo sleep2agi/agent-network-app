@@ -1,4 +1,4 @@
-import type { HubNode, NodeLifecycleRequest } from './api';
+import type { HostSupervisorDaemon, HubNode, NodeLifecycleRequest } from './api';
 import { registerTranslations, t } from './i18n';
 import { ADOPT_REFUSAL_COPY } from './adopt-refusal-copy';
 registerTranslations({
@@ -17,6 +17,9 @@ registerTranslations({
   'adopt.success': ['操作已完成', 'Operation completed'],
   'adopt.uncertain': ['暂时无法确认结果。请刷新节点状态，勿重复提交。', 'Result is not confirmed. Refresh node status before retrying.'],
   'adopt.empty': ['没有报告支持收编的 daemon。', 'No daemon reports adoption support.'],
+  'adopt.loadingDaemons': ['正在读取 daemon 列表…', 'Loading daemons…'],
+  'adopt.listFailed': ['读取 daemon 列表失败：{error}。这不代表没有可用 daemon，请重试。', 'Could not load daemons: {error}. This does not mean none are available; retry.'],
+  'adopt.retry': ['重试', 'Retry'],
   'adopt.failed': ['操作未完成，请检查 daemon 状态或联系管理员。', 'Operation did not complete. Check the daemon or contact an administrator.'],
   'adopt.failedCode': ['操作未完成（{code}），请检查 daemon 状态或联系管理员。', 'Operation did not complete ({code}). Check the daemon or contact an administrator.'],
   'adopt.socket': ['需要验证过的私有 tmux socket；默认 socket 不允许远程启动。', 'A verified private tmux socket is required; the default socket cannot be started remotely.'],
@@ -44,4 +47,15 @@ export function adoptionError(error: unknown): string {
   // Unknown code: show it so the owner can report it; free text (may hold paths) stays hidden.
   if (key === 'failed' && typeof error === 'string' && /^[a-z][a-z0-9_]{0,63}$/.test(error)) return t('adopt.failedCode', { code: error });
   return t(`adopt.${key}`);
+}
+
+/** Daemon picker state. A failed/timed-out list read is NOT "no daemon supports adoption":
+ * a slow Hub (12 s client timeout) used to show that sentence and grey out the confirm button. */
+export type AdoptDaemonList =
+  | { kind: 'loading' }
+  | { kind: 'failed'; error: string }
+  | { kind: 'ready'; daemons: HostSupervisorDaemon[] };
+export function adoptDaemonList(result: { ok: true; daemons: HostSupervisorDaemon[] } | { ok: false; error?: string }): AdoptDaemonList {
+  if (!result.ok) return { kind: 'failed', error: result.error || 'unknown' };
+  return { kind: 'ready', daemons: result.daemons.filter(d => d.adopt_capable === true) };
 }

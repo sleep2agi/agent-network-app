@@ -1,4 +1,4 @@
-import { adoptionSupported, isAdopted, adoptionOutcome, adoptionError } from './node-adoption';
+import { adoptionSupported, isAdopted, adoptionOutcome, adoptionError, adoptDaemonList } from './node-adoption';
 import { adoptKnownNode, fetchNodeLifecycleRequest, runNodeLifecycleAction, type HubConfig, type HubNode } from './api';
 import { readFileSync } from 'node:fs';
 import { nodeIsDown } from './node-danger-actions';
@@ -57,4 +57,14 @@ globalThis.fetch=async(url:any,init:any)=>{calls.push({url:String(url),init});re
 ck('adopt accepted not completed',(await adoptKnownNode(cfg,node.node_id,'daemon-fixture','/fixture/node')).ok);
 const args=JSON.parse(calls.at(-1).init.body).params;
 ck('public adopt contract',args.name==='request_adopt_node'&&args.arguments.node_id===node.node_id&&args.arguments.workdir==='/fixture/node'&&args.arguments.network_id===cfg.networkId);
+
+// A failed/timed-out daemon list is not "no daemon supports adoption" (prod: 15 s Hub vs 12 s client timeout).
+const failedList=adoptDaemonList({ok:false,error:'The operation was aborted.'});
+ck('list failure is not empty',failedList.kind==='failed'&&failedList.error.includes('aborted'));
+ck('list failure without text still failed',adoptDaemonList({ok:false}).kind==='failed');
+const ready=adoptDaemonList({ok:true,daemons:[{daemon_node_id:'d1',alias:'a',hostname:'h',adopt_capable:true} as any,{daemon_node_id:'d2',alias:'b',hostname:'h',adopt_capable:false} as any,{daemon_node_id:'d3',alias:'c',hostname:'h'} as any]});
+ck('ready keeps only adopt_capable daemons',ready.kind==='ready'&&ready.daemons.map(d=>d.daemon_node_id).join()==='d1');
+ck('empty ready list is a real empty',(()=>{const r=adoptDaemonList({ok:true,daemons:[]});return r.kind==='ready'&&r.daemons.length===0;})());
+const src=readFileSync(new URL('./NodeAdoptionControls.tsx',import.meta.url),'utf8');
+ck('controls render failed state with retry',src.includes("adopt-daemons-failed")&&src.includes("adopt-daemons-retry")&&src.includes("adopt.listFailed"));
 console.log(`${p}/${t}`);
