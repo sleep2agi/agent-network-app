@@ -72,10 +72,9 @@ export function chatInfoGroups(input: ChatInfoInput): ChatInfoRow[][] {
   if (toggles.length) groups.push(toggles);
 
   if (input.canOpenNode) {
-    const visible = visibleNodeSections({ readOnly: true, hasRulesTarget: input.hasRulesTarget, skillsCapable: input.skillsCapable });
+    const visible = visibleNodeSections({ readOnly: true, hasRulesTarget: input.hasRulesTarget, skillsCapable: input.skillsCapable, secretsCapable: input.secretsCapable });
     const sections = NODE_SECTIONS
       .filter(s => s.key !== 'overview' && s.key !== 'danger' && visible.includes(s.key))
-      .filter(s => s.key !== 'secrets' || input.secretsCapable)
       .map((s): ChatInfoRow => ({ key: `section:${s.key}` as ChatInfoRowKey, kind: 'link', label: s.label, section: s.key }));
     if (sections.length) groups.push(sections);
   }
