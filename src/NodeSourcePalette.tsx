@@ -40,6 +40,7 @@ import {
 } from './session-source-directory';
 import { canUseSnapshotForNewSession } from './session-project-create';
 import {
+  activeSourceKey,
   buildPaletteSubmission,
   childNameIssue,
   currentSourceKey,
@@ -410,8 +411,10 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
       const focused = Platform.OS === 'web' ? (globalThis as { document?: Document }).document?.activeElement : null;
       const isNameInput = (focused as { getAttribute?: (name: string) => string | null } | null)?.getAttribute?.('data-testid');
       if (isNameInput === 'source-fork-child-name' || isNameInput === 'project-create-child-name') { void submit(); return; }
-      if (activeKey && activeKey !== selectedKey) {
-        const row = rows.find(item => item.key === activeKey);
+      // active 可能停在已经被搜索过滤掉的行上；Enter 只能选当前可见行。
+      const visibleActive = activeSourceKey(view.order, activeKey);
+      if (visibleActive && visibleActive !== selectedKey) {
+        const row = rows.find(item => item.key === visibleActive);
         if (row) pick(row);
       }
       return;
@@ -507,6 +510,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
                           label={row.kind === 'project' ? `新建空会话 · ${row.title}` : row.title}
                           detail={row.disabledReason ?? row.detail}
                           current={row.key === view.currentKey}
+                          active={row.key === activeKey}
                           disabled={!!row.disabledReason}
                           onPress={() => pick(row)}
                           accessibilityLabel={`${row.title} ${row.id}${row.disabledReason ? `（${t('sourcePalette.rowDisabled')}：${row.disabledReason}）` : ''}`}

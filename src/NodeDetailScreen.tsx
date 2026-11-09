@@ -803,7 +803,7 @@ export default function NodeDetailScreen({
     if (section === 'secrets') return (
       <View>
         <SectionTitle title="密钥" />
-        <ScopedSecretsSection cfg={cfg} daemonId={node?.lifecycle_daemon_node_id} nodeId={node?.node_id} nodeRuntimeVersion={s.version} />
+        <ScopedSecretsSection cfg={cfg} daemonId={node?.lifecycle_daemon_node_id} nodeId={node?.node_id} nodeRuntimeVersion={s.version} nodeSecretsCapable={s.node_secrets_capable === true} />
       </View>
     );
     if (section === 'rules') return (

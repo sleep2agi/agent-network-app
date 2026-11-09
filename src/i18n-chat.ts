@@ -177,6 +177,7 @@ export const chatTranslations = {
   'chat.info.mute': ['消息免打扰', 'Mute notifications'],
   'chat.info.windowPin': ['窗口置顶', 'Keep window on top'],
   'chat.info.section:model': ['模型与运行时', 'Model and runtime'],
+  'chat.info.section:secrets': ['密钥', 'Secrets'],
   'chat.info.section:rules': ['规则文件', 'Rules'],
   'chat.info.section:skills': ['技能', 'Skills'],
   'chat.info.section:files': ['项目文件夹', 'Project folder'],

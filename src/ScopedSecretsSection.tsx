@@ -10,17 +10,21 @@ import './i18n-provider-management';
 import { providerHttpWarning } from './daemon-provider-management-api';
 import { colors, spacing, radius, type } from './theme';
 import { buttonStyle, buttonTextStyle } from './elevation';
-type Props={cfg:HubConfig;daemonId?:string|null;nodeId?:string|null;nodeRuntimeVersion?:string|null};
+type Props={cfg:HubConfig;daemonId?:string|null;nodeId?:string|null;nodeRuntimeVersion?:string|null;nodeSecretsCapable?:boolean};
 export default function ScopedSecretsSection(props:Props) {
   return <Page key={JSON.stringify([props.cfg.serverUrl,props.cfg.networkId,props.cfg.token,props.daemonId,props.nodeId,props.nodeRuntimeVersion])} {...props}/>;
 }
-function Page({cfg,daemonId,nodeId,nodeRuntimeVersion}:Props) {
+function Page({cfg,daemonId,nodeId,nodeRuntimeVersion,nodeSecretsCapable}:Props) {
   const {t}=useTranslation();const [snapshot,setSnapshot]=useState<SecretSnapshot|null>(null),[key,setKey]=useState(''),[value,setValue]=useState('');
   const [busy,setBusy]=useState(false),[writing,setWriting]=useState(false),[notice,setNotice]=useState(''),[deleting,setDeleting]=useState<string|null>(null);
   const active=useRef<AbortController|null>(null), mounted=useRef(true);
   const supported=!!(daemonId||nodeId) && !!cfg.networkId;
   const independent=!!nodeId && !daemonId;
-  const upgradeRequired=independent && nodeSecretsNeedsUpgrade(nodeRuntimeVersion);
+  // 能力优先：节点自报 node_secrets_capable 就必须给表单，哪怕它不报版本号
+  // （claude-code channel-server 现在正是 version=null + 有能力）。只有“没能力、且版本
+  // 缺失或低于门槛”才显示升级提示；自定义版本交给 nodeSecretsNeedsUpgrade，不误伤 fixture。
+  const upgradeRequired=independent && nodeSecretsCapable!==true
+    && (nodeRuntimeVersion==null || nodeSecretsNeedsUpgrade(nodeRuntimeVersion));
   const run=async(write?:SecretWrite)=>{
     if(!supported||upgradeRequired||active.current)return;
     const ctrl=new AbortController();active.current=ctrl;setBusy(true);setWriting(!!write);setNotice('');setDeleting(null);

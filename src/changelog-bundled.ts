@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.494:",
+  "- 聊天信息里的「密钥」行不再显示成原始 key `chat.info.section:secrets`；",
+  "  节点没上报 node_secrets_capable 时这一行直接不出现，不会点进一个不支持的空页。",
+  "- 「节点来源」面板：键盘上下移动时当前行有可见高亮；按回车只会提交搜索结果里",
+  "  仍然可见的那一行，不会选中已被过滤掉的项。",
+  "",
   "What's new in 0.2.493:",
   "- 聊天页「Fork 当前节点」现在也认 `opencode-sdk` 这类 V2 节点（仍要求 generation=v2）；之前只认 `opencode-cli`，导致真节点被误报 fork_requires_opencode_v2。",
   "",
