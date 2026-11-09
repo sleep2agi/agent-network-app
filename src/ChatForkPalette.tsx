@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { fetchHubNodes, fetchNodeStatus, type HubConfig } from './api';
-import { chatForkSource } from './chat-fork-source';
+import { chatForkSource, describeForkSourceError } from './chat-fork-source';
 import NodeSourcePalette from './NodeSourcePalette';
 import { PaletteLoading, PaletteOverlay } from './palette-kit';
 import { t } from './i18n';
@@ -20,5 +20,5 @@ export default function ChatForkPalette({ cfg, alias, onClose }: { cfg: HubConfi
     sourceNodeId={result.ok ? result.nodeId : ''} networkId={cfg.networkId ?? null}
     sessionId={result.ok ? result.sessionId : null}
     forkSessions={result.ok ? [{ sessionId: result.sessionId, nodeId: result.nodeId, label: result.label, path: result.path }] : []}
-    forkSourceError={result.ok ? null : result.error} onClose={onClose} />;
+    forkSourceError={result.ok ? null : describeForkSourceError(result.error)} onClose={onClose} />;
 }
