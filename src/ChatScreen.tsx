@@ -1997,7 +1997,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 聊天信息里「规则文件」「技能」出不出现,口径同节点信息页(visibleNodeSections)。
   // 能力位只在全量 /api/status 里有(chat-info-model.ts chatInfoCaps 顶部):下面 30s 的 light 轮询
   // 只给得出 agent-node 那一半(lightCaps,兜底);全量行在进聊天和每次打开聊天信息时取一次(fullCaps)。
-  const [lightCaps, setLightCaps] = useState<ChatInfoCaps>({ rules: false, skills: false });
+  const [lightCaps, setLightCaps] = useState<ChatInfoCaps>({ rules: false, skills: false, secrets: false });
   const [fullCaps, setFullCaps] = useState<ChatInfoCaps | null>(null);
   const sessionCaps = fullCaps ?? lightCaps;
   // 输入框底部：同 scope 受权 config 的有效模型/档位优先；否则只显示会话上报模型、档位未知。
@@ -2210,6 +2210,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     fork: true,
     hasRulesTarget: sessionCaps.rules,
     skillsCapable: sessionCaps.skills,
+    secretsCapable: sessionCaps.secrets,
   });
   const onInfoRow = (row: ChatInfoRow) => {
     switch (row.key) {

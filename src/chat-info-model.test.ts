@@ -6,6 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import {
   CHAT_FIND_SHORTCUT,
+  chatInfoCaps,
   chatInfoDrawerWidth,
   chatInfoGroups,
   chatInfoPresentation,
@@ -17,7 +18,7 @@ import { nodeInfoSectionKey, requestNodeSection, takeNodeSectionRequest } from '
 let ck = 0;
 const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; console.log(`PASS: ${msg}`); };
 
-const base: ChatInfoInput = { alias: '示例-A', canOpenNode: true, hasRulesTarget: true, skillsCapable: true };
+const base: ChatInfoInput = { alias: '示例-A', canOpenNode: true, hasRulesTarget: true, skillsCapable: true, secretsCapable: true };
 const keys = (i: ChatInfoInput) => chatInfoGroups(i).map(g => g.map(r => r.key));
 const flat = (i: ChatInfoInput) => chatInfoGroups(i).flat();
 
@@ -127,3 +128,18 @@ check(/from '\.\/ui-text'/.test(panel) && !/Text[^]*from 'react-native'/.test(pa
 check(/history\.pushState\([\s\S]*?anetChatInfo: true/.test(panel) && /addEventListener\('popstate', onPop\)/.test(panel), 'phone page (web): history back closes it');
 
 console.log(`chat info: ${ck}/${ck} checks passed`);
+
+// 2026-11-09 owner 截图：老节点（走 legacy node-server 的 claude-code 会话）没有
+// node_secrets_capable，聊天信息里仍出现「密钥」行，点进去是不支持的空页；同时 i18n
+// 缺 `chat.info.section:secrets` 时那一行会直接显示原始 key。
+{
+  const noSecrets = keys({ ...base, secretsCapable: false });
+  check(!noSecrets.flat().includes('section:secrets'), 'node without node_secrets_capable gets no 密钥 row');
+  check(noSecrets.flat().includes('section:model') && noSecrets.flat().includes('section:skills'), 'other capability rows are unaffected');
+  const withSecrets = keys({ ...base, secretsCapable: true });
+  check(withSecrets.flat().includes('section:secrets'), 'a capable node still gets the 密钥 row');
+  check(chatInfoCaps({ agent: 'claude-code', node_secrets_capable: undefined } as any).secrets === false,
+    'capability helper: absent node_secrets_capable is false (no fallback)');
+  check(chatInfoCaps({ agent: 'agent-node', node_secrets_capable: true } as any).secrets === true,
+    'capability helper: reported true is true');
+}

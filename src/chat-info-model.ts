@@ -46,6 +46,10 @@ export interface ChatInfoInput {
   /** 节点分区是否出现,口径同 NodeDetailScreen 的只读页(visibleNodeSections)。 */
   hasRulesTarget: boolean;
   skillsCapable: boolean;
+  /** #1491 —— 节点声明 node_secrets_capable 才给「密钥」行;老节点(如走
+   *  legacy node-server 的 claude-code 会话)没有该能力,给了只会点进一个
+   *  “不支持”的空页(owner 2026-11-09 截图)。 */
+  secretsCapable: boolean;
 }
 
 /**
@@ -71,13 +75,14 @@ export function chatInfoGroups(input: ChatInfoInput): ChatInfoRow[][] {
     const visible = visibleNodeSections({ readOnly: true, hasRulesTarget: input.hasRulesTarget, skillsCapable: input.skillsCapable });
     const sections = NODE_SECTIONS
       .filter(s => s.key !== 'overview' && s.key !== 'danger' && visible.includes(s.key))
+      .filter(s => s.key !== 'secrets' || input.secretsCapable)
       .map((s): ChatInfoRow => ({ key: `section:${s.key}` as ChatInfoRowKey, kind: 'link', label: s.label, section: s.key }));
     if (sections.length) groups.push(sections);
   }
   return groups;
 }
 
-export interface ChatInfoCaps { rules: boolean; skills: boolean }
+export interface ChatInfoCaps { rules: boolean; skills: boolean; secrets: boolean }
 
 /**
  * 聊天信息里「规则文件」「技能」两行出不出现(口径同节点信息页只读态)。
@@ -88,10 +93,11 @@ export interface ChatInfoCaps { rules: boolean; skills: boolean }
  *    所以凡是不走 agent-node 的会话(判据只剩 rules_file_capable)永远是 false,与 node_id 无关。
  *    调用方必须喂全量行;喂 light 行只能得到 agent-node 那一半(见 ChatScreen 的回退)。
  */
-export function chatInfoCaps(s: Pick<Session, 'agent' | 'rules_file_capable' | 'skills_capable'> | null | undefined): ChatInfoCaps {
+export function chatInfoCaps(s: Pick<Session, 'agent' | 'rules_file_capable' | 'skills_capable' | 'node_secrets_capable'> | null | undefined): ChatInfoCaps {
   return {
     rules: !!s && (isAgentNodeSession(s) || s.rules_file_capable === true),
     skills: s?.skills_capable === true,
+    secrets: s?.node_secrets_capable === true,
   };
 }
 
