@@ -861,8 +861,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const desktopVoiceDone = () => voice.micHandlers.onResponderRelease(DESKTOP_CLICK_EVENT as unknown as GestureResponderEvent);
   const desktopVoiceCancel = () => voice.micHandlers.onResponderTerminate();
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
-  // 面板盖住输入行 + 草稿卡片能长到的最高处(卡片在按住期间会显示光标处预览,不能从面板上方露出来)。
-  const holdCoverTop = inputRowTop > 0 ? inputRowTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0) : undefined;
+  // 面板盖住整个底部块(模型行 + 输入行) + 草稿卡片能长到的最高处(卡片在按住期间会显示光标处预览,不能从面板上方露出来)。
+  // 模型行在输入行上面(admin 2026-11-10),所以从底部块顶端算,不从输入行算。
+  const holdCoverTop = inputRowTop > 0 ? composerFooterTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0) : undefined;
   // 只在手机(安卓 / iOS / 折叠屏双栏)画;桌面(含窄到 phone 布局的桌面窗口)永远不画,见 holdOverlayApplies。
   const holdOverlayOn = holdOverlayApplies({ desktop, os: Platform.OS, userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '' });
   const holdLayout = holdOverlayOn && paneWidth > 0 && rootHeight > 0 ? holdOverlayLayout(paneWidth, rootHeight, composerInset, holdCoverTop) : null;
