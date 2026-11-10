@@ -11,7 +11,7 @@ import {
   HubConfig,
 } from './api';
 import { describeDaemonCapability } from './daemon-capability';
-import { chipTitle, readinessChips, type ReadinessChip } from './runtime-readiness';
+import { chipTitle, hiddenChipsLabel, readinessChips, splitReadinessChips, type ReadinessChip } from './runtime-readiness';
 import LocalDaemonSetupCard from './LocalDaemonSetupCard';
 import { LOCAL_HUB_PROFILE_ID } from './local-hub';
 import { isTauriDesktop } from './clipboard-attachment';
@@ -151,7 +151,7 @@ export default function HostSupervisorPickerScreen({
       <View style={styles.root}>
         <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
         <ScrollView
-          contentContainerStyle={styles.contentPad}
+          contentContainerStyle={[styles.contentPad, styles.column]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -190,7 +190,7 @@ export default function HostSupervisorPickerScreen({
       <View style={styles.root}>
         <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
         <ScrollView
-          contentContainerStyle={styles.contentPad}
+          contentContainerStyle={[styles.contentPad, styles.column]}
           refreshControl={
             <RefreshControl
               refreshing={refreshing}
@@ -231,18 +231,19 @@ export default function HostSupervisorPickerScreen({
   }
 
   // count≥2 (or count=1 in forced list view) → picker list
+  const picked = daemons.find(x => x.daemon_node_id === selected);
   return (
     <View style={styles.root}>
       <Header onBack={onBack} showBack={paneShowsBack(desktop)} title="选服务器" {...headerRefresh} />
-      <View style={styles.contentPad}>
-        <Text style={styles.listHeader}>
+      <View style={[styles.contentPad, styles.listHeaderPad]}>
+        <Text style={[styles.listHeader, styles.column]}>
           选择服务器（{count}）
         </Text>
       </View>
       <FlatList
         data={daemons}
         keyExtractor={d => d.daemon_node_id}
-        contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }}
+        contentContainerStyle={[styles.column, { paddingHorizontal: spacing.lg, paddingBottom: spacing.lg }]}
         refreshControl={
           <RefreshControl
             refreshing={refreshing}
@@ -264,9 +265,9 @@ export default function HostSupervisorPickerScreen({
         disabled={!selected}
         label="下一步"
         hint="先选一台服务器，再继续"
+        selectedLabel={picked ? `将在 ${picked.alias} 上创建` : undefined}
         onPress={() => {
-          const d = daemons.find(x => x.daemon_node_id === selected);
-          if (d) handleNext(d, onPicked);
+          if (picked) handleNext(picked, onPicked);
         }}
       />
     </View>
@@ -329,25 +330,34 @@ function HeaderRefresh({ onRefresh, refreshing }: { onRefresh: () => void; refre
   );
 }
 
-function Footer({ disabled, label, onPress, hint }: { disabled: boolean; label: string; onPress: () => void; hint?: string }) {
+function Footer({ disabled, label, onPress, hint, selectedLabel }: { disabled: boolean; label: string; onPress: () => void; hint?: string; selectedLabel?: string }) {
+  // admin 2026-10-21:灰掉的「下一步」不能是一条沉默的大灰条 —— 旁边说明为什么不能点。
+  // Vincent 2026-11-10:说明和按钮同一行(说明在左、按钮在右),灰 = 实心中性灰,能点 = 实心强调色 + ›。
+  const note = disabled ? hint : selectedLabel;
   return (
     <View style={styles.footer}>
-      {/* admin 2026-10-21:灰掉的「下一步」以前是一条沉默的大灰条,像坏了。
-          现在说明它为什么不能点,按钮本身也不再是整条灰底。 */}
-      {disabled && hint ? <Text testID="picker-footer-hint" style={styles.footerHint}>{hint}</Text> : null}
-      <Pressable
-        disabled={disabled}
-        onPress={onPress}
-        style={({ pressed }) => [
-          styles.primaryBtn,
-          disabled && styles.primaryBtnDisabled,
-          pressed && !disabled && { opacity: 0.8 },
-        ]}
-      >
-        <Text style={[styles.primaryBtnText, disabled && styles.primaryBtnTextDisabled]}>
-          {label}
-        </Text>
-      </Pressable>
+      <View style={[styles.footerInner, styles.column]}>
+        {note ? (
+          <Text testID={disabled ? 'picker-footer-hint' : 'picker-footer-selected'} style={styles.footerHint} numberOfLines={2}>{note}</Text>
+        ) : <View style={styles.footerSpacer} />}
+        <Pressable
+          testID="picker-next"
+          accessibilityRole="button"
+          accessibilityState={{ disabled }}
+          disabled={disabled}
+          onPress={onPress}
+          style={({ pressed }) => [
+            styles.primaryBtn,
+            disabled && styles.primaryBtnDisabled,
+            pressed && !disabled && { opacity: 0.8 },
+          ]}
+        >
+          <Text style={[styles.primaryBtnText, disabled && styles.primaryBtnTextDisabled]}>
+            {label}
+          </Text>
+          {disabled ? null : <Ionicons name="chevron-forward" size={16} color={colors.onAccent} />}
+        </Pressable>
+      </View>
     </View>
   );
 }
@@ -373,8 +383,7 @@ function DaemonCard({
     red: colors.failed,
     gray: colors.rest,
   }[alert];
-  // admin 2026-10-21:标题左边那颗健康绿点紧挨着选中 radio,看着像同一套控件。
-  // 选中态只留 radio(整卡高亮跟着它走);健康状态降级成底部一行旁注,带字,不会被误读成选中。
+  // admin 2026-10-21:健康绿点不能紧挨着选中 radio(看着像同一套控件)——它在标题下面的旁注行里,带字。
   const health = daemon.online === false
     ? { color: colors.rest, label: '离线' }
     : { color: alertColor, label: ALERT_LABEL[alert] ?? ALERT_LABEL.gray };
@@ -382,68 +391,68 @@ function DaemonCard({
     daemon.host_telemetry?.cpu_cores != null ? `${daemon.host_telemetry.cpu_cores} 核` : '',
     daemon.host_telemetry?.mem_gb != null ? `${daemon.host_telemetry.mem_gb} GB` : '',
   ].filter(Boolean).join(' · ');
-  // 选中态只留 radio 一处(admin 2026-10-21):整卡描边 + radio 会读成两套控件。
-  const cardStyle = [styles.card];
+  const keys = describeAllowedSecretKeys(daemon.allowed_secret_keys);
+  // Vincent 2026-11-10:整张卡就是选择目标。radio 在最前面,选中时整卡描边 + 浅强调底 —— 一个控件,两处同一信号。
   const inner = (
-    <>
-      <View style={styles.cardHeader}>
-        <Text testID="daemon-card-title" style={styles.cardTitle} numberOfLines={1}>{daemon.alias}</Text>
-        {radio ? (
-          <View testID="daemon-radio" style={[styles.radio, selected && styles.radioSelected]}>
-            {selected ? <View style={styles.radioInner} /> : null}
+    <View style={styles.cardRow}>
+      {radio ? (
+        <View testID="daemon-radio" style={[styles.radio, selected && styles.radioSelected]}>
+          {selected ? <View style={styles.radioInner} /> : null}
+        </View>
+      ) : null}
+      <View style={styles.cardBody}>
+        <View style={styles.cardHeader}>
+          <Text testID="daemon-card-title" style={styles.cardTitle} numberOfLines={1}>{daemon.alias}</Text>
+          {rightAction ? (
+            <Pressable
+              onPress={rightAction.onPress}
+              hitSlop={6}
+              style={({ pressed }) => [pressed && { opacity: 0.6 }]}
+            >
+              <Text style={styles.rightActionText}>{rightAction.label}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+        <View style={styles.metaRow}>
+          <View testID="daemon-health-dot" style={[styles.dot, { backgroundColor: health.color }]} />
+          <Text style={styles.metaText}>{health.label}</Text>
+          {telemetry ? <Text style={styles.metaText}>· {telemetry}</Text> : null}
+        </View>
+        {/* #623 —— daemon 报了 runtime_readiness:能建的露出来,建不了 / 未检测的收进「+N」。
+            机器级闸门(can_create_nodes)不变:建不了 / 未知时那一行照旧在。没报 ⇒ 声明支持的 runtime 名照旧列出。 */}
+        {readiness ? <ReadinessChips chips={readiness} /> : <RuntimeChips runtimes={daemon.runtimes_supported} />}
+        {readiness && describeDaemonCapability(daemon, Date.now()).kind === 'ready' ? null : <CapabilityRow daemon={daemon} />}
+        {/* 机器 ID 与密钥授权(#1475)是旁注:一行小灰字,窄屏自动折行。
+            密钥没上报(旧 Hub/daemon)就不显示,不替它说「未授权」。 */}
+        {daemon.hostname || keys.kind !== 'unknown' ? (
+          <View style={styles.footnoteRow}>
+            {daemon.hostname ? (
+              <Text testID="daemon-card-id" style={styles.footnote} numberOfLines={1}>机器 ID · {daemon.hostname}</Text>
+            ) : null}
+            {keys.kind !== 'unknown' ? (
+              <Text testID={`daemon-secret-keys-${keys.kind}`} style={styles.footnote} numberOfLines={2}>{keys.text}</Text>
+            ) : null}
           </View>
-        ) : rightAction ? (
-          <Pressable
-            onPress={rightAction.onPress}
-            hitSlop={6}
-            style={({ pressed }) => [pressed && { opacity: 0.6 }]}
-          >
-            <Text style={styles.rightActionText}>{rightAction.label}</Text>
-          </Pressable>
         ) : null}
       </View>
-      {/* #623 —— daemon 报了 runtime_readiness:每个 runtime 一颗 ✓/✗/? 胶囊,替掉「可建节点 ✓」那一行。
-          机器级闸门(can_create_nodes)不变:建不了 / 未知时那一行照旧在。没报 ⇒ 和以前一模一样。 */}
-      {readiness ? <ReadinessChips chips={readiness} /> : <RuntimeChips runtimes={daemon.runtimes_supported} />}
-      {/* #1475 —— daemon 能拿哪些密钥。现网 7 个 daemon 全是 []，以前界面上完全看不出来。
-          没上报（旧 Hub/daemon）就整行不显示，不替它说「未授权」。 */}
-      {readiness && describeDaemonCapability(daemon, Date.now()).kind === 'ready' ? null : <CapabilityRow daemon={daemon} />}
-      {/* 底部元信息:健康(带字)+ CPU/内存,然后是机器 ID。
-          admin 2026-10-21:裸 hostname 以前占着正文位置,现在只当「机器 ID」旁注。 */}
-      <View style={styles.metaRow}>
-        <View testID="daemon-health-dot" style={[styles.dot, { backgroundColor: health.color }]} />
-        <Text style={styles.metaText}>{health.label}</Text>
-        {telemetry ? <Text style={styles.metaText}>· {telemetry}</Text> : null}
-      </View>
-      {daemon.hostname ? (
-        <Text testID="daemon-card-id" style={styles.metaId} numberOfLines={1}>机器 ID · {daemon.hostname}</Text>
-      ) : null}
-      {/* #1475 —— daemon 能拿哪些密钥。现网 7 个 daemon 全是 []，以前界面上完全看不出来。
-          没上报（旧 Hub/daemon）就整行不显示，不替它说「未授权」。
-          admin 2026-10-21:每张卡都重复同一句技术话太重,降成最小的旁注。 */}
-      {(() => {
-        const v = describeAllowedSecretKeys(daemon.allowed_secret_keys);
-        if (v.kind === 'unknown') return null;
-        return (
-          <Text testID={`daemon-secret-keys-${v.kind}`} style={styles.metaId} numberOfLines={2}>{v.text}</Text>
-        );
-      })()}
-    </>
+    </View>
   );
   if (onPress) {
     return (
       <Pressable
         testID={`daemon-card-${daemon.daemon_node_id}`}
-        accessibilityRole="button"
-        accessibilityState={{ selected }}
-        style={({ pressed, hovered }: any) => [cardStyle, hovered && styles.cardHover, pressed && { opacity: 0.85 }]}
+        accessibilityRole="radio"
+        accessibilityState={{ selected, checked: selected }}
+        aria-checked={selected}
+        accessibilityLabel={daemon.alias}
+        style={({ pressed, hovered }: any) => [styles.card, selected && styles.cardSelected, hovered && !selected && styles.cardHover, pressed && { opacity: 0.85 }]}
         onPress={onPress}
       >
         {inner}
       </Pressable>
     );
   }
-  return <View testID={`daemon-card-${daemon.daemon_node_id}`} style={cardStyle}>{inner}</View>;
+  return <View testID={`daemon-card-${daemon.daemon_node_id}`} style={[styles.card, selected && styles.cardSelected]}>{inner}</View>;
 }
 
 // #1545 —— 卡片上那一行「它现在能不能建节点」。
@@ -466,24 +475,40 @@ function CapabilityRow({ daemon }: { daemon: HostSupervisorDaemon }) {
   );
 }
 
-// #623 —— 每个 runtime 一颗胶囊:✓ 能建(绿)/ ✗ 建不了(红)/ ? 未检测(灰)。
+// #623 —— 每个 runtime 一颗胶囊:✓ 能建(绿)/ ✗ 建不了 / ? 未检测(都是中性灰,admin 2026-10-21)。
+// Vincent 2026-11-10:默认只露 ✓ 的;✗ / ? 收成一颗「+N」,点开在同一排展开,再点收起。
 // 原因:指针悬停出提示条(桌面),点按在胶囊排下面展开同一句(手机,再点收起)。
 // 完整原因始终在 accessibilityLabel 里。判据与措辞都不在这里产生:见 src/runtime-readiness.ts。
 // 提示条朝**上**弹(同 DegradedBadge):列表里后面的卡片会盖住前面卡片里绝对定位的东西。
 function ReadinessChips({ chips }: { chips: ReadinessChip[] }) {
   const [hovered, setHovered] = useState<string | null>(null);
   const [expanded, setExpanded] = useState<string | null>(null);
-  const open = chips.find(c => c.runtime === expanded) ?? null;
+  const [showAll, setShowAll] = useState(false);
+  // 提示条 260 宽、默认左对齐胶囊;胶囊在排的右半边时改成右对齐,不然会伸出卡片 / 视口。
+  const [rowWidth, setRowWidth] = useState(0);
+  const [chipX, setChipX] = useState<Record<string, number>>({});
+  const { shown, hidden } = splitReadinessChips(chips);
+  const visible = showAll ? [...shown, ...hidden] : shown;
+  const open = visible.find(c => c.runtime === expanded) ?? null;
+  const toggleAll = () => {
+    if (showAll && expanded && !shown.some(c => c.runtime === expanded)) setExpanded(null);
+    setShowAll(!showAll);
+  };
   return (
     <View testID="picker-readiness">
-      <View style={styles.chipRow}>
-        {chips.map(c => {
-          // admin 2026-10-21:红色 ✗ 读起来像「这台机器坏了」,其实只是「这个 runtime 在这台机器上没有」。
-          // 不可用 = 中性灰;红只留给真的故障(⻅ CapabilityRow / 错误态)。
+      <View style={styles.chipRow} onLayout={e => setRowWidth(e.nativeEvent.layout.width)}>
+        {shown.length === 0 && !showAll ? (
+          <Text testID="readiness-none" style={styles.noneText}>没有可直接创建的 runtime</Text>
+        ) : null}
+        {visible.map(c => {
           const tone = c.view.chip === 'ready' ? colors.running : colors.rest;
           const title = chipTitle(c);
           return (
-            <View key={c.runtime} style={styles.rChipWrap}>
+            <View
+              key={c.runtime}
+              style={styles.rChipWrap}
+              onLayout={e => { const x = e.nativeEvent.layout.x; setChipX(m => (m[c.runtime] === x ? m : { ...m, [c.runtime]: x })); }}
+            >
               <Pressable
                 testID={`readiness-chip-${c.runtime}`}
                 accessibilityRole="button"
@@ -493,20 +518,39 @@ function ReadinessChips({ chips }: { chips: ReadinessChip[] }) {
                 onHoverIn={() => setHovered(c.runtime)}
                 onHoverOut={() => setHovered(h => (h === c.runtime ? null : h))}
                 hitSlop={4}
-                style={({ pressed }: any) => [styles.rChip, { borderColor: tone, backgroundColor: tone + '1f' }, pressed && { opacity: 0.7 }]}
+                style={({ pressed }: any) => [
+                  styles.rChip,
+                  c.view.chip === 'ready' ? { borderColor: tone, backgroundColor: tone + '1f' } : styles.rChipMuted,
+                  pressed && { opacity: 0.7 },
+                ]}
               >
                 <Text dense selectable={false} numberOfLines={1} style={[styles.rChipText, { color: tone }]}>
                   {`${c.view.icon} ${c.runtime}`}
                 </Text>
               </Pressable>
               {hovered === c.runtime && expanded !== c.runtime ? (
-                <View testID={`readiness-tip-${c.runtime}`} pointerEvents="none" style={styles.rTip}>
+                <View testID={`readiness-tip-${c.runtime}`} pointerEvents="none" style={[styles.rTip, rowWidth > 0 && (chipX[c.runtime] ?? 0) > rowWidth / 2 && styles.rTipRight]}>
                   <Text style={styles.rTipText}>{title}</Text>
                 </View>
               ) : null}
             </View>
           );
         })}
+        {hidden.length > 0 ? (
+          <Pressable
+            testID="readiness-more"
+            accessibilityRole="button"
+            accessibilityLabel={showAll ? '收起' : hiddenChipsLabel(hidden)}
+            accessibilityState={{ expanded: showAll }}
+            onPress={toggleAll}
+            hitSlop={4}
+            style={({ pressed, hovered: h }: any) => [styles.moreChip, h && styles.moreChipHover, pressed && { opacity: 0.7 }]}
+          >
+            <Text dense selectable={false} numberOfLines={1} style={styles.moreChipText}>
+              {showAll ? '收起' : `+${hidden.length}`}
+            </Text>
+          </Pressable>
+        ) : null}
       </View>
       {open ? (
         <Text testID={`readiness-detail-${open.runtime}`} style={styles.rDetail}>
@@ -630,35 +674,45 @@ const makeStyles = () => StyleSheet.create({
   // count=1 auto-pick collapsed
   autoPickHint: { color: colors.textMuted, fontSize: 12, marginTop: spacing.md, textAlign: 'center' },
 
+  // 平板 / 桌面上内容不铺满整个窗格:列表、说明和底栏都收在同一条居中的列里。
+  column: { width: '100%', maxWidth: 760, alignSelf: 'center' },
+
   // count≥2 list
+  listHeaderPad: { paddingBottom: 0 },
   listHeader: { color: colors.textMuted, fontSize: 12, marginBottom: spacing.sm },
 
   // Daemon card (shared between count=1 + count≥2 + forced-list)
   card: {
     backgroundColor: colors.card,
     borderRadius: radius.surface,
+    borderWidth: 1.5,
+    borderColor: 'transparent',
     padding: spacing.md + 2,
   },
+  cardSelected: { borderColor: colors.accent, backgroundColor: colors.tonalBg },
   cardHover: { backgroundColor: colors.rowHover },
+  cardRow: { flexDirection: 'row', alignItems: 'flex-start', gap: spacing.md },
+  cardBody: { flex: 1, minWidth: 0 },
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'center',
     gap: spacing.sm,
-    marginBottom: spacing.xs,
   },
-  dot: { width: 10, height: 10, borderRadius: radius.pill },
-  cardTitle: { color: colors.text, fontSize: 15, fontWeight: '600', flex: 1 },
-  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: spacing.sm },
-  metaText: { color: colors.textSecondary, fontSize: 11 },
-  metaId: { color: colors.textMuted, fontSize: 11, marginTop: 2 },
+  dot: { width: 8, height: 8, borderRadius: radius.pill },
+  cardTitle: { color: colors.text, fontSize: 16, fontWeight: '600', flex: 1 },
+  metaRow: { flexDirection: 'row', alignItems: 'center', gap: 6, marginTop: 2, marginBottom: spacing.xs },
+  metaText: { color: colors.textSecondary, fontSize: 12 },
+  footnoteRow: { flexDirection: 'row', flexWrap: 'wrap', columnGap: spacing.md, rowGap: 2, marginTop: spacing.sm },
+  footnote: { color: colors.textMuted, fontSize: 11, flexShrink: 1 },
   rightActionText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
 
   // Radio (count≥2 list)
   radio: {
     width: 20,
     height: 20,
+    marginTop: 1,
     borderRadius: radius.pill,
-    borderColor: colors.border,
+    borderColor: colors.textMuted,
     borderWidth: 1.5,
     alignItems: 'center',
     justifyContent: 'center',
@@ -678,8 +732,14 @@ const makeStyles = () => StyleSheet.create({
   // #623 readiness 胶囊
   rChipWrap: { zIndex: 20, maxWidth: '100%' },
   rChip: { borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, paddingHorizontal: spacing.sm, paddingVertical: 2, maxWidth: '100%' },
+  rChipMuted: { borderColor: colors.border, backgroundColor: 'transparent' },
   rChipText: { fontSize: 11, fontWeight: '600' },
+  moreChip: { borderRadius: radius.pill, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, backgroundColor: colors.inputBg, paddingHorizontal: spacing.sm, paddingVertical: 2 },
+  moreChipHover: { borderColor: colors.textMuted },
+  moreChipText: { color: colors.textSecondary, fontSize: 11, fontWeight: '600' },
+  noneText: { color: colors.textMuted, fontSize: 12, alignSelf: 'center' },
   rTip: { position: 'absolute', bottom: '100%', marginBottom: 6, left: 0, width: 260, paddingHorizontal: 10, paddingVertical: 6, borderRadius: radius.item, backgroundColor: colors.railTooltipBg, zIndex: 40 },
+  rTipRight: { left: 'auto', right: 0 },
   rTipText: { color: colors.railTooltipText, fontSize: 12, lineHeight: 17 },
   rDetail: { color: colors.textSecondary, fontSize: 12, lineHeight: 17, marginTop: spacing.xs },
   runtimeEmpty: { color: colors.textMuted, fontSize: 11, marginTop: spacing.xs },
@@ -687,15 +747,19 @@ const makeStyles = () => StyleSheet.create({
 
   // Footer (primary button)
   footer: {
-    padding: spacing.lg,
+    paddingHorizontal: spacing.lg,
+    paddingVertical: spacing.md,
     borderTopColor: colors.border,
     borderTopWidth: 1,
+    backgroundColor: colors.bg,
   },
-  primaryBtn: { ...buttonStyle('primary') },
-  primaryBtnDisabled: { backgroundColor: colors.tonalBg, borderColor: colors.border, borderWidth: 1 },
+  footerInner: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  footerSpacer: { flex: 1 },
+  primaryBtn: { ...buttonStyle('primary'), flexDirection: 'row', gap: 4, minWidth: 128 },
+  primaryBtnDisabled: { backgroundColor: colors.border },
   primaryBtnText: { ...buttonTextStyle('primary') },
   primaryBtnTextDisabled: { color: colors.textMuted },
-  footerHint: { color: colors.textSecondary, fontSize: 12, textAlign: 'center', marginBottom: spacing.sm },
+  footerHint: { flex: 1, color: colors.textSecondary, fontSize: 12, lineHeight: 17 },
 
   // 501 degrade
   warnCard: {

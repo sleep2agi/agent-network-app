@@ -5,9 +5,11 @@
 //   WEB_DIR=<expo export dir> [OUT=<png dir>] [SHOT_TAG=after] [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] \
 //     node tests/test-create-node-runtime-readiness/drive.mjs
 //
-// 视口 桌面 1200×850 / 手机 390×844 × 主题 浅 / 深:
+// 视口 手机 390×844 / 平板 1024×768 / 窄桌面 1000×700 / 桌面 1200×800 × 主题 浅 / 深:
 //   选服务器
-//     (1) daemon-example 卡片:每个 runtime 一颗胶囊,✓ / ✗ / ? 与 state 一致;「可建节点」那一行被胶囊排替掉
+//     (1) daemon-example 卡片:默认只露 ✓ 的胶囊,✗ / ? 收成一颗「+3」(Vincent 2026-11-10);
+//         点开后每个 runtime 一颗胶囊,✓ / ✗ / ? 与 state 一致;「可建节点」那一行被胶囊排替掉
+//     (1b) 整卡是选择目标:点「+3」不会选中卡片;点卡片 → 选中描边 + 底栏「下一步」从灰变实心、写着将在哪台上创建
 //     (2) 原因:桌面悬停 ✗ 胶囊 → 提示条,写着 hub 给的原因;手机点按 → 胶囊排下面展开同一句,再点收起
 //     (3) 🔴 旧 daemon(没 runtime_readiness):和以前一样 —— 没有胶囊排、「可建节点」行还在、runtime 名 chip 还在
 //     (4) 几何:每颗胶囊都在自己的卡片里(左右不出界),卡片在视口里,页面没有横向滚动(手机 390 尤其)
@@ -34,6 +36,7 @@ const MIXED = {
   daemon_node_id: 'd_example_1', alias: 'daemon-example', hostname: 'host-example', online: true, last_seen_at: new Date().toISOString(),
   runtimes_supported: ['claude-agent-sdk', 'codex-sdk', 'grok-build-acp', 'claude-code-cli', 'codex-app-server'],
   can_create_nodes: true, create_capability_observed_ms_ago: 1000,
+  host_telemetry: { alert_level: 'green', cpu_cores: 16, mem_gb: 126.6 }, allowed_secret_keys: [],
   runtime_readiness: {
     'claude-agent-sdk': { ok: true, state: 'ready', reason: '可以创建', checked_at: CHECKED, version: '0.0.0', cli: 'bundled', auth: 'present', network: 'reachable' },
     'codex-sdk': { ok: false, state: 'not_logged_in', reason: REASON_CODEX, checked_at: CHECKED, cli: 'found', auth: 'absent' },
@@ -47,10 +50,12 @@ const LEGACY = {
   runtimes_supported: ['claude-agent-sdk', 'grok-build-acp'], can_create_nodes: true, create_capability_observed_ms_ago: 1000,
 };
 const EXPECT_ICON = { 'claude-agent-sdk': '✓', 'codex-sdk': '✗', 'grok-build-acp': '✗', 'claude-code-cli': '?', 'codex-app-server': '✓' };
+const EXPECT_SHOWN = Object.keys(EXPECT_ICON).filter(k => EXPECT_ICON[k] === '✓');
 
-// 选服务器页的三档验收尺寸(admin 2026-10-21):手机 390×844 / 窄桌面 1000×700 / 桌面 1200×800。
+// 选服务器页的验收尺寸(admin 2026-10-21 三档 + Vincent 2026-11-10 的平板 1024):手机 390×844 / 平板 1024×768 / 窄桌面 1000×700 / 桌面 1200×800。
 const VIEWPORTS = [
   { name: 'phone-390x844', w: 390, h: 844, mobile: true },
+  { name: 'tablet-1024x768', w: 1024, h: 768, mobile: true },
   { name: 'desktop-1000x700', w: 1000, h: 700, desktop: true },
   { name: 'desktop-1200x800', w: 1200, h: 800, desktop: true },
 ];
@@ -99,6 +104,22 @@ for (const vp of VIEWPORTS) {
       await settle(page);
       await shot('picker');
 
+      const press = async (sel) => { const l = page.locator(sel).first(); if (vp.mobile) await l.tap(); else await l.click(); await settle(page); };
+      const cardState = () => page.evaluate(() => {
+        const c = document.querySelector('[data-testid="daemon-card-d_example_1"]');
+        const next = document.querySelector('[data-testid="picker-next"]');
+        return {
+          checked: c?.getAttribute('aria-checked') === 'true',
+          border: c ? getComputedStyle(c).borderTopColor : null,
+          nextDisabled: next?.getAttribute('aria-disabled') === 'true',
+          nextBg: next ? getComputedStyle(next).backgroundColor : null,
+          chips: [...(c?.querySelectorAll('[data-testid^="readiness-chip-"]') ?? [])].map(e => e.getAttribute('data-testid').replace('readiness-chip-', '')),
+          more: c?.querySelector('[data-testid="readiness-more"]')?.textContent ?? null,
+          selectedNote: document.querySelector('[data-testid="picker-footer-selected"]')?.textContent ?? '',
+        };
+      });
+      const isTransparent = (s) => !s || s === 'transparent' || /rgba\(.*,\s*0\)$/.test(s);
+
       const cards = await page.evaluate(() => {
         const card = (id) => document.querySelector(`[data-testid="daemon-card-${id}"]`);
         const box = (e) => { const r = e.getBoundingClientRect(); return { x: r.x, r: r.right, y: r.y, b: r.bottom, w: r.width }; };
@@ -117,12 +138,12 @@ for (const vp of VIEWPORTS) {
       const m = cards.d_example_1, l = cards.d_legacy_1;
       ck(`${tag} picker: both daemon cards render`, !!m && !!l);
       if (m && l) {
-        // (1) 胶囊
-        ck(`🔴 ${tag} picker: daemon-example has one readiness chip per runtime (5)`, m.chips.length === 5, m.chips.map(c => c.id).join());
-        for (const [rt, icon] of Object.entries(EXPECT_ICON)) {
-          const c = m.chips.find(x => x.id === rt);
-          ck(`${tag} picker: ${rt} chip reads ${icon}`, !!c && c.text.startsWith(icon) && c.text.includes(rt), c?.text ?? 'missing');
-        }
+        // (1) 胶囊:默认只露能建的
+        ck(`🔴 ${tag} picker: collapsed card shows only the ready runtimes (${EXPECT_SHOWN.join(', ')})`, m.chips.map(c => c.id).join() === EXPECT_SHOWN.join(), m.chips.map(c => c.id).join());
+        ck(`${tag} picker: every visible chip reads ✓`, m.chips.every(c => c.text.startsWith('✓')), m.chips.map(c => c.text).join(' | '));
+        ck(`🔴 ${tag} picker: the 3 unavailable / unchecked runtimes collapse into 「+3」`, (await textOf(page, 'readiness-more')) === '+3', String(await textOf(page, 'readiness-more')));
+        ck(`${tag} picker: status + specs sit on one compact meta line`, m.text.includes('在线') && m.text.includes('16 核') && m.text.includes('126.6 GB'));
+        ck(`${tag} picker: machine ID and key auth are footnotes`, m.text.includes('机器 ID · host-example') && m.text.includes('未授权任何密钥'));
         ck(`${tag} picker: daemon-example's 「可建节点」 line is replaced by the chips`, !m.text.includes('可建节点'));
         // (3) 旧 daemon 照旧
         ck(`🔴 ${tag} picker: legacy daemon has no readiness row`, !l.hasRow && l.chips.length === 0);
@@ -133,6 +154,21 @@ for (const vp of VIEWPORTS) {
         ck(`${tag} picker: card inside the viewport (${Math.round(m.box.x)}..${Math.round(m.box.r)} / ${vp.w})`, m.box.x >= 0 && m.box.r <= vp.w + 0.5);
         ck(`${tag} picker: no horizontal page scroll (${cards.scrollW} ≤ ${cards.innerW})`, cards.scrollW <= cards.innerW);
       }
+
+      // (1b) 下一步在没选时是实心灰、不可点;点「+3」只展开,不选中卡片
+      const s0 = await cardState();
+      ck(`🔴 ${tag} picker: 下一步 starts disabled and grey`, s0.nextDisabled && isGrey(s0.nextBg), JSON.stringify({ d: s0.nextDisabled, bg: s0.nextBg }));
+      ck(`${tag} picker: unselected card has no selection border`, !s0.checked && isTransparent(s0.border), s0.border ?? '');
+      await press(q('readiness-more'));
+      const s1 = await cardState();
+      ck(`🔴 ${tag} picker: 「+3」 expands all 5 runtimes`, s1.chips.length === 5 && s1.more === '收起', JSON.stringify({ chips: s1.chips, more: s1.more }));
+      ck(`🔴 ${tag} picker: pressing 「+3」 does not select the card`, !s1.checked);
+      const expanded = await page.evaluate(() => [...document.querySelectorAll('[data-testid="daemon-card-d_example_1"] [data-testid^="readiness-chip-"]')].map(e => ({ id: e.getAttribute('data-testid').replace('readiness-chip-', ''), text: (e.textContent || '').trim() })));
+      for (const [rt, icon] of Object.entries(EXPECT_ICON)) {
+        const c = expanded.find(x => x.id === rt);
+        ck(`${tag} picker: ${rt} chip reads ${icon}`, !!c && c.text.startsWith(icon) && c.text.includes(rt), c?.text ?? 'missing');
+      }
+      await shot('picker-expanded-all');
 
       // (5) 2026-10-21 视觉返工:术语、次要 ID、中性灰、单一选中态、灰按钮给理由
       const look = await page.evaluate(() => {
@@ -183,6 +219,18 @@ for (const vp of VIEWPORTS) {
         await settle(page);
         ck(`${tag} picker: tapping again collapses it`, !(await visible(page, 'readiness-detail-grok-build-acp')));
       }
+
+      await press(q('readiness-more'));
+      const s2 = await cardState();
+      ck(`${tag} picker: 「收起」 folds back to the ready runtimes`, s2.chips.join() === EXPECT_SHOWN.join() && s2.more === '+3', JSON.stringify({ chips: s2.chips, more: s2.more }));
+      // 整卡是选择目标:点标题(不是 radio)也能选中
+      await press(`${q('daemon-card-d_example_1')} ${q('daemon-card-title')}`);
+      const s3 = await cardState();
+      ck(`🔴 ${tag} picker: tapping anywhere on the card selects it`, s3.checked);
+      ck(`${tag} picker: selected card gets a visible border`, !isTransparent(s3.border) && !isGrey(s3.border), s3.border ?? '');
+      ck(`🔴 ${tag} picker: 下一步 turns solid accent once a server is picked`, !s3.nextDisabled && !isGrey(s3.nextBg), JSON.stringify({ d: s3.nextDisabled, bg: s3.nextBg }));
+      ck(`${tag} picker: footer says where the node will be created`, s3.selectedNote.includes('daemon-example'), s3.selectedNote);
+      await shot('picker-selected');
     } catch (e) {
       ck(`${tag} picker: case ran`, false, String(e?.message || e).split('\n')[0]);
       if (OUT) await page.screenshot({ path: `${OUT}/${TAG}-${tag}-picker-crash.png` }).catch(() => {});
