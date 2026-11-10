@@ -15,6 +15,8 @@ import {
   sourceRowDisabledReason,
   stepActiveKey,
   suggestChildName,
+  suggestForkChildName,
+  isSourceBusyStatus,
   targetOfRow,
   type ForkCandidate,
   type PaletteDirectorySnapshot,
@@ -170,5 +172,13 @@ ck('keyboard Enter only accepts an active row still visible after filtering', ac
 const suggested = [suggestChildName('fork', '示例-A', 'ses_A'), suggestChildName('project', 'Alpha', 'oprj_1'), suggestChildName('session', 'Beta-已有', 'oses_3')];
 ck('suggested names are non-empty ASCII node names', suggested.every(name => /^[A-Za-z0-9_][A-Za-z0-9_-]{0,63}$/.test(name)));
 ck('suggested names differ by target', new Set(suggested).size === 3);
+
+// admin 2026-11-10：fork 名字自动按「XXX N号」往上编；源节点忙时先等再提交。
+const family = ['TMA客户端欧', 'TMA客户端欧2号', 'TMA客户端欧3号', 'TMA客户端欧6号', 'TMA知识库欧9号'];
+ck('fork name: next free number after the highest in the family', suggestForkChildName('TMA客户端欧2号', family) === 'TMA客户端欧7号');
+ck('fork name: an unnumbered source starts the family at 2号', suggestForkChildName('TM基建欧', ['TM基建欧']) === 'TM基建欧2号');
+ck('fork name: other families do not count', suggestForkChildName('TMA知识库欧', family) === 'TMA知识库欧10号' && suggestForkChildName('孤节点', family) === '孤节点2号');
+ck('fork name: a session id is not a name (falls back)', suggestForkChildName('ses_abc', family) === null && suggestForkChildName('', family) === null);
+ck('busy: working/running/busy wait; idle/unknown do not', ['working', 'Running', ' busy '].every(isSourceBusyStatus) && !['idle', 'online', '', undefined, null].some(isSourceBusyStatus));
 
 console.log(`\n${n}/${n} passed`);

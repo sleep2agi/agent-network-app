@@ -480,3 +480,30 @@ export function paletteModeLabel(target: PaletteTarget): string {
 export function paletteRowSummary(row: SourceRow): string {
   return `${row.title} · ${row.id}`;
 }
+
+/**
+ * admin 2026-11-10：fork 弹窗的名字要自动编好 —— 「XXX N号」往上加。
+ * 源节点名去掉末尾的「N号」得到前缀；在已有节点里找「前缀 + 数字 + 号」的最大编号（源节点自己没编号算 1），
+ * 建议「前缀 + (最大+1) + 号」。不合节点名规则或没有源名时返回 null，调用方退回旧建议。
+ */
+export function suggestForkChildName(sourceAlias: string | null | undefined, existingAliases: readonly string[]): string | null {
+  const alias = (sourceAlias ?? '').trim();
+  if (!alias || /^(ses|oses|oprj)_/i.test(alias)) return null;
+  const m = alias.match(/^(.*?)(\d+)号$/);
+  const base = m ? m[1] : alias;
+  if (!base) return null;
+  let max = m ? Number(m[2]) : 1;
+  const esc = base.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const re = new RegExp(`^${esc}(\\d+)号$`);
+  for (const name of existingAliases) {
+    const hit = re.exec((name ?? '').trim());
+    if (hit) max = Math.max(max, Number(hit[1]));
+  }
+  const checked = checkNodeName(`${base}${max + 1}号`);
+  return checked.ok ? checked.name : null;
+}
+
+/** 源节点在跑一轮（fork 读会话证据会被拒）。认不出的状态不算忙，交给 Hub 判。 */
+export function isSourceBusyStatus(status: unknown): boolean {
+  return typeof status === 'string' && /^(working|running|busy)$/i.test(status.trim());
+}

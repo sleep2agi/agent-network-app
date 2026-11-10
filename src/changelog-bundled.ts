@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.503:",
+  "- Fork 节点时，新节点名字自动按「XXX N号」往上编号（如从 2号 fork 自动填「TMA客户端欧7号」），也可以手改。",
+  "- 源节点正在工作时提交 fork，会先等它这一轮结束再自动提交（以前会直接失败，只显示 unknown_rotation_required）；失败时提示最常见的原因。",
+  "",
   "What's new in 0.2.502:",
   "- 新建节点失败时的提示更可操作了：以前只说「结果未知，禁止自动重放」，现在会告诉你下一步——到节点列表确认有没有这个节点；确认没有再重新发起。",
   "",
