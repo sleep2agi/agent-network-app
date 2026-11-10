@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.505:
+            - Fork 节点默认放到「新目录」：在源目录旁边建 `<源目录>-N`，带上 AGENTS.md，运行时 / 模型 / 部门照抄源节点；新节点上线后自动把源节点最近的对话交接过去。需要接着原会话干活时选「同目录」。
+
             What's new in 0.2.504:
             - 修正 0.2.503 的一处失效：那一版的「这台节点在跑的版本」取错了字段，对所有节点都显示「版本未知」。现在显示节点自报的 agent-node 版本；CLI 版本只有新版 CLI 启动的节点会上报，缺的那一项会明确写「未上报」。
 

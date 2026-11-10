@@ -71,6 +71,7 @@ import {
   makePaletteStyles,
   type PaletteKey,
 } from './palette-kit';
+import { forkNewFolderStepLabel, runForkToNewFolder, type ForkFolder } from './fork-new-folder';
 import { t } from './i18n';
 import './i18n-node-source';
 import { colors } from './theme';
@@ -127,6 +128,8 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   }, [cfg]);
   const nameFor = (kind: Parameters<typeof suggestChildName>[0], label: string, id: string) =>
     (kind === 'fork' ? suggestForkChildName(label, existingAliases ?? []) : null) ?? suggestChildName(kind, label, id);
+  // admin 2026-11-10：fork 默认到新目录（`<源目录>-N`，独立干活）；同目录 = 老的 source fork（接续原会话）。
+  const [forkFolder, setForkFolder] = useState<ForkFolder>('new');
   const [busy, setBusy] = useState(false);
   const [projectUnresolved, setProjectUnresolved] = useState(false);
   const [daemonId, setDaemonId] = useState<string | null>(suppliedDaemon ?? null);
@@ -404,6 +407,18 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     setErrorText(null);
     setNotice(null);
     try {
+      if (submission.target === 'fork' && forkFolder === 'new') {
+        // 新目录走 clone_node：daemon 从磁盘读源配置，不读会话证据，所以不必等源节点空闲。
+        const done = await runForkToNewFolder(cfg, {
+          sourceNodeId: selectedRow.sourceNodeId ?? sourceNodeId,
+          sourceAlias: selectedRow.title,
+          name: childName,
+          live: () => liveRef.current,
+          onStep: step => { if (liveRef.current) setNotice(forkNewFolderStepLabel(step)); },
+        });
+        if (!done.ok) setErrorText(done.error);
+        return;
+      }
       if (submission.target === 'fork') {
         // 源会话正在跑一轮时，fork 的第一步（读会话证据）一定被拒，而 Hub 只回一个笼统的
         // unknown_rotation_required（admin 2026-11-10 实测）。所以先等源节点这一轮结束再提交。
@@ -625,6 +640,23 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
             >
               <Text style={styles.ghostBtnText}>{t('sourcePalette.cancel')}</Text>
             </Pressable>
+          </View>
+        ) : null}
+        {target === 'fork' ? (
+          <View style={styles.chipRow} testID="source-fork-folder">
+            {(['new', 'same'] as const).map(folder => (
+              <Pressable
+                key={folder}
+                testID={`source-fork-folder-${folder}`}
+                accessibilityRole="button"
+                accessibilityState={{ selected: forkFolder === folder, disabled: busy }}
+                disabled={busy}
+                onPress={() => { setForkFolder(folder); setErrorText(null); }}
+                style={[styles.chip, forkFolder === folder && styles.chipOn]}
+              >
+                <Text style={styles.chipText}>{folder === 'new' ? '新目录（独立干活，推荐）' : '同目录（接续原会话）'}</Text>
+              </Pressable>
+            ))}
           </View>
         ) : null}
         {target && nameIssue && childName.length > 0 ? (
