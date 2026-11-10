@@ -57,6 +57,117 @@ export function variantChoices(variants: unknown): VariantChoices {
   return list.length ? { kind: 'list', options: list } : { kind: 'none', options: [] };
 }
 
+// ── #4099 档位写入的观测窗口 ────────────────────────────────────────────────
+// 2026-11-10 真节点实测：写档位 Hub 很快回 applied，OpenCode 会话 ~20s 内翻转，
+// 而 Hub 快照的**顶层 modelVariant** 要等下一次心跳（几十秒）才跟上。
+// 所以「提交后立刻读一次、读不到就报错」必然把**成功**的切换报成红色失败。
+// 与改模型同构：提交 → 观测窗口（60s，每 3s 读一次）→ 双条件确认后才算成功。
+
+export const VARIANT_POLL_MS = 3000;
+export const VARIANT_MAX_POLLS = 20;
+/** 3 s × 20 = 60 s：足够跨过 Hub 那一两次心跳，又不至于让人以为卡死。 */
+export const VARIANT_TIMEOUT_MS = VARIANT_POLL_MS * VARIANT_MAX_POLLS;
+
+/**
+ * 一次档位写入的判定结果（纯数据，界面只负责上色）。
+ * 四种结局的**措辞**是刻意的：它们的修法不同，不能都糊成一句「失败了」。
+ */
+export type VariantOutcome =
+  | { kind: 'applied'; tone: 'success'; text: string }
+  | { kind: 'lagging'; tone: 'neutral'; text: string }
+  | { kind: 'busy'; tone: 'neutral'; text: string }
+  | { kind: 'failed'; tone: 'error'; text: string; code: string };
+
+const VARIANT_BUSY_RE = /variant_busy/i;
+
+/** `variant_busy` 不是失败：节点自己的 writer 已经等过一整轮，档位会在下一轮生效。 */
+function isVariantBusy(raw: string): boolean {
+  if (!raw) return false;
+  return VARIANT_BUSY_RE.test(raw) || raw.trim().toLowerCase() === 'busy';
+}
+
+/**
+ * 把「窗口内读到的最后一帧」分类成四种结局之一。
+ *
+ * · applied + 顶层 modelVariant 一致 → 成功（清除档位时目标是 null，读到 null 才算）；
+ * · applied 但 modelVariant 还没跟上 → 快照滞后（写入是好的，**别重发**，等心跳）；
+ * · `variant_busy` → 这一轮还在跑（非失败，跑完再切）；
+ * · 其它 → 原样给出错误码/消息，不做二次解释。
+ *
+ * 顶层 modelVariant 才是 server 的真相；config_snapshot 里的兼容投影滞后更多，
+ * 不参与这里的判定（见 api.ts 的 NodeConfigRead）。
+ */
+export function describeVariantOutcome(input: {
+  applied: boolean;
+  variantMatches: boolean;
+  target?: string | null;
+  lastStatus?: string | null;
+  lastError?: string | null;
+}): VariantOutcome {
+  const target = typeof input.target === 'string' && input.target.length > 0 ? input.target : null;
+  if (input.applied && input.variantMatches) {
+    return {
+      kind: 'applied',
+      tone: 'success',
+      text: target ? `已切换到档位 ${target}` : '已清除档位（当前没有档位）',
+    };
+  }
+  if (input.applied) {
+    return {
+      kind: 'lagging',
+      tone: 'neutral',
+      text: '写入已确认，但快照未跟上：Hub 的 modelVariant 要等下一次心跳才对齐（通常几十秒），继续等一会或点「再检查一次」，不用重下发。',
+    };
+  }
+  const raw = String(input.lastError ?? '').trim() || String(input.lastStatus ?? '').trim();
+  if (isVariantBusy(raw)) {
+    return {
+      kind: 'busy',
+      tone: 'neutral',
+      text: '这一轮还在跑，档位会对下一轮生效 —— 跑完再切。不是失败，不用重发。',
+    };
+  }
+  const code = raw || 'unknown';
+  return { kind: 'failed', tone: 'error', text: `失败：${code}`, code };
+}
+
+/**
+ * 档位写入自己的状态机（与 ModelChangePhase 并列，不混用）：
+ * 档位改动**不改 model**，所以 model 那条按 `model_effective === requested` 确认的窗口
+ * 会在第一次读回就假成功 —— 确认条件必须是 last_update + 顶层 modelVariant。
+ */
+export type VariantChangePhase =
+  | { kind: 'idle' }
+  | { kind: 'submitting'; target: string | null }
+  | { kind: 'verifying'; target: string | null; polls: number }
+  | {
+    kind: 'result';
+    target: string | null;
+    /** 再检查一次要复用的提交回执（只读重判，不重发）。 */
+    effectiveModel?: string | null;
+    updateId?: string;
+    outcome: VariantOutcome;
+  };
+
+export function variantPhaseBusy(phase: VariantChangePhase): boolean {
+  return phase.kind === 'submitting' || phase.kind === 'verifying';
+}
+
+export function variantPhaseText(phase: VariantChangePhase): string {
+  switch (phase.kind) {
+    case 'idle': return '';
+    case 'submitting': return phase.target ? `正在提交档位 ${phase.target}…` : '正在提交「清除档位」…';
+    case 'verifying': {
+      const waited = Math.round(phase.polls * VARIANT_POLL_MS / 1000);
+      const limit = Math.round(VARIANT_TIMEOUT_MS / 1000);
+      const what = phase.target ? `档位 ${phase.target}` : '「清除档位」';
+      // 中性文案：这是「在等确认」，不是失败。
+      return `已下发${what}，等 Hub 快照确认…已等 ${waited}s / 最长 ${limit}s`;
+    }
+    case 'result': return phase.outcome.text;
+  }
+}
+
 /** 切模型时原档位是否仍然适配：模型变了且目录里该新模型没有同档位 → 需要按合同清除或要求重选。 */
 export function variantAfterModelSwitch(input: {
   previousModel?: string | null;
