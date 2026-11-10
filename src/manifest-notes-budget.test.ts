@@ -39,7 +39,12 @@ check('空串原样返回', trimManifestNotes('') === '');
 check('keep 可调', trimManifestNotes(body, { keep: 1, releasesUrl: 'u' }).includes("What's new in 0.2.499:") === true
   && trimManifestNotes(body, { keep: 1, releasesUrl: 'u' }).includes("What's new in 0.2.498:") === false);
 check('默认保留 3 段', NOTES_SECTIONS_KEPT === 3);
-check('裁剪结果显著变小（>80%）', out.length < body.length * 0.2);
+// 上面那份夹具只有 5 段，裁到 3 段不可能缩 80% —— 这条断言第一次写错，是拿「真实 450 段」的
+// 比例去要求一个小夹具。要测「确实变小」就用足够长的夹具，别用一个恰好能过的假数字。
+const many = ['前言', '', ...Array.from({ length: 60 }, (_, i) => `What's new in 0.2.${400 + i}:\n- 内容 ${i}`)].join('\n');
+const trimmedMany = trimManifestNotes(many.releasesUrl ? many : many, { releasesUrl: 'u' });
+check('450 段量级下缩到 25% 以内', trimmedMany.length < many.length * 0.25);
+check('小夹具也至少是变短（不是变长）', out.length < body.length);
 
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log('all green');
