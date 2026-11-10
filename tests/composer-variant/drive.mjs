@@ -137,7 +137,8 @@ try {
   await page.waitForFunction(() => {
     const text = ['composer-model', 'composer-variant']
       .map(id => document.querySelector(`[data-testid="${id}"]`)?.textContent || '').join(' ');
-    return text.includes('stub/effective') && text.includes('未知');
+    return text.includes('stub/effective') && text.includes('思考档位')
+      && (document.querySelector('[data-testid="composer-variant-entry"]')?.getAttribute('aria-label') || '').includes('未知');
   });
   ck('missing variant on older config is unknown, not explicit default', !(await text()).includes('默认'));
   ck('no page errors', errors.length === 0);

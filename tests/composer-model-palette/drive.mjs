@@ -107,6 +107,9 @@ async function mount(viewport, alias = 'A') {
 
 const footerModel = page => page.locator('[data-testid="composer-model"]').innerText();
 const footerVariant = page => page.locator('[data-testid="composer-variant"]').innerText();
+// Unknown = the pill names the control (思考档位) and its accessibility label says 未知; never a level.
+const footerVariantUnknown = async page => (await footerVariant(page)).trim() === '思考档位'
+  && ((await page.locator('[data-testid="composer-variant-entry"]').getAttribute('aria-label')) || '').includes('未知');
 const open = page => page.getByTestId('composer-model-entry').click();
 const waitModel = (page, text) => page.waitForFunction(t => (document.querySelector('[data-testid="composer-model"]')?.textContent || '').includes(t), text);
 const checksCount = page => page.locator('[data-testid^="model-palette-check-"]').count();
@@ -116,7 +119,7 @@ try {
 
   // 1) Reported model is visible; missing variant is unknown, never "default".
   await waitModel(page, 'tianma/MiniMax-M3.1-Flash');
-  ck('footer variant stays unknown before any config readback', (await footerVariant(page)).includes('未知') && !(await footerVariant(page)).includes('默认'));
+  ck('footer variant stays unknown before any config readback', (await footerVariantUnknown(page)) && !(await footerVariant(page)).includes('默认'));
 
   // 2) Open the floating palette above the composer.
   await open(page);
@@ -160,7 +163,7 @@ try {
   const writes1 = await page.evaluate(() => window.__mpWrites.length);
   ck('confirmed switch wrote once', writes1 === 1);
   ck('write used the catalog key as model', await page.evaluate(() => window.__mpWrites[0].patch.model === 'deepseek/deepseek-v4-flash'));
-  ck('footer variant is still unknown after model-only write', (await footerVariant(page)).includes('未知') && !(await footerVariant(page)).includes('默认'));
+  ck('footer variant is still unknown after model-only write', (await footerVariantUnknown(page)) && !(await footerVariant(page)).includes('默认'));
 
   // 7) Reopen: the checkmark moved, and only one row has it.
   await open(page);

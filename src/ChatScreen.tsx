@@ -65,7 +65,7 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
-import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ChatToolRail from './ChatToolRail';
@@ -2191,6 +2191,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // Mobile row, right of the input: ＋ always; 「发送」 next to it once there is something to send.
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });
   const showExpand = !desktop && shouldShowExpand(inputLines, voiceMode);
+  const modelRowInset = composerModelRowInset(voice.available || showExpand, composerControlSize(uiScale().densityFactor), spacing.md, spacing.sm);
 
   const exactSideThreadTask = messages.find(message => message.thread_id && message.turn_id);
   const sideThreadScope = exactSideThreadTask?.thread_id && exactSideThreadTask.turn_id
@@ -2968,7 +2969,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 style={({ pressed }) => [styles.desktopVariantPill, pressed && { opacity: 0.7 }]}
               >
                 <Text style={styles.desktopVariantPillText} numberOfLines={1} testID="composer-variant">
-                  {composerVariantLabel(footerVariant)}
+                  {composerVariantPillLabel(footerVariant)}
                 </Text>
                 <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
               </Pressable>
@@ -3023,7 +3024,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         ) : null}
       <View style={styles.composerFooterBlock} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
       {modelPaletteOverlay}
-      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.md + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
+      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.xs }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
         {voice.available || showExpand ? (
@@ -3090,30 +3091,33 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onPlus={() => plusEvent('toggle')}
         />
       </View>
-      <View style={styles.composerModelRow} testID="composer-model-row">
+      <View style={[styles.composerModelRow, { paddingLeft: modelRowInset.left, paddingRight: modelRowInset.right, paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} testID="composer-model-row">
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.modelSheetOpen')}
           onPress={() => setModelSheetOpen(v => !v)}
+          hitSlop={{ top: 6, bottom: 6 }}
           style={({ pressed }) => [styles.composerModelPill, pressed && { opacity: 0.6 }]}
           testID="composer-model-entry"
         >
-          <Text style={[styles.composerModelPillText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-model">
+          <Ionicons name="cube-outline" size={12} color={colors.textMuted} />
+          <Text style={styles.composerModelPillText} numberOfLines={1} ellipsizeMode="middle" testID="composer-model">
             {footerModel || t('chat.modelUnknown')}
           </Text>
-          <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
           onPress={() => setModelSheetOpen(true)}
+          hitSlop={{ top: 6, bottom: 6 }}
           style={({ pressed }) => [styles.composerVariantPill, pressed && { opacity: 0.6 }]}
           testID="composer-variant-entry"
         >
-          <Text style={[styles.composerVariantPillText, { color: colors.textMuted }]} numberOfLines={1} testID="composer-variant">
-            {composerVariantLabel(footerVariant)}
+          <Text style={[styles.composerVariantPillText, footerVariant === undefined && styles.composerPillPlaceholder]} numberOfLines={1} testID="composer-variant">
+            {composerVariantPillLabel(footerVariant)}
           </Text>
-          <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
       </View>
       </View>
@@ -3237,11 +3241,14 @@ const makeStyles = (B = bubbleLayout()) =>
   composerFooterBlock: { position: 'relative' },
   // 手机：输入行下面一行「模型 + 思考档位」控件；未知就写未知，不摆默认值。
   // Build/agent 下拉没有可信数据源（catalog 不含 agent 列表），按需求不显示，不造假。
-  composerModelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: 2 },
-  composerModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: '60%', height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
-  composerModelPillText: { fontSize: ds(11), flexShrink: 1 },
-  composerVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 8, borderRadius: radius.pill },
-  composerVariantPillText: { fontSize: ds(11) },
+  // 左右内边距在渲染时按输入框所在列算（composerModelRowInset），底部带 Android 手势条安全区。
+  // 模型胶囊可收缩（长名中间省略），档位胶囊不收缩，两者同高同底色。
+  composerModelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  composerModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0, height: 24, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
+  composerModelPillText: { fontSize: ds(11), lineHeight: 14, color: colors.textSecondary, flexShrink: 1, minWidth: 0 },
+  composerVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0, height: 24, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
+  composerVariantPillText: { fontSize: ds(11), lineHeight: 14, color: colors.textSecondary },
+  composerPillPlaceholder: { color: colors.textMuted },
   modelChip: {
     maxWidth: 132, marginRight: 6, paddingHorizontal: 6, paddingVertical: 2,
     borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
