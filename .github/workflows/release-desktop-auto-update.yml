@@ -3020,13 +3020,25 @@ jobs:
           baseline=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-mirror-lag.yml/runs?per_page=1" \
             --jq '.workflow_runs[0].id // 0')
           echo "baseline run id: $baseline"
-          gh workflow run android-mirror-lag.yml --ref main
+          # 这个 job 不 checkout（没必要为一次 dispatch 拉整个仓库），所以必须显式给 --repo；
+          # 2026-11-10 首次真实发布时正是这里红的：`failed to run git: fatal: not a git repository`。
+          gh workflow run android-mirror-lag.yml --repo "$GITHUB_REPOSITORY" --ref main
           for attempt in $(seq 1 18); do
             sleep 10
             newest=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-mirror-lag.yml/runs?per_page=1" \
               --jq '.workflow_runs[0].id // 0')
             if [ "$newest" -gt "$baseline" ]; then
               echo "mirror gate run $newest started (baseline $baseline)"
+              exit 0
+            fi
+            # 闸的并发组同一时刻只保留一个 pending run（见 android-mirror-lag.yml 的注释）。
+            # 若已有一个 queued/in_progress 的闸 run，说明比对的活已经在干，此时新 dispatch 可能被丢弃；
+            # 这种情况判红是误报，接受它。
+            state=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-mirror-lag.yml/runs?per_page=1" \
+              --jq '.workflow_runs[0] | "\(.id) \(.status)"')
+            read -r rid rstatus <<<"$state"
+            if [ "$rstatus" = "queued" ] || [ "$rstatus" = "in_progress" ]; then
+              echo "mirror gate already running as $rid ($rstatus as of dispatch time) — not a failure"
               exit 0
             fi
             echo "waiting for the gate run to appear ($attempt/18)"

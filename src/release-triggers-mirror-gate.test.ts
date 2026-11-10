@@ -17,5 +17,11 @@ check('真的 dispatch 那道闸', /gh workflow run android-mirror-lag\.yml --re
 check('以 run id 变大作为唯一证据', /newest" -gt "\$baseline"/.test(wf));
 check('等了也等不到就判红，而不是静默成功', /::error::dispatched android-mirror-lag\.yml but no new run appeared/.test(wf));
 
+
+// 2026-11-10 首次真实发布：这个 job 在没有 checkout 的上下文里跑 `gh workflow run`，
+// 报 `failed to run git: fatal: not a git repository`。--repo 是必须的，不是可选优化。
+check('dispatch 显式带 --repo（这个 job 没有 checkout）', /gh workflow run android-mirror-lag\.yml --repo "\$GITHUB_REPOSITORY" --ref main/.test(wf));
+check('已经有一个在跑的闸 run 也算接上了（不误报）', /mirror gate already running as \$rid/.test(wf));
+
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log('all green');
