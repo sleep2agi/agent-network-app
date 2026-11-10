@@ -1,6 +1,7 @@
 // admin 2026-11-10「fork 到新目录」：交接消息的口径（旧 → 新、有上限、空对话也说清楚）+ 中文进度。
 //   run: bun src/fork-new-folder.test.ts
-import { buildForkHandoff, forkNewFolderStepLabel } from './fork-new-folder';
+import { readFileSync } from 'node:fs';
+import { buildForkHandoff, forkFolderHint, forkNewFolderStepLabel } from './fork-new-folder';
 
 let passed = 0;
 let total = 0;
@@ -34,6 +35,14 @@ ck('empty conversation is stated', buildForkHandoff({ sourceAlias: 'S', tasks: [
 ck('long single turn is clipped, not dropped', buildForkHandoff({ sourceAlias: 'S', tasks: [task('t', 'y'.repeat(5000))], perItem: 100 }).includes('（已截断）'));
 ck('waiting label names the new node', forkNewFolderStepLabel({ kind: 'waiting_online', alias: '欧7号' }) === '等「欧7号」上线…');
 ck('handoff label is Chinese', forkNewFolderStepLabel({ kind: 'handoff_sent', alias: '欧7号' }).includes('已把源节点最近的对话交接过去'));
+
+ck('new-folder hint shows the sibling -N path', forkFolderHint('new', '/data/workspaces/agent-network-client-oe-6x') === '新目录：/data/workspaces/agent-network-client-oe-6x-N（N 从 2 起，取第一个没被占用的号，如 agent-network-client-oe-6x-2）');
+ck('a source already ending in -N counts from its stem', forkFolderHint('new', '/data/ws/client-oe-3/').includes('/data/ws/client-oe-N'));
+ck('same-folder hint shows the source path', forkFolderHint('same', '/data/ws/a') === '目录：/data/ws/a（与源节点同一个目录，接续原会话）');
+ck('no reported path still explains the rule', forkFolderHint('new', null).includes('<源目录名>-N'));
+const palette = readFileSync(new URL('./NodeSourcePalette.tsx', import.meta.url), 'utf8');
+ck('palette defaults to the new folder', palette.includes("useState<ForkFolder>('new')"));
+ck('palette shows the folder path line', palette.includes('testID="source-fork-folder-path"') && palette.includes('forkFolderHint(forkFolder, selectedRow?.path)'));
 
 console.log(`fork-new-folder: ${passed}/${total}`);
 process.exit(passed === total ? 0 : 1);

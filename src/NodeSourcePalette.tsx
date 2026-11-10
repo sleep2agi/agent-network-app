@@ -71,7 +71,7 @@ import {
   makePaletteStyles,
   type PaletteKey,
 } from './palette-kit';
-import { forkNewFolderStepLabel, runForkToNewFolder, type ForkFolder } from './fork-new-folder';
+import { forkFolderHint, forkNewFolderStepLabel, runForkToNewFolder, type ForkFolder } from './fork-new-folder';
 import { t } from './i18n';
 import './i18n-node-source';
 import { colors } from './theme';
@@ -658,6 +658,9 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
               </Pressable>
             ))}
           </View>
+        ) : null}
+        {target === 'fork' ? (
+          <Text style={styles.confirmSelection} numberOfLines={2} testID="source-fork-folder-path">{forkFolderHint(forkFolder, selectedRow?.path)}</Text>
         ) : null}
         {target && nameIssue && childName.length > 0 ? (
           <Text style={styles.errorDetail} testID="source-palette-name-error">{nameIssue}</Text>

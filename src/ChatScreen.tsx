@@ -861,8 +861,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const desktopVoiceDone = () => voice.micHandlers.onResponderRelease(DESKTOP_CLICK_EVENT as unknown as GestureResponderEvent);
   const desktopVoiceCancel = () => voice.micHandlers.onResponderTerminate();
   const voiceMode = !desktop && voice.available && inputMode === 'voice';
-  // 面板盖住输入行 + 草稿卡片能长到的最高处(卡片在按住期间会显示光标处预览,不能从面板上方露出来)。
-  const holdCoverTop = inputRowTop > 0 ? inputRowTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0) : undefined;
+  // 面板盖住整个底部块(模型行 + 输入行) + 草稿卡片能长到的最高处(卡片在按住期间会显示光标处预览,不能从面板上方露出来)。
+  // 模型行在输入行上面(admin 2026-11-10),所以从底部块顶端算,不从输入行算。
+  const holdCoverTop = inputRowTop > 0 ? composerFooterTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0) : undefined;
   // 只在手机(安卓 / iOS / 折叠屏双栏)画;桌面(含窄到 phone 布局的桌面窗口)永远不画,见 holdOverlayApplies。
   const holdOverlayOn = holdOverlayApplies({ desktop, os: Platform.OS, userAgent: Platform.OS === 'web' ? String((globalThis as any).navigator?.userAgent ?? '') : '' });
   const holdLayout = holdOverlayOn && paneWidth > 0 && rootHeight > 0 ? holdOverlayLayout(paneWidth, rootHeight, composerInset, holdCoverTop) : null;
@@ -3024,7 +3025,38 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         ) : null}
       <View style={styles.composerFooterBlock} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
       {modelPaletteOverlay}
-      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.xs }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
+      {/* admin 2026-11-10：模型 / 思考档位放在输入行**上面**。原来在「按住 说话」下面、贴着屏幕底边，
+          切语音 / 键盘时很容易误触。底部安全区改由输入行垫。 */}
+      <View style={[styles.composerModelRow, { paddingLeft: modelRowInset.left, paddingRight: modelRowInset.right, paddingTop: spacing.xs }]} testID="composer-model-row">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelSheetOpen')}
+          onPress={() => setModelSheetOpen(v => !v)}
+          hitSlop={{ top: 6, bottom: 6 }}
+          style={({ pressed }) => [styles.composerModelPill, pressed && { opacity: 0.6 }]}
+          testID="composer-model-entry"
+        >
+          <Ionicons name="cube-outline" size={12} color={colors.textMuted} />
+          <Text style={styles.composerModelPillText} numberOfLines={1} ellipsizeMode="middle" testID="composer-model">
+            {footerModel || t('chat.modelUnknown')}
+          </Text>
+          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
+          onPress={() => setModelSheetOpen(true)}
+          hitSlop={{ top: 6, bottom: 6 }}
+          style={({ pressed }) => [styles.composerVariantPill, pressed && { opacity: 0.6 }]}
+          testID="composer-variant-entry"
+        >
+          <Text style={[styles.composerVariantPillText, footerVariant === undefined && styles.composerPillPlaceholder]} numberOfLines={1} testID="composer-variant">
+            {composerVariantPillLabel(footerVariant)}
+          </Text>
+          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
         {voice.available || showExpand ? (
@@ -3090,35 +3122,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onSend={() => void submit()}
           onPlus={() => plusEvent('toggle')}
         />
-      </View>
-      <View style={[styles.composerModelRow, { paddingLeft: modelRowInset.left, paddingRight: modelRowInset.right, paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} testID="composer-model-row">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.modelSheetOpen')}
-          onPress={() => setModelSheetOpen(v => !v)}
-          hitSlop={{ top: 6, bottom: 6 }}
-          style={({ pressed }) => [styles.composerModelPill, pressed && { opacity: 0.6 }]}
-          testID="composer-model-entry"
-        >
-          <Ionicons name="cube-outline" size={12} color={colors.textMuted} />
-          <Text style={styles.composerModelPillText} numberOfLines={1} ellipsizeMode="middle" testID="composer-model">
-            {footerModel || t('chat.modelUnknown')}
-          </Text>
-          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
-          onPress={() => setModelSheetOpen(true)}
-          hitSlop={{ top: 6, bottom: 6 }}
-          style={({ pressed }) => [styles.composerVariantPill, pressed && { opacity: 0.6 }]}
-          testID="composer-variant-entry"
-        >
-          <Text style={[styles.composerVariantPillText, footerVariant === undefined && styles.composerPillPlaceholder]} numberOfLines={1} testID="composer-variant">
-            {composerVariantPillLabel(footerVariant)}
-          </Text>
-          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
-        </Pressable>
       </View>
       </View>
       {plusMenuOpen ? (

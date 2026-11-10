@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.506:",
+  "- 手机端聊天：模型 / 思考档位挪到输入框上面，切语音时不会再误触。",
+  "- Fork 弹窗显示新节点会放在哪个目录（源目录旁边的 `<源目录名>-N`）；选「同目录」时显示源目录。",
+  "",
   "What's new in 0.2.505:",
   "- Fork 节点默认放到「新目录」：在源目录旁边建 `<源目录>-N`，带上 AGENTS.md，运行时 / 模型 / 部门照抄源节点；新节点上线后自动把源节点最近的对话交接过去。需要接着原会话干活时选「同目录」。",
   "",

@@ -178,7 +178,7 @@ ck('voiceSim 在设备上恒不开(os ≠ web)', !installVoiceSim('android') && 
   ck('VoiceHoldOverlay 只有一处挂载(在 holdOverlayOn 分支里)', (chat.match(/<VoiceHoldOverlay\b/g) ?? []).length === 1);
   ck('命中判定和浮层用同一份 layout(holdLayoutRef)', /zoneAt: \(pageX, pageY, prev\) => \{\s*const l = holdLayoutRef\.current;/.test(chat) && chat.includes('holdZoneAt({ x: pageX - rootOriginRef.current.x, y: pageY - rootOriginRef.current.y }, l, prev)'));
   ck('底部安全区走 ChatScreen 已有的 composerInset(不另读 insets)', chat.includes('holdOverlayLayout(paneWidth, rootHeight, composerInset, holdCoverTop)'));
-  ck('面板盖过草稿卡片能长到的最高处', chat.includes('inputRowTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0)') && ui.includes('export const VOICE_DRAFT_CARD_BLOCK_MAX = spacing.xs + 8 * 2 + 2 + DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES;'));
+  ck('面板盖过草稿卡片能长到的最高处', chat.includes('composerFooterTop - (showVoiceDraftCard(voiceMode, draft) ? VOICE_DRAFT_CARD_BLOCK_MAX : 0)') && ui.includes('export const VOICE_DRAFT_CARD_BLOCK_MAX = spacing.xs + 8 * 2 + 2 + DRAFT_CARD_LINE_HEIGHT * VOICE_DRAFT_CARD_MAX_LINES;'));
   ck('按下大条时量根视图原点', /if \(source === 'holdBar'\) measureRootOrigin\(\);/.test(chat));
   ck('hook:有 zoneAt 且判得出区 → zone 事件,否则沿用 dy(桌面)', /if \(zone\) dispatch\(\{ type: 'zone', zone \}\);\s*else dispatch\(\{ type: 'move', dy:/.test(hook));
   ck('voiceSim 只在模块加载时按 Platform.OS 装一次', hook.includes('const VOICE_SIM = installVoiceSim(Platform.OS);'));
