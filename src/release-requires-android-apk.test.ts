@@ -11,8 +11,10 @@ const wf = readFileSync('.github/workflows/release-desktop-auto-update.yml', 'ut
 let failed = 0;
 const check = (name: string, ok: boolean) => { if (!ok) { console.error('FAIL: ' + name); failed++; } else console.log('PASS: ' + name); };
 
+// ⚠️ Windows 上工作流是 CRLF，而正则里的 `.` 不匹配 \r —— 这一条曾经只写了 `description:.*\n`，
+// 于是 ubuntu 绿、windows 红（2026-11-10，run 42770695031）。用 [^\n]* 才能同时吃 LF 和 CRLF。
 check('skip_android 是显式输入，默认 false',
-  /skip_android:\s*\n\s*description:.*\n\s*required: false\s*\n\s*default: false/.test(wf));
+  /skip_android:[ \t]*\r?\n[ \t]*description:[^\n]*\r?\n[ \t]*required: false\r?\n[ \t]*default: false/.test(wf));
 check('job 级传进环境变量', /attach-android-apk:[\s\S]{0,600}SKIP_ANDROID: \$\{\{ inputs\.skip_android \}\}/.test(wf));
 check('require_apk 在未放行时 exit 1', /if \[ "\$\{SKIP_ANDROID:-false\}" = "true" \]; then[\s\S]{0,400}exit 1/.test(wf));
 check('require_apk 在放行时降级为 warning', /require_apk\(\)[\s\S]{0,400}::warning::/.test(wf));
