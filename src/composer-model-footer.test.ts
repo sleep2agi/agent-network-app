@@ -1,5 +1,6 @@
 // ck-style (self-executing; run by scripts/run-tests.mjs). Mobile composer footer: model + thinking-level pills.
-// Pills sit in the text-box column, the bottom safe area pads the footer (not the input row), unknown variant
+// Pills sit in the text-box column ABOVE the input row (admin 2026-11-10: under「按住 说话」they were mis-tapped),
+// the bottom safe area pads the input row, unknown variant
 // shows the control's name while the accessibility label still says unknown.
 import { strict as assert } from 'node:assert';
 import fs from 'node:fs';
@@ -28,11 +29,12 @@ ck('inset without left column', JSON.stringify(composerModelRowInset(false, 40, 
 
 const chat = fs.readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 const rowAt = chat.indexOf('testID="composer-model-row"');
-const row = chat.slice(chat.lastIndexOf('<View', rowAt), chat.indexOf('{plusMenuOpen ? (', rowAt));
+const row = chat.slice(chat.lastIndexOf('<View', rowAt), chat.indexOf('<View style={[styles.inputRow,', rowAt));
 const inputRow = chat.slice(chat.indexOf('<View style={[styles.inputRow,'), chat.indexOf('onLayout={event => setInputRowLocalTop'));
 ck('found the mobile model row', rowAt > 0 && row.includes('composer-variant-entry'));
-ck('footer carries the bottom safe-area inset', row.includes('paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset)'));
-ck('input row no longer carries the inset', !inputRow.includes('composerInset'));
+ck('model row sits above the input row', rowAt > 0 && rowAt < chat.indexOf('<View style={[styles.inputRow,'));
+ck('input row carries the bottom safe-area inset', inputRow.includes('paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset)'));
+ck('model row no longer carries the inset', !row.includes('composerInset'));
 ck('footer is inset to the text-box column', row.includes('paddingLeft: modelRowInset.left') && row.includes('paddingRight: modelRowInset.right'));
 ck('long model names truncate to one line', /numberOfLines=\{1\} ellipsizeMode="middle" testID="composer-model"/.test(row));
 ck('mobile pill shows the placeholder label', row.includes('{composerVariantPillLabel(footerVariant)}'));

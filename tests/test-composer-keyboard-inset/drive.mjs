@@ -52,7 +52,7 @@ const chatFixture = () => {
   return out;
 };
 
-// Geometry read in the page. Chat composer = input row + its adjacent model footer;
+// Geometry read in the page. Chat composer = model row (top) + input row;
 // DM has no footer. Use the existing footer marker, not pane/viewport bottom or a
 // hardcoded footer height. Missing/displaced footer fails closed.
 const measure = (page, paneId, newest = null) => page.evaluate(([paneId, newest]) => {
@@ -69,7 +69,8 @@ const measure = (page, paneId, newest = null) => page.evaluate(([paneId, newest]
   const mobileChat = paneId === 'chat-pane' && !row.querySelector('[data-testid="desktop-composer-card"]');
   const footer = mobileChat ? pane.querySelector('[data-testid="composer-model-row"]') : null;
   const fb = footer?.getBoundingClientRect();
-  if (mobileChat && (!footer || footer.parentElement !== row || !fb?.height || Math.abs(fb.bottom - rb.bottom) > 0.5)) return null;
+  // admin 2026-11-10: the model row now sits at the TOP of the block (above the input row).
+  if (mobileChat && (!footer || footer.parentElement !== row || !fb?.height || Math.abs(fb.top - rb.top) > 0.5)) return null;
   const pb = pane.getBoundingClientRect();
   const header = pane.querySelector('[data-testid="chat-header"], [data-testid="dm-header"]')?.getBoundingClientRect();
   // 🔴 fail closed：末行只认 Range 行盒；拿不到 rect 就是「不可判定」，不用元素盒兜底。
@@ -115,7 +116,7 @@ const measure = (page, paneId, newest = null) => page.evaluate(([paneId, newest]
     }
   }
   return {
-    composerTop: rb.top, composerBottom: fb?.bottom ?? rb.bottom, inputRowBottom: rb.bottom, footerHeight: fb?.height ?? 0, paneBottom: pb.bottom,
+    composerTop: rb.top, composerBottom: rb.bottom, inputRowBottom: rb.bottom, footerHeight: fb?.height ?? 0, paneBottom: pb.bottom,
     headerBottom: header?.bottom ?? pb.top, last, lastLines, clip, list,
     overflowX: document.documentElement.scrollWidth > window.innerWidth + 1,
   };

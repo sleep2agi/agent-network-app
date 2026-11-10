@@ -3024,7 +3024,38 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         ) : null}
       <View style={styles.composerFooterBlock} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
       {modelPaletteOverlay}
-      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.xs }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
+      {/* admin 2026-11-10：模型 / 思考档位放在输入行**上面**。原来在「按住 说话」下面、贴着屏幕底边，
+          切语音 / 键盘时很容易误触。底部安全区改由输入行垫。 */}
+      <View style={[styles.composerModelRow, { paddingLeft: modelRowInset.left, paddingRight: modelRowInset.right, paddingTop: spacing.xs }]} testID="composer-model-row">
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelSheetOpen')}
+          onPress={() => setModelSheetOpen(v => !v)}
+          hitSlop={{ top: 6, bottom: 6 }}
+          style={({ pressed }) => [styles.composerModelPill, pressed && { opacity: 0.6 }]}
+          testID="composer-model-entry"
+        >
+          <Ionicons name="cube-outline" size={12} color={colors.textMuted} />
+          <Text style={styles.composerModelPillText} numberOfLines={1} ellipsizeMode="middle" testID="composer-model">
+            {footerModel || t('chat.modelUnknown')}
+          </Text>
+          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
+        </Pressable>
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
+          onPress={() => setModelSheetOpen(true)}
+          hitSlop={{ top: 6, bottom: 6 }}
+          style={({ pressed }) => [styles.composerVariantPill, pressed && { opacity: 0.6 }]}
+          testID="composer-variant-entry"
+        >
+          <Text style={[styles.composerVariantPillText, footerVariant === undefined && styles.composerPillPlaceholder]} numberOfLines={1} testID="composer-variant">
+            {composerVariantPillLabel(footerVariant)}
+          </Text>
+          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
+        </Pressable>
+      </View>
+      <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
         {voice.available || showExpand ? (
@@ -3090,35 +3121,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onSend={() => void submit()}
           onPlus={() => plusEvent('toggle')}
         />
-      </View>
-      <View style={[styles.composerModelRow, { paddingLeft: modelRowInset.left, paddingRight: modelRowInset.right, paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} testID="composer-model-row">
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.modelSheetOpen')}
-          onPress={() => setModelSheetOpen(v => !v)}
-          hitSlop={{ top: 6, bottom: 6 }}
-          style={({ pressed }) => [styles.composerModelPill, pressed && { opacity: 0.6 }]}
-          testID="composer-model-entry"
-        >
-          <Ionicons name="cube-outline" size={12} color={colors.textMuted} />
-          <Text style={styles.composerModelPillText} numberOfLines={1} ellipsizeMode="middle" testID="composer-model">
-            {footerModel || t('chat.modelUnknown')}
-          </Text>
-          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
-        </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
-          onPress={() => setModelSheetOpen(true)}
-          hitSlop={{ top: 6, bottom: 6 }}
-          style={({ pressed }) => [styles.composerVariantPill, pressed && { opacity: 0.6 }]}
-          testID="composer-variant-entry"
-        >
-          <Text style={[styles.composerVariantPillText, footerVariant === undefined && styles.composerPillPlaceholder]} numberOfLines={1} testID="composer-variant">
-            {composerVariantPillLabel(footerVariant)}
-          </Text>
-          <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
-        </Pressable>
       </View>
       </View>
       {plusMenuOpen ? (
