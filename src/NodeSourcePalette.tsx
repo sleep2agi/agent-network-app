@@ -51,6 +51,8 @@ import {
   sourcePaletteView,
   stepActiveKey,
   suggestChildName,
+  suggestForkChildName,
+  isSourceBusyStatus,
   targetOfRow,
   type ForkCandidate,
   type PaletteTarget,
@@ -115,6 +117,16 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   const [childName, setChildName] = useState('');
   // 名字是用户改过的就不再被自动建议覆盖；没改过时换目标行跟着换（fork-… / …-new / …-attach）。
   const [childNameTouched, setChildNameTouched] = useState(false);
+  // fork 的默认名按「XXX N号」往上编（admin 2026-11-10）：要知道网络里已有哪些名字。读不到就退回旧建议。
+  const [existingAliases, setExistingAliases] = useState<string[] | null>(null);
+  useEffect(() => {
+    let live = true;
+    fetchHubNodes(cfg).then(r => { if (live) setExistingAliases((r.nodes ?? []).map(n => n.alias).filter(Boolean)); })
+      .catch(() => { if (live) setExistingAliases([]); });
+    return () => { live = false; };
+  }, [cfg]);
+  const nameFor = (kind: Parameters<typeof suggestChildName>[0], label: string, id: string) =>
+    (kind === 'fork' ? suggestForkChildName(label, existingAliases ?? []) : null) ?? suggestChildName(kind, label, id);
   const [busy, setBusy] = useState(false);
   const [projectUnresolved, setProjectUnresolved] = useState(false);
   const [daemonId, setDaemonId] = useState<string | null>(suppliedDaemon ?? null);
@@ -299,8 +311,14 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     if (!rows.some(row => row.key === key)) return;
     const candidate = forkCandidates.find(item => item.sessionId === sessionId);
     setSelectedKey(key);
-    setChildName(prev => prev || suggestChildName('fork', candidate?.label ?? sessionId, sessionId));
+    setChildName(prev => prev || nameFor('fork', candidate?.label ?? sessionId, sessionId));
   }, [rows, selectedKey, sessionId, forkCandidates]);
+
+  useEffect(() => {
+    if (!existingAliases || childNameTouched || !selectedRow || selectedRow.kind !== 'fork') return;
+    setChildName(nameFor(selectedRow.kind, selectedRow.title, selectedRow.id));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [existingAliases]);
 
   const pick = (row: SourceRow) => {
     if (busy || projectUnresolved || (receipt && classifyStatus(receipt.status).kind !== 'registration-receipt')) return;
@@ -313,7 +331,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     setSelectedKey(row.key);
     setActiveKey(row.key);
     setReceipt(null);
-    if (!childNameTouched) setChildName(suggestChildName(row.kind, row.title, row.id));
+    if (!childNameTouched) setChildName(nameFor(row.kind, row.title, row.id));
   };
 
   const chooseServer = async (serverId: string) => {
@@ -332,6 +350,26 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
       if (result.kind === 'failed' || result.kind === 'denied' || result.kind === 'unavailable') { setDirectory({ kind: result.kind, error: result.error }); break; }
     }
     setErrorText(null);
+  };
+
+  /** 源节点空闲（或读不到状态）才放行；最多等 10 分钟，关掉弹窗即停止。 */
+  const waitForSourceIdle = async (alias: string): Promise<boolean> => {
+    const deadline = Date.now() + 10 * 60_000;
+    let waited = false;
+    for (;;) {
+      if (!liveRef.current) return false;
+      const data = await fetchNodeStatus(cfg, alias).catch(() => null);
+      const row = (data?.sessions ?? []).find(item => item?.node_id === sourceNodeId || item?.alias === alias);
+      if (!isSourceBusyStatus(row?.status)) {
+        if (waited) await new Promise(resolve => setTimeout(resolve, 2000)); // 让这一轮的落盘先完成
+        if (waited && liveRef.current) setNotice(null);
+        return liveRef.current;
+      }
+      if (Date.now() >= deadline) { setErrorText('源节点一直在工作（等了 10 分钟），请稍后再 fork'); return false; }
+      waited = true;
+      setNotice('源节点正在工作，这一轮结束后会自动提交 fork…');
+      await new Promise(resolve => setTimeout(resolve, 3000));
+    }
   };
 
   const submit = async () => {
@@ -367,6 +405,10 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     setNotice(null);
     try {
       if (submission.target === 'fork') {
+        // 源会话正在跑一轮时，fork 的第一步（读会话证据）一定被拒，而 Hub 只回一个笼统的
+        // unknown_rotation_required（admin 2026-11-10 实测）。所以先等源节点这一轮结束再提交。
+        const idle = await waitForSourceIdle(selectedRow.title);
+        if (!idle) return;
         const result = await postSessionSourceFork(cfg, submission.selection);
         if (!result.ok) {
           if (result.unavailable) { setErrorText(`${result.error} · ${gateClosedMessage()}`); return; }
@@ -592,7 +634,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           <Text style={styles.confirmSelection} testID="source-fork-status">
             {forkOutcome?.kind === 'registration-receipt'
               ? `注册回执（非原生接受/存活）：${receipt.status}`
-              : `状态：${receipt.status}${receipt.childSessionId ? ` · child ${receipt.childSessionId}` : ''}`}
+              : `状态：${receipt.status}${receipt.childSessionId ? ` · child ${receipt.childSessionId}` : ''}${receipt.status === 'unknown_rotation_required' ? ' · 未能完成，最常见的原因是提交时源节点正在工作；等它空闲后换个名字重试' : ''}`}
           </Text>
         ) : null}
         {notice ? <Text style={styles.notice} testID="project-create-status">{notice}</Text> : null}
