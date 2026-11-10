@@ -50,6 +50,18 @@ jobs:
           HEAD: ${{ github.event.pull_request.head.sha }}
         run: |
           if [ "$EVENT" != "pull_request" ]; then echo "app=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          # Release version bump only (the code it ships was already driven when it merged):
+          # every changed file is a version pin, and the json/toml pins change nothing but
+          # version lines. src/changelog-bundled.ts is generated from the release notes.
+          files=$(git diff --name-only "$BASE...$HEAD")
+          pins='^(app\.json|package(-lock)?\.json|src/version\.ts|src/changelog-bundled\.ts|src/version-consistency\.test\.ts|src/macos-dmg-retry\.test\.ts|src-tauri/Cargo\.(toml|lock)|src-tauri/tauri\.conf\.json|\.github/workflows/release-desktop-auto-update\.yml)$'
+          if [ -n "$files" ] && ! echo "$files" | grep -qvE "$pins" \
+            && ! git diff -U0 "$BASE...$HEAD" -- app.json package.json package-lock.json src-tauri/Cargo.toml src-tauri/Cargo.lock src-tauri/tauri.conf.json src/version.ts src/version-consistency.test.ts \
+                 | grep -E '^[-+][^-+]' | grep -qvE '("?(version|versionCode)"?[[:space:]]*[:=]|APP_VERSION = |^[-+]const expected = )'; then
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "Version bump only: drives pass without running (the shipped code was driven at merge)." >> "$GITHUB_STEP_SUMMARY"
+            exit 0
+          fi
           # App-code paths: the old pull_request.paths filter.
           if git diff --name-only "$BASE...$HEAD" | grep -qE '^(src/|App\.tsx$|index\.ts$|assets/|tests/|package(-lock)?\.json$|scripts/run-drives\.mjs$|\.github/workflows/drives\.yml$)'; then
             echo "app=true" >> "$GITHUB_OUTPUT"
