@@ -2897,6 +2897,34 @@ jobs:
           INCLUDE_LINUX: ${{ inputs.include_linux }}
         run: node scripts/verify-desktop-release-draft.mjs
 
+      # #4485 —— 0.2.503 实际发生过一次静默失败：上面那条按 release_id 校验通过了，
+      # 但**用户真正会打开的入口**（`releases/tags/desktop-v<ver>`）是一个 0 资产的空壳，
+      # 真正的资产落在另一个 `untagged-<sha>` 的已发布 release 上。
+      # 构建全绿、版本号也发出去了，下载页却是空的 —— 所以这里按 **tag** 再核一次。
+      - name: Assert the tagged release carries the assets users will download
+        env:
+          GH_TOKEN: ${{ github.token }}
+          EXPECTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./package.json").version')
+          tag="desktop-v$version"
+          count=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.assets | length')
+          echo "tag=$tag assets=$count"
+          if [ "$count" -lt 6 ]; then
+            echo "::error::release $tag carries only $count assets — users would open an empty download page"
+            exit 1
+          fi
+          stray=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+            --jq "[.[] | select((.tag_name | startswith(\"untagged-\")) and (.draft == false) and (.target_commitish == \"$EXPECTED_COMMIT\"))] | length")
+          if [ "$stray" != "0" ]; then
+            echo "::error::$stray untagged-* release(s) carry this build's assets — the tagged release is probably the empty shell"
+            gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
+              --jq '.[] | select(.tag_name | startswith("untagged-")) | "\(.id) \(.tag_name) assets=\(.assets|length)"'
+            exit 1
+          fi
+          echo "tagged release looks right"
+
   # 0.2.265/0.2.266 的教训:`ANet_<ver>_android-universal.apk` 也能当 release 资产,但安卓更新器找的是
   # `Agent.Network_<ver>_android-universal.apk`(src/android-update-core.ts apkCacheFileName),版本化路径
   # 因此 404,只能靠 android 通道兜底。这里在 draft 发布前把 APK 按更新器的名字挂上去:
