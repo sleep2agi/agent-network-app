@@ -71,8 +71,11 @@ try {
     await page.getByTestId('source-palette-search').fill('current-project');
     await page.getByTestId('source-palette-row-ses_A123').click();
     await page.getByTestId('source-fork-child-name').fill('chat-fork-child');
+    ck(`${name}: fork defaults to a new folder`, await page.getByTestId('source-fork-folder-new').getAttribute('aria-selected') === 'true');
     await bounds(page, viewport);
     await page.screenshot({ path: `${out}/${name}-selected.png` });
+    // 这些用例测的是同目录 source fork；fork 默认是「新目录」（admin 2026-11-10），先切到同目录。
+    await page.getByTestId('source-fork-folder-same').click();
     await page.getByTestId('source-fork-submit').click();
     await page.getByTestId('source-fork-message').waitFor();
     const error = await page.getByTestId('source-fork-message').innerText();
@@ -87,6 +90,8 @@ try {
     ck(`${name}: composer layout unchanged`, composerBefore && composerAfter && Math.abs(composerAfter.height - composerBefore.height) <= 1 && Math.abs(composerAfter.width - composerBefore.width) <= 1);
     await page.evaluate(() => { window.__chatFork.mode = 'unknown'; });
     await open(page);
+    // 这些用例测的是同目录 source fork；fork 默认是「新目录」（admin 2026-11-10），先切到同目录。
+    await page.getByTestId('source-fork-folder-same').click();
     await page.getByTestId('source-fork-submit').click();
     await page.getByTestId('source-fork-status').waitFor();
     ck(`${name}: unknown disables submit rather than generating another intent`, await page.getByTestId('source-fork-submit').getAttribute('aria-disabled') === 'true');

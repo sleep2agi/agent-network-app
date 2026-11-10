@@ -227,6 +227,8 @@ try {
   await page.getByTestId('source-palette-row-ses_B').click();
   ck('selecting a managed session switches to fork mode', (await text(page, 'source-palette-mode')).includes('fork_independent'));
   await page.getByTestId('source-fork-child-name').fill('fork-child');
+  // 这些用例测的是同目录 source fork；fork 默认是「新目录」（admin 2026-11-10），先切到同目录。
+  await page.getByTestId('source-fork-folder-same').click();
   await page.getByTestId('source-fork-submit').click();
   await page.waitForFunction(() => window.__fp.calls.fork.length === 1);
   const forkBody = (await page.evaluate(() => window.__fp.calls.fork))[0];
@@ -257,6 +259,8 @@ try {
   {
     const { ctx: c3, page: p3 } = await mount({ width: 1280, height: 900 }, 'fork-500');
     await p3.getByTestId('source-fork-child-name').fill('fork-fail');
+    // 这些用例测的是同目录 source fork；fork 默认是「新目录」（admin 2026-11-10），先切到同目录。
+    await p3.getByTestId('source-fork-folder-same').click();
     await p3.getByTestId('source-fork-submit').click();
     await p3.waitForFunction(() => window.__fp.calls.fork.length === 1);
     const msg = await text(p3, 'source-fork-message');
@@ -272,6 +276,8 @@ try {
     ck('closed directory shows the real gate reason', dirMsg.includes('未开放') && dirMsg.includes('不会退回普通创建'), dirMsg);
     ck('closed directory still lists the managed fork source from /api/status', await count(p4, '[data-testid="source-palette-row-ses_A"]') === 1);
     await p4.getByTestId('source-fork-child-name').fill('fork-while-closed');
+    // 这些用例测的是同目录 source fork；fork 默认是「新目录」（admin 2026-11-10），先切到同目录。
+    await p4.getByTestId('source-fork-folder-same').click();
     await p4.getByTestId('source-fork-submit').click();
     await p4.waitForFunction(() => window.__fp.calls.fork.length === 1);
     const b = (await p4.evaluate(() => window.__fp.calls.fork))[0];
