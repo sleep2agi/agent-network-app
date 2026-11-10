@@ -2966,6 +2966,32 @@ jobs:
   # 这里在 draft 阶段（APK 挂完之后、发布之前）把它映射成本 release 真实资产的
   # browser_download_url，上传替换后**重新下载**断言五个 URL 都是公共下载链接、
   # 且能匿名 HEAD 到内容。缺映射/歧义/非公开链接一律 fail-closed，不静默带坏 URL 发布。
+  normalize-updater-manifest:
+    needs: [prepare-release, attach-android-apk]
+    if: inputs.publish == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: ${{ inputs.commit }}
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+      - name: Normalize latest.json platform URLs to public download links
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: |
+          set -euo pipefail
+          # 与 attach-android-apk 同一个来源：这次发布的版本号就是 package.json 的版本。
+          version=$(node -p 'require("./package.json").version')
+          export RELEASE_TAG="desktop-v$version"
+          echo "normalizing $RELEASE_TAG"
+          # 脚本自己 fresh 回读 release assets、上传替换、再回读断言；任何一步不合预期即非零退出。
+          node scripts/normalize-desktop-update-manifest.mjs
+
   trigger-android-mirror-gate:
     # #4422 —— 「发布 release」和「推进安卓镜像」过去是两步人工操作，中间没有任何东西比对过，
     # 于是镜像能静默落后三个版本而所有 CI 都是绿的。那道闸（android-mirror-lag.yml）存在，
@@ -3002,29 +3028,3 @@ jobs:
           done
           echo "::error::dispatched android-mirror-lag.yml but no new run appeared within 180s — the request was accepted, yet nothing ran. Check the workflow's \`on:\` block and the dispatch target, do NOT assume the mirror is watched."
           exit 1
-
-  normalize-updater-manifest:
-    needs: [prepare-release, attach-android-apk]
-    if: inputs.publish == true
-    runs-on: ubuntu-latest
-    timeout-minutes: 15
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          ref: ${{ inputs.commit }}
-          persist-credentials: false
-      - uses: actions/setup-node@v4
-        with:
-          node-version: 20
-      - name: Normalize latest.json platform URLs to public download links
-        env:
-          GH_TOKEN: ${{ github.token }}
-          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
-        run: |
-          set -euo pipefail
-          # 与 attach-android-apk 同一个来源：这次发布的版本号就是 package.json 的版本。
-          version=$(node -p 'require("./package.json").version')
-          export RELEASE_TAG="desktop-v$version"
-          echo "normalizing $RELEASE_TAG"
-          # 脚本自己 fresh 回读 release assets、上传替换、再回读断言；任何一步不合预期即非零退出。
-          node scripts/normalize-desktop-update-manifest.mjs
