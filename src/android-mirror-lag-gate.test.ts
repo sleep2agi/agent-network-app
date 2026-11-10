@@ -246,8 +246,13 @@ check('the four failure messages are distinct and self-labelled',
     .every((m, index) => m.startsWith(`MIRROR-GATE[${'abcd'[index]}]`)));
 
 // ── workflow 文件本身 ─────────────────────────────────────────────────────────────
-const workflow = readFileSync(new URL('../.github/workflows/android-mirror-lag.yml', import.meta.url), 'utf8');
-const script = readFileSync(new URL('../scripts/android-mirror-lag-gate.mjs', import.meta.url), 'utf8');
+// 🔴 必须先规范化换行：Windows runner 默认 core.autocrlf=true，检出的是 CRLF，
+//    而下面这些断言用的是 `\n` 锚定的正则与 indexOf('…\n')。不规范化的话，
+//    同一份 YAML 在 linux 上绿、在 windows 上红 —— 那不是代码坏了，是读取方式没对齐
+//    （2026-11-10 实测：unit-tests (windows-latest) 只因这一条红）。
+const toLf = (text: string) => text.replace(/\r\n/g, '\n');
+const workflow = toLf(readFileSync(new URL('../.github/workflows/android-mirror-lag.yml', import.meta.url), 'utf8'));
+const script = toLf(readFileSync(new URL('../scripts/android-mirror-lag-gate.mjs', import.meta.url), 'utf8'));
 check('workflow: hourly schedule + manual dispatch',
   /schedule:\n(?:[ \t]*#[^\n]*\n)*[ \t]*- cron: '\d+ \* \* \* \*'/.test(workflow) && workflow.includes('workflow_dispatch:'));
 check('workflow: permissions are exactly actions:write + contents:read',
