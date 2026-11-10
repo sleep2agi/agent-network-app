@@ -3,7 +3,7 @@
 import { readFileSync } from 'node:fs';
 import { groupNodeTasks, isSelfTask } from './node-task-groups';
 import { partitionNodeTasks } from './node-tasks';
-import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, factText, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
+import { NODE_PAGE_CONTENT_MAX_WIDTH, NODE_RULES_EDITOR_MIN_HEIGHT, NODE_SECTIONS, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, factText, departmentPathLabel, headerChips, resolveActiveSection, splitOverviewFacts, visibleNodeSections } from './node-page-model';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) p++; else console.log(`  ✗ ${n}`); };
@@ -52,12 +52,12 @@ const facts = [
   { label: '节点名称', value: A }, { label: '节点 ID', value: 'n_1' }, { label: '服务器', value: 'https://hub.example.com' },
   { label: 'Hostname', value: 'devbox' }, { label: 'IP', value: '127.0.0.1' }, { label: '工作路径', value: '/srv/work' },
   { label: 'Runtime', value: 'codex-sdk' }, { label: '模型', value: 'gpt-5.5' }, { label: '版本', value: '2.5.0-preview.83' },
-  { label: '所属 team', value: '通信' }, { label: '最后更新', value: '刚刚' },
+  { label: '所属部门', value: '通信' }, { label: '最后更新', value: '刚刚' },
 ];
 const split = splitOverviewFacts(facts);
-ck('主要字段按固定顺序', split.primary.map(f => f.label).join(',') === '节点 ID,服务器,Hostname,工作路径,所属 team,最后更新');
+ck('主要字段按固定顺序', split.primary.map(f => f.label).join(',') === '节点 ID,服务器,Hostname,工作路径,所属部门,最后更新');
 const withCodexHome = splitOverviewFacts([...facts, { label: 'codex_home', value: '/srv/codex-home' }]);
-ck('codex_home 紧跟工作路径，没有这条时不占位', withCodexHome.primary.map(f => f.label).join(',') === '节点 ID,服务器,Hostname,工作路径,codex_home,所属 team,最后更新');
+ck('codex_home 紧跟工作路径，没有这条时不占位', withCodexHome.primary.map(f => f.label).join(',') === '节点 ID,服务器,Hostname,工作路径,codex_home,所属部门,最后更新');
 ck('其余字段进「更多信息」且不重复', split.secondary.length === facts.length - split.primary.length && !split.secondary.some(f => split.primary.includes(f)));
 ck('头部标签:运行时 · 模型 · 版本 · 主机', JSON.stringify(headerChips(facts)) === JSON.stringify(['codex-sdk', 'gpt-5.5', 'v2.5.0-preview.83', 'devbox']));
 ck('头部标签:缺的不显示,版本不重复加 v', JSON.stringify(headerChips([{ label: '版本', value: 'v1.2' }])) === JSON.stringify(['v1.2']));
@@ -111,3 +111,17 @@ ck('无密钥能力(legacy node-server) → 不出现「密钥」分区',
   !visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true }).includes('secrets'));
 ck('有 node_secrets_capable → 仍出现「密钥」分区',
   visibleNodeSections({ readOnly: false, hasRulesTarget: true, skillsCapable: true, secretsCapable: true }).includes('secrets'));
+
+// admin 2026-11-10:「所属部门」显示树上的完整路径
+{
+  const org = { departments: [
+    { id: 'a', name: '天马', parent_id: null, leader_user_id: null, sort: 0, member_count: 0 },
+    { id: 'b', name: '研发', parent_id: 'a', leader_user_id: null, sort: 0, member_count: 0 },
+    { id: 'c', name: '客户端', parent_id: 'b', leader_user_id: null, sort: 0, member_count: 0 },
+  ], members: [] };
+  ck('部门路径:根到叶', departmentPathLabel(org, 'c') === '天马 / 研发 / 客户端');
+  ck('部门路径:根部门只有自己', departmentPathLabel(org, 'a') === '天马');
+  ck('部门路径:没归属 ⇒ 不出现', departmentPathLabel(org, null) === undefined);
+  ck('部门路径:未知部门 ⇒ 不出现', departmentPathLabel(org, 'zz') === undefined);
+  ck('部门路径:没有部门表 ⇒ 不出现', departmentPathLabel(null, 'c') === undefined);
+}

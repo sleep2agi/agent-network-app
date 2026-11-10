@@ -3,6 +3,7 @@
 // 这里只放「有哪些分区、什么时候出现、概览里哪些字段是主要的」,渲染在 NodeDetailScreen。
 // 纯逻辑,不 import react-native。
 import type { NodeInfoFact } from './node-info';
+import { pathTo, type OrgData } from './org-model';
 
 export type NodeSectionKey = 'overview' | 'model' | 'secrets' | 'rules' | 'skills' | 'files' | 'tasks' | 'schedules' | 'logs' | 'permissions' | 'danger';
 
@@ -123,7 +124,7 @@ export function resolveActiveSection(active: NodeSectionKey, visible: readonly N
 }
 
 /** 概览网格里默认露出的字段;其余放进「更多信息」折叠区。 */
-export const PRIMARY_FACT_LABELS: readonly string[] = ['节点 ID', '服务器', 'Hostname', '工作路径', 'codex_home', '所属 team', '最后更新'];
+export const PRIMARY_FACT_LABELS: readonly string[] = ['节点 ID', '服务器', 'Hostname', '工作路径', 'codex_home', '所属部门', '最后更新'];
 
 /**
  * 「模型与运行时」摘要卡的字段,按两列网格的阅读顺序。
@@ -162,4 +163,12 @@ export function headerChips(facts: readonly NodeInfoFact[]): string[] {
   const get = (label: string) => facts.find(f => f.label === label)?.value?.trim() || '';
   const version = get('版本');
   return [get('Runtime'), get('模型'), version ? `v${version.replace(/^v/, '')}` : '', get('Hostname') || get('服务器')].filter(Boolean);
+}
+
+/** 「所属部门」那一行:从根到这个部门的完整路径,如「天马 / 研发 / 客户端」(admin 2026-11-10:
+ *  不要 team 了,标部门,显示树上的路径)。没部门表 / 没归属 ⇒ undefined(这一行不出现)。 */
+export function departmentPathLabel(org: OrgData | null | undefined, departmentId: string | null | undefined): string | undefined {
+  if (!org || !departmentId) return undefined;
+  const names = pathTo(org, departmentId).map(d => d.name.trim()).filter(Boolean);
+  return names.length ? names.join(' / ') : undefined;
 }
