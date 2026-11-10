@@ -54,6 +54,7 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          add-rust-environment-hash-key: false
 
       - name: Generate icons
         run: npx tauri icon assets/icon.png
@@ -132,6 +133,7 @@ jobs:
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          add-rust-environment-hash-key: false
 
       - name: Generate icons
         # 这一步会生成 icons/icon.ico —— Windows 的可执行图标只认 .ico，
