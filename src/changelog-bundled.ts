@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.502:",
+  "- 新建节点失败时的提示更可操作了：以前只说「结果未知，禁止自动重放」，现在会告诉你下一步——到节点列表确认有没有这个节点；确认没有再重新发起。",
+  "",
   "What's new in 0.2.501:",
   "- 节点信息里的「所属 team」（按名字前缀猜的）改为「所属部门」，显示完整部门路径，如「TMAI / TMWork」；没设部门的节点显示「未分配」。",
   "- Agent 列表按节点自己的部门分组，组标题是部门路径；以前负责人没分部门时会退回按名字前缀分组。没设部门的节点归到「未归属」。",
