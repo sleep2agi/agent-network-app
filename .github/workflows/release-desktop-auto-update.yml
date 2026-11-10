@@ -596,6 +596,10 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.501:
+            - 节点信息里的「所属 team」（按名字前缀猜的）改为「所属部门」，显示完整部门路径，如「TMAI / TMWork」；没设部门的节点显示「未分配」。
+            - Agent 列表按节点自己的部门分组，组标题是部门路径；以前负责人没分部门时会退回按名字前缀分组。没设部门的节点归到「未归属」。
+
             What's new in 0.2.500:
             - 工作目录含中文的节点，模型列表读不到时现在会说清原因（OpenCode 只从请求头读目录，请求头运不了非 ASCII）和出路（换成纯英文路径）；当前模型与档位不受影响。
             - 更新检查更轻：以前每次检查更新都要下载并解析整部更新日志（0.2.499 里是 141 KB），现在只带最近三个版本，完整历史仍在发布页。
