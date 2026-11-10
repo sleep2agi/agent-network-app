@@ -20,7 +20,6 @@ on:
   schedule:
     - cron: '30 18 * * *'   # 02:30 UTC+8, after the evening releases
   pull_request:
-    types: [opened, synchronize, reopened, labeled]
     paths:
       - 'src/**'
       - 'App.tsx'
@@ -42,8 +41,6 @@ permissions:
 jobs:
   export:
     name: web export
-    # Tier 3 on PRs: opt in with the full-qa label; always runs nightly / on demand.
-    if: ${{ (github.event_name != 'pull_request' || contains(github.event.pull_request.labels.*.name, 'full-qa')) }}
     runs-on: ubuntu-latest
     timeout-minutes: 15
     steps:
