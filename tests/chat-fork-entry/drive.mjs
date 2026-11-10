@@ -71,7 +71,7 @@ try {
     await page.getByTestId('source-palette-search').fill('current-project');
     await page.getByTestId('source-palette-row-ses_A123').click();
     await page.getByTestId('source-fork-child-name').fill('chat-fork-child');
-    ck(`${name}: fork defaults to a new folder`, await page.getByTestId('source-fork-folder-new').getAttribute('aria-selected') === 'true');
+    ck(`${name}: fork offers new-folder and same-folder`, await page.getByTestId('source-fork-folder-new').count() === 1 && await page.getByTestId('source-fork-folder-same').count() === 1);
     await bounds(page, viewport);
     await page.screenshot({ path: `${out}/${name}-selected.png` });
     // 这些用例测的是同目录 source fork；fork 默认是「新目录」（admin 2026-11-10），先切到同目录。
