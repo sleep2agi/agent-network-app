@@ -30,6 +30,7 @@ const tables: TranslationTable = {
   'chat.variantSuffix': [' · 档位 {value}', ' · variant {value}'],
   'chat.variantUnknownShort': ['未知', 'unknown'],
   'chat.variantDefaultShort': ['默认', 'default'],
+  'chat.variantPillUnknown': ['思考档位', 'Thinking'],
   'chat.modelSheetOpen': ['查看当前模型与可用模型目录', 'Show current model and catalog'],
   'chat.modelUnknown': ['模型未知或已过期', 'Model unknown or stale'],
   'server.overview': ['概览', 'Overview'],

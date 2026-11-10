@@ -43,6 +43,17 @@ export function composerVariantLabel(variant: string | null | undefined): string
   return variant;
 }
 
+/** Footer variant pill text. An unknown value shows the control's name (never a made-up level);
+ * the accessibility label still says unknown via composerVariantLabel. */
+export function composerVariantPillLabel(variant: string | null | undefined): string {
+  return variant === undefined ? t('chat.variantPillUnknown') : composerVariantLabel(variant);
+}
+
+/** Left/right inset of the mobile model row so its pills line up with the text box, not the buttons beside it. */
+export function composerModelRowInset(hasLeftCol: boolean, controlSize: number, rowPad: number, gap: number): { left: number; right: number } {
+  return { left: rowPad + (hasLeftCol ? controlSize + gap : 0), right: rowPad + controlSize + gap };
+}
+
 /** Never combine a config variant with the independently cached status model. */
 export function readEffectiveComposerModel(snapshot: ComposerModelSnapshot | null, scope: object, reported: ComposerModelSnapshot | null, reportedScope: object, now = Date.now()): string | null {
   if (!snapshot || snapshot.scope !== scope || !Number.isFinite(snapshot.expiresAt) || now >= snapshot.expiresAt) return null;
