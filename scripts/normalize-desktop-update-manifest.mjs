@@ -29,6 +29,34 @@ const isObject = (value) => Boolean(value) && typeof value === 'object' && !Arra
 
 export const latestJsonAssetName = 'latest.json';
 
+/**
+ * #4437 —— manifest 里的 notes 只保留最近几版，别把整部更新史塞进每次检查更新。
+ *
+ * 实测 0.2.499：`latest.json` 146,292 字节，其中 notes 141 KB（从 0.2.499 一路列到 0.2.43，
+ * 约 450 段）。客户端不是只在升级时读它，是**每次检查更新**都下载并解析。
+ *
+ * 只裁 manifest 里的副本：GitHub release 正文保持完整（那是给人读的归档）。删的是**整段**，
+ * 不是按字符数截断 —— 按字符数切会在句子中间断掉，那种「省流量」比不省更糟。
+ */
+export const NOTES_SECTIONS_KEPT = 3;
+
+const NOTES_HEADING = /^What's new in (\d[\d.]*):$/;
+
+/** 把 notes 裁到「前言 + 最近 keep 段」，并注明哪里还能看到全文。 */
+export const trimManifestNotes = (notes, { keep = NOTES_SECTIONS_KEPT, releasesUrl } = {}) => {
+  if (typeof notes !== 'string' || notes.length === 0) return notes;
+  const lines = notes.split('\n');
+  const headingIdx = [];
+  for (let i = 0; i < lines.length; i += 1) {
+    if (NOTES_HEADING.test(lines[i].trim())) headingIdx.push(i);
+  }
+  if (headingIdx.length <= keep) return notes;
+  const cut = headingIdx[keep];
+  const kept = lines.slice(0, cut).join('\n').replace(/\s+$/, '');
+  const tail = releasesUrl ? `\n\n更早版本的更新内容：${releasesUrl}` : '';
+  return `${kept}${tail}`;
+};
+
 export const publicDownloadUrl = (repository, tag, name) =>
   `https://github.com/${repository}/releases/download/${tag}/${name}`;
 
@@ -235,7 +263,18 @@ export async function normalizeReleaseManifest({
     anonymous: [],
   };
 
-  if (!normalized.changed) {
+  // #4437 —— notes 预算：裁过之后即使 URL 已规范也必须上传一次，否则永远缩不下来。
+  const trimmedNotes = trimManifestNotes(normalized.manifest.notes, {
+    releasesUrl: `https://github.com/${repository}/releases`,
+  });
+  const notesShrank = trimmedNotes !== normalized.manifest.notes;
+  if (notesShrank) {
+    const beforeBytes = Buffer.byteLength(normalized.manifest.notes ?? '', 'utf8');
+    normalized.manifest.notes = trimmedNotes;
+    log(`trimmed latest.json notes ${beforeBytes} -> ${Buffer.byteLength(trimmedNotes, 'utf8')} bytes (kept ${NOTES_SECTIONS_KEPT} sections)`);
+  }
+
+  if (!normalized.changed && !notesShrank) {
     log(`latest.json already uses public download URLs (release ${releaseId}, ${tag}, version ${version}, sha256 ${summary.beforeSha256}); nothing to upload`);
     summary.afterSha256 = summary.beforeSha256;
     if (draft) {
