@@ -22,6 +22,11 @@ on:
         required: false
         default: false
         type: boolean
+      skip_android:
+        description: 'Publish without an Android APK on purpose (default false: a missing APK fails the release)'
+        required: false
+        default: false
+        type: boolean
 
 permissions:
   contents: write
@@ -2868,6 +2873,12 @@ jobs:
     if: inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 35
+    env:
+      # #4395 —— 缺 APK 默认**让发布失败**，而不是 warning 之后照发。
+      # 0.489–0.492 连续四版都没有 APK：安卓用户读 desktop/<ver>/SHA256SUMS 找不到 APK，
+      # 判 incomplete 只能停在 0.488，而流水线那边每一步都只是 warning。
+      # 确实要发无 APK 的版本时，dispatch 里显式 skip_android=true 放行。
+      SKIP_ANDROID: ${{ inputs.skip_android }}
     steps:
       - uses: actions/checkout@v4
         with:
@@ -2883,6 +2894,18 @@ jobs:
           COMMIT: ${{ inputs.commit }}
         run: |
           set -euo pipefail
+          # #4395 —— 三种「拿不到 APK」的情况默认判红；skip_android=true 才降级为 warning。
+          # 这行判据本身要能区分「没构建」「构建失败」「等超时」，否则下一个人只看到一句
+          # 「by hand」不知道该去查哪一层。
+          require_apk() {
+            local why="$1"
+            if [ "${SKIP_ANDROID:-false}" = "true" ]; then
+              echo "::warning::${why}（skip_android=true，按显式放行继续发布，但这一版没有 APK）"
+              exit 0
+            fi
+            echo "::error::${why}；这一版会缺 APK，安卓用户读不到更新。确认要这样发就重新 dispatch 并设 skip_android=true"
+            exit 1
+          }
           # android-build is triggered by the push that produced the bump commit and
           # usually finishes after the desktop release starts. Wait for THIS commit's
           # run instead of silently skipping the attach.
@@ -2890,13 +2913,11 @@ jobs:
             line=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-build.yml/runs?head_sha=$COMMIT&per_page=1" --jq '.workflow_runs[0] | "\(.id // "") \(.status // "") \(.conclusion // "")"')
             read -r run_id status conclusion <<<"$line"
             if [ -z "$run_id" ]; then
-              echo "::warning::no android-build run for $COMMIT; attach the APK to desktop-v<version> by hand"
-              exit 0
+              require_apk "no android-build run exists for $COMMIT（这一版的 bump commit 没有触发构建）"
             fi
             if [ "$status" = "completed" ]; then
               if [ "$conclusion" != "success" ]; then
-                echo "::warning::android-build $run_id for $COMMIT concluded '$conclusion'; attach the APK by hand"
-                exit 0
+                require_apk "android-build $run_id for $COMMIT concluded '$conclusion'"
               fi
               echo "run_id=$run_id" >> "$GITHUB_OUTPUT"
               echo "using android-build $run_id"
@@ -2905,8 +2926,7 @@ jobs:
             echo "android-build $run_id is $status; waiting ($attempt/40)"
             sleep 30
           done
-          echo "::warning::android-build for $COMMIT did not finish in 20 minutes; attach the APK by hand"
-          exit 0
+          require_apk "android-build for $COMMIT did not finish in 20 minutes (run may still be going)"
       - name: Attach the APK with the updater's file name
         if: steps.find.outputs.run_id != ''
         env:
