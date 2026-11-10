@@ -1,0 +1,40 @@
+# #4492 —— `ios-pods-check` 的 `pods` job 会被**取消**（不是失败）。
+#
+# 实测（2026-11-10）：成功的都在 87–131s 内跑完 11 个 step；
+# 唯一的取消是 931s（15.5 分钟）且 **0 个 step** —— 它从来没拿到 macos-15 runner。
+# 两条 bump PR 同时开时更容易撞上（两个 pods job 竞争 macos runner）。
+#
+# 这里只做一件最小的事：**被取消就跑一次**。不改测试、不放宽任何断言、不碰 branch protection。
+# 守卫：最多重试到第 3 次，避免与「总是取消」形成无限循环。
+name: ios-pods autoretry on cancel
+
+on:
+  workflow_run:
+    workflows: ["ios-pods-check"]
+    types: [completed]
+
+permissions:
+  actions: write
+  contents: read
+
+jobs:
+  retry:
+    # 只有「被取消」才重试：失败（真正的 pod 解析问题）必须保持红，不能被这个动作掩盖。
+    if: ${{ github.event.workflow_run.conclusion == 'cancelled' }}
+    runs-on: ubuntu-latest
+    steps:
+      - name: Retry the cancelled run (once, with a hard cap)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ github.event.workflow_run.id }}
+          ATTEMPT: ${{ github.event.workflow_run.run_attempt }}
+          HEAD: ${{ github.event.workflow_run.head_sha }}
+        run: |
+          set -euo pipefail
+          echo "run=$RUN_ID attempt=$ATTEMPT head=$HEAD conclusion=cancelled"
+          if [ "${ATTEMPT:-0}" -ge 3 ]; then
+            echo "::warning::already retried $ATTEMPT times and still cancelled — 停止重试，需要人工看 runner 配额"
+            exit 0
+          fi
+          gh api -X POST "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/rerun"
+          echo "已请求重跑 run $RUN_ID（attempt $ATTEMPT → $((ATTEMPT + 1))）"
