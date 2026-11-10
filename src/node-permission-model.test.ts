@@ -1,13 +1,16 @@
 // 节点「权限」分区(#489)的纯逻辑。ck 风格自执行脚本(不是 bun:test)。
 // @ts-expect-error app tsconfig 不带 node 类型(其余读源码的 ck 测试同样报这一条);运行时由 node/bun 提供。
 import { readFileSync } from 'node:fs';
+import { setLanguagePreference } from './i18n';
 import {
-  canShowPermissionSection, NODE_PERMISSION_OPTIONS, normalizeMode, optionFor, permissionLayout, reasonLabel, reportFootnote,
+  canShowPermissionSection, nodePermissionOptions, normalizeMode, supportsInboxAllowlist, optionFor, permissionLayout, reasonLabel, reportFootnote,
   reportHeadline, routeLabel, saveErrorText, shouldSubmit, summarizeReport, type NodePermissionReport,
 } from './node-permission-model';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) p++; else console.log(`  ✗ ${n}`); };
+setLanguagePreference('zh');
+const NODE_PERMISSION_OPTIONS = nodePermissionOptions();
 
 // ── 三个选项:顺序、名字、说明说人话 ──
 ck('三个选项,顺序 正常/只读/受限', NODE_PERMISSION_OPTIONS.map(o => o.label).join('/') === '正常/只读/受限');
@@ -55,6 +58,17 @@ ck('403 / 404 / 其它错误各有人话', saveErrorText({ status: 403 }).includ
 ck('桌面一行分段,手机竖排卡片', permissionLayout(false) === 'segmented' && permissionLayout(true) === 'cards');
 
 // ── 组件:失败回滚、报表只在读得到时出现(源码断言) ──
+// ── 收件白名单:只看 /health 能力位 ──
+ck('有 node_inbox_allowlist 能力位才显示「收」', supportsInboxAllowlist(['node_permission_mode', 'node_inbox_allowlist'], 'node_inbox_allowlist')
+  && !supportsInboxAllowlist(['node_permission_mode'], 'node_inbox_allowlist') && !supportsInboxAllowlist(null, 'node_inbox_allowlist'));
+
+// ── 英文 ──
+setLanguagePreference('en');
+ck('en: 选项名', nodePermissionOptions().map(o => o.label).join('/') === 'Normal/Read-only/Restricted');
+ck('en: 报表标题', reportHeadline(a) === 'Would have blocked 7 times in the past 7 days' && routeLabel('mcp:broadcast') === 'Broadcast');
+ck('en: 不认识的原因码原样', reasonLabel('new_reason') === 'new_reason');
+setLanguagePreference('zh');
+
 const comp = readFileSync(new URL('./NodePermissionSection.tsx', import.meta.url), 'utf8');
 ck('PUT 失败回到原来的选项', /if \(!res\.ok\) \{\s*setMode\(previous\);/.test(comp));
 ck('报表行只在读到报表时渲染', /\{report \? \(/.test(comp));
@@ -63,6 +77,8 @@ ck('手机卡片高度 ≥ 64(手指大小)', /minHeight: 64/.test(comp));
 const screen = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
 ck('节点页按 Hub 的 viewer_can 决定显示权限分区', /permissionsAllowed: canShowPermissionSection\(node\)/.test(screen));
 const api = readFileSync(new URL('./api.ts', import.meta.url), 'utf8');
+ck('收件白名单按 /health 能力位探测,PUT { senders }', /INBOX_ALLOWLIST_CAPABILITY = 'node_inbox_allowlist'/.test(api) && /INBOX_ALLOWLIST_FIELD = 'senders'/.test(api) && /inbox-allowlist/.test(api));
+ck('「收」卡只在 Hub 支持时渲染', /\{showInbox \? \(\s*<View style=\{card\} testID="node-perm-receive"/.test(comp));
 ck('报表读失败(403 等)返回 null 而不是抛', /fetchNodePermissionReport[\s\S]{0,600}catch \{\s*return null;/.test(api));
 
 console.log(`node permission model: ${p}/${t} checks passed`);
