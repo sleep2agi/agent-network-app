@@ -51,6 +51,13 @@ const ids = modelIdsFromCatalog({
 ck('keeps provider/model and drops disabled providers and duplicates', JSON.stringify(ids) === JSON.stringify(['deepseek/deepseek-flash', 'openai/gpt-6']));
 ck('empty snapshot is an empty list, not a builtin fallback', modelIdsFromCatalog(null).length === 0);
 ck('not_opencode_v2 is readable', catalogErrorText('not_opencode_v2').includes('不是 OpenCode V2'));
+// #4411 —— 目录含中文的节点：必须说清「为什么读不到」和「怎么改」，
+// 而不是把 directory_not_ascii 这个内部枚举原样丢给用户。
+const asciiErr = catalogErrorText('directory_not_ascii');
+ck('directory_not_ascii 解释了是请求头运不了非 ASCII', asciiErr.includes('请求头') && asciiErr.includes('非 ASCII'));
+ck('directory_not_ascii 给出了可执行的出路（改纯英文路径）', asciiErr.includes('英文路径'));
+ck('directory_not_ascii 不把内部枚举当文案', !asciiErr.includes('directory_not_ascii'));
+ck('directory_not_ascii 明确说当前档位不受影响', asciiErr.includes('不受影响'));
 
 // #2293 —— 节点自报清单：只保留 provider/model 形状，去重保序，不补内置。
 ck('reported catalog: 保留 provider/model、去重、保序',

@@ -151,6 +151,10 @@ export function catalogErrorText(error: string | undefined): string {
     case 'user_token_required': return '读取模型列表需要登录人类账号，节点令牌不行。';
     case 'unavailable': return '节点上的 OpenCode 服务器没有返回模型列表。';
     case 'unauthorized': return '节点上的 OpenCode 服务器拒绝了这次读取。';
+    // #4411 —— 这不是「节点坏了」，而是**结构性限制**：OpenCode 只从请求头读目录，
+    // 而 header 运不了非 ASCII。所以工作目录含中文的节点永远拉不到模型清单，
+    // 客户端原样显示一遍 `directory_not_ascii` 等于什么都没说。
+    case 'directory_not_ascii': return '这个节点的工作目录含中文（或其它非 ASCII 字符）：OpenCode 只从请求头读目录，而请求头运不了非 ASCII，所以拉不到模型列表。把工作目录改成纯英文路径（例如 /home/you/work）就能读到了；当前模型与档位不受影响。';
     default: return error ? `读取 OpenCode 模型列表失败：${error}` : '读取 OpenCode 模型列表失败。';
   }
 }
