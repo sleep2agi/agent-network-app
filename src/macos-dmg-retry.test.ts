@@ -162,8 +162,10 @@ check('wrapper passes bash -n', syntax.status === 0, syntax.stderr);
 
 const conf = JSON.parse(readFileSync(new URL('../src-tauri/tauri.conf.json', import.meta.url), 'utf8'));
 const pkg = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8'));
-// 这条只是把「当前版本」抄了一遍，与 version-consistency 重复；bump 时必须跟着改。
-check('release version matches the bump', conf.version === '0.2.499' && pkg.version === '0.2.499');
+// 原来这里把「当前版本」抄了一遍字面量，于是每次 bump 都要多记一处（2026-11-10 的 0.2.500
+// 就是这么红掉的：version-consistency 改完以为齐了，这条还钉着旧号）。
+// 这条要证明的是「tauri.conf 与 package.json 一致」，版本号本身由 version-consistency 负责。
+check('release version matches the bump', conf.version === pkg.version && /^\d+\.\d+\.\d+$/.test(pkg.version));
 check('include_linux still defaults to false', /include_linux:[\s\S]*?default:\s*false/.test(workflow));
 check('macOS matrix still builds app and dmg', workflow.includes('{"platform":"macos-15","args":"--bundles app,dmg"}'));
 check('tauri-action runs the wrapper from the workflow temp dir on macOS only',
