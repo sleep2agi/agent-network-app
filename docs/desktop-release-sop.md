@@ -651,6 +651,26 @@ page would show the full notes on a phone: `android/<ver>/notes.md` answers 200
 anonymously and contains `What's new in <ver>:` with this version's items
 (owner, 2026-09-30: 0.2.160's page showed only 「此版本包含功能改进和问题修复。」).
 The release is done when `android/latest/VERSION` shows the new version.
+
+**The hourly `android-mirror-lag` gate now does the step above for you when you
+forget it.** Publishing the desktop release and advancing `android/latest/VERSION`
+were two manual steps nobody compared until 2026-11-09: `desktop-v0.2.497` was
+published at 23:54Z while the mirror still served 0.2.494 (the in-app updater's
+pointer) and no CI was red. `android-mirror-lag.yml` runs at `:23` every hour,
+compares the newest published release with `android/latest/VERSION` read
+anonymously from the mirror file itself, and — when they differ — dispatches
+`modelscope-android-publish.yml` with the `android-build` run whose `head_sha` is
+that release commit. It only accepts a **successful `android-build` on main** for
+that exact commit, and it does not trust the dispatch's HTTP 204: it records the
+newest publish-run id first and waits for a *newer* run to appear, then waits up
+to 20 minutes for the pointer to move. A red check names which of the four
+situations happened (`MIRROR-GATE[a]` no successful `android-build` for the
+release commit — nothing was dispatched; `[b]` dispatch accepted but no run
+appeared, usually a dispatch sent to a fork; `[c]` the run finished and the
+pointer did not move — read its log; `[d]` the run is still running, the mirror
+is legitimately behind). `gh workflow run android-mirror-lag.yml --ref main
+-f dry_run=true` reports without dispatching. It never replaces the manual run
+above when you want a specific build published immediately.
 The same can be run locally with `scripts/modelscope-android-publish.py publish
 --apk <file> --version <ver> --notes <notes.md> [--dry-run]` (token from `MODELSCOPE_API_TOKEN`),
 but releases go through the workflow from main.
