@@ -299,6 +299,12 @@ export interface HubNode {
   updated_at?: string | null;
   config_revision?: number | null;
   /** RFC-041(Hub ≥ .92):节点自己的模式。旧 Hub 没有 ⇒ undefined(当作正常)。 */
+  /** Hub /api/nodes —— 节点自报的 agent-node 版本（server.ts 的 out.agent_node_version）。
+   *  缺失 = 节点没上报，调用方必须显示「未知」，不得猜测。 */
+  agent_node_version?: string | null;
+  /** Hub /api/nodes —— 启动这个节点的 CLI 版本（server.ts 的 launched_by_cli_version）。
+   *  与 agent_node_version 一起才能拼出「这台节点当前跑的」安装命令（#4463）。 */
+  launched_by_cli_version?: string | null;
   permission_mode?: 'normal' | 'readonly' | 'restricted' | null;
   /** RFC-041 白名单:null = 不限制(Hub 不会返回 [];旧 Hub 没有 ⇒ undefined)。 */
   peer_allowlist?: string[] | null;
