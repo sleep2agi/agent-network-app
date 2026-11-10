@@ -50,5 +50,16 @@ ck('internal space → invalid, not a version', spacey.kind === 'unknown' && spa
 const padded = versionPairHint({ nodeVersion: '\t2.5.0-preview.198 ' });
 ck('trims surrounding whitespace', padded.kind === 'ready' && padded.nodeVersion === '2.5.0-preview.198');
 
+
+// 🔴 源码级护栏：0.2.503 发布过的那一版面板读的是 node.agent_node_version ——
+// 那是 daemon(host_supervisor) 行的字段，普通 agent 节点永远没有（生产实测 343 个里 0 个），
+// 于是面板对所有节点显示「版本未知」。功能发了但等于没发。
+// 这条断言直接钉住取数字段，防止同样的错误再被写成“新功能”。
+import { readFileSync } from 'node:fs';
+const screen = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
+ck('screen reads agent-node version from the status row (version)', screen.includes('(s as Session & { version?: string | null }).version'));
+ck('screen does NOT read node.agent_node_version (daemon-only field)', !screen.includes('node?.agent_node_version'));
+ck('screen still takes the CLI version from the node row', screen.includes('cliVersion: node?.launched_by_cli_version'));
+
 console.log(`${n}/${n} passed`);
 process.exit(0);
