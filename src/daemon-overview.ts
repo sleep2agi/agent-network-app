@@ -13,11 +13,24 @@
 
 import type { HostSupervisorDaemon, Session } from './api';
 import { describeDaemonCapability } from './daemon-capability';
+import { currentLanguage } from './i18n';
 import { cpuMeter, fmtGb, heartbeatMs, hostLevels, sizeMeter, telemetryOf, type HostTelemetry, type LevelTone } from './host-levels';
 import { daemonChecklist, installBlocker, type LocalDaemonScan } from './local-daemon';
 import { hasReadiness, readinessFor, type ReadinessState, type RuntimeReadinessEntry } from './runtime-readiness';
 
-export const ANET_INSTALL_DOCS = 'https://www.anet.sh/en/guide/install';
+/**
+ * 安装文档地址要**跟着界面语言**走。
+ *
+ * 这两份页面内容不同（中文 `/guide/install`、英文 `/en/guide/install`），而这里原来写死了 `/en/` ——
+ * 中文用户点「安装文档」会被送进英文页。两份都已核实过口径一致（都在教 `anet pair`），
+ * 所以这是**语言没对齐**，不是内容错。
+ */
+export const ANET_INSTALL_DOCS_EN = 'https://www.anet.sh/en/guide/install';
+export const ANET_INSTALL_DOCS_ZH = 'https://www.anet.sh/guide/install';
+/** 兼容旧名：默认英文，供未接 i18n 的调用点保持原行为。 */
+export const ANET_INSTALL_DOCS = ANET_INSTALL_DOCS_EN;
+/** 按当前界面语言给安装文档地址（渲染期取值，切语言后会跟着变）。 */
+export const anetInstallDocs = (): string => (currentLanguage() === 'zh' ? ANET_INSTALL_DOCS_ZH : ANET_INSTALL_DOCS_EN);
 export const ANET_RUNTIME_DOCS = 'https://www.anet.sh/en/guide/runtimes';
 
 export type ResourceKey = 'cpu' | 'ram' | 'disk' | 'network';
@@ -358,7 +371,8 @@ function sortRuntimes(rows: RuntimeRow[]): RuntimeRow[] {
 function gapForRuntime(row: RuntimeRow): OverviewGap | null {
   if (row.state !== 'missing_cli' && row.state !== 'not_logged_in' && row.state !== 'no_network') return null;
   const guide = RUNTIME_GUIDE[row.id];
-  const docsUrl = guide?.docsUrl ?? ANET_RUNTIME_DOCS;
+  // 这一格对 claude-agent-sdk 指的是**安装文档**（那里才有精确配对命令），按当前语言解析。
+  const docsUrl = guide?.docsUrl === ANET_INSTALL_DOCS ? anetInstallDocs() : (guide?.docsUrl ?? ANET_RUNTIME_DOCS);
   if (row.state === 'missing_cli') {
     return { id: row.id, labelKey: row.labelKey || row.id, stateKey: STATE_KEY[row.state], reason: row.reason, noteKey: guide?.install ? row.noteKey : 'daemon.overview.seeDocs', primary: guide?.install ? 'copy-install' : 'docs', command: guide?.install ?? null, docsUrl };
   }
@@ -379,7 +393,7 @@ function gapForTool(row: ToolRow): OverviewGap | null {
     noteKey: command ? null : 'daemon.overview.seeDocs',
     primary: command ? 'copy-install' : 'docs',
     command,
-    docsUrl: ANET_INSTALL_DOCS,
+    docsUrl: anetInstallDocs(),
   };
 }
 
@@ -484,7 +498,7 @@ export function buildDaemonOverview(input: DaemonOverviewInput): DaemonOverview 
   const localInstall = !!(localMatch && toolGaps && !blocked && reported);
   const gaps: OverviewGap[] = [];
   if (localInstall) {
-    gaps.push({ id: 'toolchain', labelKey: 'daemon.overview.toolchain', stateKey: 'daemon.overview.state.missing_cli', reason: null, noteKey: null, primary: 'install-local', command: null, docsUrl: ANET_INSTALL_DOCS });
+    gaps.push({ id: 'toolchain', labelKey: 'daemon.overview.toolchain', stateKey: 'daemon.overview.state.missing_cli', reason: null, noteKey: null, primary: 'install-local', command: null, docsUrl: anetInstallDocs() });
   } else if (reported) {
     for (const row of tools) {
       const gap = gapForTool(row);
@@ -509,7 +523,7 @@ export function buildDaemonOverview(input: DaemonOverviewInput): DaemonOverview 
       noteKey: null,
       primary: 'copy-fix',
       command: 'anet doctor',
-      docsUrl: ANET_INSTALL_DOCS,
+      docsUrl: anetInstallDocs(),
     });
   }
 
