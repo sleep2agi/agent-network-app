@@ -5,6 +5,8 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.498:",
+  "- 节点页「权限」分成「发」和「收」两块：「发」设置模式和它能发给哪些节点（从节点列表勾选）；「收」设置谁能给它派活、发消息（节点、成员、所有成员，可开严格）。Hub 支持收件白名单时才显示「收」。被拒绝时显示原因码和 Hub 的提示。支持中英文。",
   "What's new in 0.2.497:",
   "- 修复：输入框模型面板切换模型后误报「已接受，但生效模型未确认」，再选一次一直报「配置在别处被改过了」。现在节点已确认就显示「已切换」，冲突时真正重新加载配置。",
   "What's new in 0.2.496:",
