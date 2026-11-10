@@ -596,6 +596,11 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.500:
+            - 工作目录含中文的节点，模型列表读不到时现在会说清原因（OpenCode 只从请求头读目录，请求头运不了非 ASCII）和出路（换成纯英文路径）；当前模型与档位不受影响。
+            - 更新检查更轻：以前每次检查更新都要下载并解析整部更新日志（0.2.499 里是 141 KB），现在只带最近三个版本，完整历史仍在发布页。
+            - 发布流程加固：这一版没有安卓包会直接判失败，而不是发出去让安卓用户拿不到；发布完成后也会立刻核对安卓镜像是否跟上。
+
             What's new in 0.2.499:
             - 节点页「权限」分成「发」和「收」两块：「发」设置模式和它能发给哪些节点（从节点列表勾选）；「收」设置谁能给它派活、发消息（节点、成员、所有成员，可开严格）。Hub 支持收件白名单时才显示「收」。被拒绝时显示原因码和 Hub 的提示。支持中英文。
             - 切换思考档位后的确认窗口放宽到 150 秒：按真机实测，Hub 快照比写入晚 1–2.5 分钟才跟上，原来的 60 秒会在其实已经生效时先报「快照未跟上」。
