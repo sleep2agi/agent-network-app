@@ -30,7 +30,11 @@ on:
 
 permissions:
   contents: write
-  actions: read
+  # 2026-11-10 实测（0.2.501 run 42815455002）：只给 `actions: read` 时，
+  # `gh workflow run android-mirror-lag.yml` 返回
+  #   HTTP 403: Resource not accessible by integration
+  # 于是发布链末端的镜像闸触发必然失败。dispatch workflow 需要 actions: write。
+  actions: write
 
 concurrency:
   # 正常仍串行(固定组名,防两个 run 同时发同一版本)。
@@ -3036,7 +3040,10 @@ jobs:
           echo "baseline run id: $baseline"
           # 这个 job 不 checkout（没必要为一次 dispatch 拉整个仓库），所以必须显式给 --repo；
           # 2026-11-10 首次真实发布时正是这里红的：`failed to run git: fatal: not a git repository`。
-          gh workflow run android-mirror-lag.yml --repo "$GITHUB_REPOSITORY" --ref main
+          if ! gh workflow run android-mirror-lag.yml --repo "$GITHUB_REPOSITORY" --ref main 2>&1 | tee -a "$RUNNER_TEMP/dispatch.log"; then
+            echo "::error::android-mirror-lag dispatch failed — most likely this job lacks 'actions: write' (403 Resource not accessible by integration). See $RUNNER_TEMP/dispatch.log"
+            exit 1
+          fi
           for attempt in $(seq 1 18); do
             sleep 10
             newest=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-mirror-lag.yml/runs?per_page=1" \

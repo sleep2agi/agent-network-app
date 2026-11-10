@@ -24,5 +24,11 @@ check('等了也等不到就判红，而不是静默成功', /::error::dispatche
 check('dispatch 显式带 --repo（这个 job 没有 checkout）', /gh workflow run android-mirror-lag\.yml --repo "\$GITHUB_REPOSITORY" --ref main/.test(wf));
 check('已经有一个在跑的闸 run 也算接上了（不误报）', /mirror gate already running as \$rid/.test(wf));
 
+
+// 2026-11-10 首考（0.2.501 run 42815455002）：job 有 --repo 但仍是 403 ——
+// 因为 workflow 级 permissions 只给了 `actions: read`，而 dispatch 需要 write。
+check('workflow 给了 actions: write（dispatch 需要）', /^permissions:\n(?:  .*\n)*?  actions: write/m.test(wf));
+check('dispatch 失败时点名 403 与缺少 actions: write', /403 Resource not accessible by integration/.test(wf));
+
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log('all green');
