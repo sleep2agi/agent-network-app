@@ -64,9 +64,9 @@ export function variantChoices(variants: unknown): VariantChoices {
 // 与改模型同构：提交 → 观测窗口（60s，每 3s 读一次）→ 双条件确认后才算成功。
 
 export const VARIANT_POLL_MS = 3000;
-export const VARIANT_MAX_POLLS = 20;
+export const VARIANT_MAX_POLLS = 50;
 /** 3 s × 20 = 60 s：足够跨过 Hub 那一两次心跳，又不至于让人以为卡死。 */
-export const VARIANT_TIMEOUT_MS = VARIANT_POLL_MS * VARIANT_MAX_POLLS;
+export const VARIANT_TIMEOUT_MS = 150_000;
 
 /**
  * 一次档位写入的判定结果（纯数据，界面只负责上色）。

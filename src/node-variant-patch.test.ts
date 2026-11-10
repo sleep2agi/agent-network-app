@@ -92,7 +92,9 @@ ck('applied 但期望模型为空 → 仅按 last 判定', lastUpdateApplied({ u
 // 顶层 modelVariant 要等下一次心跳（几十秒）。提交后立刻读一次必然「未确认」，
 // 于是**成功**的切换被报成红色失败。现在给 60s 窗口 + 双条件确认。
 ck('观测窗口 60s / 每 3s 一读（跨过 Hub 那一两次心跳）',
-  VARIANT_POLL_MS === 3000 && VARIANT_TIMEOUT_MS === 60000 && VARIANT_MAX_POLLS * VARIANT_POLL_MS === VARIANT_TIMEOUT_MS);
+  // 2026-11-10 第二次真机实测：快照上报延迟 ~60s（null）与 ~150s（low）。60 秒窗口覆盖不到长尾，
+  // 会在写入已成功时先报「快照未跟上」——那是误报。150 秒 = 实测上界。
+  VARIANT_POLL_MS === 3000 && VARIANT_TIMEOUT_MS === 150000 && VARIANT_MAX_POLLS * VARIANT_POLL_MS === VARIANT_TIMEOUT_MS);
 
 // 1) applied + 顶层 modelVariant 一致 → 成功
 const okOutcome = describeVariantOutcome({ applied: true, variantMatches: true, target: 'high' });
