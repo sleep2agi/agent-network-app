@@ -94,10 +94,12 @@ jobs:
     environment: macos-signing
     strategy:
       fail-fast: false
-      # 所有矩阵行现在写同一个 release（同一个 releaseId）：并发跑会让多个 tauri-action
-      # 同时改 latest.json，后写的覆盖先写的。串行化是最小、可解释的修法；
-      # 真正的一次写入者由 normalize-updater-manifest 收口。
-      max-parallel: 1
+      # macOS 和 Windows 并行（以前 max-parallel: 1，Windows 每次白等 macOS 12-22 分钟）。
+      # 串行当初只为一件事：每条腿的 tauri-action 都会读改写 latest.json，并发会互相覆盖。
+      # 现在这两条腿不写 latest.json（uploadUpdaterJson 关），由 verify-draft 开头的
+      # scripts/assemble-desktop-latest-json.mjs 从 .sig 资产一次性生成。
+      # 带 Linux 时仍串行：Linux 腿的补丁步骤要读改写 tauri-action 写好的 latest.json。
+      max-parallel: ${{ inputs.include_linux && 1 || 2 }}
       matrix:
         # Linux is opt-in, not a skipped matrix job that delays the primary pair.
         # When requested it still uses the production updater/signing/retention gates.
@@ -593,6 +595,8 @@ jobs:
           tagName: desktop-v__VERSION__
           releaseName: ANet Desktop v__VERSION__
           releaseId: ${{ needs.prepare-release.outputs.release_id }}
+          # 并行构建时不让每条腿各写一份 latest.json（会互相覆盖）；见 max-parallel 处的说明。
+          uploadUpdaterJson: ${{ inputs.include_linux }}
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
@@ -2862,6 +2866,12 @@ jobs:
       # #2064: 两个同 tag 草稿会让这件事看起来像「资产没编出来」。先点清数量。
       # 草稿身份由 prepare-release 的 release_id 唯一确定：不再按 tag 列举/计数
       # （分页下 "1\n0\n0" 那类误报），身份断言改在 verify-desktop-release-draft.mjs 里做。
+
+      - name: Assemble latest.json from the signed assets (parallel builds; no-op on the serial Linux path)
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
+        run: node scripts/assemble-desktop-latest-json.mjs
 
       - name: Require selected platform draft assets, updater entries, and checksums
         env:
