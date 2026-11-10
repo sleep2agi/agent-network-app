@@ -2991,3 +2991,40 @@ jobs:
           echo "normalizing $RELEASE_TAG"
           # 脚本自己 fresh 回读 release assets、上传替换、再回读断言；任何一步不合预期即非零退出。
           node scripts/normalize-desktop-update-manifest.mjs
+
+  trigger-android-mirror-gate:
+    # #4422 —— 「发布 release」和「推进安卓镜像」过去是两步人工操作，中间没有任何东西比对过，
+    # 于是镜像能静默落后三个版本而所有 CI 都是绿的。那道闸（android-mirror-lag.yml）存在，
+    # 但它只靠 `on: schedule`，2026-11-10 实测 03:33Z 合并后到 07:07Z 之间 **一次都没触发**
+    # （同一仓库的 modelscope-mirror 定时任务是跑了的）。护栏自己不响，比没有护栏更糟。
+    #
+    # 发布完成是这条链上唯一确定已知的时刻，所以在这里显式触发一次，不指望 cron 醒来。
+    # 不等待它跑完：闸自己会等镜像最多 20 分钟，那是闸的职责，不是发布链的职责。
+    needs: [normalize-updater-manifest]
+    if: inputs.publish == true
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Dispatch the mirror gate and prove a new run appeared
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          # `gh workflow run` 成功只代表请求被接受（HTTP 204）。2026-11-09 有过把 dispatch
+          # 发到 fork 的情况：204、命令成功、上游一个 run 都没有。所以只认 id 变大的新 run。
+          baseline=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-mirror-lag.yml/runs?per_page=1" \
+            --jq '.workflow_runs[0].id // 0')
+          echo "baseline run id: $baseline"
+          gh workflow run android-mirror-lag.yml --ref main
+          for attempt in $(seq 1 18); do
+            sleep 10
+            newest=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-mirror-lag.yml/runs?per_page=1" \
+              --jq '.workflow_runs[0].id // 0')
+            if [ "$newest" -gt "$baseline" ]; then
+              echo "mirror gate run $newest started (baseline $baseline)"
+              exit 0
+            fi
+            echo "waiting for the gate run to appear ($attempt/18)"
+          done
+          echo "::error::dispatched android-mirror-lag.yml but no new run appeared within 180s — the request was accepted, yet nothing ran. Check the workflow's \`on:\` block and the dispatch target, do NOT assume the mirror is watched."
+          exit 1
