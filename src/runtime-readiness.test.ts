@@ -3,7 +3,7 @@
 // 以及两个屏幕确实用这张映射(读源码:react-native 组件在这里 import 不了)。
 import { readFileSync } from 'node:fs';
 import {
-  UNCHECKED_LABEL, chipTitle, hasReadiness, readinessChips, readinessFor, readinessSelectable, sharedLoginWarning,
+  UNCHECKED_LABEL, chipTitle, hasReadiness, hiddenChipsLabel, readinessChips, readinessFor, readinessSelectable, sharedLoginWarning, splitReadinessChips,
   type ReadinessInput, DETECTED_LABEL } from './runtime-readiness';
 
 let passed = 0, total = 0;
@@ -104,6 +104,21 @@ check('chips: supported order first, then readiness-only keys', chips.map(c => c
 check('chips: supported runtime without entry is ? 未检测', chips[0].view.chip === 'unknown');
 check('chips: one per runtime of the mixed daemon', readinessChips(mixed)!.length === 5);
 
+// ── 选服务器卡片:只露能建的,✗ / ? 收进「+N」(Vincent 2026-11-10)──
+{
+  const split = splitReadinessChips(readinessChips(mixed)!);
+  check('split: shown holds only ready chips', split.shown.length > 0 && split.shown.every(c => c.view.chip === 'ready'), split.shown.map(c => c.runtime).join());
+  check('split: hidden holds every blocked / unknown chip', split.hidden.length > 0 && split.hidden.every(c => c.view.chip !== 'ready'));
+  check('split: nothing lost or duplicated', split.shown.length + split.hidden.length === readinessChips(mixed)!.length);
+  const order = readinessChips(mixed)!.map(c => c.runtime);
+  check('split: each half keeps the card order', [split.shown, split.hidden].every(h => h.every((c, i) => i === 0 || order.indexOf(h[i - 1].runtime) < order.indexOf(c.runtime))));
+  const none = splitReadinessChips(readinessChips({ runtimes_supported: ['a', 'b'], runtime_readiness: { a: { state: 'missing_cli' } } })!);
+  check('split: a daemon with nothing ready shows no chips and hides all', none.shown.length === 0 && none.hidden.length === 2);
+  check('hidden label: counts blocked and 未检测 separately', hiddenChipsLabel(none.hidden) === '另外 2 个 runtime：1 个不可用，1 个未检测', hiddenChipsLabel(none.hidden));
+  const allReady = splitReadinessChips(readinessChips({ runtimes_supported: ['a'], runtime_readiness: { a: { state: 'ready' } } })!);
+  check('split: all ready ⇒ nothing hidden', allReady.hidden.length === 0 && allReady.shown.length === 1);
+}
+
 // ── 两个屏幕确实走这张映射(源码级接线守卫)──
 const wiz = readFileSync(new URL('./CreateNodeWizardScreen.tsx', import.meta.url), 'utf8');
 const picker = readFileSync(new URL('./HostSupervisorPickerScreen.tsx', import.meta.url), 'utf8');
@@ -111,6 +126,10 @@ check('wizard: imports readinessFor from ./runtime-readiness', /import \{[^}]*re
 check('wizard: a runtime row is disabled by readiness (allowed includes .selectable)', /const allowed = [^;\n]*\.selectable/.test(wiz));
 check('wizard: 下一步 on the runtime step is gated by readiness too', /isRuntimeAllowed[\s\S]{0,400}readinessSelectable\(daemon/.test(wiz));
 check('picker: imports readinessChips', /import \{[^}]*readinessChips[^}]*\} from '\.\/runtime-readiness'/.test(picker));
+check('picker: card chips go through splitReadinessChips', /const \{ shown, hidden \} = splitReadinessChips\(chips\)/.test(picker));
+check('picker: hidden runtimes collapse behind the +N toggle', picker.includes('testID="readiness-more"') && picker.includes('`+${hidden.length}`'));
+check('picker: the whole card is the radio target', /accessibilityRole="radio"[\s\S]{0,200}accessibilityState=\{\{ selected, checked: selected \}\}\s*aria-checked=\{selected\}/.test(picker) && picker.includes('selected && styles.cardSelected'));
+check('picker: disabled 下一步 is a solid neutral, not a pale tonal bar', /primaryBtnDisabled: \{ backgroundColor: colors\.border \}/.test(picker));
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

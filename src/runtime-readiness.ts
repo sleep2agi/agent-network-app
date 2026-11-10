@@ -152,6 +152,29 @@ export function readinessChips(d: ReadinessInput): ReadinessChip[] | null {
   return ids.map(runtime => ({ runtime, view: readinessFor(d, runtime) }));
 }
 
+export interface ReadinessSplit {
+  /** 卡片上直接露出来的:能建的(✓)。 */
+  shown: ReadinessChip[];
+  /** 收进「+N」里的:建不了(✗)和未检测(?),原顺序。 */
+  hidden: ReadinessChip[];
+}
+
+/** Vincent 2026-11-10:7 颗胶囊等权重排一排,卡片没法扫。只露能用的,其余收成「+N」。 */
+export function splitReadinessChips(chips: ReadinessChip[]): ReadinessSplit {
+  return {
+    shown: chips.filter(c => c.view.chip === 'ready'),
+    hidden: chips.filter(c => c.view.chip !== 'ready'),
+  };
+}
+
+/** 「+N」的读屏文字:「另外 3 个 runtime：2 个不可用，1 个未检测」。 */
+export function hiddenChipsLabel(hidden: ReadinessChip[]): string {
+  const blocked = hidden.filter(c => c.view.chip === 'blocked').length;
+  const unknown = hidden.length - blocked;
+  const parts = [blocked ? `${blocked} 个不可用` : '', unknown ? `${unknown} 个${UNCHECKED_LABEL}` : ''].filter(Boolean);
+  return `另外 ${hidden.length} 个 runtime：${parts.join('，')}`;
+}
+
 /** 胶囊的提示条 / 读屏文字:「grok-build-acp:✗ 这台机器没装 grok」。 */
 export function chipTitle(c: ReadinessChip): string {
   const v = c.view;

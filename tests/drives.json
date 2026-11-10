@@ -204,7 +204,7 @@
     },
     "test-create-node-runtime-readiness/drive.mjs": {
       "kind": "stub",
-      "secs": 30
+      "secs": 40
     },
     "test-create-node-name/drive.mjs": {
       "kind": "stub",
