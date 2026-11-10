@@ -1,5 +1,5 @@
 // Daemon 设置 → 全览：真实遥测 / runtime 就绪优先；没有上报才用演示探测。缺项带安装或修复命令。
-import { readFileSync } from 'node:fs';
+import { readFileSync, readdirSync } from 'node:fs';
 import { setLanguagePreference, t } from './i18n';
 import './i18n-daemon';
 import './i18n-backend-pending';
@@ -119,7 +119,9 @@ const cap = blocked.gaps.find(row => row.id === 'capability');
 ck('create-capability block points at anet doctor and keeps the reason code', cap?.command === 'anet doctor' && cap?.reason === 'anet_bin_source' && cap?.docsUrl === ANET_INSTALL_DOCS && cap?.stateKey === 'daemon.overview.state.blocked');
 
 const demo = buildDaemonOverview(base({ supervisor: { daemon_node_id: 'node_d1', alias: 'daemon-a', hostname: 'vm-demo', online: true } }));
-ck('no telemetry and no readiness uses the demo probe', demo.demo && !demo.pending && demo.resources.every(row => row.source === 'demo') && demo.gaps.some(row => row.id === 'opencode-cli') && demo.gaps.some(row => row.command === 'npm install -g @sleep2agi/agent-network'));
+ck('no telemetry and no readiness uses the demo probe', demo.demo && !demo.pending && demo.resources.every(row => row.source === 'demo') && demo.gaps.some(row => row.id === 'opencode-cli') && !demo.gaps.some(row => row.command?.includes('@sleep2agi/agent-network')));
+ck('missing CLI points to install docs, not an unpaired command', demo.gaps.some(row => row.id === 'tool:anet' && row.primary === 'docs' && row.docsUrl === ANET_INSTALL_DOCS && row.command === null));
+ck('bundled agent runtime points to install docs, not an unpaired command', RUNTIME_GUIDE['claude-agent-sdk'].docsUrl === ANET_INSTALL_DOCS && RUNTIME_GUIDE['claude-agent-sdk'].install === null);
 ck('demo does not offer the local installer', !demo.localInstall);
 ck('a daemon missing from the supervisor list is called out beside the demo', buildDaemonOverview(base({ supervisor: null, listing: 'missing' })).notListed);
 
@@ -192,6 +194,21 @@ ck('screen passes the merged offline state to the overview', screen.includes('of
 
 const quiet = JSON.stringify(readiness);
 ck('readiness result does not echo a secret-shaped field', !quiet.includes('apiKey') && !quiet.includes('sk-'));
+
+// Do not bake either component's npm install command into UI copy: independently
+// moving dist-tags (even two preview tags) do not establish an exact pair.
+function uiSources(dir: URL): URL[] {
+  return readdirSync(dir, { withFileTypes: true }).flatMap(entry => {
+    if (entry.isDirectory()) return uiSources(new URL(`${entry.name}/`, dir));
+    if (entry.isFile() && /\.(?:ts|tsx)$/.test(entry.name) && !/\.test\.tsx?$/.test(entry.name)) return [new URL(entry.name, dir)];
+    return [];
+  });
+}
+const hardcodedPairInstalls = uiSources(new URL('.', import.meta.url)).flatMap(file => {
+  const text = readFileSync(file, 'utf8');
+  return text.split('\n').filter(line => /npm\s+(?:i|install|add)\b[^\n]*@sleep2agi\/(?:agent-node|agent-network)(?:@|\b)/.test(line)).map(() => file.pathname);
+});
+ck(`no hardcoded CLI/agent-node npm install command in UI sources: ${hardcodedPairInstalls.join(', ')}`, hardcodedPairInstalls.length === 0);
 
 console.log(`\n${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

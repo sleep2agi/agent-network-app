@@ -129,7 +129,7 @@ interface RuntimeGuide {
 }
 
 export const RUNTIME_GUIDE: Record<string, RuntimeGuide> = {
-  'claude-agent-sdk': { labelKey: 'daemon.overview.runtime.claude-agent-sdk', install: 'npm install -g @sleep2agi/agent-node', login: null, docsUrl: ANET_RUNTIME_DOCS },
+  'claude-agent-sdk': { labelKey: 'daemon.overview.runtime.claude-agent-sdk', install: null, login: null, docsUrl: ANET_INSTALL_DOCS },
   'claude-code-cli': { labelKey: 'daemon.overview.runtime.claude-code-cli', install: 'npm install -g @anthropic-ai/claude-code', login: 'claude auth login', docsUrl: ANET_RUNTIME_DOCS },
   'codex-sdk': { labelKey: 'daemon.overview.runtime.codex-sdk', install: 'npm install -g @openai/codex', login: 'codex login', docsUrl: ANET_RUNTIME_DOCS },
   'codex-app-server': { labelKey: 'daemon.overview.runtime.codex-app-server', install: 'npm install -g @openai/codex', login: 'codex login', docsUrl: ANET_RUNTIME_DOCS },
@@ -150,8 +150,8 @@ const TOOL_LABEL: Record<ToolKey, string> = {
 const TOOL_INSTALL: Record<ToolKey, string | null> = {
   node: null,
   npm: null,
-  anet: 'npm install -g @sleep2agi/agent-network',
-  agentNode: 'npm install -g @sleep2agi/agent-node',
+  anet: null,
+  agentNode: null,
 };
 
 const STATE_KEY: Record<RuntimeRow['state'], string> = {
