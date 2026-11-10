@@ -36,6 +36,11 @@ ck('registration label never says online/healthy', !/online|healthy|TUI ready/i.
 ck('unknown_rotation_required → unknown', classifyProjectCreate('unknown_rotation_required').kind === 'unknown');
 ck('session_creation=unknown on pending → unknown', classifyProjectCreate('delivery_pending', 'unknown').kind === 'unknown');
 ck('unknown label says no replay', /禁止自动重放/.test(projectCreateLabel(classifyProjectCreate('unknown_rotation_required'))));
+// 2026-11-10：服务端可能在确认窗口内被判死（见 anet 需求池 #4448）。用户看到「结果未知」时
+// 必须知道下一步做什么，否则只能卡在那里重试或放弃。
+const unknownLabel = projectCreateLabel(classifyProjectCreate('unknown_rotation_required'));
+ck('unknown label names the next step (check the node list)', /节点列表/.test(unknownLabel) && /确认/.test(unknownLabel));
+ck('unknown label still forbids automatic replay', /禁止自动重放/.test(unknownLabel));
 ck('progress label keeps status', /create_pending/.test(projectCreateLabel(classifyProjectCreate('create_pending', 'not_started'))));
 
 console.log(`${n}/${n} passed`);

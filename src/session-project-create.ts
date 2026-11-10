@@ -98,7 +98,8 @@ export function classifyProjectCreate(status: ProjectCreateStatus, sessionCreati
 /** 回执展示文案：绝不写 online/healthy/TUI ready。 */
 export function projectCreateLabel(outcome: ProjectCreateOutcome): string {
   if (outcome.kind === 'registered') return `已注册（registration_confirmed）${outcome.childNodeId ? ` · child ${outcome.childNodeId}` : ''}——注册回执不等于在线/健康/TUI 就绪`;
-  if (outcome.kind === 'unknown') return '结果未知（session_creation=unknown）：可能已创建，禁止自动重放或更换 intent';
+  if (outcome.kind === 'unknown') return '结果未知（session_creation=unknown）：可能已创建，禁止自动重放或更换 intent。'
+    + '下一步：到节点列表确认有没有这个节点——有就直接用；确认没有，可以重新发起一次新请求（系统不会自动重放旧请求）。';
   if (outcome.kind === 'failed') return `失败：${outcome.error}`;
   return `进行中：${outcome.status}`;
 }
