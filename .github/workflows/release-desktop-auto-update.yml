@@ -2908,21 +2908,28 @@ jobs:
         run: node scripts/verify-desktop-release-draft.mjs
 
       # #4485 —— 0.2.503 实际发生过一次静默失败：上面那条按 release_id 校验通过了，
-      # 但**用户真正会打开的入口**（`releases/tags/desktop-v<ver>`）是一个 0 资产的空壳，
-      # 真正的资产落在另一个 `untagged-<sha>` 的已发布 release 上。
-      # 构建全绿、版本号也发出去了，下载页却是空的 —— 所以这里按 **tag** 再核一次。
-      - name: Assert the tagged release carries the assets users will download
+      # 但**用户真正会打开的入口**是一个 0 空壳，真正的资产落在另一个 `untagged-<sha>` 上。
+      #
+      # 第一次实跑（0.2.504）我写错了：用了 `/releases/tags/<tag>`，而这一步跑在**发布之前**，
+      # 草稿还不会被 tag 端点检索到 ⇒ 直接 404 判红。改成本步本来就有的 RELEASE_ID + 断言 tag 名。
+      - name: Assert the verified release is the one users will open
         env:
           GH_TOKEN: ${{ github.token }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
           EXPECTED_COMMIT: ${{ inputs.commit }}
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
-          tag="desktop-v$version"
-          count=$(gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" --jq '.assets | length')
-          echo "tag=$tag assets=$count"
-          if [ "$count" -lt 6 ]; then
-            echo "::error::release $tag carries only $count assets — users would open an empty download page"
+          expected_tag="desktop-v$version"
+          actual_tag=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '.tag_name')
+          assets=$(gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" --jq '.assets | length')
+          echo "release=$RELEASE_ID tag=$actual_tag assets=$assets expected_tag=$expected_tag"
+          if [ "$actual_tag" != "$expected_tag" ]; then
+            echo "::error::the release we verified has tag '$actual_tag', expected '$expected_tag' — users would open a different object"
+            exit 1
+          fi
+          if [ "$assets" -lt 6 ]; then
+            echo "::error::release $actual_tag carries only $assets assets — users would open an empty download page"
             exit 1
           fi
           stray=$(gh api "repos/$GITHUB_REPOSITORY/releases?per_page=30" \
@@ -2933,7 +2940,7 @@ jobs:
               --jq '.[] | select(.tag_name | startswith("untagged-")) | "\(.id) \(.tag_name) assets=\(.assets|length)"'
             exit 1
           fi
-          echo "tagged release looks right"
+          echo "verified release is the one users will open"
 
   # 0.2.265/0.2.266 的教训:`ANet_<ver>_android-universal.apk` 也能当 release 资产,但安卓更新器找的是
   # `Agent.Network_<ver>_android-universal.apk`(src/android-update-core.ts apkCacheFileName),版本化路径
