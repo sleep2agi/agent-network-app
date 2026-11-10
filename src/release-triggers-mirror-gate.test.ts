@@ -13,7 +13,8 @@ const check = (name: string, ok: boolean) => { if (!ok) { console.error('FAIL: '
 check('存在 trigger-android-mirror-gate job', /\n  trigger-android-mirror-gate:/.test(wf));
 check('它排在 normalize-updater-manifest 之后', wf.indexOf('trigger-android-mirror-gate:') > wf.indexOf('normalize-updater-manifest:'));
 check('只在 publish=true 时跑', /trigger-android-mirror-gate:[\s\S]{0,900}if: inputs\.publish == true/.test(wf));
-check('真的 dispatch 那道闸', /gh workflow run android-mirror-lag\.yml --ref main/.test(wf));
+// 不要钉死参数顺序：`--repo` 是后来补上的，把它写成 `--ref main` 紧邻会让「加参数」变成「测试红」。
+check('真的 dispatch 那道闸', /gh workflow run android-mirror-lag\.yml[^\n]*--ref main/.test(wf));
 check('以 run id 变大作为唯一证据', /newest" -gt "\$baseline"/.test(wf));
 check('等了也等不到就判红，而不是静默成功', /::error::dispatched android-mirror-lag\.yml but no new run appeared/.test(wf));
 
