@@ -283,6 +283,8 @@ export interface HubNode {
   server?: string | null;
   hostname?: string | null;
   role?: string | null;
+  /** 节点显式归属的部门(Hub nodes.department_id;/api/nodes 已带)。旧 Hub 没有 ⇒ undefined。 */
+  department_id?: string | null;
   /** app#196 —— hub 显式告知这个节点能不能走 stop/restart/delete。
    *  判据在 hub 侧（node_create_requests 里真有创建记录，或它本身是 daemon），
    *  🔴 **不是 id 前缀** —— 前缀是实现细节，今天恰好等价，明天会悄悄失效。

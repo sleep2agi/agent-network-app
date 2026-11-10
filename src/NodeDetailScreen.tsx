@@ -67,9 +67,8 @@ import AliasAvatar from './AliasAvatar';
 import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
-import { teamOf } from './agents-list';
 import * as Clipboard from 'expo-clipboard';
-import { fetchDepartmentNodes, fetchOrg } from './org-api';
+import { fetchOrg } from './org-api';
 import { fetchHostSupervisors, fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
@@ -108,7 +107,7 @@ import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, departmentPathLabel, factText, headerChips, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
@@ -239,7 +238,7 @@ export default function NodeDetailScreen({
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
-  /** 这个节点所在的 Hub 部门(空 = 没归属 / 旧 Hub 没有部门表)。逐个部门查到就停。 */
+  /** 这个节点所在部门的完整路径「A / B / C」(空 = 没归属 / 旧 Hub 没有部门表)。 */
   const [department, setDepartment] = useState<string | null>(null);
   const [nodeListState, setNodeListState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [pendingAction, setPendingAction] = useState<NodeLifecycleAction | null>(null);
@@ -386,20 +385,22 @@ export default function NodeDetailScreen({
     return () => { live = false; };
   }, [cfg, handStartedNodeId, onOverviewTab]);
 
+  // 只认节点显式归属 nodes.department_id(/api/nodes 已带)。不再按负责人推断:admin 名下的节点
+  // 会被一律标成 admin 所在部门,反而误导。没归属 ⇒「未分配」;旧 Hub / 没有部门表 ⇒ 这一行不出现。
+  const explicitDepartmentId = node?.department_id ?? null;
+  const [hasDepartments, setHasDepartments] = useState(false);
   useEffect(() => {
     let live = true;
     setDepartment(null);
     void (async () => {
       const org = await fetchOrg(cfg, cfg.networkId ?? '').catch(() => null);
-      if (!org || !org.departments.length) return;
-      for (const d of org.departments) {
-        const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
-        if (!live) return;
-        if (nodes.some(n => n.alias === alias)) { setDepartment(d.name); return; }
-      }
+      if (!live) return;
+      setHasDepartments(!!org && org.departments.length > 0);
+      const path = departmentPathLabel(org, explicitDepartmentId);
+      if (path) setDepartment(path);
     })();
     return () => { live = false; };
-  }, [cfg, alias]);
+  }, [cfg, explicitDepartmentId]);
 
   // board #585 —— 启动请求提交后:节点上线 / daemon 报失败 / 2 分钟没动静,各说一句。
   const watchOnline = state.kind === 'ready' && state.session.status !== 'offline';
@@ -494,7 +495,6 @@ export default function NodeDetailScreen({
   const control = node ? nodeControlView({ node, danger, online, hostname: node.hostname ?? s.hostname, daemons: hostDaemons, networkId: cfg.networkId }) : null;
   const backgroundTarget = sessionControlTarget(cfg, s, alias);
   const chipColor = statusColor(s.status, online);
-  const team = teamOf(s.alias);
   const executeLifecycle = async () => {
     if (!pendingAction || !node || actionBusy) return;
     setActionBusy(true);
@@ -517,7 +517,7 @@ export default function NodeDetailScreen({
 
   const facts: NodeInfoFact[] = [
     ...nodeInfoFacts(s, node, cfg.serverUrl),
-    { label: '所属 team', value: team },
+    { label: '所属部门', value: department ?? (hasDepartments && node ? '未分配' : undefined) },
     { label: '最后更新', value: formatTime(s.updated_at) },
     { label: '生命周期', value: node?.lifecycle_state },
     { label: '配置版本', value: typeof node?.config_revision === 'number' ? String(node.config_revision) : undefined },
@@ -601,7 +601,7 @@ export default function NodeDetailScreen({
               从军团点进来就能对上「它归谁」,不用再翻组织架构页)。 */}
           {department ? (
             <View testID="node-detail-department" style={[localStyles.chip, { backgroundColor: colors.subtleFill }]}>
-              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, maxWidth: 180 }} numberOfLines={1} ellipsizeMode="tail">{department}</Text>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, maxWidth: 180 }} numberOfLines={1} ellipsizeMode="tail">{department.split(' / ').pop()}</Text>
             </View>
           ) : null}
           {/* #460 降级:原因 + 修法在提示条里(悬停 / 点按)。 */}
