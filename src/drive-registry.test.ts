@@ -42,7 +42,14 @@ const expected = dockerEntries.map(([k, v]) => `${k.split('/')[0]}=${v.image}`).
 ck('docker matrix in drives.yml == docker entries in the registry', JSON.stringify(matrix) === JSON.stringify(expected), `${matrix.join(',')} vs ${expected.join(',')}`);
 ck('docker images exist (tests/<image>/Dockerfile)', dockerEntries.every(([, v]) => !!v.image && existsSync(join(ROOT, 'tests', v.image, 'Dockerfile'))));
 ck('stub shards run through scripts/run-drives.mjs, which reads the registry', /node scripts\/run-drives\.mjs --web web-export --out drive-out --shard \$\{\{ matrix\.shard \}\}\/8/.test(wf) && /shard: \[1, 2, 3, 4, 5, 6, 7, 8\]/.test(wf) && read('scripts/run-drives.mjs').includes("v.kind === 'stub'"));
-ck('drives.yml: on demand, nightly, and on PRs that touch app code', /workflow_dispatch:/.test(wf) && /schedule:\n\s+- cron:/.test(wf) && /pull_request:\n\s+paths:[\s\S]*?- 'src\/\*\*'/.test(wf));
+// 2026-11-10: the required drives checks must exist on EVERY PR (a path-filtered workflow that never
+// starts leaves them "expected" forever), so the PR trigger has no paths filter. The `changes` job
+// decides whether app code changed; only then do the export and shards really run.
+ck('drives.yml: on demand, nightly, and on PRs that touch app code', /workflow_dispatch:/.test(wf) && /schedule:\n\s+- cron:/.test(wf)
+  && /\n  pull_request:\n(?!\s+paths:)/.test(wf)
+  && /grep -qE '\^\(src\//.test(wf)
+  && /RUN_DRIVES: \$\{\{ needs\.changes\.outputs\.app \}\}/.test(wf)
+  && /- name: Run shard\n\s+if: env\.RUN_DRIVES == 'true'/.test(wf));
 ck('a shard that selects nothing fails (no green from an empty shard)', /no drives selected — refusing to pass/.test(read('scripts/run-drives.mjs')));
 
 // Stub = only the export + Chromium. A drive that reads a hub address / seed / bundle env var is not a stub.
