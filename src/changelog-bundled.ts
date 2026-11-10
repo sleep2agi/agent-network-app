@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.504:",
+  "- 修正 0.2.503 的一处失效：那一版的「这台节点在跑的版本」取错了字段，对所有节点都显示「版本未知」。现在显示节点自报的 agent-node 版本；CLI 版本只有新版 CLI 启动的节点会上报，缺的那一项会明确写「未上报」。",
+  "",
   "What's new in 0.2.503:",
   "- Fork 节点时，新节点名字自动按「XXX N号」往上编号（如从 2号 fork 自动填「TMA客户端欧7号」），也可以手改。",
   "- 源节点正在工作时提交 fork，会先等它这一轮结束再自动提交（以前会直接失败，只显示 unknown_rotation_required）；失败时提示最常见的原因。",
