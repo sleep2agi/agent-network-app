@@ -5,7 +5,7 @@
 # gap (bundled release dates) — some red for days, all invisible. A drive nobody runs rots.
 #
 # What runs here is decided by tests/drives.json, not by this file:
-#   stub   — needs only the web export + Chromium: 8 shards, on every PR that touches app code, nightly, on demand
+#   stub   — needs only the web export + Chromium: 8 shards, on every PR that touches app code (others pass as no-ops), nightly, on demand
 #   docker — builds its own bundle with its Dockerfile: nightly + on demand only (≈1–2 min of docker build each)
 #   hub / manual — not in CI (each entry says why: a seeded throwaway hub, a packaged binary …)
 # src/drive-registry.test.ts (npm test) fails when a drive is missing from the registry, so a new drive has to be put in
@@ -19,17 +19,11 @@ on:
   workflow_dispatch:
   schedule:
     - cron: '30 18 * * *'   # 02:30 UTC+8, after the evening releases
+  # Every PR triggers this workflow. `web export` and the 8 `stub drives` shards are REQUIRED
+  # checks; with a path filter, a PR that did not touch app code never started them and stayed
+  # blocked on "expected" checks forever (2026-11-10). The `changes` job decides whether the
+  # drives really run; otherwise the required jobs pass in seconds under their real names.
   pull_request:
-    paths:
-      - 'src/**'
-      - 'App.tsx'
-      - 'index.ts'
-      - 'assets/**'
-      - 'tests/**'
-      - 'package.json'
-      - 'package-lock.json'
-      - 'scripts/run-drives.mjs'
-      - '.github/workflows/drives.yml'
 
 concurrency:
   group: drives-${{ github.event.pull_request.number || github.ref }}
@@ -39,19 +33,54 @@ permissions:
   contents: read
 
 jobs:
-  export:
-    name: web export
+  changes:
+    name: drives scope
     runs-on: ubuntu-latest
-    timeout-minutes: 15
+    timeout-minutes: 5
+    outputs:
+      app: ${{ steps.scope.outputs.app }}
     steps:
       - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+        with:
+          fetch-depth: 0
+      - id: scope
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if [ "$EVENT" != "pull_request" ]; then echo "app=true" >> "$GITHUB_OUTPUT"; exit 0; fi
+          # App-code paths: the old pull_request.paths filter.
+          if git diff --name-only "$BASE...$HEAD" | grep -qE '^(src/|App\.tsx$|index\.ts$|assets/|tests/|package(-lock)?\.json$|scripts/run-drives\.mjs$|\.github/workflows/drives\.yml$)'; then
+            echo "app=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "app=false" >> "$GITHUB_OUTPUT"
+            echo "No app code changed: drives pass without running." >> "$GITHUB_STEP_SUMMARY"
+          fi
+
+  export:
+    name: web export
+    needs: changes
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      RUN_DRIVES: ${{ needs.changes.outputs.app }}
+    steps:
+      - if: env.RUN_DRIVES != 'true'
+        run: echo "No app code changed; skipping the web export."
+      - if: env.RUN_DRIVES == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN_DRIVES == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
-      - run: npm ci
-      - run: npx expo export -p web --output-dir web-export
-      - uses: actions/upload-artifact@v4
+      - if: env.RUN_DRIVES == 'true'
+        run: npm ci
+      - if: env.RUN_DRIVES == 'true'
+        run: npx expo export -p web --output-dir web-export
+      - if: env.RUN_DRIVES == 'true'
+        uses: actions/upload-artifact@v4
         with:
           name: web-export
           path: web-export
@@ -59,38 +88,48 @@ jobs:
 
   stub:
     name: stub drives (${{ matrix.shard }}/8)
-    needs: export
+    needs: [changes, export]
     # 钉 24.04:GitHub 把 ubuntu-latest 推到 26.04 后,Playwright 的 chromium 直接不支持
     # (ERROR: Playwright does not support chromium on ubuntu26.04-x64),8 个 shard 全红。
     runs-on: ubuntu-24.04
     timeout-minutes: 25
+    env:
+      RUN_DRIVES: ${{ needs.changes.outputs.app }}
     strategy:
       fail-fast: false
       matrix:
         shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-node@v4
+      - if: env.RUN_DRIVES != 'true'
+        run: echo "No app code changed; skipping this shard."
+      - if: env.RUN_DRIVES == 'true'
+        uses: actions/checkout@v4
+      - if: env.RUN_DRIVES == 'true'
+        uses: actions/setup-node@v4
         with:
           node-version: '22'
           cache: npm
       # Drives import a few app modules / fixtures from the repo (tests/test-layout-sweep/harness.mjs, src/*.ts text).
-      - run: npm ci
-      - uses: actions/download-artifact@v4
+      - if: env.RUN_DRIVES == 'true'
+        run: npm ci
+      - if: env.RUN_DRIVES == 'true'
+        uses: actions/download-artifact@v4
         with:
           name: web-export
           path: web-export
       # Same Playwright as the suites' Docker images (mcr.microsoft.com/playwright:v1.58.2-noble).
       - name: Playwright + Chromium
+        if: env.RUN_DRIVES == 'true'
         run: |
           npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.58.2
           /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
       - name: Run shard
+        if: env.RUN_DRIVES == 'true'
         env:
           PLAYWRIGHT_MODULE: /tmp/pw/node_modules/playwright/index.mjs
           LANG: zh_CN.UTF-8
         run: node scripts/run-drives.mjs --web web-export --out drive-out --shard ${{ matrix.shard }}/8
-      - if: always()
+      - if: always() && env.RUN_DRIVES == 'true'
         uses: actions/upload-artifact@v4
         with:
           name: drives-shard-${{ matrix.shard }}
