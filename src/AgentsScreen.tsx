@@ -7,7 +7,7 @@
 
 import * as Clipboard from 'expo-clipboard';
 import { fetchDepartmentNodes, fetchOrg } from './org-api';
-import { groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
+import { departmentLabelsByAlias, groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
 import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
@@ -35,6 +35,7 @@ import { fetchStatus, fetchUserMessages, takeStatusPrefetch, type HubConfig, typ
   ackUserMessages,
   fetchReplyInbox,
   fetchTasks,
+  fetchHubNodes,
 } from './api';
 import { loadSessionsCache, saveSessionsCache } from './storage';
 import RegisteredAgentsSection from './RegisteredAgentsSection';
@@ -561,19 +562,26 @@ export default function AgentsScreen({
   const groupsShown = groupsCollapsed ? [] : groupsMatched;
   const groupsHeaderHRef = useRef<number | null>(null);
   const groupsSectionHRef = useRef<number | null>(null);
-  // 部门归属:每个部门一次 nodes 查询(部门通常 <20 个,并发即可;任一失败就少一组,不阻塞列表)。
+  // 部门归属:优先用节点自己的部门(nodes.department_id,/api/nodes 一次拿全),分组标题是部门路径。
+  // admin 2026-11-10「组织架构在列表里没看见,还是前缀的样子」—— 旧做法按「负责人所在部门」查,
+  // 负责人没分部门时整张表为空 ⇒ 退回前缀分组。旧 Hub(/api/nodes 不带 department_id)才走旧查法。
   useEffect(() => {
     if (!org || !org.departments.length) { setDeptByAlias(new Map()); return; }
     let alive = true;
-    void Promise.all(org.departments.map(async d => {
-      const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
-      return { name: d.name, nodes };
-    })).then(groups => {
+    void (async () => {
+      const hub = await fetchHubNodes(cfg).catch(() => null);
+      const explicit = hub ? departmentLabelsByAlias(org, hub.nodes ?? []) : null;
+      if (explicit) { if (alive) setDeptByAlias(explicit); return; }
+      // 每个部门一次 nodes 查询(部门通常 <20 个,并发即可;任一失败就少一组,不阻塞列表)。
+      const groups = await Promise.all(org.departments.map(async d => {
+        const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
+        return { name: d.name, nodes };
+      }));
       if (!alive) return;
       const map = new Map<string, string>();
       for (const g of groups) for (const n of g.nodes) if (n.alias && !map.has(n.alias)) map.set(n.alias, g.name);
       setDeptByAlias(map);
-    }).catch(() => { if (alive) setDeptByAlias(new Map()); });
+    })().catch(() => { if (alive) setDeptByAlias(new Map()); });
     return () => { alive = false; };
   }, [org, cfg]);
 

@@ -182,3 +182,20 @@ export function orgPerms(data: OrgData, managed: ReadonlySet<string> | null): Or
     candidates: people => people.filter(p => scoped(p.user_id)),
   };
 }
+
+/** alias → 部门路径「TMAI / TMWork」,只认节点显式归属 nodes.department_id(/api/nodes)。
+ *  没有归属 / 部门已删的节点不进 Map(列表里归到「未归属」)。返回 null = Hub 太旧,
+ *  /api/nodes 根本不带 department_id 这个字段 ⇒ 调用方退回旧的按负责人查法。 */
+export function departmentLabelsByAlias(
+  data: OrgData,
+  nodes: readonly { alias?: string | null; department_id?: string | null }[],
+): Map<string, string> | null {
+  if (!nodes.some(n => n && Object.prototype.hasOwnProperty.call(n, 'department_id'))) return null;
+  const out = new Map<string, string>();
+  for (const n of nodes) {
+    if (!n.alias || !n.department_id) continue;
+    const label = deptPathLabel(data, n.department_id);
+    if (label) out.set(n.alias, label);
+  }
+  return out;
+}

@@ -1,6 +1,6 @@
 // 组织架构(board #419)纯逻辑 + 接口 + 接线。ck 风格,自执行。
 import { readFileSync } from 'node:fs';
-import { childrenOf, deleteBlocker, departmentOf, deptPathLabel, flattenTree, groupPeopleByDepartment, membersIn, pathTo, searchOrg, subtreeIds, totalMembers, type OrgData } from './org-model';
+import { childrenOf, deleteBlocker, departmentOf, deptPathLabel, departmentLabelsByAlias, flattenTree, groupPeopleByDepartment, membersIn, pathTo, searchOrg, subtreeIds, totalMembers, type OrgData } from './org-model';
 import { fetchOrg, createDepartment, setMemberDepartment, orgErrorText } from './org-api';
 
 let p = 0, n = 0;
@@ -81,6 +81,19 @@ ck('添加子部门表单:部门名称* / 上级部门 / 部门 ID / 部门负�
 // 部门群(RFC-042,#457 第 4 步)起做了:但两处入口都要过功能门(旧 Hub 没有群接口 → 不出现)和权限。
 ck('部门群:入口都过功能门 + 权限', (chart.match(/groupsOn && [^\n]*canManageDeptGroup\(head\?\.managed \?\? null, /g) ?? []).length === 2);
 ck('「人员」按部门分组(旧 Hub 不分)', agents.includes('groupPeopleByDepartment(org, peopleShown.rows)') && agents.includes("t('people.noDept')"));
+// admin 2026-11-10:列表按节点自己的部门分组(nodes.department_id),标题是部门路径
+{
+  const data = { departments: [D('a', 'TMAI', null), D('b', 'TMWork', 'a'), D('c', 'TM基建', 'a')], members: [] };
+  const m = departmentLabelsByAlias(data, [
+    { alias: 'x', department_id: 'b' }, { alias: 'y', department_id: 'a' }, { alias: 'z', department_id: null }, { alias: 'w', department_id: 'gone' },
+  ]);
+  ck('显式部门:路径', m?.get('x') === 'TMAI / TMWork');
+  ck('显式部门:根部门', m?.get('y') === 'TMAI');
+  ck('显式部门:没归属不进表', m?.has('z') === false);
+  ck('显式部门:部门已删不进表', m?.has('w') === false);
+  ck('旧 Hub 不带字段 ⇒ null(退回旧查法)', departmentLabelsByAlias(data, [{ alias: 'x' }]) === null);
+}
 
 console.log(`${p}/${n} passed`);
 process.exit(p === n ? 0 : 1);
+
