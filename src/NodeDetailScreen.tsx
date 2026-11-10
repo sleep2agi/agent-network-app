@@ -68,8 +68,7 @@ import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import * as Clipboard from 'expo-clipboard';
-import { fetchDepartmentNodes, fetchOrg } from './org-api';
-import { pathTo } from './org-model';
+import { fetchOrg } from './org-api';
 import { fetchHostSupervisors, fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
@@ -386,29 +385,22 @@ export default function NodeDetailScreen({
     return () => { live = false; };
   }, [cfg, handStartedNodeId, onOverviewTab]);
 
+  // 只认节点显式归属 nodes.department_id(/api/nodes 已带)。不再按负责人推断:admin 名下的节点
+  // 会被一律标成 admin 所在部门,反而误导。没归属 ⇒「未分配」;旧 Hub / 没有部门表 ⇒ 这一行不出现。
   const explicitDepartmentId = node?.department_id ?? null;
+  const [hasDepartments, setHasDepartments] = useState(false);
   useEffect(() => {
     let live = true;
     setDepartment(null);
     void (async () => {
       const org = await fetchOrg(cfg, cfg.networkId ?? '').catch(() => null);
-      if (!live || !org || !org.departments.length) return;
-      // 先认节点显式归属(nodes.department_id);没有才退回「按负责人所在部门」逐个查,取最深的那个。
-      let deptId: string | null = explicitDepartmentId && org.departments.some(d => d.id === explicitDepartmentId) ? explicitDepartmentId : null;
-      if (!deptId) {
-        let depth = -1;
-        for (const d of org.departments) {
-          const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
-          if (!live) return;
-          const dDepth = pathTo(org, d.id).length;
-          if (nodes.some(n => n.alias === alias) && dDepth > depth) { deptId = d.id; depth = dDepth; }
-        }
-      }
-      const path = departmentPathLabel(org, deptId);
-      if (live && path) setDepartment(path);
+      if (!live) return;
+      setHasDepartments(!!org && org.departments.length > 0);
+      const path = departmentPathLabel(org, explicitDepartmentId);
+      if (path) setDepartment(path);
     })();
     return () => { live = false; };
-  }, [cfg, alias, explicitDepartmentId]);
+  }, [cfg, explicitDepartmentId]);
 
   // board #585 —— 启动请求提交后:节点上线 / daemon 报失败 / 2 分钟没动静,各说一句。
   const watchOnline = state.kind === 'ready' && state.session.status !== 'offline';
@@ -525,7 +517,7 @@ export default function NodeDetailScreen({
 
   const facts: NodeInfoFact[] = [
     ...nodeInfoFacts(s, node, cfg.serverUrl),
-    { label: '所属部门', value: department ?? undefined },
+    { label: '所属部门', value: department ?? (hasDepartments && node ? '未分配' : undefined) },
     { label: '最后更新', value: formatTime(s.updated_at) },
     { label: '生命周期', value: node?.lifecycle_state },
     { label: '配置版本', value: typeof node?.config_revision === 'number' ? String(node.config_revision) : undefined },
