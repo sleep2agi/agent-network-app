@@ -48,6 +48,7 @@
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import NodeAdoptionControls from './NodeAdoptionControls';
+import { installHint } from './node-install-hint';
 import NodeControlCard from './NodeControlCard';
 import NodeSessionControl from './NodeSessionControl';
 import { sessionControlTarget } from './node-session-control';
@@ -535,6 +536,8 @@ export default function NodeDetailScreen({
   const chrome = nodePageChrome({ section, keyboardVisible });
   const pageScrolls = nodePageScrolls(section);
   const runtimeFacts = modelSectionFacts(facts);
+  // #4463 —— 用节点自报的两个版本拼「当前这台跑的」安装命令；缺一个就不给命令。
+  const install = installHint({ cliVersion: node?.launched_by_cli_version, nodeVersion: node?.agent_node_version });
 
   // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
   const headerCard = (
@@ -776,6 +779,21 @@ export default function NodeDetailScreen({
         <SectionTitle title="模型与运行时" hint={readOnly ? '可改模型与 Codex 思考程度,会经 Hub 下发到节点。' : '改模型会让节点重启一次;思考程度热更新,不经过大模型。'} />
         <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
           {runtimeFacts.map(fact => <FactCell key={fact.label} fact={fact} columns={factColumns} />)}
+        </View>
+        {/* #4463 —— 版本配对不成立时，用户最需要的是一行能粘贴的命令。
+            版本只来自节点自报；缺一个就只说「未知」+ 指向 anet pair，不编造命令。 */}
+        <View testID="node-install-hint" style={[card, { marginTop: spacing.sm, gap: spacing.xs }]}>
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>按这台节点自报的版本重装</Text>
+          {install.kind === 'ready' ? (
+            <>
+              <Text selectable testID="node-install-hint-command" style={{ color: colors.text, fontSize: typeScale.small, lineHeight: 18 }}>{install.command}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{install.note}</Text>
+            </>
+          ) : (
+            <Text testID="node-install-hint-unknown" style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>
+              {`版本未知（${install.missing.map(m => m === 'cli' ? 'CLI' : 'agent-node').join(' / ') || '上报值不合法'}）。${install.note}`}
+            </Text>
+          )}
         </View>
         {/* board #694 —— 节点操作自然会在这里找:一句指路,点了回概览。 */}
         {control ? (
