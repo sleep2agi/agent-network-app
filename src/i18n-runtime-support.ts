@@ -70,8 +70,8 @@ registerTranslations({
   'runtimeSupport.badge.unknown': ['本机未检测', 'Not checked'],
   'runtimeSupport.badge.undeclared': ['未声明', 'Not declared'],
   'runtimeSupport.upgrade.npm': [
-    '这台 daemon 还没有上报完整的 runtime 探测或建节点能力。在那台机器上执行 npm install -g @sleep2agi/agent-node@preview，然后重启 daemon。',
-    'This daemon has not reported runtime readiness or node-creation capability. On that machine run npm install -g @sleep2agi/agent-node@preview, then restart the daemon.',
+    '这台 daemon 还没有上报完整的 runtime 探测或建节点能力。在目标机器先执行 anet --version 查看 CLI 版本；如果 anet 拒绝启动，请执行它打印的 CLI 与 agent-node 精确配对安装命令，然后重启 daemon。',
+    'This daemon has not reported runtime readiness or node-creation capability. On the target machine, first run anet --version to check the CLI version. If anet refuses to start, run the exact paired CLI and agent-node install command it prints, then restart the daemon.',
   ],
   'runtimeSupport.upgrade.hub': [
     '当前 Hub 没有 host_supervisor 列表，看不到这台机器的探测。升级 Hub 到 commhub-server@0.9.0-preview.8 以上后再看。',

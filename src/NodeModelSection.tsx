@@ -8,7 +8,20 @@ import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 
-import { variantAfterModelSwitch, variantChoices, variantValueError, variantWritable } from './node-variant-patch';
+import {
+  describeVariantOutcome,
+  variantAfterModelSwitch,
+  variantChoices,
+  variantPhaseBusy,
+  variantPhaseText,
+  variantValueError,
+  variantWritable,
+  VARIANT_MAX_POLLS,
+  VARIANT_POLL_MS,
+  VARIANT_TIMEOUT_MS,
+  type VariantChangePhase,
+  type VariantOutcome,
+} from './node-variant-patch';
 import { fetchHubNodes, fetchNodeConfig, pollOpenCodeCatalog, queueOpenCodeCatalog, updateNodeConfig, type HubConfig, type HubNode, type NodeConfigRead } from './api';
 import { styles } from './app-styles';
 import {
@@ -73,6 +86,28 @@ async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string
   }
 }
 
+/**
+ * #4099 一次档位写入的读回判定（观测窗口与「再检查一次」共用，避免两条判定走样）。
+ *
+ * 双条件：Hub 的 `last_update` 必须真的 applied 且 update_id 与本次提交对齐，
+ * **且**顶层 `modelVariant` 已经等于目标（清除档位时目标是 null）。
+ * 顶层 modelVariant 才是 server 的真相；config_snapshot 的兼容投影滞后更多，不当判据。
+ */
+function variantOutcomeOf(
+  v: NodeConfigRead | null,
+  write: { target: string | null; effectiveModel?: string | null; updateId?: string },
+): VariantOutcome {
+  const ack = lastUpdateApplied(v?.last_update, write.updateId, write.effectiveModel);
+  return describeVariantOutcome({
+    applied: ack.applied,
+    variantMatches: !!v && v.modelVariant !== undefined && v.modelVariant === write.target,
+    target: write.target,
+    // 有 error 就原样给；没有就把 last_update 的对齐原因说清楚（比一个裸 status 好读）。
+    lastError: v?.last_update?.error ?? (ack.applied ? null : ack.reason),
+    lastStatus: v?.last_update?.status ?? null,
+  });
+}
+
 export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiveConfig }: { cfg: HubConfig; node: HubNode; runtimeVersion?: string | null; onEffectiveConfig?: (value: NodeConfigRead | null) => void }) {
   const scope = useMemo(() => ({}), [cfg, node.node_id]);
   const currentScope = useRef<object | null>(scope);
@@ -92,6 +127,12 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
   const [currentCopied, setCurrentCopied] = useState(false);
   const [custom, setCustom] = useState('');
   const [phase, setPhase] = useState<ModelChangePhase>({ kind: 'idle' });
+  // #4099 档位写入走自己那条状态机：它不改 model，确认条件是 last_update=applied
+  // **且**顶层 modelVariant === 目标 —— 复用 model 那条（按 model_effective 确认）会假成功。
+  // 文案/忙碌判定都在 node-variant-patch.ts（纯，可测）。
+  const [variantPhase, setVariantPhase] = useState<VariantChangePhase>({ kind: 'idle' });
+  // 观测窗口的「一次提交」凭据（scope 用对象身份，切节点即失效）。
+  const [variantWatch, setVariantWatch] = useState<{ scope: object; target: string | null; effectiveModel: string; updateId?: string } | null>(null);
   const v2 = isOpenCodeV2Node(node);
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
@@ -133,6 +174,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
   useEffect(() => {
     setPhase({ kind: 'idle' }); setV2Models(null); setV2VariantMap(null); setReadFailed(false);
     setPicked(''); setCustom(''); setFilter('');
+    setVariantPhase({ kind: 'idle' }); setVariantWatch(null);
   }, [scope]);
 
   useEffect(() => {
@@ -250,9 +292,52 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
     return () => { active = false; clearTimeout(timer); clearTimeout(deadlineTimer); };
   }, [requested, baseRevision, cfg, node.node_id, scope]);
 
+  // ── #4099 档位写入的观测窗口 ───────────────────────────────────────────────
+  // 2026-11-10 真节点实测：写档位 Hub 很快回 applied、会话 ~20s 内翻转，但 Hub 快照的
+  // 顶层 modelVariant 要等下一次心跳（几十秒）才跟上。以前这里提交后只读一次就下结论，
+  // 于是**成功的切换**被报成红色失败文案（0.2.497 之前那条）。
+  // 现在与改模型同构：窗口内反复读，双条件都满足才算成功；窗口只读，绝不重发。
+  const activeVariantWatch = variantWatch && variantWatch.scope === scope ? variantWatch : null;
+  useEffect(() => {
+    if (!activeVariantWatch) return;
+    const watch = activeVariantWatch;
+    const token = scope;
+    let active = true;
+    let current: Extract<VariantChangePhase, { kind: 'verifying' }> = { kind: 'verifying', target: watch.target, polls: 0 };
+    let timer: ReturnType<typeof setTimeout> | null = null;
+    const deadline = Date.now() + VARIANT_TIMEOUT_MS;
+    const outcomeOf = (v: NodeConfigRead | null): VariantOutcome => variantOutcomeOf(v, watch);
+    const settle = (v: NodeConfigRead | null) => {
+      if (!active || currentScope.current !== token) return;
+      active = false;
+      if (timer) clearTimeout(timer);
+      const outcome = outcomeOf(v);
+      setVariantPhase({ kind: 'result', target: watch.target, effectiveModel: watch.effectiveModel, updateId: watch.updateId, outcome });
+      setVariantWatch(null);
+      if (outcome.kind === 'applied' && v) callback.current?.(v);
+    };
+    const tick = async () => {
+      if (!active || currentScope.current !== token) return;
+      let v: NodeConfigRead | null = null;
+      let failed = false;
+      try { v = await fetchNodeConfig(cfg, node.node_id); } catch { failed = true; }
+      if (!active || currentScope.current !== token) return;
+      if (!failed) setView(v);
+      setReadFailed(failed);
+      if (!failed && v && outcomeOf(v).kind === 'applied') { settle(v); return; }
+      const polls = current.polls + 1;
+      if (polls >= VARIANT_MAX_POLLS || Date.now() >= deadline) { settle(failed ? null : v); return; }
+      current = { kind: 'verifying', target: watch.target, polls };
+      setVariantPhase(current);
+      timer = setTimeout(tick, VARIANT_POLL_MS);
+    };
+    timer = setTimeout(tick, VARIANT_POLL_MS);
+    return () => { active = false; if (timer) clearTimeout(timer); };
+  }, [activeVariantWatch, cfg, node.node_id, scope]);
+
   // V2 共存节点上纯 model 是 hot 变更:不受 config_update_capable 限制(它只挡重启级).
   const availability = modelControlAvailability(view === undefined ? null : view, { hotModel: v2 });
-  const busy = phaseIsBusy(phase);
+  const busy = phaseIsBusy(phase) || variantPhaseBusy(variantPhase);
   // 机器上报了 V2 目录就用它;没上报(常见:刚接入/还没轮询到)就退回内置候选,
   // 否则「建议」里只剩「当前」那一个 chip,用户会以为没法切换(admin 2026-11-01 截图)。
   const v2Catalog = v2Models ?? [];
@@ -297,6 +382,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
     const token = scope;
     writeLock.current = token;
     ++readGeneration.current;
+    // 换模型就把档位那条状态收起来：两条状态机不同时挂在界面上（避免旧结论误导）。
+    setVariantPhase({ kind: 'idle' });
+    setVariantWatch(null);
     setPhase({ kind: 'submitting', requested: model });
     try {
       const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: view.config_revision, patch: { model } });
@@ -343,13 +431,22 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
   const applyVariant = async (nextVariant: string | null) => {
     if (!view || busy || !variantGate.ok || writeLock.current === scope) return;
     const err = variantValueError(nextVariant);
-    if (err) { setPhase({ kind: 'error', message: err }); return; }
+    if (err) {
+      setVariantPhase({ kind: 'result', target: nextVariant, outcome: { kind: 'failed', tone: 'error', text: `失败：${err}`, code: err } });
+      return;
+    }
     const effectiveModel = view.model_effective;
-    if (!effectiveModel) { setPhase({ kind: 'error', message: '生效模型未知，不能写档位' }); return; }
+    if (!effectiveModel) {
+      setVariantPhase({ kind: 'result', target: nextVariant, outcome: { kind: 'failed', tone: 'error', text: '失败：生效模型未知，不能写档位', code: 'model_effective_unknown' } });
+      return;
+    }
     const token = scope;
     writeLock.current = token;
     ++readGeneration.current;
-    setPhase({ kind: 'submitting', requested: effectiveModel });
+    // 档位这条和模型那条互斥：开始写档位就把模型那边的旧结论清掉。
+    setPhase({ kind: 'idle' });
+    setVariantWatch(null);
+    setVariantPhase({ kind: 'submitting', target: nextVariant });
     try {
       const res = await updateNodeConfig(cfg, {
         nodeId: node.node_id,
@@ -359,14 +456,19 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
       });
       if (currentScope.current !== token) return;
       if (res.ok) {
-        const after = await reload(false);
-        if (currentScope.current !== token) return;
-        const confirmed = lastUpdateApplied(after?.last_update, res.update_id, effectiveModel).applied
-          && after?.model_effective === effectiveModel && after?.modelVariant !== undefined && after.modelVariant === nextVariant;
-        callback.current?.(confirmed ? after : null);
-        setPhase(confirmed ? { kind: 'applied', model: effectiveModel } : { kind: 'error', message: '已接受，但当前档位未确认' });
-      } else if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); }
-      else setPhase({ kind: 'error', message: res.error });
+        // 回 ok 只是 ack：顶层 modelVariant 要等下一次心跳才跟上。交给 60s 观测窗口确认，
+        // 双条件都满足才 applied；窗口内只读，绝不重发（节点自己的 writer 已经等过一轮）。
+        setVariantWatch({ scope: token, target: nextVariant, effectiveModel, updateId: res.update_id });
+        return;
+      }
+      if (res.conflict) { void reload(); setPhase({ kind: 'conflict' }); setVariantPhase({ kind: 'idle' }); return; }
+      // variant_busy 不是失败：这一轮还在跑，档位会对下一轮生效（分类在纯模块里）。
+      setVariantPhase({
+        kind: 'result',
+        target: nextVariant,
+        effectiveModel,
+        outcome: describeVariantOutcome({ applied: false, variantMatches: false, target: nextVariant, lastError: res.error }),
+      });
     } finally { if (writeLock.current === token) writeLock.current = null; }
   };
 
@@ -377,6 +479,10 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
     if (v.model === currentModel) { setPhase({ kind: 'error', message: '和当前模型相同,无需修改' }); return; }
     await applyModel(v.model);
   };
+
+  // 档位那条状态机的展示文本/色调（idle 是空串，不渲染）。
+  const variantText = variantPhaseText(variantPhase);
+  const variantTone = variantPhase.kind === 'result' ? variantPhase.outcome.tone : 'neutral';
 
   return (
     <View style={{ paddingTop: spacing.xl }}>
@@ -591,6 +697,30 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
           <Text style={{ color: phase.kind === 'applied' ? colors.running : phase.kind === 'error' || phase.kind === 'timeout' || phase.kind === 'conflict' ? colors.failed : colors.textMuted, fontSize: 12, lineHeight: 18 }}>
             {phaseText(phase)}
           </Text>
+        ) : null}
+        {/* #4099 档位：等待/成功/滞后/忙碌/失败各有各的话，中性态一律不上红字。 */}
+        {variantText ? (
+          <Text testID="node-variant-status" style={{ color: variantTone === 'success' ? colors.running : variantTone === 'error' ? colors.failed : colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+            {variantText}
+          </Text>
+        ) : null}
+        {variantPhase.kind === 'result' && variantPhase.outcome.kind === 'lagging' && !busy ? (
+          <Pressable accessibilityRole="button" testID="node-variant-recheck"
+            onPress={async () => {
+              const receipt = variantPhase;
+              const token = scope;
+              try {
+                const v = await fetchNodeConfig(cfg, node.node_id);
+                if (currentScope.current !== token) return;
+                if (v) setView(v);
+                const outcome = variantOutcomeOf(v, receipt);
+                setVariantPhase({ ...receipt, outcome });
+                if (outcome.kind === 'applied' && v) callback.current?.(v);
+              } catch { /* 读失败就保留原结论：再点一次即可，不重发 */ }
+            }}
+            style={state => [{ alignSelf: 'flex-start' }, ((state as { hovered?: boolean }).hovered || state.pressed) && { opacity: 0.7 }]}>
+            <Text style={{ color: colors.accent, fontSize: 12 }}>再检查一次</Text>
+          </Pressable>
         ) : null}
         {/* 0.486:超时/报错/冲突时给一行可复制的诊断(只含 node_id/runtime/from/target,不含 token)。
             用户贴回来这一行,运维就不用再问五个问题。 */}

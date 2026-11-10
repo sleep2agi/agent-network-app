@@ -1,0 +1,77 @@
+# 安卓镜像落后闸门:desktop-v<ver> 已发布,而 android/latest/VERSION 还停在旧版本?
+# 2026-11-09 实测:release desktop-v0.2.497 已发布(23:54Z),镜像指针还是 0.2.494,
+# 2026-11-10 当天 modelscope-android-publish 一次都没跑过。应用内更新器读的就是这个指针,
+# 于是用户拿到的包落后三个版本,而所有 CI 都是绿的 —— 因为「发布 release」和「推进安卓镜像」
+# 是两步人工操作,中间没有任何东西比对过。
+#
+# 这道闸每小时做一次比对,不一致就自己把发布补上:
+#   1. 本仓最新已发布(non-draft/non-prerelease)release desktop-vX.Y.Z + 其提交 sha;
+#   2. 匿名读镜像文件本身 android/latest/VERSION(不用任何缓存副本);
+#   3. 一致 → 一行结论绿;不一致 → 继续;
+#   4. 找 head_sha == 该 release 提交的**成功** android-build run(main 上),没有就红;
+#   5. dispatch modelscope-android-publish.yml,**并证明真的出现了一个新 run**;
+#   6. 再看镜像是否跟上(≤20 分钟),跟不上就红。
+#
+# 🔴 为什么要「证明 run 出现」:`gh workflow run` 成功只代表请求被接受(HTTP 204)。
+#    2026-11-09 有过把 dispatch 发到 fork 的情况:204、命令成功、上游一个 run 都没有,
+#    大家以为发完了。所以脚本先记下最新 run id,dispatch 之后只认 id 更大的新 run。
+#
+# 失败文案在 scripts/android-mirror-lag-gate.mjs 里,红灯第一行就能分清是哪一种:
+#   MIRROR-GATE[a] 该 release 提交上没有成功的 android-build run(什么都不 dispatch)
+#   MIRROR-GATE[b] dispatch 被接受但没有 run 出现(最可能是发到了 fork)
+#   MIRROR-GATE[c] run 跑完了但镜像没动(发布本身失败,看 run 日志)
+#   MIRROR-GATE[d] run 还在跑,镜像只是还没跟上(机制没坏,只是比 20 分钟慢)
+#
+# 布局与人工发布步骤见 docs/desktop-release-sop.md 第 10 节。
+name: android mirror lag gate
+
+on:
+  schedule:
+    # 每小时 :23(避开整点的 release / mirror 定时任务,也避开 modelscope-mirror 的 :11/:41)。
+    - cron: '23 * * * *'
+  workflow_dispatch:
+    inputs:
+      dry_run:
+        description: '只比对并报告,不 dispatch 发布(人工核对时用)'
+        required: false
+        type: boolean
+        default: false
+
+# actions: write 是 dispatch 发布 workflow 需要的;contents: read 用来读 release 与 run。
+# 除此之外没有任何凭据。
+permissions:
+  actions: write
+  contents: read
+
+# 自己一个组:和 modelscope-mirror / modelscope-android-publish 分开,否则一次镜像 cron
+# 会把等待中的发布挤掉(GitHub 每个组只留一个 pending run)。
+concurrency:
+  group: android-mirror-lag-gate
+  cancel-in-progress: false
+
+jobs:
+  gate:
+    # 只从 main 上跑:这条 workflow 会**真的**推进安卓镜像,不能让任意分支的一次
+    # 手动 dispatch 决定线上版本。
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    # dispatch 等待 5 分钟 + 镜像等待 20 分钟 + 余量。
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4.4.0
+        with:
+          node-version: 20
+
+      # 选择规则(release / run / dispatch 证明)先离线验一遍:光靠"这小时的镜像刚好一致"
+      # 是看不出判定逻辑坏没坏的。
+      - name: Self-test the selection rules (offline)
+        run: node scripts/android-mirror-lag-gate.mjs --self-test
+
+      - name: Compare the newest release with android/latest/VERSION (and publish if behind)
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
+        run: node scripts/android-mirror-lag-gate.mjs

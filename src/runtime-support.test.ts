@@ -121,10 +121,10 @@ ck('an old hub stays an upgrade, not an empty daemon', hostContextFromSupervisor
 
 setLanguagePreference('zh');
 ck('zh tab and banner stay the agreed words', t('backendPending.tab.runtime') === 'Runtime 支持' && t('server.pendingTitle.runtime') === 'Runtime 支持' && t('backendPending.banner') === '演示数据 · 后端开发中');
-ck('zh npm upgrade names the package', t('runtimeSupport.upgrade.npm').includes('npm install -g @sleep2agi/agent-node@preview') && t('runtimeSupport.upgrade.npm').includes('重启 daemon'));
+ck('zh upgrade asks for the paired versions', t('runtimeSupport.upgrade.npm').includes('anet --version') && t('runtimeSupport.upgrade.npm').includes('精确配对安装命令') && !t('runtimeSupport.upgrade.npm').includes('agent-node@'));
 ck('zh feature title is the product matrix', t('runtimeSupport.section.features') === 'ANet 功能支持' && t('runtimeSupport.feature.daemon_lifecycle') === 'Daemon 建节点/生命周期');
 setLanguagePreference('en');
-ck('en tab is Runtime support', t('backendPending.tab.runtime') === 'Runtime support' && t('runtimeSupport.level.partial') === 'Partial' && t('runtimeSupport.upgrade.npm').includes('npm install -g @sleep2agi/agent-node@preview'));
+ck('en tab and paired upgrade guidance', t('backendPending.tab.runtime') === 'Runtime support' && t('runtimeSupport.level.partial') === 'Partial' && t('runtimeSupport.upgrade.npm').includes('anet --version') && t('runtimeSupport.upgrade.npm').includes('exact paired') && !t('runtimeSupport.upgrade.npm').includes('agent-node@'));
 const noteKeys = new Set(runtimeSupportEntries({ kind: 'missing' }).flatMap(row => row.features.map(cell => cell.noteKey)));
 ck('every catalog note translates', [...noteKeys].every(key => t(key) !== key && !t(key).includes('{')));
 setLanguagePreference('system');

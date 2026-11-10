@@ -4,8 +4,8 @@
 import { readFileSync } from 'node:fs';
 import {
   checkNodeName, describeNodeNameRejection, folderError, isValidNodeName, normalizeNodeName,
-  NODE_FOLDER_RE, NODE_NAME_CASES, NODE_NAME_HINT, NODE_NAME_AGENT_NODE_UPGRADE_CMD, NODE_NAME_HUB_DOCS_URL,
-  NODE_NAME_HUB_UPGRADE_CMD, NODE_NAME_MIN_AGENT_NODE, NODE_NAME_MIN_HUB, OLD_DAEMON_NAME_REJECTED, OLD_HUB_NAME_REJECTED,
+  NODE_FOLDER_RE, NODE_NAME_CASES, NODE_NAME_HINT, NODE_NAME_HUB_DOCS_URL,
+  NODE_NAME_HUB_UPGRADE_CMD, NODE_NAME_MIN_HUB, OLD_DAEMON_NAME_REJECTED, OLD_HUB_NAME_REJECTED,
 } from './node-name';
 import { buildCreateNodeSpec } from './create-node-request';
 import { createRequestVerdict } from './create-request-status';
@@ -48,9 +48,10 @@ check('hub upgrade message names min version, npm command, docs, and lowercase f
   && OLD_HUB_NAME_REJECTED.includes(NODE_NAME_HUB_UPGRADE_CMD)
   && OLD_HUB_NAME_REJECTED.includes(NODE_NAME_HUB_DOCS_URL)
   && OLD_HUB_NAME_REJECTED.includes('小写英文'));
-check('daemon upgrade message names min agent-node, npm command, and lowercase fallback',
-  OLD_DAEMON_NAME_REJECTED.includes(NODE_NAME_MIN_AGENT_NODE)
-  && OLD_DAEMON_NAME_REJECTED.includes(NODE_NAME_AGENT_NODE_UPGRADE_CMD)
+check('daemon upgrade message requires paired versions and offers lowercase fallback',
+  OLD_DAEMON_NAME_REJECTED.includes('anet --version')
+  && OLD_DAEMON_NAME_REJECTED.includes('精确配对安装命令')
+  && !OLD_DAEMON_NAME_REJECTED.includes('agent-node@')
   && OLD_DAEMON_NAME_REJECTED.includes('小写英文'));
 check('node_name_invalid for a locally-invalid name → no rewrite (raw)', describeNodeNameRejection('node_name_invalid', 'a/b', 'hub') === null);
 check('other errors → null', describeNodeNameRejection('runtime_invalid', '测试', 'hub') === null && describeNodeNameRejection(undefined, '测试', 'hub') === null);
