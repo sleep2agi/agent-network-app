@@ -27,6 +27,19 @@ export function forkNewFolderStepLabel(step: ForkNewFolderStep): string {
   }
 }
 
+/** Pure. 「目录」那一行的说明：新目录 = 源目录旁边的 `<源目录名>-N`（daemon 从 2 起取第一个空着的号；
+ * 源目录名本身以 `-数字` 结尾时从主干往后数，与 agent-node clone-node.ts 的 planCloneWorkdir 同一规则）。 */
+export function forkFolderHint(folder: ForkFolder, sourcePath: string | null | undefined): string {
+  const path = (sourcePath ?? '').trim().replace(/[\\/]+$/, '');
+  if (folder === 'same') return path ? `目录：${path}（与源节点同一个目录，接续原会话）` : '目录：与源节点同一个目录（接续原会话）';
+  if (!path) return '目录：源节点目录旁边新建 `<源目录名>-N`（N 从 2 起，取第一个没被占用的号）';
+  const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
+  const parent = cut >= 0 ? path.slice(0, cut + 1) : '';
+  const name = cut >= 0 ? path.slice(cut + 1) : path;
+  const stem = name.replace(/-\d+$/, '') || name;
+  return `新目录：${parent}${stem}-N（N 从 2 起，取第一个没被占用的号，如 ${stem}-2）`;
+}
+
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…（已截断）` : s);
 
 /** Pure. 源节点最近的对话（旧 → 新）压成一条交接消息；总长有上限，最老的先丢。 */
