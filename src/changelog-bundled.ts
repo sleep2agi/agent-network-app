@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.503:",
+  "- 节点详情「模型与运行时」新增「这台节点在跑的版本」：直接显示节点自报的 CLI 版本与 agent-node 版本（以前要回 Hub 页面翻）。要装成精确配对，请在那台机器执行 `anet pair` —— 客户端不会替你拼安装命令：两个包的发布通道各自推进，拼出来的组合不一定成立。",
+  "",
   "What's new in 0.2.502:",
   "- 新建节点失败时的提示更可操作了：以前只说「结果未知，禁止自动重放」，现在会告诉你下一步——到节点列表确认有没有这个节点；确认没有再重新发起。",
   "",
