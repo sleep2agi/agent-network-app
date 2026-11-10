@@ -9,7 +9,6 @@ on:
       - 'src-tauri/tauri.conf.json'
       - 'src-tauri/windows/**'
       - 'tests/windows-installer-brand/**'
-      - 'package-lock.json'
       - '.github/workflows/windows-installer-brand.yml'
   workflow_dispatch:
 

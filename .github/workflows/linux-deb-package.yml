@@ -1,12 +1,9 @@
 name: Linux deb package (TEST ONLY)
 on:
   pull_request:
-    types: [opened, synchronize, reopened, ready_for_review]
+    types: [opened, synchronize, reopened, ready_for_review, labeled]
     paths:
       - 'src-tauri/**'
-      - 'src/NodeDetailScreen.tsx'
-      - 'src/CreateNodeWizardScreen.tsx'
-      - 'src/opencode-create-options.ts'
       - 'tests/opencode-v2-create/**'
       - 'tests/node-confirm-contrast/**'
       - 'local-hub-sidecar/**'
@@ -30,8 +27,8 @@ on:
       - 'scripts/seed-previous-local-hub.mjs'
       - 'scripts/with-linux-test-keyring.sh'
       - '.github/workflows/linux-deb-package.yml'
-      - 'package.json'
-      - 'package-lock.json'
+  schedule:
+    - cron: '50 18 * * *'
   workflow_dispatch:
     inputs:
       focus:
@@ -59,7 +56,7 @@ jobs:
     # Draft integration is exercised explicitly by the bounded current-pair job.
     # Preserve main's package/native-auth baseline on ready PRs. The added
     # old120/162/128 lifecycle extension is explicit manual historical replay.
-    if: (github.event_name != 'pull_request' || github.event.pull_request.draft == false) && (github.event_name != 'workflow_dispatch' || (inputs.focus != 'current-v1-registration' && inputs.focus != 'current-v2-create'))
+    if: (github.event_name != 'pull_request' || (github.event.pull_request.draft == false && contains(github.event.pull_request.labels.*.name, 'full-qa'))) && (github.event_name != 'workflow_dispatch' || (inputs.focus != 'current-v1-registration' && inputs.focus != 'current-v2-create'))
     needs: v1-ci-contract
     env:
       V1_REGISTRATION_ONLY: ${{ github.event_name == 'workflow_dispatch' && inputs.focus == 'v1-registration' }}

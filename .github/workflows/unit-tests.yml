@@ -22,7 +22,7 @@ name: unit tests
 
 on:
   push:
-    branches: ['**']
+    branches: [main]
   pull_request:
     branches: ['**']
 
