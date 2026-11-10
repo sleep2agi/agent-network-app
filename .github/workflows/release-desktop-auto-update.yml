@@ -3023,6 +3023,11 @@ jobs:
     if: inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
+    # The workflow-level token is actions: read, so `gh workflow run` got HTTP 403
+    # "Resource not accessible by integration" on 0.2.500 and 0.2.501. Only this job may dispatch.
+    permissions:
+      contents: read
+      actions: write
     steps:
       - name: Dispatch the mirror gate and prove a new run appeared
         env:
