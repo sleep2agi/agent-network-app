@@ -539,7 +539,10 @@ export default function NodeDetailScreen({
   // #4463 —— 节点自报的两个版本。这里**不拼安装命令**：两个包的 dist-tag 独立变化，
   // 拼出来的「配对」可能并不成立（仓库护栏 daemon-overview.test.ts 明令禁止）。
   // 只显示实际在跑的版本，并指向权威的 `anet pair`。
-  const versionPair = versionPairHint({ cliVersion: node?.launched_by_cli_version, nodeVersion: node?.agent_node_version });
+  // 🔴 版本不能取 `node.agent_node_version`：那是 **daemon（host_supervisor）** 行的字段，
+  // 普通 agent 节点永远没有（生产实测：343 个节点里 0 个有它）⇒ 会永远显示「版本未知」。
+  // agent-node 的版本由节点自己上报在 status 行的 `version` 上（实测 `2.5.0-preview.198`）。
+  const versionPair = versionPairHint({ cliVersion: node?.launched_by_cli_version, nodeVersion: (s as Session & { version?: string | null }).version });
 
   // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
   const headerCard = (
@@ -790,7 +793,10 @@ export default function NodeDetailScreen({
           {versionPair.kind === 'ready' ? (
             <>
               <Text selectable testID="node-version-pair-values" style={{ color: colors.text, fontSize: typeScale.small, lineHeight: 18 }}>
-                {`CLI ${versionPair.cliVersion} · agent-node ${versionPair.nodeVersion}`}
+                {[
+                  `CLI ${versionPair.cliVersion ?? '未上报'}`,
+                  `agent-node ${versionPair.nodeVersion ?? '未上报'}`,
+                ].join(' · ')}
               </Text>
               <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{versionPair.guidance}</Text>
             </>
