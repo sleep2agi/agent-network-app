@@ -15,6 +15,12 @@
 //   3  picking 受限 sends PUT …/permission-mode {mode:"restricted"} once and shows it checked + 「已改为」
 //   4  a failed PUT puts the old choice back and says why
 //   5  the report row reads 「过去 7 天本来会拦下 7 次」 and opens into counts by reason and by action
+//   6  发 and 收 cards: 收 only when /health capabilities has node_inbox_allowlist; seeded node_ids show as aliases
+//   7  发: picking a node from the network's node list sends PUT …/peer-allowlist {peers:[alias]}
+//   8  收: picking 「所有成员」 sends PUT …/inbox-allowlist {senders:[…, "user:*"]}; strict toggles !strict
+//   9  a refused save shows the Hub's reason code and hint, and keeps the old list
+//  10  a Hub without the capability: no 收 card, 发 still there
+// SHOT=<png> also saves the desktop-light 发/收 section there.
 // Exit 1 when any check fails. Run it against the pre-change export first: it must go red.
 import { mkdirSync } from 'node:fs';
 import { join } from 'node:path';
@@ -46,7 +52,7 @@ const initScript = ({ theme }) => {
     { alias: '示例-旧版', status: 'idle', agent: 'claude-code', node_id: 'n_perm_old', updated_at: iso(5) },
   ];
   const nodes = [
-    { node_id: 'n_perm_own', alias: '示例-主人', permission_mode: 'normal', viewer_can: { permission_mode: true } },
+    { node_id: 'n_perm_own', alias: '示例-主人', permission_mode: 'normal', viewer_can: { permission_mode: true }, peer_allowlist: null, inbox_allowlist: ['n_perm_old'], tool_allowlist: null },
     { node_id: 'n_perm_other', alias: '示例-别人', permission_mode: 'normal', viewer_can: { permission_mode: false } },
     { node_id: 'n_perm_old', alias: '示例-旧版' },
   ];
@@ -80,6 +86,17 @@ const initScript = ({ theme }) => {
       if (n) n.permission_mode = body.mode;
       return { ok: true, node_id: n?.node_id, permission_mode: body.mode, previous };
     }
+    const list = /^\/api\/nodes\/([^/]+)\/(peer|inbox)-allowlist$/.exec(p);
+    if (list && method === 'PUT') {
+      const body = decode(data);
+      const field = list[2] === 'peer' ? 'peers' : 'senders';
+      (window.__listPuts ||= []).push({ node: decodeURIComponent(list[1]), kind: list[2], value: body[field] });
+      if (window.__listFail) return { __status: 403, ok: false, error: 'node_permission_denied', reason: 'sender_not_allowed', route: 'PUT /api/nodes/:id/inbox-allowlist', hint: 'stub hint: ask the node owner' };
+      const n = nodes.find(x => x.node_id === decodeURIComponent(list[1]));
+      if (n) n[`${list[2]}_allowlist`] = body[field];
+      return { ok: true, node_id: n?.node_id, [field]: body[field] };
+    }
+    if (p === '/health') return { ok: true, capabilities: sessionStorage.getItem('noInboxCap') ? ['node_permission_mode'] : ['node_permission_mode', 'node_inbox_allowlist'] };
     if (p === '/api/networks/net-perm/node-permission-report') return report;
     if (p === '/api/auth/me') return { ok: true, user: { user_id: 'u_tester', username: 'tester', role: 'user' }, current_network: 'net-perm', networks: [{ network_id: 'net-perm', member_role: 'owner', agent_access: 'all' }] };
     if (p === '/api/networks/net-perm/humans') return { ok: true, humans: [{ user_id: 'u_tester', username: 'tester' }] };
@@ -226,7 +243,9 @@ async function run(vp, viewport, ua, theme, phone) {
   const normalBack = await page.locator(tid('node-perm-option-normal')).getAttribute('aria-checked').catch(() => null);
   record(tag, '4b a later successful pick clears the error', { cleared: errGone === 0, normal: normalBack === 'true' }, { errGone, normalBack });
 
-  // 5 report
+  // 5 report (below 发 / 收 now, so bring it into view before probing paint)
+  await page.locator(tid('node-perm-report')).scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+  await sleep(300);
   const headline = await page.locator(tid('node-perm-report-headline')).innerText({ timeout: 3000 }).catch(() => '');
   const hPaint = await paintedText(page, tid('node-perm-report-headline'), '过去 7 天本来会拦下 7 次').catch(() => null);
   await page.locator(tid('node-perm-report')).click({ timeout: 3000 }).catch(() => {});
@@ -241,6 +260,63 @@ async function run(vp, viewport, ua, theme, phone) {
     reasons: reasons.join(',') === 'beyond_owner_visibility,human_only', routes: routes.length === 3 && routes[0].includes('改任务') && routes[0].includes('4'),
     footnote: foot.includes('只记录、不拦截'),
   }, { headline, reasons, routes, foot });
+  // 6 send / receive cards
+  await page.locator(tid('node-perm-receive')).waitFor({ timeout: 5000 }).catch(() => {});
+  const cards = await page.evaluate(() => ({
+    send: !!document.querySelector('[data-testid="node-perm-send"]'), receive: !!document.querySelector('[data-testid="node-perm-receive"]'),
+    inboxValue: document.querySelector('[data-testid="node-inbox-allowlist-value"]')?.textContent || '',
+  }));
+  record(tag, '6 发 and 收 cards; node_id shown as alias', { send: cards.send, receive: cards.receive, alias: cards.inboxValue.includes('示例-旧版') && !cards.inboxValue.includes('n_perm_old') }, cards);
+
+  // 7 peer pick from the node list
+  await page.evaluate(() => { window.__listPuts = []; window.__listFail = false; });
+  await page.locator(tid('node-peer-allowlist-pick-toggle')).click({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-peer-allowlist-pick-示例-别人')).click({ timeout: 3000 }).catch(() => {});
+  await sleep(600);
+  let lp = await page.evaluate(() => window.__listPuts);
+  const peerVal = await page.locator(tid('node-peer-allowlist-value')).innerText({ timeout: 2000 }).catch(() => '');
+  record(tag, '7 发: pick a node → PUT peer-allowlist', { onePut: lp.length === 1 && lp[0].kind === 'peer' && JSON.stringify(lp[0].value) === '["示例-别人"]', shown: peerVal.includes('示例-别人') }, { lp, peerVal });
+
+  // 8 inbox: any person, then strict
+  await page.evaluate(() => { window.__listPuts = []; });
+  await page.locator(tid('node-inbox-allowlist-person-any')).click({ timeout: 3000 }).catch(() => {});
+  await sleep(600);
+  await page.locator(tid('node-inbox-allowlist-strict')).click({ timeout: 3000 }).catch(() => {});
+  await sleep(600);
+  lp = await page.evaluate(() => window.__listPuts);
+  const strictOn = await page.locator(tid('node-inbox-allowlist-strict')).getAttribute('aria-checked').catch(() => null);
+  record(tag, '8 收: 所有成员 then strict → PUT inbox-allowlist {senders}', {
+    any: lp[0]?.kind === 'inbox' && JSON.stringify(lp[0]?.value) === '["n_perm_old","user:*"]',
+    strict: JSON.stringify(lp[1]?.value) === '["n_perm_old","user:*","!strict"]', checked: strictOn === 'true',
+  }, { lp, strictOn });
+  if (tag === 'desktop-light' && process.env.SHOT) {
+    await page.locator(tid('node-inbox-allowlist-pick-toggle')).click({ timeout: 3000 }).catch(() => {});
+    await page.setViewportSize({ width: 1440, height: 1900 });
+    await sleep(500);
+    await page.locator(tid('node-perm-section')).screenshot({ path: process.env.SHOT }).catch(e => console.log('shot failed', e.message));
+    await page.setViewportSize(viewport);
+    await sleep(300);
+  }
+
+  // 9 refused save
+  await page.evaluate(() => { window.__listFail = true; });
+  await page.locator(tid('node-inbox-allowlist-strict')).click({ timeout: 3000 }).catch(() => {});
+  await sleep(600);
+  const listErr = await page.locator(tid('node-inbox-allowlist-error')).innerText({ timeout: 2000 }).catch(() => '');
+  const stillStrict = await page.locator(tid('node-inbox-allowlist-strict')).getAttribute('aria-checked').catch(() => null);
+  record(tag, '9 refusal shows reason code + Hub hint, keeps the list', { reason: listErr.includes('sender_not_allowed'), hint: listErr.includes('stub hint: ask the node owner'), kept: stillStrict === 'true' }, { listErr, stillStrict });
+  await page.evaluate(() => { window.__listFail = false; });
+
+  // 10 Hub without the capability
+  await page.evaluate(() => sessionStorage.setItem('noInboxCap', '1'));
+  await openNode(page, '示例-主人');
+  await page.locator(`${tid('node-section-nav')} [role="tab"]`, { hasText: '权限' }).first().click({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-perm-send')).waitFor({ timeout: 5000 }).catch(() => {});
+  await sleep(800);
+  const oldCards = await page.evaluate(() => ({ send: !!document.querySelector('[data-testid="node-perm-send"]'), receive: !!document.querySelector('[data-testid="node-perm-receive"]') }));
+  record(tag, '10 older Hub: no 收 card', { send: oldCards.send, noReceive: !oldCards.receive }, oldCards);
+  await page.evaluate(() => sessionStorage.removeItem('noInboxCap'));
+
   record(tag, '0 no page errors', { none: errors.length === 0 }, { errors: errors.slice(0, 3) });
   await ctx.close();
 }

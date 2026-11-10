@@ -298,9 +298,11 @@ export interface HubNode {
   config_revision?: number | null;
   /** RFC-041(Hub ≥ .92):节点自己的模式。旧 Hub 没有 ⇒ undefined(当作正常)。 */
   permission_mode?: 'normal' | 'readonly' | 'restricted' | null;
-  /** RFC-041 白名单:null = 不限制,[] = 一个都不允许(旧 Hub 没有 ⇒ undefined)。 */
+  /** RFC-041 白名单:null = 不限制(Hub 不会返回 [];旧 Hub 没有 ⇒ undefined)。 */
   peer_allowlist?: string[] | null;
   tool_allowlist?: string[] | null;
+  /** 收件白名单:谁能给这个节点派活 / 发消息。只有 /health 报了 INBOX_ALLOWLIST_CAPABILITY 的 Hub 才有。 */
+  inbox_allowlist?: string[] | null;
   /** Hub ≥ .93(#2275):调用者能不能改这个节点的模式 —— 「权限」分区只在它为 true 时出现。 */
   viewer_can?: { permission_mode?: boolean } | null;
   config_snapshot?: {
@@ -604,47 +606,65 @@ export const putNodePermissionMode = async (
   }
 };
 
-/** PUT /api/nodes/:id/peer-allowlist —— null = 清空(不限制),[] = 谁都不许。
- *  权限同 permission-mode(节点主人 / 网络 owner·admin)。 */
-export const putNodePeerAllowlist = async (
-  cfg: HubConfig,
-  nodeId: string,
-  peers: string[] | null,
-): Promise<{ ok: true; peers: string[] | null } | { ok: false; error: string; status?: number }> => {
+/** 白名单 PUT 被拒时 Hub 给的全部信息:error 码之外,node_permission_denied 带 reason + hint,其它带 message。 */
+export interface NodeAllowlistFailure { ok: false; error: string; status?: number; reason?: string; hint?: string; message?: string }
+
+/** 三张白名单同一套 PUT:body `{ [field]: string[] | null }`,null = 清空(不限制);Hub 拒收 [](400 empty_allowlist_ambiguous)。
+ *  权限同 permission-mode(节点主人 / 网络 owner·admin)。成功时以 Hub 回的那一份为准。 */
+async function putNodeAllowlist(
+  cfg: HubConfig, nodeId: string, route: string, field: string, list: string[] | null, replyField = field,
+): Promise<{ ok: true; list: string[] | null } | NodeAllowlistFailure> {
   try {
     const res = await withTimeout(signal =>
-      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/peer-allowlist`, {
-        method: 'PUT', headers: headers(cfg), signal, body: JSON.stringify({ peers }),
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/${route}`, {
+        method: 'PUT', headers: headers(cfg), signal, body: JSON.stringify({ [field]: list }),
       }),
     );
     const body = (await res.json().catch(() => ({}))) as any;
-    if (!res.ok || body?.ok === false) return { ok: false, error: body?.error || `HTTP ${res.status}`, status: res.status };
-    const list = Array.isArray(body?.peers) ? body.peers.map(String) : peers;
-    return { ok: true, peers: list };
+    if (!res.ok || body?.ok === false) {
+      const text = (v: unknown) => (typeof v === 'string' && v ? v : undefined);
+      return { ok: false, error: body?.error || `HTTP ${res.status}`, status: res.status, reason: text(body?.reason), hint: text(body?.hint), message: text(body?.message) };
+    }
+    const reply = body?.[replyField];
+    return { ok: true, list: Array.isArray(reply) ? reply.map(String) : reply === null ? null : list };
   } catch (e) {
     return { ok: false, error: e instanceof Error ? e.message : String(e) };
   }
+}
+
+/** PUT /api/nodes/:id/peer-allowlist { peers } —— 发:这个节点能给谁派活 / 发消息(别名或 node_id)。 */
+export const putNodePeerAllowlist = async (cfg: HubConfig, nodeId: string, peers: string[] | null) => {
+  const r = await putNodeAllowlist(cfg, nodeId, 'peer-allowlist', 'peers', peers);
+  return r.ok ? { ok: true as const, peers: r.list } : r;
 };
 
-/** PUT /api/nodes/:id/tool-allowlist —— null = 不限制,[] = 一个都不允许。
+/** PUT /api/nodes/:id/tool-allowlist { tools } —— 这个节点能调哪些 MCP 工具。
  *  保活类工具(ALWAYS_TOOLS)不应出现在提交里:挡掉它们会让节点变成假的活节点。 */
-export const putNodeToolAllowlist = async (
-  cfg: HubConfig,
-  nodeId: string,
-  tools: string[] | null,
-): Promise<{ ok: true; tools: string[] | null } | { ok: false; error: string; status?: number }> => {
+export const putNodeToolAllowlist = async (cfg: HubConfig, nodeId: string, tools: string[] | null) => {
+  const r = await putNodeAllowlist(cfg, nodeId, 'tool-allowlist', 'tools', tools);
+  return r.ok ? { ok: true as const, tools: r.list } : r;
+};
+
+/** 收件白名单(agent-network inbox_allowlist):PUT { senders } → { ok, node_id, senders }。只在 /health 报了这个能力位时才调用。 */
+export const INBOX_ALLOWLIST_CAPABILITY = 'node_inbox_allowlist';
+const INBOX_ALLOWLIST_ROUTE = 'inbox-allowlist';
+const INBOX_ALLOWLIST_FIELD = 'senders';
+
+/** PUT /api/nodes/:id/inbox-allowlist —— 收:谁能给这个节点派活 / 发消息。 */
+export const putNodeInboxAllowlist = async (cfg: HubConfig, nodeId: string, senders: string[] | null) => {
+  const r = await putNodeAllowlist(cfg, nodeId, INBOX_ALLOWLIST_ROUTE, INBOX_ALLOWLIST_FIELD, senders);
+  return r.ok ? { ok: true as const, senders: r.list } : r;
+};
+
+/** GET /health 的 capabilities。读不到 / 没有这个数组 ⇒ [](当作旧 Hub,不猜)。 */
+export const fetchHubHealthCapabilities = async (cfg: HubConfig): Promise<string[]> => {
   try {
-    const res = await withTimeout(signal =>
-      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/tool-allowlist`, {
-        method: 'PUT', headers: headers(cfg), signal, body: JSON.stringify({ tools }),
-      }),
-    );
-    const body = (await res.json().catch(() => ({}))) as any;
-    if (!res.ok || body?.ok === false) return { ok: false, error: body?.error || `HTTP ${res.status}`, status: res.status };
-    const list = Array.isArray(body?.tools) ? body.tools.map(String) : tools;
-    return { ok: true, tools: list };
-  } catch (e) {
-    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl.replace(/\/$/, '')}/health`, { method: 'GET', signal }));
+    if (!res.ok) return [];
+    const caps = ((await res.json().catch(() => null)) as { capabilities?: unknown } | null)?.capabilities;
+    return Array.isArray(caps) ? caps.filter((c): c is string => typeof c === 'string') : [];
+  } catch {
+    return [];
   }
 };
 
