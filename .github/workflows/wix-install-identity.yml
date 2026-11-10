@@ -36,6 +36,7 @@ jobs:
         with:
           workspaces: src-tauri
           cache-on-failure: true
+          add-rust-environment-hash-key: false
       - run: npm ci --prefix local-hub-sidecar --ignore-scripts
       - run: npm run build:local-hub-sidecar
       - run: npx tauri icon assets/icon.png
@@ -82,6 +83,7 @@ jobs:
         with:
           workspaces: src-tauri
           cache-on-failure: true
+          add-rust-environment-hash-key: false
       - run: npm ci --prefix local-hub-sidecar --ignore-scripts
       - run: npm run build:local-hub-sidecar
       - run: npx tauri icon assets/icon.png
