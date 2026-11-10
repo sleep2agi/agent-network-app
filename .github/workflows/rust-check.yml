@@ -83,9 +83,12 @@ jobs:
         with:
           toolchain: stable
 
+      # #4406 —— 与 release 腿同一个理由：版本号 bump 会改 Cargo.toml/lock，
+      # 默认哈希进 key ⇒ 每次 bump 都是新 key ⇒ 全量重编，还会把缓存总量推过 10 GB 驱逐线。
       - uses: swatinem/rust-cache@6323deb102c322ba6fcbdcafc7e3dddab59af2b6 # v2.9.2
         with:
           workspaces: src-tauri
+          add-rust-environment-hash-key: false
 
       - uses: actions/setup-node@v4
         with:

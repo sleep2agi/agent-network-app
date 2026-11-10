@@ -184,9 +184,16 @@ jobs:
         run: |
           npm ci --prefix local-hub-sidecar --ignore-scripts
           npm run build:local-hub-sidecar
+      # #4406 —— 每次发版都会改 src-tauri/Cargo.toml 与 Cargo.lock 里的 version，
+      # 而 rust-cache 默认把 Cargo.toml/Cargo.lock 的哈希算进 key
+      # ⇒ **每发一版就是一次全新 key ⇒ Rust 全量重编**（实测：命中 33–40s / 未命中 3s，
+      #   随之 Check Rust 32–38s → 192s、credential-store 26s → 202s）。
+      # 关掉这个哈希：cache 只是热目录，依赖真变了 cargo 的指纹会重编那几个 crate，
+      # 正确性不靠这个 key。
       - uses: swatinem/rust-cache@v2
         with:
           workspaces: src-tauri
+          add-rust-environment-hash-key: false
       - run: npx tauri icon assets/icon.png
       - name: Check Rust app sources
         working-directory: src-tauri
