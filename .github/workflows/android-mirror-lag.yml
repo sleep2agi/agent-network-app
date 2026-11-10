@@ -75,3 +75,64 @@ jobs:
           GITHUB_TOKEN: ${{ github.token }}
           DRY_RUN: ${{ inputs.dry_run && '1' || '0' }}
         run: node scripts/android-mirror-lag-gate.mjs
+
+      # 🔴 上面那道门只比较「最新 release」与 latest/VERSION。2026-11-10 实测它有一个盲区：
+      #    0.2.495 / 0.2.496 从未被推进镜像，但 0.2.497 补上之后门是**绿**的 —— 中间两版
+      #    永久缺席而没人知道。这里把「有 release、有 APK、但镜像上没有」的版本列出来。
+      #    只警告不判红：历史缺口补不回来（latest/VERSION 必须留在最新版），但必须看得见。
+      - name: 报告缺席版本（有 release 与 APK，但镜像上没有）— 非阻断
+        continue-on-error: true
+        env:
+          GITHUB_TOKEN: ${{ github.token }}
+          MIRROR_BASE: https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master
+          LOOKBACK: '8'
+        run: |
+          set -euo pipefail
+          python3 - <<'EOF'
+          import json, os, urllib.request, urllib.error
+
+          base = os.environ['MIRROR_BASE'].rstrip('/')
+          token = os.environ['GITHUB_TOKEN']
+          lookback = int(os.environ.get('LOOKBACK', '8'))
+          api = 'https://api.github.com/repos/sleep2agi/agent-network-app/releases?per_page=50'
+          req = urllib.request.Request(api, headers={'Authorization': 'Bearer ' + token,
+                                                     'Accept': 'application/vnd.github+json'})
+          rels = json.load(urllib.request.urlopen(req, timeout=60))
+
+          seen = []
+          for rel in rels:
+              if rel.get('draft') or rel.get('prerelease'):
+                  continue
+              tag = rel.get('tag_name') or ''
+              if not tag.startswith('desktop-v'):
+                  continue
+              ver = tag[len('desktop-v'):]
+              if not any(a.get('name', '').endswith('.apk') for a in rel.get('assets', [])):
+                  continue          # 这一版本来就没有 APK，不算缺席
+              seen.append(ver)
+              if len(seen) >= lookback:
+                  break
+
+          missing = []
+          for ver in seen:
+              url = f'{base}/android/agent-network-{ver}.apk'
+              req = urllib.request.Request(url, method='HEAD')
+              try:
+                  with urllib.request.urlopen(req, timeout=60) as r:
+                      ok = r.status == 200
+              except urllib.error.HTTPError as e:
+                  ok = e.code == 200
+              except Exception:
+                  ok = None
+              if ok is None:
+                  print(f'::warning::无法判断 {ver} 是否在镜像上（HEAD 出错），不计入缺席')
+              elif not ok:
+                  missing.append(ver)
+
+          if missing:
+              print('::warning::镜像上缺席的版本（有 release 与 APK）: ' + ', '.join(missing))
+              print('这些版本的用户仍可在 GitHub release 里取到 APK，但应用内更新不会指向它们。')
+              print('历史缺口不自动回填（latest/VERSION 必须留在最新版）；若要回填，需人工决定。')
+          else:
+              print(f'镜像上最近 {len(seen)} 个带 APK 的版本都存在。')
+          EOF
