@@ -2,6 +2,8 @@ import { useRef, useState } from 'react';
 import { Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import AttachmentFileCard from './AttachmentFileCard';
+import AttachmentTextPreview, { TextPreviewLink } from './AttachmentTextPreview';
+import { isTextPreviewable } from './attachment-file-model';
 import { appFetch } from './app-fetch';
 import { chooseSavePath, displayDownloadPath, downloadAuthedBytes, isTauriDesktop, revealInFolder, saveBrowserDownload, saveToDownloads } from './desktop-download';
 import { colors } from './theme';
@@ -15,6 +17,8 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
   const { t } = useTranslation();
   const linkInk = useBubbleInk('link');
   const busy = useRef(false);
+  const [previewOpen, setPreviewOpen] = useState(false);
+  const previewable = isTextPreviewable(name, mime, size);
   const [state, setState] = useState<{ kind: 'ready' | 'downloading' | 'saved' | 'error'; path?: string; message?: string; messageKey?: string; eta?: string }>({ kind: 'ready' });
   const download = async (direct: boolean) => {
     if (busy.current) return;
@@ -65,12 +69,16 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
       <AttachmentFileCard name={name} mime={mime} size={size} status={state.kind} progress={state.eta}
         detail={state.messageKey ? t(state.messageKey, { error: state.message ?? '' }) : state.message ?? (state.path ? displayDownloadPath(state.path) : t(isTauriDesktop() ? 'chat.file.saveHint' : 'chat.file.browserHint'))}
         onPress={state.kind === 'saved' ? () => { void reveal(); } : (e: any) => { void download(!!(e?.nativeEvent?.altKey ?? e?.altKey)); }} />
-      {state.kind === 'saved' ? (
+      {previewable || state.kind === 'saved' ? (
         <View style={{ flexDirection: 'row', gap: 16, paddingVertical: 8 }}>
+          {previewable ? <TextPreviewLink name={name} onPress={() => setPreviewOpen(true)} /> : null}
+          {state.kind === 'saved' ? <>
           <Pressable accessibilityRole="button" accessibilityLabel={`${t('chat.file.reveal')} ${name}`} testID="attachment-file-reveal" onPress={() => { void reveal(); }}><Text style={[{ color: colors.accent, fontSize: 12 }, linkInk]}>{t('chat.file.reveal')}</Text></Pressable>
           <Pressable accessibilityRole="button" accessibilityLabel={`${t('chat.file.saveAs')} ${name}`} testID="attachment-file-save-as" onPress={() => { void download(false); }}><Text style={[{ color: colors.accent, fontSize: 12 }, linkInk]}>{t('chat.file.saveAs')}</Text></Pressable>
+          </> : null}
         </View>
       ) : null}
+      {previewOpen ? <AttachmentTextPreview url={uri} token={token} name={name} mime={mime} onClose={() => setPreviewOpen(false)} /> : null}
     </View>
   );
 }
