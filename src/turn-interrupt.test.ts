@@ -6,6 +6,7 @@
 import { readFileSync } from 'node:fs';
 import {
   INTERRUPT_CONFIRM_MS,
+  LATE_EVIDENCE_MS,
   ackProvesInterrupted,
   idleInterrupt,
   interruptAfterSend,
@@ -40,6 +41,7 @@ ck('idle state is not a success', idleInterrupt().phase === 'idle' && idleInterr
   ck('no proof within the window ⇒ unconfirmed', late.phase === 'unconfirmed');
   ck('unconfirmed is not reported as interrupted', late.phase !== 'interrupted');
   ck('confirm window covers one 5s message poll', INTERRUPT_CONFIRM_MS === 8000);
+ck('late evidence (status flip) is bounded', LATE_EVIDENCE_MS === 30000);
   const confirmed = interruptAfterSend({ sent: 'ok', confirmed: true, timedOut: true });
   ck('proof wins over the timeout', confirmed.phase === 'interrupted');
 }

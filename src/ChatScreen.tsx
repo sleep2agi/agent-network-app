@@ -69,7 +69,7 @@ import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerMo
 import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ComposerStopButton from './ComposerStopButton';
-import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, type InterruptState } from './turn-interrupt';
+import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -1988,11 +1988,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // so he can tell whether the agent is even online.
   const [sessionStatus, setSessionStatus] = useState('');
   // #4591 —— 停止当前回合。Hub 回 accepted 只代表控制消息**入队**，真凭据来自节点回执 / 回合结束；
-  // 3 秒内没等到就照实说「已发送，节点未确认」，不假装成功（同档位那套 pending≠applied）。
+  // 窗口内没等到就照实说「已发送，节点未确认」，不假装成功（同档位那套 pending≠applied）；迟到凭据 30s 内仍可升级。
   const [interrupt, setInterrupt] = useState<InterruptState>(idleInterrupt);
   const interruptSeenRef = useRef<Set<string>>(new Set());
   const prevSessionStatusRef = useRef('');
   const interruptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 点击时刻：迟到凭据只在这个时间点之后 LATE_EVIDENCE_MS 内算数（否则会把自然结束当成停止成功）。 */
+  const interruptSentAtRef = useRef(0);
+  const lateEvidenceAllowed = () => Date.now() - interruptSentAtRef.current <= LATE_EVIDENCE_MS;
   const interruptBusy = interrupt.phase === 'sending' || interrupt.phase === 'waiting';
   const interruptIdOf = (m: { task_id?: string; created_at?: string; content?: string }) => `${m.task_id ?? ''}|${m.created_at ?? ''}|${m.content ?? ''}`;
   const [controlSession, setControlSession] = useState<Session | null>(null);
@@ -2133,10 +2136,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       clearInterval(t);
     };
   }, [cfg, alias]);
-  // #4591 —— 点「停止」：先记下此刻的消息集合（回执只认之后新出现的），发控制消息，再等 3 秒真凭据。
+  // #4591 —— 点「停止」：先记下此刻的消息集合（回执只认之后新出现的），发控制消息，再等真凭据（窗口 INTERRUPT_CONFIRM_MS，迟到凭据上限 LATE_EVIDENCE_MS）。
   const pressInterrupt = () => {
     if (interruptBusy || !interruptable(sessionStatus)) return;
     interruptSeenRef.current = new Set(messages.map(interruptIdOf));
+    interruptSentAtRef.current = Date.now();
     setInterrupt({ phase: 'sending', detail: null });
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     void interruptTurn(cfg, alias).then(res => {
@@ -2159,6 +2163,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // unconfirmed 之后仍要继续听：超过窗口才到的真凭据（回执 / 状态翻转）照样把状态升回来，
     // 否则用户只会停在一句「未确认」上，而其实早就停了。
     if (interrupt.phase !== 'waiting' && interrupt.phase !== 'unconfirmed') return;
+    if (interrupt.phase === 'unconfirmed' && !lateEvidenceAllowed()) return;
     const seen = interruptSeenRef.current;
     if (messages.some(m => !seen.has(interruptIdOf(m)) && replyProvesInterrupted(m.content ?? m.result ?? ''))) {
       setInterrupt({ phase: 'interrupted', detail: null });
@@ -2168,7 +2173,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   useEffect(() => {
     const prev = prevSessionStatusRef.current;
     prevSessionStatusRef.current = sessionStatus;
-    if ((interrupt.phase === 'waiting' || interrupt.phase === 'unconfirmed') && statusFlipProvesInterrupted(prev, sessionStatus)) {
+    if ((interrupt.phase === 'waiting' || (interrupt.phase === 'unconfirmed' && lateEvidenceAllowed()))
+      && statusFlipProvesInterrupted(prev, sessionStatus)) {
       setInterrupt({ phase: 'interrupted', detail: null });
     }
   }, [sessionStatus, interrupt.phase]);

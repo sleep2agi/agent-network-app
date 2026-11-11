@@ -9,7 +9,7 @@
 //     文本形如 `[alias] interrupt {"ok":true,"interrupted":true}`（cli.ts:6794-6800）。
 //
 // 所以客户端只能：先给「已发送」，等**节点侧**的真凭据（回执文本 / 回合真的结束），
-// 3 秒内没等到就照实说「已发送，节点未确认」，绝不假装成功。
+// 8 秒内没等到就照实说「已发送，节点未确认」，绝不假装成功；之后迟到的真凭据仍可升级，但有上限（见 LATE_EVIDENCE_MS）。
 
 /** 8 秒确认窗口。到点没有真凭据 ⇒ unconfirmed（不是失败）。
  *
@@ -17,6 +17,10 @@
  *  回执再回来」一整圈。3 秒窗口在真机上几乎必然先判「未确认」，用户会以为没生效。
  *  8 秒覆盖一次完整轮询；即使到点成了 unconfirmed，后续真凭据（回执 / 状态翻转）仍会把它升回 interrupted。 */
 export const INTERRUPT_CONFIRM_MS = 8000;
+
+/** 迟到凭据的接受上限（从点击那一刻算）。超过就不再升级成「已停止」——
+ *  否则用户点了没生效、三分钟后回合自然结束，界面也会说「已停止」，那是假消息。 */
+export const LATE_EVIDENCE_MS = 30_000;
 
 export type InterruptPhase = 'idle' | 'sending' | 'waiting' | 'interrupted' | 'unconfirmed' | 'failed' | 'unsupported';
 
@@ -72,7 +76,7 @@ export function interruptAfterSend(input: {
   sent: 'ok' | 'failed' | 'unsupported';
   /** 回执 / 节点消息 / 状态翻转是否已证明截断。 */
   confirmed: boolean;
-  /** 从现在起是否已经过了 3 秒窗口。 */
+  /** 从现在起是否已经过了确认窗口（INTERRUPT_CONFIRM_MS）。 */
   timedOut: boolean;
   /** 失败原因原文（sent=failed 时）。 */
   detail?: string | null;
