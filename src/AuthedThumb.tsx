@@ -12,6 +12,8 @@ import * as Sharing from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
 import AttachmentFileCard from './AttachmentFileCard';
+import AttachmentTextPreview, { TextPreviewLink } from './AttachmentTextPreview';
+import { isTextPreviewable } from './attachment-file-model';
 import { ActivityIndicator, Image, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
@@ -76,6 +78,7 @@ export function AttachmentFile({
   const [error, setError] = useState<string | null>(null);
   /** 「62% · 剩余约 8 秒」—— 没有总量或还没算出速度时是 undefined。 */
   const [progress, setProgress] = useState<string | undefined>(undefined);
+  const [previewOpen, setPreviewOpen] = useState(false);
 
   const open = async () => {
     if (busyRef.current) return;
@@ -108,7 +111,16 @@ export function AttachmentFile({
     }
   };
 
-  if (!label) return <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} progress={busy ? progress : undefined} detail={error ?? t('chat.file.nativeHint')} onPress={() => { void open(); }} />;
+  if (!label) return (
+    <View style={{ maxWidth: '100%' }}>
+      <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} progress={busy ? progress : undefined} detail={error ?? t('chat.file.nativeHint')} onPress={() => { void open(); }} />
+      {/* admin 2026-11-11：.md / 文本附件可以直接在应用里预览。 */}
+      {isTextPreviewable(name, mime, size) ? (
+        <View style={{ flexDirection: 'row', paddingVertical: 8 }}><TextPreviewLink name={name} onPress={() => setPreviewOpen(true)} /></View>
+      ) : null}
+      {previewOpen ? <AttachmentTextPreview url={`${serverUrl}/api/files/${fileId}`} token={token} name={name} mime={mime} onClose={() => setPreviewOpen(false)} /> : null}
+    </View>
+  );
 
   return (
     <Pressable accessibilityRole="button" accessibilityLabel={label ?? name} onPress={open} hitSlop={6}>

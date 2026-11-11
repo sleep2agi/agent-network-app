@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.511:
+            - 聊天里的 .md / 文本附件（txt、log、json、yaml…，1 MB 以内）新增「预览」：直接在应用里看，Markdown 按排版显示，也可以切到源码；不用先下载再去文件夹里找。手机和桌面都有。
+
             What's new in 0.2.510:
             - 手机端模型面板：整个面板落在屏幕内，不再顶进状态栏；思考档位多了「默认」，当前用的那一档会标出来；Build / Agent 只列能切的（compaction / title / summary 这些 OpenCode 内部 agent 不再显示）。
 

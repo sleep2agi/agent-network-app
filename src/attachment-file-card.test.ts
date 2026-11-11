@@ -14,7 +14,7 @@ assert.equal(formatFileSize(1024), '1.0 KB');
 assert.equal(formatFileSize(10.5 * 1024 ** 2), '10.5 MB');
 assert.equal(formatFileSize(1024 ** 3), '1.0 GB');
 for (const size of [undefined, -1, NaN, Infinity]) assert.equal(formatFileSize(size), undefined);
-for (const [name, label] of [['proposal.DOCX', 'DOC'], ['slides.pptx', 'PPT'], ['report.pdf', 'PDF'], ['table.xlsx', 'XLS'], ['table.csv', 'XLS'], ['bundle.tar.gz', 'ZIP'], ['app.tsx', 'CODE'], ['README.md', 'TXT'], ['unknown', 'FILE']]) {
+for (const [name, label] of [['proposal.DOCX', 'DOC'], ['slides.pptx', 'PPT'], ['report.pdf', 'PDF'], ['table.xlsx', 'XLS'], ['table.csv', 'XLS'], ['bundle.tar.gz', 'ZIP'], ['app.tsx', 'CODE'], ['README.md', 'MD'], ['notes.txt', 'TXT'], ['unknown', 'FILE']]) {
   assert.equal(filePresentation(name).label, label);
 }
 assert.equal(filePresentation('unnamed', 'application/pdf').label, 'PDF');
