@@ -86,6 +86,12 @@ const FULL = {
   ck('palette asks the gate for each capability',
     src.includes('caps.projectNewSession.ok') && src.includes('caps.attach.ok') && src.includes('caps.fork.ok') && src.includes('caps.directory.ok'));
   ck('data comes from /api/host-supervisors', src.includes('fetchHostSupervisors('));
+  // 通信欧 review 两条：别在客户端再判能力值（Hub 已白名单过滤，按值判会在版本号变化时误伤）；
+  // fork 必须两条能力同时在场，别被「顺手放宽成任一条」。
+  const caps = readFileSync(new URL('./source-capabilities.ts', import.meta.url), 'utf8');
+  ck('client never compares capability VALUES (hub already filtered)', !/===\s*['"]source-|['"]source-directory-read-v/.test(caps));
+  ck('fork gate keeps both fields ANDed',
+    /present\(row\.source_fork_transport\)\s*&&\s*present\(row\.source_node_delivery\)/.test(caps));
 }
 
 console.log(`source-capabilities: ${passed}/${total}`);
