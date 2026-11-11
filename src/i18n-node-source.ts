@@ -26,6 +26,15 @@ export const nodeSourcePaletteTranslations = {
   'sourcePalette.rowDisabled': ['不能提交', 'Cannot submit'],
   'sourcePalette.needsServer': ['选一个 Server 才能拿到 selection_scope', 'Pick a server to get a selection_scope'],
   'sourcePalette.sourceLine': ['network {network} · source node {node}', 'network {network} · source node {node}'],
+  'sourcePalette.forkIntro': ['从「{name}」的当前会话分出一个新节点，原节点不受影响。', 'Split a new node off “{name}”’s current session; the original keeps running.'],
+  'sourcePalette.forkSourceSection': ['源会话', 'Source session'],
+  'sourcePalette.forkName': ['新节点名称', 'New node name'],
+  'sourcePalette.forkFolder': ['工作目录', 'Working folder'],
+  'sourcePalette.forkFolder.new': ['新目录', 'New folder'],
+  'sourcePalette.forkFolder.newHint': ['独立干活，推荐', 'Works on its own · recommended'],
+  'sourcePalette.forkFolder.same': ['同目录', 'Same folder'],
+  'sourcePalette.forkFolder.sameHint': ['接续原会话，共用文件', 'Continues the session, shares files'],
+  'sourcePalette.forkSubmit': ['Fork', 'Fork'],
   'sourcePalette.disabledRowHint': ['灰掉的行都带着真实原因，点一下会说明为什么不能提交。', 'Disabled rows carry the real reason; tapping one explains why.'],
 } as const;
 

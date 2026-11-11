@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.513:
+            - 「Fork 当前节点」浮层重新排版：去掉 network / node id、mode= 这类内部字段和多余的搜索框；新节点名称、工作目录（新目录 / 同目录分段选择）分行标清，目录直接显示将要用的路径，取消和 Fork 按钮放在右下角。
+
             What's new in 0.2.512:
             - 节点信息页加上「权限」分区：在这里设置这个节点「只接收来自谁的消息」（收件白名单）和「可以发给谁」。之前只在节点详情页里有，从聊天/智能体列表点进去找不到。
 
