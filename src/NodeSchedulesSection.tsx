@@ -8,7 +8,11 @@ import { useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from 'react-native';
 import { Text } from './ui-text';
 import {
+  SCHEDULE_PURGE_CAPABILITY,
+  cancelScheduledTask,
   createExternalScheduleEdit,
+  fetchHubHealthCapabilities,
+  purgeScheduledTask,
   fetchExternalScheduleEdits,
   fetchExternalSchedules,
   fetchScheduledRuns,
@@ -24,7 +28,8 @@ import {
   type HubTask,
 } from './api';
 import { editIntentErrorText } from './ScheduledTasksScreen';
-import ScheduleEditor from './ScheduleEditor';
+import ScheduleEditor, { DeleteScheduleModal } from './ScheduleEditor';
+import { Ionicons } from './icons';
 import { afterEditorSaved, createEditorFor, editorPropsOf, nodeRowClick, type ScheduleEditorState } from './schedule-editor-model';
 import { runIsOpen } from './schedule-run-result';
 import { NODE_SCHEDULES_EMPTY, externalSchedulesForNode, hubSchedulesForNode, lastRunKey, nodeScheduleRows, type NodeScheduleRow, type ScheduleOpenRequest } from './node-schedules';
@@ -78,6 +83,15 @@ export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq 
   const loadedRef = useRef(false);
   // 就地编辑器:开着的是哪一条(打开那一刻的行,不跟 10 秒轮询换)。
   const [editor, setEditor] = useState<ScheduleEditorState | null>(null);
+  // 删除(真删):Hub /health 报了 scheduled_task_purge 才出现垃圾桶;旧 Hub 不显示,不猜。
+  const [purgeSupported, setPurgeSupported] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void fetchHubHealthCapabilities(cfg).then(caps => { if (alive) setPurgeSupported(caps.includes(SCHEDULE_PURGE_CAPABILITY)); });
+    return () => { alive = false; };
+  }, [cfg]);
+  const [deleteAsk, setDeleteAsk] = useState<{ row: NodeScheduleRow; name: string; running: boolean } | null>(null);
+  const [deleting, setDeleting] = useState(false);
   const lastRunsRef = useRef(lastRuns);
   lastRunsRef.current = lastRuns;
 
@@ -170,6 +184,31 @@ export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq 
     }
   };
 
+  const hubStatusOf = (row: NodeScheduleRow) => row.source === 'hub' ? hub.find(x => x.schedule_id === row.scheduleId)?.status ?? null : null;
+  const rowDeletable = (row: NodeScheduleRow) => editable && purgeSupported && row.source === 'hub' && !!hubStatusOf(row);
+  const askDelete = (row: NodeScheduleRow) => {
+    const status = hubStatusOf(row);
+    setActionError('');
+    setDeleteAsk({ row, name: row.name, running: status === 'active' || status === 'paused' });
+  };
+  const confirmDelete = async () => {
+    if (!deleteAsk) return;
+    const { row, running } = deleteAsk;
+    setDeleting(true); setActionError('');
+    try {
+      if (running) await cancelScheduledTask(cfg, row.scheduleId);
+      await purgeScheduledTask(cfg, row.scheduleId);
+      setHub(prev => prev.filter(x => x.schedule_id !== row.scheduleId));
+      setDeleteAsk(null);
+    } catch (e) {
+      setActionError(`删除失败:${e instanceof Error ? e.message : String(e)}`);
+      setDeleteAsk(null);
+    } finally {
+      setDeleting(false);
+      await load();
+    }
+  };
+
   const editorView = editable ? (
     <ScheduleEditor
       cfg={cfg}
@@ -234,11 +273,14 @@ export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq 
               busy={busyKey === row.key}
               onOpen={rowOpenable(row) ? () => openRow(row) : undefined}
               onToggle={() => void toggle(row)}
+              onDelete={rowDeletable(row) ? () => askDelete(row) : undefined}
+              stopped={hubStatusOf(row) === 'cancelled' || hubStatusOf(row) === 'completed'}
             />
           ))}
         </View>
       )}
       {editorView}
+      <DeleteScheduleModal value={deleteAsk ? { name: deleteAsk.name, running: deleteAsk.running } : null} busy={deleting} onClose={() => { if (!deleting) setDeleteAsk(null); }} onConfirm={() => void confirmDelete()} />
     </View>
   );
 }
@@ -257,12 +299,16 @@ function withSubmitted(
   return out;
 }
 
-function ScheduleRow({ row, last, busy, onOpen, onToggle }: {
+function ScheduleRow({ row, last, busy, onOpen, onToggle, onDelete, stopped = false }: {
   row: NodeScheduleRow;
   last: boolean;
   busy: boolean;
   onOpen?: () => void;
   onToggle: () => void;
+  /** 有 = 行尾多一个垃圾桶(Hub 计划 + 能改 + Hub 支持真删)。 */
+  onDelete?: () => void;
+  /** 已取消 / 已完成:开关永远是关且点不动,能删时就不画开关,只留垃圾桶。 */
+  stopped?: boolean;
 }) {
   const id = row.key.replace(/[^A-Za-z0-9_-]/g, '_');
   return (
@@ -295,7 +341,20 @@ function ScheduleRow({ row, last, busy, onOpen, onToggle }: {
         </View>
         {row.toggle.hint ? <Text style={s.hint} numberOfLines={2} testID={`node-schedule-hint-${id}`}>{row.toggle.hint}</Text> : null}
       </Pressable>
-      <View style={s.toggleWrap} testID={`node-schedule-toggle-${id}`}>
+      {onDelete ? (
+        <Pressable
+          onPress={onDelete}
+          disabled={busy}
+          hitSlop={6}
+          accessibilityRole="button"
+          accessibilityLabel={`删除 ${row.name}`}
+          testID={`node-schedule-delete-${id}`}
+          style={(state: { pressed: boolean; hovered?: boolean }) => [s.deleteBtn, !stopped && s.deleteBtnBeforeToggle, (state.hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
+        >
+          <Ionicons name="trash-outline" size={18} color={deleteIconColor(stopped)} />
+        </Pressable>
+      ) : null}
+      {onDelete && stopped ? null : <View style={s.toggleWrap} testID={`node-schedule-toggle-${id}`}>
         <Switch
           accessibilityLabel={row.toggle.value ? `暂停 ${row.name}` : `恢复 ${row.name}`}
           accessibilityHint={row.toggle.hint ?? undefined}
@@ -305,10 +364,13 @@ function ScheduleRow({ row, last, busy, onOpen, onToggle }: {
           trackColor={{ true: colors.accent, false: colors.border }}
           thumbColor={colors.card}
         />
-      </View>
+      </View>}
     </View>
   );
 }
+
+/** 已停下的计划垃圾桶用次要色(主要动作);还在跑的用弱色,别抢开关的视线。 */
+const deleteIconColor = (stopped: boolean) => (stopped ? colors.textSecondary : colors.textMuted);
 
 // Rebuilt on theme change (colors are read at StyleSheet.create time).
 const makeStyles = () => StyleSheet.create({
@@ -335,6 +397,8 @@ const makeStyles = () => StyleSheet.create({
   pill: { flexShrink: 0, fontSize: typeScale.caption, fontWeight: weight.medium, overflow: 'hidden', paddingHorizontal: 8, paddingVertical: 1, borderRadius: radius.pill },
   hint: { color: colors.textMuted, fontSize: typeScale.caption, lineHeight: 16 },
   toggleWrap: { paddingRight: spacing.lg, paddingLeft: spacing.xs, justifyContent: 'center' },
+  deleteBtn: { width: 36, height: 36, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center', marginRight: spacing.md },
+  deleteBtnBeforeToggle: { marginRight: 0 },
 });
 let s = makeStyles();
 onThemeChange(() => { s = makeStyles(); });

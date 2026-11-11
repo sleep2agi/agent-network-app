@@ -27,9 +27,9 @@ const HUB = 'http://hub.placeholder.invalid';
 const json = (body, status = 200) => ({ status, contentType: 'application/json', body: JSON.stringify(body) });
 
 // ── stateful mock hub ────────────────────────────────────────────────────────
-let row, patches, listReads;
+let row, patches, listReads, purges, cancels;
 const reset = () => {
-  patches = []; listReads = 0;
+  patches = []; listReads = 0; purges = []; cancels = [];
   row = {
     schedule_id: 'sched_1', network_id: 'net-placeholder', name: '团队整体工作调度', target_node_id: 'node_demo_a', target_alias: 'demo-node-a',
     task_content: '看一眼团队进度', priority: 'normal', schedule: { type: 'interval', every_seconds: 120 }, timezone: 'Asia/Shanghai',
@@ -47,7 +47,15 @@ const answer = (req) => {
   const u = new URL(req.url()), p = u.pathname, method = req.method();
   if (p === '/api/status') return json({ sessions: [session] });
   if (p === '/api/nodes') return json({ ok: true, nodes: [{ node_id: 'node_demo_a', alias: 'demo-node-a', runtime: 'claude-code', lifecycle_state: 'active' }], count: 1 });
-  if (p === '/api/scheduled-tasks' && method === 'GET') { listReads++; return json({ ok: true, schedules: [row] }); }
+  if (p === '/health') return json({ ok: true, capabilities: ['scheduled_task_purge'] });
+  if (p === '/api/scheduled-tasks' && method === 'GET') { listReads++; return json({ ok: true, schedules: row ? [row] : [] }); }
+  if ((p === '/api/scheduled-tasks/sched_1/cancel' && method === 'POST') || (p === '/api/scheduled-tasks/sched_1' && method === 'DELETE')) { cancels.push(1); row = { ...row, status: 'cancelled', next_run_at: null, revision: row.revision + 1 }; return json({ ok: true, status: 'cancelled' }); }
+  if (p === '/api/scheduled-tasks/sched_1/purge' && method === 'POST') {
+    purges.push(row?.status);
+    if (!row) return json({ ok: false, error: 'schedule_not_found' }, 404);
+    if (row.status !== 'cancelled' && row.status !== 'completed') return json({ ok: false, error: 'schedule_not_stopped' }, 409);
+    row = null; return json({ ok: true, status: 'purged' });
+  }
   if (p === '/api/scheduled-tasks/sched_1/runs') return json({ ok: true, runs: runs().slice(0, Number(u.searchParams.get('limit') || 50)) });
   if (p === '/api/scheduled-tasks/sched_1' && method === 'PATCH') {
     const body = JSON.parse(req.postData() || '{}');
@@ -190,6 +198,17 @@ for (const { w, h, phone } of [{ w: 1200, h: 800, phone: false }, { w: 390, h: 8
     await page.locator(tid('schedule-form-cancel')).click();
     await page.waitForTimeout(400);
     ck(`${tag} 新建: untouched form closes without the confirm`, !(await formOpen(page)) && (await page.locator(tid('schedule-discard-confirm')).count()) === 0);
+
+    // 删除(admin 11-11):行尾垃圾桶 ⇒ 确认 ⇒ 还在跑的先 cancel 再 purge ⇒ 行从列表消失
+    ck(`${tag} 删除: trash button on the Hub row`, (await page.locator(tid('node-schedule-delete-hub_sched_1')).count()) === 1);
+    await page.locator(tid('node-schedule-delete-hub_sched_1')).click();
+    await page.locator(tid('schedule-delete-confirm')).waitFor({ timeout: 5000 }).catch(() => {});
+    ck(`${tag} 删除: confirm asked, says it cannot be undone`, (await page.locator(tid('schedule-delete-confirm')).count()) === 1 && (await page.locator(tid('schedule-delete-confirm')).innerText()).includes('无法恢复'));
+    if (OUT) await page.screenshot({ path: `${OUT}/${tag}-delete-confirm.png` });
+    await page.locator(tid('schedule-delete-confirm-ok')).click();
+    await page.waitForFunction(() => !document.querySelector('[data-testid="node-schedule-row-hub_sched_1"]'), null, { timeout: 10000 }).catch(() => {});
+    ck(`${tag} 删除: active plan cancelled first, then purged`, cancels.length === 1 && purges.length === 1 && purges[0] === 'cancelled', JSON.stringify({ cancels, purges }));
+    ck(`${tag} 删除: row gone from the list`, (await page.locator(tid('node-schedule-row-hub_sched_1')).count()) === 0);
     await ctx.close();
   }
 }

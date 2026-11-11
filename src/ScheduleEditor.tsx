@@ -653,6 +653,17 @@ export function CancelScheduleModal({ value, busy, onClose, onConfirm }: {
   return <ScheduleConfirm visible={!!value} title="取消计划？" message={value?.name} backLabel="返回" confirmLabel="取消计划" busy={busy} testID="schedule-cancel-confirm" onClose={onClose} onConfirm={onConfirm} />;
 }
 
+/** 删除计划(真删,admin 11-11)。还在跑的先取消再删,所以文案同时说「停止」和「删除」。 */
+export function DeleteScheduleModal({ value, busy, onClose, onConfirm }: {
+  value: { name: string; running: boolean } | null;
+  busy: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const message = value ? `「${value.name}」${value.running ? '会先停止,再' : ''}连同执行记录一起删除,删除后无法恢复。已经派出去的任务不受影响。` : undefined;
+  return <ScheduleConfirm visible={!!value} title="删除计划？" message={message} backLabel="返回" confirmLabel="删除" busy={busy} testID="schedule-delete-confirm" onClose={onClose} onConfirm={onConfirm} />;
+}
+
 /** 编辑器 + 定时任务页共用的样式(定时任务页的 makeStyles 在它上面再加列表 / 详情自己的)。按主题现取颜色。 */
 export function scheduleStyleDefs() { return {
   flex: { flex: 1 },

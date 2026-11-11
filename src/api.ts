@@ -477,6 +477,12 @@ export const setScheduledTaskStatus = (cfg: HubConfig, row: HubScheduledTask, st
 export const runScheduledTaskNow = (cfg: HubConfig, scheduleId: string) =>
   scheduledWrite<{ ok: true; taskId?: string; status: string }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}/run-now${networkQuery(cfg)}`, 'POST', {});
 
+/** 真删一条已停下(已取消 / 已完成)的计划,连执行记录一起删(Hub /health 报 scheduled_task_purge 才有)。
+ *  还在跑的 Hub 回 409 schedule_not_stopped:调用方先 cancel。 */
+export const SCHEDULE_PURGE_CAPABILITY = 'scheduled_task_purge';
+export const purgeScheduledTask = (cfg: HubConfig, scheduleId: string) =>
+  scheduledWrite<{ ok: true; status: 'purged' }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}/purge${networkQuery(cfg)}`, 'POST', {});
+
 export const cancelScheduledTask = (cfg: HubConfig, scheduleId: string) =>
   scheduledWrite<{ ok: true; status: string }>(cfg, `/api/scheduled-tasks/${encodeURIComponent(scheduleId)}${networkQuery(cfg)}`, 'DELETE');
 
