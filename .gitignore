@@ -42,3 +42,6 @@ yarn-error.*
 src-tauri/binaries/commhub-*-apple-darwin
 src-tauri/binaries/commhub-*-pc-windows-msvc.exe
 src-tauri/binaries/commhub-*-unknown-linux-gnu
+# 符号链接形式的 node_modules 也要忽略：`node_modules/` 只匹配目录，
+# 指向目录的 symlink 会被 git 当成文件而绕过忽略（2026-11-12 一次误提交的成因）。
+node_modules
