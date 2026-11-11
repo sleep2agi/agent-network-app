@@ -57,8 +57,8 @@ try {
   for (const [label, viewport] of [['desktop', { width: 1280, height: 900 }], ['phone', { width: 390, height: 844 }]]) {
     const { page, errors } = await mount(viewport);
     await row(page, 'build').waitFor();
-    assert.deepEqual(await page.locator('[data-testid^="composer-agent-row-"]').evaluateAll(rows => rows.map(row => row.getAttribute('aria-label'))), ['build', 'general', 'explore', 'compaction', 'title', 'summary', 'plan']);
-    ck(`${label}: native order, dedupe only, internal agents retained`, true);
+    assert.deepEqual(await page.locator('[data-testid^="composer-agent-row-"]').evaluateAll(rows => rows.map(row => row.getAttribute('aria-label'))), ['build', 'general', 'explore', 'plan']);
+    ck(`${label}: native order, dedupe, internal agents (compaction/title/summary) hidden`, true);
     ck(`${label}: readback current checked once`, await check(page).count() === 1 && await page.getByTestId('composer-agent-check-build').count() === 1);
     const box = await page.getByTestId('composer-model-sheet').boundingBox();
     ck(`${label}: panel within viewport`, box && box.y >= 0 && box.x >= 0 && box.y + box.height <= viewport.height && box.x + box.width <= viewport.width);
