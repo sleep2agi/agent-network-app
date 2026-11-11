@@ -52,11 +52,12 @@ const FULL = {
 
 // ⑤ 老 Hub / 读失败 ⇒ 全部关闭，原因是「Hub 版本不提供」，而不是「这台机器没开」
 {
+  // 规格：「老 Hub 时入口仍显示，点进去说明」——不拿未知冒充不支持，所以不门控，只给一行提示。
   const g = sourceCapabilityGates(FULL, 'unsupported');
-  ck('old hub closes everything', !g.directory.ok && !g.projectNewSession.ok && !g.attach.ok && !g.fork.ok);
-  ck('old hub reason is about the hub version', g.directory.reasonKey === 'sourcePalette.cap.hubUnsupported');
+  ck('old hub does NOT gate entries (they stay visible)', g.directory.ok && g.projectNewSession.ok && g.attach.ok && g.fork.ok);
+  ck('old hub surfaces a notice instead', g.hubNoticeKey === 'sourcePalette.cap.hubUnsupported');
   const u = sourceCapabilityGates(FULL, 'unknown');
-  ck('unknown read is also closed (no pretending)', !u.fork.ok && u.source === 'unknown');
+  ck('unknown read also stays ungated, with notice', u.fork.ok && u.hubNoticeKey === 'sourcePalette.cap.hubUnsupported' && u.source === 'unknown');
 }
 
 // ⑥ daemon 不在列表里 ⇒ 不是守护节点

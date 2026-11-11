@@ -542,6 +542,9 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           <Ionicons name="close" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
+      {caps.hubNoticeKey ? (
+        <Text style={[styles.headerSub, { color: colors.textSecondary }]} numberOfLines={2} testID="source-capability-hub-notice">{t(caps.hubNoticeKey)}</Text>
+      ) : null}
       {/* Fork 当前节点（admin 11-11「有点丑」）：不摆 network / node id、mode= 这类内部字段，改成一句人话；
           只有一个源会话时也不放搜索框。完整命令面板（节点来源）保持原样。 */}
       {forkOnly ? (

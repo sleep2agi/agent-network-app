@@ -35,6 +35,8 @@ export interface SourceCapabilityGates {
   attach: CapabilityGate;
   fork: CapabilityGate;
   source: CapsSource;
+  /** 只有在「Hub 读不到能力」时才有值：给 UI 显示一行说明（不参与门控）。 */
+  hubNoticeKey?: string;
 }
 
 const present = (v: unknown): boolean => typeof v === 'string' && v.trim().length > 0;
@@ -48,9 +50,14 @@ const gate = (ok: boolean, reasonKey: string): CapabilityGate => (ok ? { ok: tru
  */
 export function sourceCapabilityGates(row: DaemonSourceCaps | null | undefined, source: CapsSource): SourceCapabilityGates {
   if (source !== 'ok') {
+    // 老 Hub / 读失败：**不门控**（入口照常显示，点进去由服务端给真实原因），
+    // 同时在 UI 上看得到一句「当前 Hub 版本不提供该能力」。
+    // 为什么不在这里关：规格要求「入口仍显示，但点进去说明」，而且此时我们**不知道**
+    // 这台机器到底支持什么 —— 拿不到数据就把入口关掉，等于用「未知」冒充「不支持」。
     const r = 'sourcePalette.cap.hubUnsupported';
     return {
-      directory: gate(false, r), projectNewSession: gate(false, r), attach: gate(false, r), fork: gate(false, r), source,
+      directory: { ok: true, reasonKey: null }, projectNewSession: { ok: true, reasonKey: null },
+      attach: { ok: true, reasonKey: null }, fork: { ok: true, reasonKey: null }, source, hubNoticeKey: r,
     };
   }
   // 列表拿到了但这台 daemon 没有被列出来：说明它不是 host_supervisor，能力无从谈起。
