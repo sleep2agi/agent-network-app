@@ -79,6 +79,14 @@ ck('empty status is not a flip', !statusFlipProvesInterrupted('working', ''));
     screen.includes('enabled={interruptable(sessionStatus)}') && screen.includes('<ComposerStopButton'));
   ck('composer waits for node proof instead of trusting accepted',
     screen.includes('ackProvesInterrupted(res.payload)') && screen.includes('replyProvesInterrupted('));
+  // 「未确认」不是终局：unconfirmed 之后仍要听迟到真凭据（回执 / 状态翻转）。
+  // 这两条守的是 UI 层的 effect 条件 —— 把条件收回成 `!== 'waiting'` 时行为会退化，但纯函数测试仍全绿。
+  ck('still listens for node proof after unconfirmed',
+    screen.includes("interrupt.phase !== 'waiting' && interrupt.phase !== 'unconfirmed'"));
+  ck('status flip also counts while unconfirmed (bounded by LATE_EVIDENCE_MS)',
+    /interrupt\.phase === 'unconfirmed' && lateEvidenceAllowed\(\)/.test(screen));
+  ck('late evidence has an upper bound so a natural turn end cannot be misread as a stop',
+    screen.includes('lateEvidenceAllowed') && screen.includes('LATE_EVIDENCE_MS'));
 }
 
 console.log(`turn-interrupt: ${passed}/${total}`);
