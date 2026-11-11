@@ -177,3 +177,53 @@ export function reportsCatalogSince(version: string | null | undefined): boolean
   if (major !== 2 || minor !== 5 || patch !== 0) return null;
   return preview >= 160;
 }
+
+/** Pure. 节点自报清单 + 自报档位 → 面板快照的 models。档位编码 `provider/model=a,b,c`；
+ * 认不出的条目丢掉，不猜。没报档位的模型不带 variants（面板据此显示当前值，而不是编出档位）。 */
+export function reportedCatalogWithVariants(
+  catalog: readonly unknown[] | null | undefined,
+  variants: readonly unknown[] | null | undefined,
+): Array<{ providerId: string; id: string; variants?: string[] }> {
+  const map = new Map<string, string[]>();
+  for (const entry of variants ?? []) {
+    if (typeof entry !== 'string') continue;
+    const eq = entry.lastIndexOf('=');
+    if (eq <= 0) continue;
+    const key = entry.slice(0, eq);
+    const list = entry.slice(eq + 1).split(',').map(v => v.trim()).filter(v => /^[A-Za-z0-9._-]{1,40}$/.test(v));
+    if (list.length && new Set(list).size === list.length) map.set(key, list);
+  }
+  const out: Array<{ providerId: string; id: string; variants?: string[] }> = [];
+  for (const raw of reportedCatalogModels(catalog as string[] | null | undefined)) {
+    const slash = raw.indexOf('/');
+    const v = map.get(raw);
+    out.push({ providerId: raw.slice(0, slash), id: raw.slice(slash + 1), ...(v ? { variants: v } : {}) });
+  }
+  return out;
+}
+
+/** Pure. 这台节点自己没有清单时，用**同 runtime 其他节点**自报的清单（连同它们报的档位）兜底。
+ * 只合并、去重、保序；返回贡献节点数，界面据此写明「清单来自 N 个同类节点」。 */
+export function peerCatalogWithVariants(
+  nodes: readonly { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null; opencode_catalog_variants?: string[] | null }[] | null | undefined,
+  options: { runtime: string | null | undefined; excludeNodeId?: string; limit?: number },
+): { models: Array<{ providerId: string; id: string; variants?: string[] }>; nodes: number } {
+  const runtime = options.runtime;
+  if (!runtime) return { models: [], nodes: 0 };
+  const limit = options.limit ?? 120;
+  const byKey = new Map<string, { providerId: string; id: string; variants?: string[] }>();
+  let contributing = 0;
+  for (const n of nodes ?? []) {
+    if (!n || n.runtime !== runtime) continue;
+    if (options.excludeNodeId && n.node_id === options.excludeNodeId) continue;
+    const rows = reportedCatalogWithVariants(n.opencode_catalog, n.opencode_catalog_variants);
+    if (rows.length) contributing += 1;
+    for (const row of rows) {
+      const key = `${row.providerId}/${row.id}`;
+      const prev = byKey.get(key);
+      if (!prev) { if (byKey.size < limit) byKey.set(key, row); }
+      else if (!prev.variants && row.variants) byKey.set(key, row);
+    }
+  }
+  return { models: [...byKey.values()], nodes: contributing };
+}

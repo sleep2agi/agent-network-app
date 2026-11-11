@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.508:",
+  "- 模型面板：手动启动、还没上报模型清单的节点，不再只显示一段红字 —— 改用同类节点报的清单（会注明来源），可以直接换模型。",
+  "- 模型面板：OpenCode 节点的思考档位（none / low / high / max）现在可以直接点选 —— 节点升级到 agent-node 2.5.0-preview.202 后会随模型清单一起上报档位，以前这里只能显示「未知」。",
+  "",
   "What's new in 0.2.507:",
   "- 模型面板：交给守护进程管理的节点读不到 daemon 代读的模型清单时，改用节点自己上报的清单，不再只显示一行 node_not_found；真的读不到时显示中文原因。",
   "- 模型面板：Build / Agent 改成一行可点的标签，模型列表恢复完整高度（之前被挤得只剩三四行）；思考档位在清单没列出档位时显示当前值（如「默认」），不再显示「未知」和下方不一致。",
