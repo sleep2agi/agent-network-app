@@ -1,0 +1,24 @@
+import { setLanguagePreference } from './i18n';
+// 节点管理授权模型:显示文案、增删(同能力同范围替换级别)、草稿完整性、错误人话。
+import { addGrant, draftComplete, grantErrorText, grantLine, removeGrant, type GrantDraft } from './node-grants-model';
+
+setLanguagePreference('zh');
+let n = 0;
+const ck = (name: string, ok: boolean) => { if (!ok) { console.error('FAIL', name); process.exit(1); } n++; };
+const depts = [{ id: 'd_tm', path: 'TMAI / TMWork' }];
+const nodes = [{ key: 'n_a', node_id: 'n_a', alias: '神明' } as any];
+const net: GrantDraft = { capability: 'schedules', scope_kind: 'network', scope_id: '', level: 'edit' };
+const dep: GrantDraft = { capability: 'schedules', scope_kind: 'department', scope_id: 'd_tm', level: 'read' };
+const nod: GrantDraft = { capability: 'schedules', scope_kind: 'node', scope_id: 'n_a', level: 'edit' };
+
+ck('全网显示', grantLine(net, depts, nodes) === '定时任务 · 整个网络 · 可编辑');
+ck('部门显示路径', grantLine(dep, depts, nodes) === '定时任务 · 部门 TMAI / TMWork · 只读');
+ck('节点显示别名', grantLine(nod, depts, nodes) === '定时任务 · 节点 神明 · 可编辑');
+ck('不认识的部门显示 id', grantLine({ ...dep, scope_id: 'd_x' }, depts, nodes).includes('d_x'));
+ck('同能力同范围再加一次 = 替换级别,不重复', (() => { const l = addGrant([dep], { ...dep, level: 'edit' }); return l.length === 1 && l[0].level === 'edit'; })());
+ck('不同范围各一条', addGrant([net], dep).length === 2);
+ck('撤销只删那一条', (() => { const l = removeGrant([net, dep, nod], dep); return l.length === 2 && !l.some(x => x.scope_kind === 'department'); })());
+ck('部门 / 节点范围没选对象不能提交', draftComplete(net) && !draftComplete({ ...dep, scope_id: '' }) && !draftComplete({ ...nod, scope_id: '' }));
+ck('403 说清楚谁能授', grantErrorText({ status: 403, error: 'permission_denied' }).includes('节点主人不能'));
+ck('能力未开放', grantErrorText({ status: 400, error: 'capability_not_supported' }).includes('还不支持'));
+console.log(`node grants model: ${n}/${n}`);

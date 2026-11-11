@@ -26,6 +26,7 @@ import './i18n-backend-pending';
 import './i18n-hub-scope';
 import './i18n-runtime-support';
 import './i18n-node-permissions';
+import './i18n-node-grants';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
@@ -64,6 +65,7 @@ migrated.push('src/HubScopeScreen.tsx');
 migrated.push('src/HubScopeFixtureScreen.tsx');
 migrated.push('src/AgentOrgScreen.tsx');
 migrated.push('src/NodePermissionSection.tsx');
+migrated.push('src/NodeGrantsCard.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

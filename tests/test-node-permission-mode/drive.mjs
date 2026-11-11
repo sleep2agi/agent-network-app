@@ -96,7 +96,15 @@ const initScript = ({ theme }) => {
       if (n) n[`${list[2]}_allowlist`] = body[field];
       return { ok: true, node_id: n?.node_id, [field]: body[field] };
     }
-    if (p === '/health') return { ok: true, capabilities: sessionStorage.getItem('noInboxCap') ? ['node_permission_mode'] : ['node_permission_mode', 'node_inbox_allowlist'] };
+    const grants = /^\/api\/nodes\/([^/]+)\/grants$/.exec(p);
+    if (grants) {
+      window.__grants ||= {};
+      const id = decodeURIComponent(grants[1]);
+      if (method === 'PUT') { const body = decode(data); (window.__grantPuts ||= []).push({ node: id, grants: body.grants }); window.__grants[id] = body.grants.map(g => ({ ...g, scope_id: g.scope_id || '' })); }
+      return { ok: true, node_id: id, grants: window.__grants[id] || [], capabilities: ['schedules'] };
+    }
+    if (p === '/api/networks/net-perm/departments') return { ok: true, departments: [{ id: 'd_top', name: '示例部门', parent_id: null, leader_user_id: null, sort: 0, member_count: 1 }, { id: 'd_kid', name: '子部门', parent_id: 'd_top', leader_user_id: null, sort: 1, member_count: 0 }], members: [] };
+    if (p === '/health') return { ok: true, capabilities: sessionStorage.getItem('noInboxCap') ? ['node_permission_mode'] : ['node_permission_mode', 'node_inbox_allowlist', 'node_inbox_allowlist_dept', 'node_grants'] };
     if (p === '/api/networks/net-perm/node-permission-report') return report;
     if (p === '/api/auth/me') return { ok: true, user: { user_id: 'u_tester', username: 'tester', role: 'user' }, current_network: 'net-perm', networks: [{ network_id: 'net-perm', member_role: 'owner', agent_access: 'all' }] };
     if (p === '/api/networks/net-perm/humans') return { ok: true, humans: [{ user_id: 'u_tester', username: 'tester' }] };
@@ -306,6 +314,30 @@ async function run(vp, viewport, ua, theme, phone) {
   const stillStrict = await page.locator(tid('node-inbox-allowlist-strict')).getAttribute('aria-checked').catch(() => null);
   record(tag, '9 refusal shows reason code + Hub hint, keeps the list', { reason: listErr.includes('sender_not_allowed'), hint: listErr.includes('stub hint: ask the node owner'), kept: stillStrict === 'true' }, { listErr, stillStrict });
   await page.evaluate(() => { window.__listFail = false; });
+
+  // 11 管理权限：添加「定时任务 · 某部门(子部门) · 只读」→ 一次 PUT，列表里出现；撤销 → PUT []
+  await page.evaluate(() => { window.__grantPuts = []; });
+  await page.locator(tid('node-grants-card')).scrollIntoViewIfNeeded({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-grants-add')).click({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-grants-scope-department')).click({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-grants-dept-d_kid')).click({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-grants-level-read')).click({ timeout: 3000 }).catch(() => {});
+  const boardDisabled = await page.locator(tid('node-grants-cap-board')).getAttribute('aria-disabled').catch(() => null);
+  await page.locator(tid('node-grants-form')).screenshot({ path: join(OUT, `${tag}-4-grants-form.png`) }).catch(() => {});
+  await page.locator(tid('node-grants-save')).click({ timeout: 3000 }).catch(() => {});
+  await sleep(600);
+  const gPuts = await page.evaluate(() => window.__grantPuts);
+  const gRow = await page.locator(tid('node-grants-list')).innerText({ timeout: 2000 }).catch(() => '');
+  await page.locator(tid('node-grants-card')).screenshot({ path: join(OUT, `${tag}-5-grants.png`) }).catch(() => {});
+  record(tag, '11 管理权限: add department·read → one PUT, row shows path', {
+    onePut: gPuts.length === 1 && gPuts[0].grants.length === 1 && gPuts[0].grants[0].scope_kind === 'department' && gPuts[0].grants[0].scope_id === 'd_kid' && gPuts[0].grants[0].level === 'read',
+    row: gRow.includes('定时任务') && gRow.includes('示例部门 / 子部门') && gRow.includes('只读'),
+    boardComingSoon: boardDisabled === 'true',
+  }, { gPuts, gRow, boardDisabled });
+  await page.locator(tid('node-grant-revoke-schedules-department-d_kid')).click({ timeout: 3000 }).catch(() => {});
+  await sleep(500);
+  const gPuts2 = await page.evaluate(() => window.__grantPuts);
+  record(tag, '12 管理权限: revoke → PUT []', { cleared: gPuts2.length === 2 && gPuts2[1].grants.length === 0 }, { gPuts2 });
 
   // 10 Hub without the capability
   await page.evaluate(() => sessionStorage.setItem('noInboxCap', '1'));
