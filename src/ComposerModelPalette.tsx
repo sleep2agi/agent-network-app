@@ -23,7 +23,7 @@ import {
   type HubNode,
   type NodeConfigRead,
 } from './api';
-import { catalogErrorText, isOpenCodeV2Node } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, reportedCatalogWithVariants } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { variantValueError, variantWritable } from './node-variant-patch';
@@ -129,10 +129,9 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       return () => { live = false; };
     }
     // 节点自己上报到 Hub 的模型清单（GET /api/nodes 的 `opencode_catalog`）—— 真实来源，不是内置清单。
-    const reported = (node.opencode_catalog ?? []).filter((id): id is string => typeof id === 'string' && id.includes('/'));
-    const reportedSnapshot = reported.length
-      ? { models: reported.map((id) => ({ providerId: id.slice(0, id.indexOf('/')), id: id.slice(id.indexOf('/') + 1) })) } as PaletteCatalogSnapshot
-      : null;
+    // 档位也来自节点自报（opencode_catalog_variants，admin 2026-11-11「有没有让他正常上报」）。
+    const reported = reportedCatalogWithVariants(node.opencode_catalog, node.opencode_catalog_variants);
+    const reportedSnapshot = reported.length ? { models: reported } as PaletteCatalogSnapshot : null;
     // daemon 代读失败时：有上报清单就用它（收编来的节点 Hub 上没有「daemon 创建」记录，代读会被拒
     // node_not_found —— admin 2026-11-11 截图），没有才显示**翻译过的**原因，不再露原始错误码。
     const failWith = (error: string | undefined) => setCatalog(reportedSnapshot
@@ -164,7 +163,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       if (live) failWith('unavailable');
     })();
     return () => { live = false; };
-  }, [node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, (node?.opencode_catalog ?? []).join('|'), cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
+  }, [node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, (node?.opencode_catalog ?? []).join('|'), (node?.opencode_catalog_variants ?? []).join('|'), cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
 
   const view = paletteView({
     snapshot: catalog.snapshot,

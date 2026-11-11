@@ -177,3 +177,27 @@ export function reportsCatalogSince(version: string | null | undefined): boolean
   if (major !== 2 || minor !== 5 || patch !== 0) return null;
   return preview >= 160;
 }
+
+/** Pure. 节点自报清单 + 自报档位 → 面板快照的 models。档位编码 `provider/model=a,b,c`；
+ * 认不出的条目丢掉，不猜。没报档位的模型不带 variants（面板据此显示当前值，而不是编出档位）。 */
+export function reportedCatalogWithVariants(
+  catalog: readonly unknown[] | null | undefined,
+  variants: readonly unknown[] | null | undefined,
+): Array<{ providerId: string; id: string; variants?: string[] }> {
+  const map = new Map<string, string[]>();
+  for (const entry of variants ?? []) {
+    if (typeof entry !== 'string') continue;
+    const eq = entry.lastIndexOf('=');
+    if (eq <= 0) continue;
+    const key = entry.slice(0, eq);
+    const list = entry.slice(eq + 1).split(',').map(v => v.trim()).filter(v => /^[A-Za-z0-9._-]{1,40}$/.test(v));
+    if (list.length && new Set(list).size === list.length) map.set(key, list);
+  }
+  const out: Array<{ providerId: string; id: string; variants?: string[] }> = [];
+  for (const raw of reportedCatalogModels(catalog as string[] | null | undefined)) {
+    const slash = raw.indexOf('/');
+    const v = map.get(raw);
+    out.push({ providerId: raw.slice(0, slash), id: raw.slice(slash + 1), ...(v ? { variants: v } : {}) });
+  }
+  return out;
+}

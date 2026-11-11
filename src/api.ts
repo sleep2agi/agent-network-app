@@ -330,6 +330,8 @@ export interface HubNode {
    * 旧 Hub 没有这一格 ⇒ undefined（当作「没上报过」，不是「这台机器没有模型」）。
    */
   opencode_catalog?: string[] | null;
+  /** admin 2026-11-11 —— 每个模型的思考档位：`provider/model=none,low,high,max`（agent-node ≥ 2.5.0-preview.202 上报）。 */
+  opencode_catalog_variants?: string[] | null;
   /**
    * #2293 —— `/api/nodes` 从快照里放出来的三个标量（**不是**整个快照）：
    * 代际（v1/v2）、模式（copresence/…）、OpenCode serve 的 loopback 端点。
