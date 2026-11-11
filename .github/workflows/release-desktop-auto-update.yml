@@ -611,6 +611,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.519:
+            - 聊天框新增「打断并发送」：一轮还在跑的时候，输入框旁会出现这个动作。点它才会先停下这一轮、确认停下后把这条发出去；默认发送保持不变（仍是即时的一条请求，不会悄悄打断你的回合）。
+              如果 8 秒内拿不到「真的停了」的凭据，这条不会发出，草稿留在输入框里，并明确告诉你没发出去。
+
             What's new in 0.2.518:
             - 聊天框下方「思考档位」：没有 daemon 中继、或快照不报档位的节点，档位从「思考档位（未知）」变成该模型真实的可选档位；选完沿用既有回读确认（快照优先，用节点自报的档位补齐缺口，谁都没报仍然显示未知）。
             - 新增「停止当前回合」：只在有回合在飞时可点。Hub 回 accepted 不算成功 —— 以节点回执 interrupted=true 或回合真的结束为准；8 秒内没有真凭据会显示「已发送，节点未确认（可能仍在跑）」，之后迟到的真凭据仍会升级成「已停止」（需要 agent-node 2.5.0-preview.206 起）。
