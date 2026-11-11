@@ -201,3 +201,29 @@ export function reportedCatalogWithVariants(
   }
   return out;
 }
+
+/** Pure. 这台节点自己没有清单时，用**同 runtime 其他节点**自报的清单（连同它们报的档位）兜底。
+ * 只合并、去重、保序；返回贡献节点数，界面据此写明「清单来自 N 个同类节点」。 */
+export function peerCatalogWithVariants(
+  nodes: readonly { node_id?: string; runtime?: string | null; opencode_catalog?: string[] | null; opencode_catalog_variants?: string[] | null }[] | null | undefined,
+  options: { runtime: string | null | undefined; excludeNodeId?: string; limit?: number },
+): { models: Array<{ providerId: string; id: string; variants?: string[] }>; nodes: number } {
+  const runtime = options.runtime;
+  if (!runtime) return { models: [], nodes: 0 };
+  const limit = options.limit ?? 120;
+  const byKey = new Map<string, { providerId: string; id: string; variants?: string[] }>();
+  let contributing = 0;
+  for (const n of nodes ?? []) {
+    if (!n || n.runtime !== runtime) continue;
+    if (options.excludeNodeId && n.node_id === options.excludeNodeId) continue;
+    const rows = reportedCatalogWithVariants(n.opencode_catalog, n.opencode_catalog_variants);
+    if (rows.length) contributing += 1;
+    for (const row of rows) {
+      const key = `${row.providerId}/${row.id}`;
+      const prev = byKey.get(key);
+      if (!prev) { if (byKey.size < limit) byKey.set(key, row); }
+      else if (!prev.variants && row.variants) byKey.set(key, row);
+    }
+  }
+  return { models: [...byKey.values()], nodes: contributing };
+}

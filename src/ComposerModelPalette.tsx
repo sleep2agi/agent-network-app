@@ -15,6 +15,7 @@ import { t } from './i18n';
 import { colors, radius, spacing } from './theme';
 import { ds } from './ui-scale';
 import {
+  fetchHubNodes,
   fetchNodeConfig,
   pollOpenCodeCatalog,
   queueOpenCodeCatalog,
@@ -23,7 +24,7 @@ import {
   type HubNode,
   type NodeConfigRead,
 } from './api';
-import { catalogErrorText, isOpenCodeV2Node, reportedCatalogWithVariants } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { variantValueError, variantWritable } from './node-variant-patch';
@@ -65,6 +66,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const styles = makeStyles();
   const { height: windowHeight } = useWindowDimensions();
   const [query, setQuery] = useState('');
+  // 清单不是这台节点自己的（来自同类节点）时的说明；null = 来源就是这台节点。
+  const [catalogNote, setCatalogNote] = useState<string | null>(null);
   const [catalog, setCatalog] = useState<{ snapshot: PaletteCatalogSnapshot | null; loading: boolean; error: string | null }>({
     snapshot: null,
     loading: true,
@@ -134,9 +137,22 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     const reportedSnapshot = reported.length ? { models: reported } as PaletteCatalogSnapshot : null;
     // daemon 代读失败时：有上报清单就用它（收编来的节点 Hub 上没有「daemon 创建」记录，代读会被拒
     // node_not_found —— admin 2026-11-11 截图），没有才显示**翻译过的**原因，不再露原始错误码。
-    const failWith = (error: string | undefined) => setCatalog(reportedSnapshot
-      ? { snapshot: reportedSnapshot, loading: false, error: null }
-      : { snapshot: null, loading: false, error: catalogErrorText(error) });
+    setCatalogNote(null);
+    const failWith = (error: string | undefined) => {
+      if (reportedSnapshot) { setCatalog({ snapshot: reportedSnapshot, loading: false, error: null }); return; }
+      // admin 2026-11-11（天马总运维截图）：手动启动、旧版本的节点既没人代读也没自报，面板只剩一段红字，
+      // 连换模型都做不到。先用同 runtime 其他节点自报的清单兜底，并写明来源；都没有才显示原因。
+      void fetchHubNodes(cfgRef.current).then(result => {
+        if (!live) return;
+        const peers = peerCatalogWithVariants(result.nodes, { runtime: node.runtime, excludeNodeId: node.node_id });
+        if (peers.models.length) {
+          setCatalog({ snapshot: { models: peers.models } as PaletteCatalogSnapshot, loading: false, error: null });
+          setCatalogNote(t('chat.modelPicker.peerCatalogSource', { count: peers.nodes }));
+        } else {
+          setCatalog({ snapshot: null, loading: false, error: catalogErrorText(error) });
+        }
+      }).catch(() => { if (live) setCatalog({ snapshot: null, loading: false, error: catalogErrorText(error) }); });
+    };
     const daemonNodeId = nodeProviderDaemon(node);
     if (!daemonNodeId) {
       // A node started by hand (`anet node start`, opencode-cli co-presence) has no daemon
@@ -453,7 +469,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       )}
 
       {view.status === 'ready' && view.catalogTotal > 0 ? (
-        <Text style={styles.source} testID="model-palette-source">{t('chat.modelPicker.catalogSource')}</Text>
+        <Text style={styles.source} testID="model-palette-source">{catalogNote ?? t('chat.modelPicker.catalogSource')}</Text>
       ) : null}
 
       {notice ? <Text style={styles.notice} testID="model-palette-applied">{notice}</Text> : null}

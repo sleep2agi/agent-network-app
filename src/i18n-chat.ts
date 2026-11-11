@@ -24,6 +24,7 @@ export const chatTranslations = {
   'chat.modelPicker.variantTitle': ['思考档位', 'Thinking level'],
   'chat.modelPicker.clearVariant': ['清除档位', 'Clear variant'],
   'chat.modelPicker.variantNone': ['该模型没有可选档位', 'This model has no optional variant'],
+  'chat.modelPicker.peerCatalogSource': ['这台节点还没上报自己的模型清单，下面是 {count} 个同类节点报的清单（换模型以节点实际支持为准）', 'This node has not reported its own catalog; listing what {count} similar nodes reported (the node decides what actually works)'],
   'chat.modelPicker.variantUnknown': ['{value}（这个模型的清单里没有列出其它档位）', '{value} (the catalog lists no other levels for this model)'],
   'chat.modelPicker.currentMark': ['当前', 'Current'],
   'chat.file.saveHint': ['选择位置保存 · Alt 点击直接存到下载', 'Choose a save location · Alt-click to save to Downloads'],
