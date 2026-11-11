@@ -60,10 +60,22 @@ export function sourceCapabilityGates(row: DaemonSourceCaps | null | undefined, 
       attach: { ok: true, reasonKey: null }, fork: { ok: true, reasonKey: null }, source, hubNoticeKey: r,
     };
   }
-  // 列表拿到了但这台 daemon 没有被列出来：说明它不是 host_supervisor，能力无从谈起。
+  // 列表拿到了，但这台 daemon 没有被列出来 ⇒ 能力无处可查 ⇒ 按「未知」处理：放行，不禁用。
+  // （兼容优先：宁可让老 Hub/非守护节点保持 #4495 之前的行为，也不要误杀。）
   if (!row) {
-    const r = 'sourcePalette.cap.notDaemon';
-    return { directory: gate(false, r), projectNewSession: gate(false, r), attach: gate(false, r), fork: gate(false, r), source };
+    return {
+      directory: { ok: true, reasonKey: null }, projectNewSession: { ok: true, reasonKey: null },
+      attach: { ok: true, reasonKey: null }, fork: { ok: true, reasonKey: null }, source,
+    };
+  }
+  // 拿到了行，但五条键一条都没有 ⇒ 与「读不到」同义（老 daemon / 老 Hub），同样放行 + 中性提示。
+  const anyKey = present(row.source_directory_read) || present(row.project_new_session)
+    || present(row.session_attach) || present(row.source_fork_transport) || present(row.source_node_delivery);
+  if (!anyKey) {
+    return {
+      directory: { ok: true, reasonKey: null }, projectNewSession: { ok: true, reasonKey: null },
+      attach: { ok: true, reasonKey: null }, fork: { ok: true, reasonKey: null }, source, hubNoticeKey: 'sourcePalette.cap.hubUnsupported',
+    };
   }
   const directory = present(row.source_directory_read);
   return {

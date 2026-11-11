@@ -60,10 +60,13 @@ const FULL = {
   ck('unknown read also stays ungated, with notice', u.fork.ok && u.hubNoticeKey === 'sourcePalette.cap.hubUnsupported' && u.source === 'unknown');
 }
 
-// ⑥ daemon 不在列表里 ⇒ 不是守护节点
+// ⑥ 行不存在 / 五条键一条都没有 ⇒ 未知 ⇒ 放行（兼容优先，别误杀老 Hub）
 {
   const g = sourceCapabilityGates(null, 'ok');
-  ck('row missing ⇒ notDaemon reason', !g.directory.ok && g.directory.reasonKey === 'sourcePalette.cap.notDaemon');
+  ck('row missing ⇒ ungated (compat-first)', g.directory.ok && g.projectNewSession.ok && g.attach.ok && g.fork.ok);
+  const empty = sourceCapabilityGates({}, 'ok');
+  ck('row with zero capability keys ⇒ ungated + notice',
+    empty.fork.ok && empty.directory.ok && empty.hubNoticeKey === 'sourcePalette.cap.hubUnsupported');
 }
 
 // ⑦ 空串/空白不算能力（Hub 不会给半个值，但别把空串当支持）
