@@ -106,13 +106,15 @@ export interface NodeSectionVisibility {
 /**
  * 哪些分区出现。原则:只读页**隐藏的是编辑控件,不是分区** —— 有数据的分区都在;
  * 只有「危险操作」本身就是一组变更动作,只读页整区不出现。
+ * 「权限」例外:它的改动 Hub 逐条判权(viewer_can.permission_mode),节点信息页也给入口。
  */
 export function visibleNodeSections(v: NodeSectionVisibility): NodeSectionKey[] {
   return NODE_SECTIONS.map(s => s.key).filter(key => {
     if (key === 'rules') return v.hasRulesTarget;
     if (key === 'skills') return v.skillsCapable;
     if (key === 'secrets') return v.secretsCapable !== false;
-    if (key === 'permissions') return !v.readOnly && v.permissionsAllowed === true;
+    // 节点信息页(readOnly)也出现:admin 11-11「只接收来自谁的消息」找不到入口 —— 能不能改由 Hub 判(viewer_can)。
+    if (key === 'permissions') return v.permissionsAllowed === true;
     if (key === 'danger') return !v.readOnly;
     return true;
   });

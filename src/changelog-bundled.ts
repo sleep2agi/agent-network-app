@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.512:",
+  "- 节点信息页加上「权限」分区：在这里设置这个节点「只接收来自谁的消息」（收件白名单）和「可以发给谁」。之前只在节点详情页里有，从聊天/智能体列表点进去找不到。",
+  "",
   "What's new in 0.2.511:",
   "- 聊天里的 .md / 文本附件（txt、log、json、yaml…，1 MB 以内）新增「预览」：直接在应用里看，Markdown 按排版显示，也可以切到源码；不用先下载再去文件夹里找。手机和桌面都有。",
   "",
