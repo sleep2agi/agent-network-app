@@ -62,6 +62,8 @@ const CATALOG_MAX_POLLS = 15;
 const READBACK_POLLS = 4;
 const READBACK_POLL_MS = 1500;
 
+const INTERNAL_AGENTS = new Set(['compaction', 'title', 'summary']);
+
 export default function ComposerModelPalette({ cfg, node, targetError, currentModel, currentVariant, onReadback, onClose }: Props) {
   const styles = makeStyles();
   const { height: windowHeight } = useWindowDimensions();
@@ -198,12 +200,17 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     runtime: node?.runtime ?? null,
   });
   const agentConfig = agentConfigScope === scope ? config : null;
-  const agents = composerAgents(agentConfig);
+  // admin 2026-11-11（手机截图）：compaction / title / summary 是 OpenCode 内部用的 agent，
+  // 用户不会去切；只在它恰好是当前值时才显示。
+  const agents = composerAgents(agentConfig).filter(id => !INTERNAL_AGENTS.has(id) || id === agentConfig?.agent);
   const agentWritable = composerAgentSwitchable(agentConfig);
   const currentAgent = composerAgentCurrent(agentConfig);
   const showAgentSection = composerAgentSectionVisible(agentConfig);
   // admin 2026-11-11「切换模型的体验太差」：agent 改成一行芯片后，模型列表不再让出一半高度。
-  const listMax = Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
+  // 面板整体（搜索 + 列表 + 来源 + 档位 + agent）必须落在屏幕内：手机上原来列表独占半屏，
+  // 再加下面两段，顶端顶进了状态栏（admin 2026-11-11 手机截图）。列表高度扣掉下面那几段。
+  const belowList = 90 + (agents.length ? 40 + 36 * Math.ceil(agents.length / 4) : 0);
+  const listMax = Math.max(140, Math.min(430, Math.round((windowHeight || 800) * 0.62) - 140 - belowList));
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
 
   const applyAgent = async (agent: string) => {
@@ -485,6 +492,15 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
             <Text style={styles.variantNote} testID="node-variant-none">{t('chat.modelPicker.variantNone')}</Text>
           ) : (
             <>
+              <Pressable
+                key="__default"
+                testID="node-variant-chip-default"
+                disabled={busy || !variantGate.ok || currentVariant === null}
+                onPress={() => void applyVariant(null)}
+                style={({ pressed }) => [styles.variantChip, currentVariant === null && styles.variantChipOn, pressed && { opacity: 0.7 }]}
+              >
+                <Text style={[styles.variantChipText, currentVariant === null && { color: colors.accent }]}>{t('chat.variantDefaultShort')}{currentVariant === null ? `（${t('chat.modelPicker.currentMark')}）` : ''}</Text>
+              </Pressable>
               {choices.options.map(value => {
                 const selected = value === currentVariant;
                 return (
