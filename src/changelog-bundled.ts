@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.514:",
+  "- 节点页「定时任务」每一行加了删除按钮（垃圾桶）：确认后计划连同执行记录一起删掉，列表里不再出现；还在跑的会先停止再删。已取消的计划只剩删除按钮。需要 Hub 支持（新版 Hub 自动出现）。",
+  "",
   "What's new in 0.2.513:",
   "- 「Fork 当前节点」浮层重新排版：去掉 network / node id、mode= 这类内部字段和多余的搜索框；新节点名称、工作目录（新目录 / 同目录分段选择）分行标清，目录直接显示将要用的路径，取消和 Fork 按钮放在右下角。",
   "",
