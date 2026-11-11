@@ -15,6 +15,7 @@ import { Ionicons } from './icons';
 import {
   fetchNodeStatus,
   fetchHubNodes,
+  fetchHostSupervisors,
   getSessionSourceFork,
   getSourceDirectory,
   postSessionSourceFork,
@@ -27,6 +28,7 @@ import {
   classifyProjectCreate,
   projectCreateLabel,
 } from './session-project-create';
+import { capsOfDaemonRow, sourceCapabilityGates, type CapsSource, type DaemonSourceCaps } from './source-capabilities';
 import {
   classifyStatus,
   gateClosedMessage,
@@ -142,6 +144,23 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   const [projectUnresolved, setProjectUnresolved] = useState(false);
   const [daemonId, setDaemonId] = useState<string | null>(suppliedDaemon ?? null);
   const [daemonError, setDaemonError] = useState<string | null>(null);
+  // #4495 —— 这台 daemon 自报的「源能力」：来自 GET /api/host-supervisors 的那一行。
+  // 缺失 = Hub 没投影 / daemon 没报 = 不支持（不猜、不写死 true）。
+  const [daemonCaps, setDaemonCaps] = useState<DaemonSourceCaps | null>(null);
+  const [capsSource, setCapsSource] = useState<CapsSource>('unknown');
+  useEffect(() => {
+    if (!daemonId) { setDaemonCaps(null); setCapsSource('unknown'); return; }
+    let live = true;
+    void fetchHostSupervisors(cfg).then(result => {
+      if (!live) return;
+      if (!result.ok) { setDaemonCaps(null); setCapsSource(result.unconfirmed ? 'unsupported' : 'unknown'); return; }
+      const row = (result.daemons ?? []).find(d => d.daemon_node_id === daemonId);
+      setDaemonCaps(capsOfDaemonRow(row as DaemonSourceCaps | undefined));
+      setCapsSource('ok');
+    }).catch(() => { if (live) { setDaemonCaps(null); setCapsSource('unknown'); } });
+    return () => { live = false; };
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, daemonId]);
+  const caps = useMemo(() => sourceCapabilityGates(daemonCaps, capsSource), [daemonCaps, capsSource]);
   const directoryRequestRef = useRef<string | null>(null);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
@@ -199,6 +218,11 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   // ── 目录（只读）：POST → 轮询 GET；单 Server 时自动选一次拿 selection_scope ──
   useEffect(() => {
     if (forkOnly) { setDirectory({ kind: 'idle' }); return; }
+    // #4495 —— 没有 source_directory_read 就不要发目录请求：直接把真实原因摆出来。
+    if (!caps.directory.ok) {
+      setDirectory({ kind: 'denied', error: t(caps.directory.reasonKey ?? 'sourcePalette.cap.directory') });
+      return;
+    }
     if (!networkId || !sourceNodeId || !daemonId) {
       setDirectory(daemonError ? { kind: 'failed', error: daemonError } : { kind: 'pending' }); return;
     }
@@ -261,7 +285,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
       timer = setInterval(() => { void tick(); }, DIRECTORY_POLL_MS);
     })();
     return () => { live = false; if (timer) clearInterval(timer); };
-  }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, networkId, sourceNodeId, daemonId, daemonError, forkOnly]);
+  }, [cfg.serverUrl, cfg.token, cfg.networkId, cfg.profileId, networkId, sourceNodeId, daemonId, daemonError, forkOnly, caps.directory.ok, caps.directory.reasonKey]);
 
   // ── fork 回执轮询：unknown 继续用同一 request_id 收敛（不新开意图）──
   useEffect(() => {
@@ -285,8 +309,8 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     selectionScope: directory.kind === 'ready' ? directory.selectionScope : null,
     snapshotId: snapshot?.snapshotId ?? null,
     selectionExpiresAt: snapshot?.selectionExpiresAt ?? null,
-    hasProjectCreateCapability: true,
-  }), [networkId, sourceNodeId, directory, snapshot]);
+    hasProjectCreateCapability: caps.projectNewSession.ok,
+  }), [networkId, sourceNodeId, directory, snapshot, caps.projectNewSession.ok]);
 
   // 名单读不到时，当前节点会话仍然是真实存在的 fork 源（只有 id 与标题）。
   const forkCandidates = useMemo<ForkCandidate[]>(() => {
@@ -299,10 +323,20 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
 
   const forkRowList = useMemo(() => forkRows(forkCandidates, gate), [forkCandidates, gate]);
   const directoryRowList = useMemo(() => directoryRows(snapshot, gate), [snapshot, gate]);
-  const rows = useMemo(() => [...forkRowList, ...directoryRowList], [forkRowList, directoryRowList]);
+  // #4495 —— 按**各自**的能力门控：缺哪个就只关那一类入口，给真实原因（不是一句「不支持」）。
+  const gatedForkRows = useMemo(() => (caps.fork.ok
+    ? forkRowList
+    : forkRowList.map(row => (row.disabledReason ? row : { ...row, disabledReason: t(caps.fork.reasonKey ?? 'sourcePalette.cap.fork') }))), [forkRowList, caps.fork.ok, caps.fork.reasonKey]);
+  const gatedDirectoryRows = useMemo(() => directoryRowList.map(row => {
+    if (row.disabledReason) return row;
+    if (row.kind === 'session' && !caps.attach.ok) return { ...row, disabledReason: t(caps.attach.reasonKey ?? 'sourcePalette.cap.attach') };
+    if (row.kind === 'project' && !caps.projectNewSession.ok) return { ...row, disabledReason: t(caps.projectNewSession.reasonKey ?? 'sourcePalette.cap.projectNewSession') };
+    return row;
+  }), [directoryRowList, caps.attach.ok, caps.attach.reasonKey, caps.projectNewSession.ok, caps.projectNewSession.reasonKey]);
+  const rows = useMemo(() => [...gatedForkRows, ...gatedDirectoryRows], [gatedForkRows, gatedDirectoryRows]);
   const view = useMemo(() => sourcePaletteView({
-    forkRows: forkRowList,
-    directoryRows: directoryRowList,
+    forkRows: gatedForkRows,
+    directoryRows: gatedDirectoryRows,
     snapshot,
     query,
     selectedKey,
@@ -387,7 +421,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     if (submittingRef.current || busy || projectUnresolved) return;
     if (!selectedRow) { setErrorText(t('sourcePalette.confirmHint')); return; }
     if (selectedRow.kind !== 'fork') {
-      const usable = canUseSnapshotForNewSession({ snapshot: { expiresAt: null, selectionExpiresAt: snapshot?.selectionExpiresAt ?? null }, hasProjectCreateCapability: true });
+      const usable = canUseSnapshotForNewSession({ snapshot: { expiresAt: null, selectionExpiresAt: snapshot?.selectionExpiresAt ?? null }, hasProjectCreateCapability: caps.projectNewSession.ok });
       if (!usable.ok) { setErrorText(usable.reason); return; }
     }
     if (receipt && selectedRow.kind === 'fork') { setErrorText(`已有请求 ${receipt.requestId}：仅查询回执，不重新提交`); return; }
@@ -491,7 +525,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
   const nameIssue = target ? childNameIssue(childName) : null;
   const newSessionGate = canUseSnapshotForNewSession({
     snapshot: { expiresAt: null, selectionExpiresAt: snapshot?.selectionExpiresAt ?? null },
-    hasProjectCreateCapability: true,
+    hasProjectCreateCapability: caps.projectNewSession.ok,
   });
   const newSessionUsable = newSessionGate.ok;
   const newSessionReason = newSessionGate.reason;
