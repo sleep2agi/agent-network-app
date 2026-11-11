@@ -2,7 +2,7 @@
 // 守护：daemon 代读失败（排队 / 轮询 / 超时）一律先退回节点自报清单，没有才显示翻译过的原因。
 //   run: bun src/composer-model-palette-fallback.test.ts
 import { readFileSync } from 'node:fs';
-import { catalogErrorText, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
+import { catalogErrorText, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
 import { paletteVariantChoices } from './composer-model-palette';
 
 let passed = 0;
@@ -46,6 +46,35 @@ ck('node_not_found is translated', catalogErrorText('node_not_found') !== 'node_
   ck('peer fallback keeps a peer-reported variant list', JSON.stringify(peers.models[0].variants) === '["none","high"]');
   ck('peer fallback excludes the node itself', peerCatalogWithVariants([{ node_id: 'self', runtime: 'opencode-cli', opencode_catalog: ['a/b'] }], { runtime: 'opencode-cli', excludeNodeId: 'self' }).nodes === 0);
   ck('palette says the list came from peers', src.includes("t('chat.modelPicker.peerCatalogSource', { count: peers.nodes })") && src.includes("{catalogNote ?? t('chat.modelPicker.catalogSource')}"));
+}
+
+// #4610：daemon 快照只有模型 id（老 daemon / 某些 runtime 不报 variants），Hub 上早有自报档位。
+// 快照优先，但**快照没给**的模型用自报档位补上；快照给了（含明确空数组）就不动。
+{
+  const reported = reportedCatalogWithVariants(
+    ['deepseek/deepseek-flash', 'opencode/plain', 'x/y'],
+    ['deepseek/deepseek-flash=none,low,high,max', 'x/y=low,high'],
+  );
+  const snapshot = {
+    providers: [{ id: 'deepseek', activation: 'enabled' }],
+    models: [
+      { providerId: 'deepseek', id: 'deepseek-flash' },                 // 快照没给 → 补
+      { providerId: 'x', id: 'y', variants: ['fast'] },                 // 快照给了 → 保持
+      { providerId: 'opencode', id: 'not-in-report' },                  // 两边都没有 → 未知
+    ],
+  };
+  const merged = mergeReportedVariants(snapshot, reported) as { providers?: unknown; models: Array<{ providerId: string; id: string; variants?: unknown }> };
+  ck('daemon snapshot is kept when it already gave the levels', JSON.stringify(merged.models[1].variants) === '["fast"]');
+  ck('snapshot gaps are filled from reported levels', JSON.stringify(merged.models[0].variants) === '["none","low","high","max"]');
+  ck('a model nobody reported stays unknown', merged.models[2].variants === undefined);
+  ck('merged gap is selectable in the pill', paletteVariantChoices({ models: merged.models } as never, 'deepseek/deepseek-flash').kind === 'list');
+  ck('merge keeps provider rows and order', Array.isArray(merged.providers) && merged.models.map(m => `${m.providerId}/${m.id}`).join() === 'deepseek/deepseek-flash,x/y,opencode/not-in-report');
+  ck('an explicit empty variants list is not overwritten', (() => {
+    const m = mergeReportedVariants({ models: [{ providerId: 'x', id: 'y', variants: [] }] }, reported) as { models: Array<{ variants?: unknown }> };
+    return Array.isArray(m.models[0].variants) && (m.models[0].variants as unknown[]).length === 0;
+  })());
+  ck('no snapshot stays null (nothing invented)', mergeReportedVariants(null, reported) === null);
+  ck('palette merges the ready snapshot before showing it', src.includes('mergeReportedVariants(polled.snapshot'));
 }
 
 console.log(`composer-model-palette-fallback: ${passed}/${total}`);
