@@ -202,6 +202,38 @@ export function reportedCatalogWithVariants(
   return out;
 }
 
+/** Pure. daemon 代读成功时，把 Hub 自报的档位补进**快照里没给档位**的模型。
+ *  为什么：#4610 —— daemon 快照比自报新鲜，所以快照给了档位就以快照为准；
+ *  但老 daemon / 某些 runtime 的快照只有模型 id、没有 variants，于是档位 pill 只能显示
+ *  「未知」，即使 Hub 上早就有节点自报的 `opencode_catalog_variants`。
+ *  只补缺失项，不覆盖、不新增快照里没有的模型，也不编造快照和自报都没给的档位。 */
+export function mergeReportedVariants<T extends { providerId?: string | null; id?: string | null; variants?: unknown }>(
+  snapshot: { providers?: unknown; models?: readonly T[] | null } | null | undefined,
+  reported: readonly { providerId: string; id: string; variants?: string[] }[] | null | undefined,
+): { providers?: unknown; models: T[] } | null {
+  if (!snapshot) return null;
+  const models = Array.isArray(snapshot.models) ? snapshot.models : [];
+  const byKey = new Map<string, string[]>();
+  for (const row of reported ?? []) {
+    if (!row?.providerId || !row?.id || !row.variants?.length) continue;
+    byKey.set(`${row.providerId}/${row.id}`, row.variants);
+  }
+  if (!byKey.size) return { providers: snapshot.providers, models: [...models] };
+  return {
+    providers: snapshot.providers,
+    models: models.map(m => {
+      const p = typeof m?.providerId === 'string' ? m.providerId.trim() : '';
+      const i = typeof m?.id === 'string' ? m.id.trim() : '';
+      const key = p && i ? `${p}/${i}` : '';
+      const given = m?.variants;
+      // 快照给了（含明确的空数组 = 这模型没有档位）就不动；只补「完全没给」的。
+      if (!key || given !== undefined) return m;
+      const fill = byKey.get(key);
+      return fill ? { ...m, variants: fill } : m;
+    }),
+  };
+}
+
 /** Pure. 这台节点自己没有清单时，用**同 runtime 其他节点**自报的清单（连同它们报的档位）兜底。
  * 只合并、去重、保序；返回贡献节点数，界面据此写明「清单来自 N 个同类节点」。 */
 export function peerCatalogWithVariants(

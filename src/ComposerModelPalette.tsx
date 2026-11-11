@@ -24,7 +24,7 @@ import {
   type HubNode,
   type NodeConfigRead,
 } from './api';
-import { catalogErrorText, isOpenCodeV2Node, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
+import { catalogErrorText, isOpenCodeV2Node, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { variantValueError, variantWritable } from './node-variant-patch';
@@ -174,7 +174,10 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         if (!live) return;
         if (!polled.ok) { failWith(polled.error); return; }
         if (polled.status === 'ready') {
-          setCatalog({ snapshot: polled.snapshot as unknown as PaletteCatalogSnapshot, loading: false, error: null });
+          // #4610：快照优先（更新鲜），但快照没给档位的模型用 Hub 自报的档位补上 ——
+          // 否则老 daemon 的快照只有模型 id，档位 pill 永远「未知」。
+          const merged = mergeReportedVariants(polled.snapshot as unknown as PaletteCatalogSnapshot, reported);
+          setCatalog({ snapshot: (merged ?? polled.snapshot) as unknown as PaletteCatalogSnapshot, loading: false, error: null });
           return;
         }
       }
