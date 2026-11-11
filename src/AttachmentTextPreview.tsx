@@ -11,6 +11,7 @@ import { downloadAuthedBytes } from './desktop-download';
 import { decodePreviewText, isMarkdownFile } from './attachment-file-model';
 import { colors, radius, onThemeChange } from './theme';
 import { useTranslation } from './i18n-react';
+import { useModalSafePadding } from './safe-area-runtime';
 import './i18n-chat';
 
 export function TextPreviewLink({ onPress, name }: { onPress: () => void; name: string }) {
@@ -26,6 +27,7 @@ export default function AttachmentTextPreview({ url, token, name, mime, onClose 
   url: string; token: string; name: string; mime?: string; onClose: () => void;
 }) {
   const { t } = useTranslation();
+  const safe = useModalSafePadding('overlay');
   const [state, setState] = useState<{ kind: 'loading' } | { kind: 'ready'; text: string; truncated: boolean } | { kind: 'error'; message: string }>({ kind: 'loading' });
   const [raw, setRaw] = useState(false);
   useEffect(() => {
@@ -41,7 +43,7 @@ export default function AttachmentTextPreview({ url, token, name, mime, onClose 
   const markdown = isMarkdownFile(name, mime);
   return (
     <Modal transparent animationType="fade" visible onRequestClose={onClose}>
-      <Pressable style={styles.backdrop} onPress={onClose} accessibilityLabel={t('chat.file.previewClose')}>
+      <Pressable style={[styles.backdrop, { paddingTop: safe.paddingTop + 16, paddingBottom: safe.paddingBottom + 16, paddingLeft: safe.paddingLeft + 16, paddingRight: safe.paddingRight + 16 }]} onPress={onClose} accessibilityLabel={t('chat.file.previewClose')}>
         <Pressable style={styles.sheet} onPress={() => {}} testID="attachment-text-preview">
           <View style={styles.header}>
             <Text style={styles.title} numberOfLines={1} testID="attachment-text-preview-name">{name}</Text>
