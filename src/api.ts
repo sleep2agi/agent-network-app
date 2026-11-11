@@ -672,6 +672,27 @@ export const putNodeInboxAllowlist = async (cfg: HubConfig, nodeId: string, send
   return r.ok ? { ok: true as const, senders: r.list } : r;
 };
 
+/** 节点管理授权(Hub /health 报 node_grants 才有)。能力 × 范围 × 级别,见 node-grants-model.ts。 */
+export const NODE_GRANTS_CAPABILITY = 'node_grants';
+export type NodeGrant = { capability: string; scope_kind: 'network' | 'department' | 'node'; scope_id: string; level: 'read' | 'edit'; granted_by?: string | null; created_at?: string };
+export type NodeGrantsResult = { ok: true; grants: NodeGrant[] } | { ok: false; status: number; error: string; message?: string };
+
+const nodeGrantsCall = async (cfg: HubConfig, nodeId: string, init: RequestInit): Promise<NodeGrantsResult> => {
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl.replace(/\/$/, '')}/api/nodes/${encodeURIComponent(nodeId)}/grants`, { ...init, headers: headers(cfg), signal }));
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return { ok: false, status: res.status, error: body?.error || `HTTP ${res.status}`, message: typeof body?.message === 'string' ? body.message : undefined };
+    return { ok: true, grants: Array.isArray(body?.grants) ? body.grants : [] };
+  } catch (e) {
+    return { ok: false, status: 0, error: String((e as Error)?.message ?? e) };
+  }
+};
+/** GET /api/nodes/:id/grants */
+export const fetchNodeGrants = (cfg: HubConfig, nodeId: string) => nodeGrantsCall(cfg, nodeId, { method: 'GET' });
+/** PUT /api/nodes/:id/grants —— 整份替换,[] 清空。 */
+export const putNodeGrants = (cfg: HubConfig, nodeId: string, grants: Pick<NodeGrant, 'capability' | 'scope_kind' | 'scope_id' | 'level'>[]) =>
+  nodeGrantsCall(cfg, nodeId, { method: 'PUT', body: JSON.stringify({ grants }) });
+
 /** GET /health 的 capabilities。读不到 / 没有这个数组 ⇒ [](当作旧 Hub,不猜)。 */
 export const fetchHubHealthCapabilities = async (cfg: HubConfig): Promise<string[]> => {
   try {

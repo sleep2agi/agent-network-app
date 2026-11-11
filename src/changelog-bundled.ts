@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.517:",
+  "- 节点「权限」里新增「管理权限」：可以让某个节点管理别人的定时任务，范围选整个网络、某个部门（含子部门）或指定节点，级别选只读或可编辑；任务看板稍后支持。只有网络 owner / 管理员能授全网，部门负责人只能授自己负责的部门（需要新版 Hub）。",
+  "",
   "What's new in 0.2.516:",
   "- 节点「权限 → 收：接受来自」可以按部门授权：勾选一个部门，这个部门及其子部门里的节点和人都能给该节点派活（需要新版 Hub）。",
   "",

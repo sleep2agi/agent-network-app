@@ -21,6 +21,8 @@ import {
 } from './api';
 import { fetchHumans } from './human-dm-api';
 import { fetchOrg } from './org-api';
+import NodeGrantsCard from './NodeGrantsCard';
+import { NODE_GRANTS_CAPABILITY } from './api';
 import type { Human } from './human-dm';
 import {
   ALWAYS_TOOLS, ANY_PERSON_ENTRY, INBOX_DEPT_CAPABILITY, deptChoices, deptEntry, type DeptChoice, PERMISSION_REASON_CODES, allowlistErrorText, allowlistText, entryLabel, isAlwaysTool, isStrict,
@@ -78,6 +80,8 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   const [inboxSupported, setInboxSupported] = useState<boolean | undefined>(undefined);
   /** 部门授权(Hub 报 node_inbox_allowlist_dept 才画)。admin 11-11「以部门去授权」。 */
   const [deptSupported, setDeptSupported] = useState(false);
+  /** 管理权限(Hub 报 node_grants 才画)。 */
+  const [grantsSupported, setGrantsSupported] = useState(false);
   const [depts, setDepts] = useState<DeptChoice[]>([]);
 
   useEffect(() => { setMode(normalizeMode(node.permission_mode)); }, [node.node_id, node.permission_mode]);
@@ -86,16 +90,16 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
     void fetchHubNodes(cfg)
       .then(r => { if (alive) setChoices(nodeChoices(r.nodes ?? [], node)); })
       .catch(() => { if (alive) setChoices([]); });
-    void fetchHubHealthCapabilities(cfg).then(caps => { if (alive) { setInboxSupported(supportsInboxAllowlist(caps, INBOX_ALLOWLIST_CAPABILITY)); setDeptSupported(caps.includes(INBOX_DEPT_CAPABILITY)); } });
+    void fetchHubHealthCapabilities(cfg).then(caps => { if (alive) { setInboxSupported(supportsInboxAllowlist(caps, INBOX_ALLOWLIST_CAPABILITY)); setDeptSupported(caps.includes(INBOX_DEPT_CAPABILITY)); setGrantsSupported(caps.includes(NODE_GRANTS_CAPABILITY)); } });
     return () => { alive = false; };
   }, [cfg, node.node_id, node.alias]);
   useEffect(() => {
     if (!inboxSupported || !cfg.networkId) return;
     let alive = true;
     void fetchHumans(cfg, cfg.networkId).then(h => { if (alive) setHumans(h); }).catch(() => { if (alive) setHumans([]); });
-    if (deptSupported) void fetchOrg(cfg, cfg.networkId).then(o => { if (alive) setDepts(deptChoices(o?.departments ?? [])); }).catch(() => { if (alive) setDepts([]); });
+    if (deptSupported || grantsSupported) void fetchOrg(cfg, cfg.networkId).then(o => { if (alive) setDepts(deptChoices(o?.departments ?? [])); }).catch(() => { if (alive) setDepts([]); });
     return () => { alive = false; };
-  }, [cfg, inboxSupported, deptSupported]);
+  }, [cfg, inboxSupported, deptSupported, grantsSupported]);
 
   useEffect(() => {
     setPeers(node.peer_allowlist ?? null);
@@ -311,6 +315,9 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
             )} />
         </View>
       ) : null}
+
+      {/* 管理权限:这个节点能管谁的定时任务(以后还有看板)。旧 Hub 不画。 */}
+      {grantsSupported ? <NodeGrantsCard cfg={cfg} nodeId={node.node_id} depts={depts} nodes={choices} compact={compact} /> : null}
 
       {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
 
