@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.520:
+            - 新建节点 / 接入已有会话：入口现在按**那台服务器实际支持的能力**显示 —— 列已有项目、复用已有 Session、fork 分别判断；不支持时直接给原因（例如「这台服务器没有开启该能力」「当前 Hub 版本不提供该能力」），不再点了才发现不行。
+
             What's new in 0.2.519:
             - 聊天框新增「打断并发送」：一轮还在跑的时候，输入框旁会出现这个动作。点它才会先停下这一轮、确认停下后把这条发出去；默认发送保持不变（仍是即时的一条请求，不会悄悄打断你的回合）。
               如果 8 秒内拿不到「真的停了」的凭据，这条不会发出，草稿留在输入框里，并明确告诉你没发出去。
