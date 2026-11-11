@@ -39,13 +39,19 @@ export const parseMarkdownBlocks = (source: string, opts: { hubImages?: boolean 
       i++;
       continue;
     }
-    const fence = line.match(/^\s*```\s*([^\s`]*)\s*$/);
+    // 围栏代码块：CommonMark 允许 **反引号** 与 **波浪号** 两种围栏，且开闭围栏的字符与长度必须一致。
+    // 现场（chuqi 2026-11-11）：对端 agent 用 `~~~text` 写代码块，客户端只认 ```，于是整段
+    // 退化成正文字段——波浪号原样显示、里面的「1. / 2.」被当成有序列表重新编号，
+    // 读起来就像「消息渲染坏了」。
+    const fence = line.match(/^\s*(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
+      const marker = fence[1];
+      const close = new RegExp(`^\\s*${marker[0] === '`' ? '`' : '~'}{${marker.length},}\\s*$`);
       const body: string[] = [];
       i++;
-      while (i < lines.length && !/^\s*```\s*$/.test(lines[i])) body.push(lines[i++]);
+      while (i < lines.length && !close.test(lines[i])) body.push(lines[i++]);
       if (i < lines.length) i++;
-      blocks.push({ kind: 'code', language: fence[1] || undefined, text: body.join('\n'), line: start, endLine: i - 1 });
+      blocks.push({ kind: 'code', language: fence[2] || undefined, text: body.join('\n'), line: start, endLine: i - 1 });
       continue;
     }
 
