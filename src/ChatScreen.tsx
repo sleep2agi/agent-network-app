@@ -20,7 +20,7 @@ import { localFileStatus } from './attachment-file-model';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import { sendFailureReason, type SendFailureReason } from './send-failure-reason';
-import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, interruptTurn, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
@@ -68,6 +68,8 @@ import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type
 import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
+import ComposerStopButton from './ComposerStopButton';
+import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -1985,6 +1987,17 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // while a recent task has no result yet, otherwise the session status
   // so he can tell whether the agent is even online.
   const [sessionStatus, setSessionStatus] = useState('');
+  // #4591 —— 停止当前回合。Hub 回 accepted 只代表控制消息**入队**，真凭据来自节点回执 / 回合结束；
+  // 窗口内没等到就照实说「已发送，节点未确认」，不假装成功（同档位那套 pending≠applied）；迟到凭据 30s 内仍可升级。
+  const [interrupt, setInterrupt] = useState<InterruptState>(idleInterrupt);
+  const interruptSeenRef = useRef<Set<string>>(new Set());
+  const prevSessionStatusRef = useRef('');
+  const interruptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  /** 点击时刻：迟到凭据只在这个时间点之后 LATE_EVIDENCE_MS 内算数（否则会把自然结束当成停止成功）。 */
+  const interruptSentAtRef = useRef(0);
+  const lateEvidenceAllowed = () => Date.now() - interruptSentAtRef.current <= LATE_EVIDENCE_MS;
+  const interruptBusy = interrupt.phase === 'sending' || interrupt.phase === 'waiting';
+  const interruptIdOf = (m: { task_id?: string; created_at?: string; content?: string }) => `${m.task_id ?? ''}|${m.created_at ?? ''}|${m.content ?? ''}`;
   const [controlSession, setControlSession] = useState<Session | null>(null);
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
@@ -2123,6 +2136,49 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       clearInterval(t);
     };
   }, [cfg, alias]);
+  // #4591 —— 点「停止」：先记下此刻的消息集合（回执只认之后新出现的），发控制消息，再等真凭据（窗口 INTERRUPT_CONFIRM_MS，迟到凭据上限 LATE_EVIDENCE_MS）。
+  const pressInterrupt = () => {
+    if (interruptBusy || !interruptable(sessionStatus)) return;
+    interruptSeenRef.current = new Set(messages.map(interruptIdOf));
+    interruptSentAtRef.current = Date.now();
+    setInterrupt({ phase: 'sending', detail: null });
+    if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
+    void interruptTurn(cfg, alias).then(res => {
+      if (!res.ok) {
+        setInterrupt(interruptAfterSend({ sent: res.unsupported ? 'unsupported' : 'failed', confirmed: false, timedOut: false, detail: res.error }));
+        return;
+      }
+      // Hub 只给 accepted；只有 interrupted===true 才算截断凭据。
+      const confirmed = ackProvesInterrupted(res.payload);
+      setInterrupt(interruptAfterSend({ sent: 'ok', confirmed, timedOut: false }));
+      if (confirmed) return;
+      interruptTimerRef.current = setTimeout(() => {
+        setInterrupt(prev => (prev.phase === 'waiting' ? interruptAfterSend({ sent: 'ok', confirmed: false, timedOut: true }) : prev));
+      }, INTERRUPT_CONFIRM_MS);
+    });
+  };
+  useEffect(() => () => { if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current); }, []);
+  // 真凭据之一：节点回执（`interrupt {"ok":true,"interrupted":true}`）作为新消息出现。
+  useEffect(() => {
+    // unconfirmed 之后仍要继续听：超过窗口才到的真凭据（回执 / 状态翻转）照样把状态升回来，
+    // 否则用户只会停在一句「未确认」上，而其实早就停了。
+    if (interrupt.phase !== 'waiting' && interrupt.phase !== 'unconfirmed') return;
+    if (interrupt.phase === 'unconfirmed' && !lateEvidenceAllowed()) return;
+    const seen = interruptSeenRef.current;
+    if (messages.some(m => !seen.has(interruptIdOf(m)) && replyProvesInterrupted(m.content ?? m.result ?? ''))) {
+      setInterrupt({ phase: 'interrupted', detail: null });
+    }
+  }, [messages, interrupt.phase]);
+  // 真凭据之二：会话状态从「在飞」翻走（回合真的结束）。只在刚发过停止时才算。
+  useEffect(() => {
+    const prev = prevSessionStatusRef.current;
+    prevSessionStatusRef.current = sessionStatus;
+    if ((interrupt.phase === 'waiting' || (interrupt.phase === 'unconfirmed' && lateEvidenceAllowed()))
+      && statusFlipProvesInterrupted(prev, sessionStatus)) {
+      setInterrupt({ phase: 'interrupted', detail: null });
+    }
+  }, [sessionStatus, interrupt.phase]);
+
   // 全量行:能力位很少变,不跟 30s 轮询(全量投影比 light 大一个量级)。失败就保留上一次 / 退回 light。
   // 换了聊天对象先清掉,别让上一个 agent 的能力位挂在这一个的聊天信息里。
   useEffect(() => { setFullCaps(null); setControlSession(null); }, [cfg, alias]);
@@ -2974,6 +3030,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 </Text>
                 <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
               </Pressable>
+              <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} desktop onPress={pressInterrupt} />
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
@@ -3055,6 +3112,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           </Text>
           <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
+        <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} onPress={pressInterrupt} />
       </View>
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。

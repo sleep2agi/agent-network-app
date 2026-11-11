@@ -8,6 +8,7 @@ import { buildSourceForkBody, classifyStatus, describeSourceForkRefusal, type So
 import { reportProfileAuthResponse } from './profile-auth-state';
 import type { NodePermissionReport } from './node-permission-model';
 import { withDeadline } from './deadline';
+import { INTERRUPT_MESSAGE } from './turn-interrupt';
 import { clockOffsetFrom, dreqCreatedAt, recordSendTiming, type SendTiming } from './send-timing';
 import { pollUntilTerminal } from './node-rules';
 import { interpretCloneReply, isCloneToolMissing, type CloneNodeArgs } from './node-clone';
@@ -2075,6 +2076,87 @@ export const writeNodeRulesFile = (cfg: HubConfig, node: RulesTarget, content: s
 /** Node skills view — enqueue list_node_skills / read_node_skill (read-only; the
  *  only argument besides the target is a skill NAME). Result comes back through
  *  getRulesFileResult / waitForRulesFileResult like the rules file. */
+/** #4591 —— Hub 是否支持 `send_message` 的 `control:"interrupt"`。
+ *
+ *  为什么必须先问：旧 Hub 也有 `send_message`，只是 schema 里没有 `control`。zod 会**静默丢掉**
+ *  未知键，于是我们那条控制消息会被当成一条普通聊天消息发进别人的对话。宁可说「不支持」，
+ *  也不往对话里塞垃圾 —— 所以先 `tools/list` 看 schema，拿不到就不发。
+ *  只在同一个 hub+令牌上问一次（结果按 serverUrl|token 缓存）。 */
+const interruptSupportCache = new Map<string, boolean>();
+/** Test-only. */
+export function forgetInterruptSupport(): void { interruptSupportCache.clear(); }
+
+const mcpToolsList = async (cfg: HubConfig): Promise<{ tools?: Array<{ name?: string; inputSchema?: { properties?: Record<string, unknown> } }> } | null> => {
+  try {
+    const got = await withDeadline(
+      (async () => {
+        const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/mcp`, {
+          method: 'POST',
+          headers: {
+            ...headers(cfg),
+            Accept: 'application/json, text/event-stream',
+            'MCP-Protocol-Version': '2025-03-26',
+          },
+          signal,
+          body: JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/list' }),
+        }));
+        if (!res.ok) return null;
+        return { text: await res.text() };
+      })(),
+      HUB_TOOL_DEADLINE_MS,
+      () => null,
+    );
+    if (!got) return null;
+    let envelope: unknown;
+    try {
+      envelope = JSON.parse(got.text);
+    } catch {
+      const dataLines = got.text.split('\n').filter(l => l.startsWith('data:')).map(l => l.slice(5).trim()).filter(Boolean);
+      const last = dataLines[dataLines.length - 1];
+      if (!last) return null;
+      try { envelope = JSON.parse(last); } catch { return null; }
+    }
+    const result = (envelope as { result?: unknown } | null)?.result;
+    return result && typeof result === 'object' ? (result as { tools?: Array<{ name?: string; inputSchema?: { properties?: Record<string, unknown> } }> }) : null;
+  } catch {
+    return null;
+  }
+};
+
+export const hubSupportsInterrupt = async (cfg: HubConfig): Promise<boolean | 'unknown'> => {
+  const key = `${cfg.serverUrl}\u0000${cfg.token}`;
+  const hit = interruptSupportCache.get(key);
+  if (hit !== undefined) return hit;
+  const list = await mcpToolsList(cfg);
+  if (!list || !Array.isArray(list.tools)) return 'unknown';
+  const tool = list.tools.find(t => t?.name === 'send_message');
+  const ok = !!(tool?.inputSchema?.properties && 'control' in tool.inputSchema.properties);
+  interruptSupportCache.set(key, ok);
+  return ok;
+};
+
+export type InterruptSendResult =
+  | { ok: true; payload: any }
+  | { ok: false; unsupported: boolean; error: string };
+
+/** 发一条「停止当前回合」的控制消息。**不改协议**：走已有 /mcp tools/call 桥，
+ *  工具与参数由 Hub 侧 `send_message(control:"interrupt")` 定义（server/src/tools.ts:2469）。 */
+export const interruptTurn = async (cfg: HubConfig, alias: string): Promise<InterruptSendResult> => {
+  const support = await hubSupportsInterrupt(cfg);
+  if (support === 'unknown') return { ok: false, unsupported: false, error: '无法确认当前 Hub 是否支持停止（tools/list 没读到）' };
+  if (!support) return { ok: false, unsupported: true, error: '当前 Hub 版本还不支持停止当前回合' };
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const r = await callHubTool(cfg, 'send_message', {
+    alias,
+    message: INTERRUPT_MESSAGE,
+    control: 'interrupt',
+    ...(networkId ? { network_id: networkId } : {}),
+  });
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: r.error };
+  if (r.kind === 'error') return { ok: false, unsupported: false, error: r.error };
+  return { ok: true, payload: r.payload };
+};
+
 const enqueueSkills = async (
   cfg: HubConfig,
   tool: 'list_node_skills' | 'read_node_skill',

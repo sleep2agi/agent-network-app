@@ -259,5 +259,15 @@ export const chatTranslations = {
   // #692 守护节点(host_supervisor)会话页:输入框换成这一行 + 入口。
   'chat.daemon.notice': ['这是守护进程管理页，托管的 Agent 可以照常对话', 'This is the daemon management page; managed agents can still be chatted with normally'],
   'chat.daemon.managed': ['托管的节点（{count}）', 'Managed nodes ({count})'],
+  // #4591 —— 停止当前回合。Hub 侧只把控制消息入队（accepted），真凭据要等节点回执。
+  'chat.interrupt.button': ['停止', 'Stop'],
+  'chat.interrupt.a11y': ['停止当前回合', 'Stop the running turn'],
+  'chat.interrupt.idleHint': ['现在没有在跑的回合，空闲时不能停止', 'No turn is running right now, so there is nothing to stop'],
+  'chat.interrupt.sending': ['正在发送停止…', 'Sending stop…'],
+  'chat.interrupt.waiting': ['已发送，等节点确认…', 'Sent, waiting for the node…'],
+  'chat.interrupt.interrupted': ['已停止', 'Stopped'],
+  'chat.interrupt.unconfirmed': ['已发送，节点未确认（可能仍在跑）', 'Sent, but the node has not confirmed (it may still be running)'],
+  'chat.interrupt.failed': ['停止失败：{message}', 'Stop failed: {message}'],
+  'chat.interrupt.unsupported': ['当前 Hub 版本还不支持停止', 'This Hub version cannot stop a running turn'],
 } satisfies Record<string, readonly [string, string]>;
 registerTranslations(chatTranslations);
