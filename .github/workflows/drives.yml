@@ -103,7 +103,16 @@ jobs:
     needs: [changes, export]
     # 钉 24.04:GitHub 把 ubuntu-latest 推到 26.04 后,Playwright 的 chromium 直接不支持
     # (ERROR: Playwright does not support chromium on ubuntu26.04-x64),8 个 shard 全红。
+    #
+    # 🔴 2026-11-11/12：`playwright install --with-deps` 需要 apt，而 runner 的 apt 镜像指向
+    #   azure.archive.ubuntu.com，该域名在这些 runner 上整晚解析失败（Temporary failure resolving），
+    #   于是「浏览器装不上」被判成代码红，三个 PR 全部卡住。重试没用、把镜像换成
+    #   archive.ubuntu.com 也没用（仍解析失败）。
+    #   ⇒ 直接用 Playwright 官方镜像跑 shard：浏览器与系统依赖都在镜像里，全程不碰 apt。
     runs-on: ubuntu-24.04
+    container:
+      image: mcr.microsoft.com/playwright:v1.58.2-noble
+      options: --ipc=host
     timeout-minutes: 25
     env:
       RUN_DRIVES: ${{ needs.changes.outputs.app }}
@@ -130,31 +139,11 @@ jobs:
           name: web-export
           path: web-export
       # Same Playwright as the suites' Docker images (mcr.microsoft.com/playwright:v1.58.2-noble).
-      - name: Playwright + Chromium
+      - name: Playwright module (browsers come from the image)
         if: env.RUN_DRIVES == 'true'
         run: |
+          # 镜像自带 /ms-playwright 与 PLAYWRIGHT_BROWSERS_PATH，不需要 install --with-deps。
           npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.58.2
-          # 🔴 2026-11-11：`--with-deps` 会走 apt，而 runner 的镜像源指向 azure.archive.ubuntu.com；
-          #    那个域名在部分 runner 上偶发 DNS 解析失败（实测 15:21–15:31 整批 8 分片全红，
-          #    报错是 "Temporary failure resolving 'azure.archive.ubuntu.com'"），
-          #    于是「浏览器装不上」被当成代码失败。DNS 抖动通常几十秒内恢复 ⇒ 重试，而不是让 PR 红。
-          # runner 的 apt 镜像默认指向 azure.archive.ubuntu.com；该域名在这些 runner 上解析失败
-          # （2026-11-11 整晚复现）。换成标准的 archive.ubuntu.com 再试。
-          if [ -f /etc/apt/apt-mirrors.txt ]; then
-            sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' /etc/apt/apt-mirrors.txt || true
-          fi
-          ok=0
-          for i in 1 2 3; do
-            if /tmp/pw/node_modules/.bin/playwright install --with-deps chromium; then ok=1; break; fi
-            echo "::warning::playwright install attempt $i failed (often apt/DNS); retrying in 15s"
-            sleep 15
-          done
-          if [ "$ok" != "1" ]; then
-            # 兜底：不带 --with-deps（跳过 apt）。runner 镜像本身带大部分运行库；
-            # 缺库时会以真实的浏览器错误暴露出来，而不是被 apt 的 DNS 抖动伪装成代码红。
-            echo "::warning::--with-deps failed; falling back to plain chromium install"
-            /tmp/pw/node_modules/.bin/playwright install chromium
-          fi
       - name: Run shard
         if: env.RUN_DRIVES == 'true'
         env:
