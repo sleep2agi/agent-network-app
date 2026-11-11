@@ -110,9 +110,6 @@ jobs:
     #   archive.ubuntu.com 也没用（仍解析失败）。
     #   ⇒ 直接用 Playwright 官方镜像跑 shard：浏览器与系统依赖都在镜像里，全程不碰 apt。
     runs-on: ubuntu-24.04
-    container:
-      image: mcr.microsoft.com/playwright:v1.58.2-noble
-      options: --ipc=host
     timeout-minutes: 25
     env:
       RUN_DRIVES: ${{ needs.changes.outputs.app }}
@@ -139,11 +136,17 @@ jobs:
           name: web-export
           path: web-export
       # Same Playwright as the suites' Docker images (mcr.microsoft.com/playwright:v1.58.2-noble).
-      - name: Playwright module (browsers come from the image)
+      - name: Playwright + Chromium
         if: env.RUN_DRIVES == 'true'
         run: |
-          # 镜像自带 /ms-playwright 与 PLAYWRIGHT_BROWSERS_PATH，不需要 install --with-deps。
           npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.58.2
+          # 🔴 2026-11-12：不再用 `--with-deps`。它要 apt，而 runner 的 apt 镜像指向
+          #    azure.archive.ubuntu.com，该域名在这些 runner 上整晚解析失败
+          #    （Temporary failure resolving），把「浏览器装不上」判成代码红。
+          #    这里只下浏览器本体（走 playwright 的 CDN，不走 apt）；ubuntu-24.04 runner 镜像
+          #    自带 chromium 需要的运行库（镜像里预装了 Chrome）。
+          #    若真的缺库，会在运行驱动时以真实错误暴露，而不是被 apt 的 DNS 抖动伪装。
+          /tmp/pw/node_modules/.bin/playwright install chromium
       - name: Run shard
         if: env.RUN_DRIVES == 'true'
         env:
