@@ -128,46 +128,40 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       setCatalog({ snapshot: null, loading: false, error: catalogErrorText('not_opencode_v2') });
       return () => { live = false; };
     }
+    // 节点自己上报到 Hub 的模型清单（GET /api/nodes 的 `opencode_catalog`）—— 真实来源，不是内置清单。
+    const reported = (node.opencode_catalog ?? []).filter((id): id is string => typeof id === 'string' && id.includes('/'));
+    const reportedSnapshot = reported.length
+      ? { models: reported.map((id) => ({ providerId: id.slice(0, id.indexOf('/')), id: id.slice(id.indexOf('/') + 1) })) } as PaletteCatalogSnapshot
+      : null;
+    // daemon 代读失败时：有上报清单就用它（收编来的节点 Hub 上没有「daemon 创建」记录，代读会被拒
+    // node_not_found —— admin 2026-11-11 截图），没有才显示**翻译过的**原因，不再露原始错误码。
+    const failWith = (error: string | undefined) => setCatalog(reportedSnapshot
+      ? { snapshot: reportedSnapshot, loading: false, error: null }
+      : { snapshot: null, loading: false, error: catalogErrorText(error) });
     const daemonNodeId = nodeProviderDaemon(node);
     if (!daemonNodeId) {
       // A node started by hand (`anet node start`, opencode-cli co-presence) has no daemon
       // binding, so the daemon relay cannot read its catalogue. The Hub still carries what the
-      // node itself reported (`opencode_catalog` on GET /api/nodes); that is a real source and
-      // previously the only thing the settings panel could use. Show it, never a builtin list.
-      const reported = (node.opencode_catalog ?? []).filter((id): id is string => typeof id === 'string' && id.includes('/'));
-      setCatalog(reported.length
-        ? {
-            snapshot: {
-              models: reported.map((id) => ({ providerId: id.slice(0, id.indexOf('/')), id: id.slice(id.indexOf('/') + 1) })),
-            } as PaletteCatalogSnapshot,
-            loading: false,
-            error: null,
-          }
-        : { snapshot: null, loading: false, error: catalogErrorText('catalog_unmanaged_unreported') });
+      // node itself reported. Show it, never a builtin list.
+      failWith('catalog_unmanaged_unreported');
       return () => { live = false; };
     }
     void (async () => {
       const queued = await queueOpenCodeCatalog(cfgRef.current, { nodeId: node.node_id, daemonNodeId });
       if (!live) return;
-      if (!queued.ok) {
-        setCatalog({ snapshot: null, loading: false, error: queued.error });
-        return;
-      }
+      if (!queued.ok) { failWith(queued.error); return; }
       for (let i = 0; i < CATALOG_MAX_POLLS; i++) {
         await new Promise(resolve => setTimeout(resolve, CATALOG_POLL_MS));
         if (!live) return;
         const polled = await pollOpenCodeCatalog(cfgRef.current, queued.request_id);
         if (!live) return;
-        if (!polled.ok) {
-          setCatalog({ snapshot: null, loading: false, error: catalogErrorText(polled.error) });
-          return;
-        }
+        if (!polled.ok) { failWith(polled.error); return; }
         if (polled.status === 'ready') {
           setCatalog({ snapshot: polled.snapshot as unknown as PaletteCatalogSnapshot, loading: false, error: null });
           return;
         }
       }
-      if (live) setCatalog({ snapshot: null, loading: false, error: catalogErrorText('unavailable') });
+      if (live) failWith('unavailable');
     })();
     return () => { live = false; };
   }, [node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, (node?.opencode_catalog ?? []).join('|'), cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
@@ -193,7 +187,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const agentWritable = composerAgentSwitchable(agentConfig);
   const currentAgent = composerAgentCurrent(agentConfig);
   const showAgentSection = composerAgentSectionVisible(agentConfig);
-  const listMax = agents.length ? Math.max(100, Math.min(220, Math.round((windowHeight || 800) * 0.25))) : Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
+  // admin 2026-11-11「切换模型的体验太差」：agent 改成一行芯片后，模型列表不再让出一半高度。
+  const listMax = Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
 
   const applyAgent = async (agent: string) => {
@@ -470,7 +465,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           {!variantGate.ok ? (
             <Text style={styles.variantNote} testID="node-variant-disabled">{variantGate.reason}</Text>
           ) : choices.kind === 'unknown' ? (
-            <Text style={styles.variantNote} testID="node-variant-unknown">{t('chat.modelPicker.variantUnknown')}</Text>
+            <Text style={styles.variantNote} testID="node-variant-unknown">{t('chat.modelPicker.variantUnknown', { value: currentVariant ?? t('chat.variantDefaultShort') })}</Text>
           ) : choices.kind === 'none' ? (
             <Text style={styles.variantNote} testID="node-variant-none">{t('chat.modelPicker.variantNone')}</Text>
           ) : (
@@ -506,7 +501,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           {!agentWritable ? (
             <Text testID="composer-agent-readonly" style={styles.variantNote}>{t('composerAgent.readOnly', { value: currentAgent ?? t('composerAgent.unknownShort') })}</Text>
           ) : null}
-          {agentWritable ? <ScrollView style={{ maxHeight: 120, width: '100%' }} nestedScrollEnabled keyboardShouldPersistTaps="handled" testID="composer-agent-list"
+          {agentWritable ? <View style={styles.agentChips} testID="composer-agent-list"
             {...(Platform.OS === 'web' ? { onKeyDown: (event: { key: string; preventDefault: () => void }) => {
               if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
               if (busy) return;
@@ -524,11 +519,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
             {agents.map(agent => <Pressable key={agent} testID={`composer-agent-row-${encodeURIComponent(agent)}`} accessibilityRole="button"
               accessibilityLabel={agent} accessibilityState={{ selected: config?.agent === agent, disabled: busy }} disabled={busy}
               onFocus={() => setActiveAgent(agent)} onPress={() => void applyAgent(agent)}
-              style={[styles.row, (config?.agent === agent || activeAgent === agent) && styles.rowCurrent]}>
-              <Text style={styles.rowLabel} numberOfLines={1}>{agent}</Text>
-              {config?.agent === agent ? <Ionicons testID={`composer-agent-check-${encodeURIComponent(agent)}`} name="checkmark" size={18} color={colors.textSecondary} /> : null}
+              style={[styles.variantChip, styles.agentChip, config?.agent === agent && styles.variantChipOn, activeAgent === agent && config?.agent !== agent && styles.rowCurrent]}>
+              <Text style={[styles.variantChipText, config?.agent === agent && { color: colors.accent }]} numberOfLines={1}>{agent}</Text>
+              {config?.agent === agent ? <Ionicons testID={`composer-agent-check-${encodeURIComponent(agent)}`} name="checkmark" size={12} color={colors.accent} /> : null}
             </Pressable>)}
-          </ScrollView> : null}
+          </View> : null}
         </View>
       ) : null}
 
@@ -595,6 +590,8 @@ const makeStyles = () => ({
   variantChipText: { fontSize: ds(11), color: colors.text },
   variantClear: { fontSize: ds(11), color: colors.textMuted },
   variantNote: { fontSize: ds(11), color: colors.textMuted, flexShrink: 1 },
+  agentChips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 6, width: '100%' as const, paddingTop: 2 },
+  agentChip: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
   errorBox: { marginTop: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.item, backgroundColor: colors.inputBg, gap: 4 },
   errorText: { fontSize: ds(12), color: colors.failed, lineHeight: 18 },
   errorDetail: { fontSize: ds(11), color: colors.textMuted, lineHeight: 16 },
