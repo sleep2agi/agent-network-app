@@ -114,7 +114,8 @@ ck('点卡片不再切键盘模式(没有 onPress / 模式转移)', !card.includ
 ck('✕ 清空草稿,选区作废', card.includes("onClear={() => { setDraft(''); selectionCaptureRef.current.reset(); }}"));
 ck('识别/录音中 ✕ 不可点(busy)', card.includes('busy={voiceBusy}') && /accessibilityLabel=\{t\('voice.clearDraft'\)\} disabled=\{busy\}/.test(ui));
 ck('卡片最多 4 行高,再多在框内滚', /draftCardInput: \{ flex: 1, maxHeight: DRAFT_CARD_LINE_HEIGHT \* VOICE_DRAFT_CARD_MAX_LINES,/.test(ui) && /<TextInput[\s\S]{0,300}multiline\s*scrollEnabled/.test(ui));
-const submitAt = chat.indexOf('const submit = async () => {');
+// #4592：submit 多了一个可选参数（{ interruptFirst }），签名不再是无参箭头；用正则定位，断言的不变量不变。
+const submitAt = chat.search(/const submit = async \([^)]*\) => \{/);
 const submitFn = chat.slice(submitAt, chat.indexOf('\n  };', submitAt));
 ck('submit 不 focus、不切模式(语音模式发送不弹键盘)', submitAt > 0 && !/\.focus\(\)/.test(submitFn) && !submitFn.includes('setInputMode'));
 ck('桌面分支不画卡片(桌面不变):只一处,且在桌面 composer 之后的手机分支里', (chat.match(/<VoiceDraftCard/g) ?? []).length === 1 && cardAt > chat.indexOf('styles.desktopSendText'));

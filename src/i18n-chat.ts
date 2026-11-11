@@ -269,5 +269,13 @@ export const chatTranslations = {
   'chat.interrupt.unconfirmed': ['已发送，节点未确认（可能仍在跑）', 'Sent, but the node has not confirmed (it may still be running)'],
   'chat.interrupt.failed': ['停止失败：{message}', 'Stop failed: {message}'],
   'chat.interrupt.unsupported': ['当前 Hub 版本还不支持停止', 'This Hub version cannot stop a running turn'],
+  // #4592 —— 回合在飞时发送 = 打断 + 新轮（V2 2.0.22 不支持无缝插话）。不用「插话/steer」这类词。
+  'chat.steer.action': ['打断并发送', 'Interrupt & send'],
+  'chat.steer.actionHint': ['先停止正在跑的回合，再把这条作为新指令发出', 'Stop the running turn, then send this as a new instruction'],
+  'chat.steer.interrupting': ['正在打断上一轮…', 'Interrupting the running turn…'],
+  'chat.steer.interrupted': ['上一轮已打断，正在发送新指令', 'Previous turn stopped; sending your new instruction'],
+  'chat.steer.unconfirmed': ['上一轮未确认停止，这条没有发出（草稿还在，可再发一次）', 'The previous turn did not confirm it stopped, so this was not sent (your draft is kept — send again)'],
+  'chat.steer.failed': ['打断失败：{message}（草稿还在）', 'Could not interrupt: {message} (your draft is kept)'],
+  'chat.steer.unsupported': ['当前 Hub 版本不支持打断，这条没有发出（草稿还在）', 'This Hub version cannot interrupt, so this was not sent (your draft is kept)'],
 } satisfies Record<string, readonly [string, string]>;
 registerTranslations(chatTranslations);
