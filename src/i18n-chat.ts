@@ -24,7 +24,7 @@ export const chatTranslations = {
   'chat.modelPicker.variantTitle': ['思考档位', 'Thinking level'],
   'chat.modelPicker.clearVariant': ['清除档位', 'Clear variant'],
   'chat.modelPicker.variantNone': ['该模型没有可选档位', 'This model has no optional variant'],
-  'chat.modelPicker.variantUnknown': ['未知：目录未提供档位', 'Unknown: catalog lists no variants'],
+  'chat.modelPicker.variantUnknown': ['{value}（这个模型的清单里没有列出其它档位）', '{value} (the catalog lists no other levels for this model)'],
   'chat.modelPicker.currentMark': ['当前', 'Current'],
   'chat.file.saveHint': ['选择位置保存 · Alt 点击直接存到下载', 'Choose a save location · Alt-click to save to Downloads'],
   'chat.file.browserHint': ['安全下载到浏览器', 'Download securely in your browser'],

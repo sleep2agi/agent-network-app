@@ -187,7 +187,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const agentWritable = composerAgentSwitchable(agentConfig);
   const currentAgent = composerAgentCurrent(agentConfig);
   const showAgentSection = composerAgentSectionVisible(agentConfig);
-  const listMax = agents.length ? Math.max(100, Math.min(220, Math.round((windowHeight || 800) * 0.25))) : Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
+  // admin 2026-11-11「切换模型的体验太差」：agent 改成一行芯片后，模型列表不再让出一半高度。
+  const listMax = Math.max(180, Math.min(430, Math.round((windowHeight || 800) * 0.5)));
   const [activeAgent, setActiveAgent] = useState<string | null>(null);
 
   const applyAgent = async (agent: string) => {
@@ -464,7 +465,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           {!variantGate.ok ? (
             <Text style={styles.variantNote} testID="node-variant-disabled">{variantGate.reason}</Text>
           ) : choices.kind === 'unknown' ? (
-            <Text style={styles.variantNote} testID="node-variant-unknown">{t('chat.modelPicker.variantUnknown')}</Text>
+            <Text style={styles.variantNote} testID="node-variant-unknown">{t('chat.modelPicker.variantUnknown', { value: currentVariant ?? t('chat.variantDefaultShort') })}</Text>
           ) : choices.kind === 'none' ? (
             <Text style={styles.variantNote} testID="node-variant-none">{t('chat.modelPicker.variantNone')}</Text>
           ) : (
@@ -500,7 +501,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           {!agentWritable ? (
             <Text testID="composer-agent-readonly" style={styles.variantNote}>{t('composerAgent.readOnly', { value: currentAgent ?? t('composerAgent.unknownShort') })}</Text>
           ) : null}
-          {agentWritable ? <ScrollView style={{ maxHeight: 120, width: '100%' }} nestedScrollEnabled keyboardShouldPersistTaps="handled" testID="composer-agent-list"
+          {agentWritable ? <View style={styles.agentChips} testID="composer-agent-list"
             {...(Platform.OS === 'web' ? { onKeyDown: (event: { key: string; preventDefault: () => void }) => {
               if (event.key === 'Escape') { event.preventDefault(); closeRef.current(); return; }
               if (busy) return;
@@ -518,11 +519,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
             {agents.map(agent => <Pressable key={agent} testID={`composer-agent-row-${encodeURIComponent(agent)}`} accessibilityRole="button"
               accessibilityLabel={agent} accessibilityState={{ selected: config?.agent === agent, disabled: busy }} disabled={busy}
               onFocus={() => setActiveAgent(agent)} onPress={() => void applyAgent(agent)}
-              style={[styles.row, (config?.agent === agent || activeAgent === agent) && styles.rowCurrent]}>
-              <Text style={styles.rowLabel} numberOfLines={1}>{agent}</Text>
-              {config?.agent === agent ? <Ionicons testID={`composer-agent-check-${encodeURIComponent(agent)}`} name="checkmark" size={18} color={colors.textSecondary} /> : null}
+              style={[styles.variantChip, styles.agentChip, config?.agent === agent && styles.variantChipOn, activeAgent === agent && config?.agent !== agent && styles.rowCurrent]}>
+              <Text style={[styles.variantChipText, config?.agent === agent && { color: colors.accent }]} numberOfLines={1}>{agent}</Text>
+              {config?.agent === agent ? <Ionicons testID={`composer-agent-check-${encodeURIComponent(agent)}`} name="checkmark" size={12} color={colors.accent} /> : null}
             </Pressable>)}
-          </ScrollView> : null}
+          </View> : null}
         </View>
       ) : null}
 
@@ -589,6 +590,8 @@ const makeStyles = () => ({
   variantChipText: { fontSize: ds(11), color: colors.text },
   variantClear: { fontSize: ds(11), color: colors.textMuted },
   variantNote: { fontSize: ds(11), color: colors.textMuted, flexShrink: 1 },
+  agentChips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 6, width: '100%' as const, paddingTop: 2 },
+  agentChip: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 4 },
   errorBox: { marginTop: 8, paddingHorizontal: 10, paddingVertical: 8, borderRadius: radius.item, backgroundColor: colors.inputBg, gap: 4 },
   errorText: { fontSize: ds(12), color: colors.failed, lineHeight: 18 },
   errorDetail: { fontSize: ds(11), color: colors.textMuted, lineHeight: 16 },
