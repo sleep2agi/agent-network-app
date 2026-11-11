@@ -138,13 +138,23 @@ jobs:
           #    那个域名在部分 runner 上偶发 DNS 解析失败（实测 15:21–15:31 整批 8 分片全红，
           #    报错是 "Temporary failure resolving 'azure.archive.ubuntu.com'"），
           #    于是「浏览器装不上」被当成代码失败。DNS 抖动通常几十秒内恢复 ⇒ 重试，而不是让 PR 红。
+          # runner 的 apt 镜像默认指向 azure.archive.ubuntu.com；该域名在这些 runner 上解析失败
+          # （2026-11-11 整晚复现）。换成标准的 archive.ubuntu.com 再试。
+          if [ -f /etc/apt/apt-mirrors.txt ]; then
+            sudo sed -i 's|azure\.archive\.ubuntu\.com|archive.ubuntu.com|g' /etc/apt/apt-mirrors.txt || true
+          fi
           ok=0
-          for i in 1 2 3 4; do
+          for i in 1 2 3; do
             if /tmp/pw/node_modules/.bin/playwright install --with-deps chromium; then ok=1; break; fi
-            echo "::warning::playwright install attempt $i failed (often apt/DNS); retrying in 20s"
-            sleep 20
+            echo "::warning::playwright install attempt $i failed (often apt/DNS); retrying in 15s"
+            sleep 15
           done
-          [ "$ok" = "1" ] || { echo "::error::playwright install failed 4 times (apt/DNS), not a code failure"; exit 1; }
+          if [ "$ok" != "1" ]; then
+            # 兜底：不带 --with-deps（跳过 apt）。runner 镜像本身带大部分运行库；
+            # 缺库时会以真实的浏览器错误暴露出来，而不是被 apt 的 DNS 抖动伪装成代码红。
+            echo "::warning::--with-deps failed; falling back to plain chromium install"
+            /tmp/pw/node_modules/.bin/playwright install chromium
+          fi
       - name: Run shard
         if: env.RUN_DRIVES == 'true'
         env:
