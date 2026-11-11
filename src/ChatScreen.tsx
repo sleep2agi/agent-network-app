@@ -70,6 +70,7 @@ import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ComposerStopButton from './ComposerStopButton';
 import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
+import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -1883,7 +1884,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     }
   };
 
-  const submit = async () => {
+  const submit = async (opts?: { interruptFirst?: boolean }) => {
     const parsed = parseBtwFirstToken(draft);
     if (parsed.kind === 'invalid') {
       Alert.alert(t('chat.btwQuestion'), parsed.message);
@@ -1914,6 +1915,38 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     if (blocked) {
       setComposerNotice(blocked); // 草稿原样保留,用户移除超限的那张再发
       return;
+    }
+    // #4592 —— **显式**动作才打断：默认发送保持「即时、只发一个请求」的既有契约，
+    // 只有用户点了「打断并发送」才走 interrupt → confirm → send。
+    // 理由：status 可能是陈旧的（心跳/轮询滞后），隐式打断会让「只想排队」的人误杀自己的回合，
+    // 也会把发送延迟从 <500ms 变成最多 8s（#518 的体感就是被这条破坏的）。
+    // 拿不到凭据就**不发**：草稿保留 + 明确告知，绝不静默排队或假装已发出。
+    if (opts?.interruptFirst === true && shouldInterruptBeforeSend(sessionStatus)) {
+      setComposerNotice(t('chat.steer.interrupting'));
+      const { verdict, detail } = await interruptThenConfirm({
+        interrupt: () => interruptTurn(cfg, alias),
+        readStatus: async () => {
+          try {
+            const data = await fetchStatus(cfg);
+            return (data.sessions ?? []).find(x => x.alias === alias)?.status ?? null;
+          } catch {
+            return null;
+          }
+        },
+        sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+        windowMs: INTERRUPT_CONFIRM_MS,
+        pollMs: 1000,
+      });
+      if (verdict !== 'confirmed') {
+        setComposerNotice(
+          verdict === 'unsupported' ? t('chat.steer.unsupported')
+            : verdict === 'failed' ? t('chat.steer.failed', { message: detail ?? '' })
+              : t('chat.steer.unconfirmed'),
+        );
+        return;
+      }
+      setComposerNotice(t('chat.steer.interrupted'));
+      setSessionStatus('idle');
     }
     // 引用条在前、正文在后;agent 端看到的是「@作者: 被引用内容」+ 正文,客户端渲染时再拆开。
     const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
@@ -3031,6 +3064,25 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
               </Pressable>
               <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} desktop onPress={pressInterrupt} />
+              {interruptable(sessionStatus) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('chat.steer.action')}
+                  accessibilityHint={t('chat.steer.actionHint')}
+                  testID="composer-interrupt-send"
+                  onPress={() => void submit({ interruptFirst: true })}
+                  disabled={!canSend(draft, attached.length > 0, sending)}
+                  hitSlop={{ top: 6, bottom: 6 }}
+                  style={({ pressed }) => [
+                    { flexDirection: 'row', alignItems: 'center', gap: ds(3), paddingHorizontal: ds(2) },
+                    !canSend(draft, attached.length > 0, sending) && { opacity: 0.45 },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons name="flash-outline" size={12} color={colors.textMuted} />
+                  <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
+                </Pressable>
+              ) : null}
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
@@ -3113,6 +3165,25 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
         <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} onPress={pressInterrupt} />
+        {interruptable(sessionStatus) ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('chat.steer.action')}
+                  accessibilityHint={t('chat.steer.actionHint')}
+                  testID="composer-interrupt-send"
+                  onPress={() => void submit({ interruptFirst: true })}
+                  disabled={!canSend(draft, attached.length > 0, sending)}
+                  hitSlop={{ top: 6, bottom: 6 }}
+                  style={({ pressed }) => [
+                    { flexDirection: 'row', alignItems: 'center', gap: ds(3), paddingHorizontal: ds(2) },
+                    !canSend(draft, attached.length > 0, sending) && { opacity: 0.45 },
+                    pressed && { opacity: 0.7 },
+                  ]}
+                >
+                  <Ionicons name="flash-outline" size={12} color={colors.textMuted} />
+                  <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
+                </Pressable>
+              ) : null}
       </View>
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
