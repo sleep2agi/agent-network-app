@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.507:",
+  "- 模型面板：交给守护进程管理的节点读不到 daemon 代读的模型清单时，改用节点自己上报的清单，不再只显示一行 node_not_found；真的读不到时显示中文原因。",
+  "",
   "What's new in 0.2.506:",
   "- 手机端聊天：模型 / 思考档位挪到输入框上面，切语音时不会再误触。",
   "- Fork 弹窗显示新节点会放在哪个目录（源目录旁边的 `<源目录名>-N`）；选「同目录」时显示源目录。",

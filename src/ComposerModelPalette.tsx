@@ -128,46 +128,40 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       setCatalog({ snapshot: null, loading: false, error: catalogErrorText('not_opencode_v2') });
       return () => { live = false; };
     }
+    // 节点自己上报到 Hub 的模型清单（GET /api/nodes 的 `opencode_catalog`）—— 真实来源，不是内置清单。
+    const reported = (node.opencode_catalog ?? []).filter((id): id is string => typeof id === 'string' && id.includes('/'));
+    const reportedSnapshot = reported.length
+      ? { models: reported.map((id) => ({ providerId: id.slice(0, id.indexOf('/')), id: id.slice(id.indexOf('/') + 1) })) } as PaletteCatalogSnapshot
+      : null;
+    // daemon 代读失败时：有上报清单就用它（收编来的节点 Hub 上没有「daemon 创建」记录，代读会被拒
+    // node_not_found —— admin 2026-11-11 截图），没有才显示**翻译过的**原因，不再露原始错误码。
+    const failWith = (error: string | undefined) => setCatalog(reportedSnapshot
+      ? { snapshot: reportedSnapshot, loading: false, error: null }
+      : { snapshot: null, loading: false, error: catalogErrorText(error) });
     const daemonNodeId = nodeProviderDaemon(node);
     if (!daemonNodeId) {
       // A node started by hand (`anet node start`, opencode-cli co-presence) has no daemon
       // binding, so the daemon relay cannot read its catalogue. The Hub still carries what the
-      // node itself reported (`opencode_catalog` on GET /api/nodes); that is a real source and
-      // previously the only thing the settings panel could use. Show it, never a builtin list.
-      const reported = (node.opencode_catalog ?? []).filter((id): id is string => typeof id === 'string' && id.includes('/'));
-      setCatalog(reported.length
-        ? {
-            snapshot: {
-              models: reported.map((id) => ({ providerId: id.slice(0, id.indexOf('/')), id: id.slice(id.indexOf('/') + 1) })),
-            } as PaletteCatalogSnapshot,
-            loading: false,
-            error: null,
-          }
-        : { snapshot: null, loading: false, error: catalogErrorText('catalog_unmanaged_unreported') });
+      // node itself reported. Show it, never a builtin list.
+      failWith('catalog_unmanaged_unreported');
       return () => { live = false; };
     }
     void (async () => {
       const queued = await queueOpenCodeCatalog(cfgRef.current, { nodeId: node.node_id, daemonNodeId });
       if (!live) return;
-      if (!queued.ok) {
-        setCatalog({ snapshot: null, loading: false, error: queued.error });
-        return;
-      }
+      if (!queued.ok) { failWith(queued.error); return; }
       for (let i = 0; i < CATALOG_MAX_POLLS; i++) {
         await new Promise(resolve => setTimeout(resolve, CATALOG_POLL_MS));
         if (!live) return;
         const polled = await pollOpenCodeCatalog(cfgRef.current, queued.request_id);
         if (!live) return;
-        if (!polled.ok) {
-          setCatalog({ snapshot: null, loading: false, error: catalogErrorText(polled.error) });
-          return;
-        }
+        if (!polled.ok) { failWith(polled.error); return; }
         if (polled.status === 'ready') {
           setCatalog({ snapshot: polled.snapshot as unknown as PaletteCatalogSnapshot, loading: false, error: null });
           return;
         }
       }
-      if (live) setCatalog({ snapshot: null, loading: false, error: catalogErrorText('unavailable') });
+      if (live) failWith('unavailable');
     })();
     return () => { live = false; };
   }, [node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, (node?.opencode_catalog ?? []).join('|'), cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
