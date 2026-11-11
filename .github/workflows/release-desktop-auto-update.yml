@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.516:
+            - 节点「权限 → 收：接受来自」可以按部门授权：勾选一个部门，这个部门及其子部门里的节点和人都能给该节点派活（需要新版 Hub）。
+
             What's new in 0.2.515:
             - 消息渲染：支持 `~~~` 波浪号代码围栏（CommonMark）。对端用 `~~~text` 写代码块时，以前整段会退化成正文 —— 围栏里的「1. 2.」被当成有序列表重新编号，看起来像消息渲染坏了；现在会正常显示为代码块。
             - 说明：消息正文的 2000 字上限在**节点侧**（agent-node 的回执发送），已在 agent-node 修掉，节点升级到下一个版本后生效；本文只涉及客户端渲染。

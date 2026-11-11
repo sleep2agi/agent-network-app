@@ -73,8 +73,32 @@ export function normalizeInbox(list: readonly string[] | null | undefined): stri
 export const senderEntries = (list: readonly string[] | null | undefined): string[] => (list ?? []).filter(e => e !== STRICT_ENTRY);
 
 /** 一个名单项的显示名:node_id 换成别名,user: 前缀换成「成员 xx」,不认识的照原样并注明不在网络里。 */
-export function entryLabel(entry: string, choices: readonly NodeChoice[], humans: readonly Pick<Human, 'user_id' | 'username' | 'display_name'>[] = []): string {
+/** 收件白名单的部门项(Hub 报 node_inbox_allowlist_dept 才有):`dept:<department_id>`,含子部门。 */
+export const DEPT_ENTRY_PREFIX = 'dept:';
+export const INBOX_DEPT_CAPABILITY = 'node_inbox_allowlist_dept';
+export const deptEntry = (departmentId: string) => `${DEPT_ENTRY_PREFIX}${departmentId}`;
+export type DeptChoice = { id: string; path: string };
+
+/** 部门 → 带上级路径的显示名(「TMAI / TM门户」),按路径排序;断链 / 成环时停在已走过的那段。 */
+export function deptChoices(depts: readonly { id: string; name: string; parent_id: string | null }[]): DeptChoice[] {
+  const byId = new Map(depts.map(d => [d.id, d]));
+  const path = (id: string) => {
+    const names: string[] = [];
+    const seen = new Set<string>();
+    for (let cur = byId.get(id); cur && !seen.has(cur.id) && names.length < 32; cur = cur.parent_id ? byId.get(cur.parent_id) : undefined) {
+      seen.add(cur.id); names.unshift(cur.name);
+    }
+    return names.join(' / ');
+  };
+  return depts.map(d => ({ id: d.id, path: path(d.id) })).sort((a, b) => a.path.localeCompare(b.path));
+}
+
+export function entryLabel(entry: string, choices: readonly NodeChoice[], humans: readonly Pick<Human, 'user_id' | 'username' | 'display_name'>[] = [], depts: readonly DeptChoice[] = []): string {
   if (entry === ANY_PERSON_ENTRY) return t('nodePerm.inbox.anyPerson');
+  if (entry.startsWith(DEPT_ENTRY_PREFIX)) {
+    const id = entry.slice(DEPT_ENTRY_PREFIX.length);
+    return t('nodePerm.inbox.dept', { name: depts.find(d => d.id === id)?.path || id });
+  }
   if (entry.startsWith('user:')) {
     const ref = entry.slice('user:'.length);
     const h = humans.find(x => x.username === ref || x.user_id === ref);

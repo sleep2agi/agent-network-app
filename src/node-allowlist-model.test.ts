@@ -1,6 +1,6 @@
 import { setLanguagePreference } from './i18n';
 import {
-  ALWAYS_TOOLS, ANY_PERSON_ENTRY, PERMISSION_REASON_CODES, STRICT_ENTRY, allowlistErrorText, allowlistText, entryLabel, isAlwaysTool, isStrict,
+  ALWAYS_TOOLS, ANY_PERSON_ENTRY, PERMISSION_REASON_CODES, STRICT_ENTRY, allowlistErrorText, allowlistText, deptChoices, deptEntry, entryLabel, isAlwaysTool, isStrict,
   listHasNode, mergeDraft, nodeChoices, normalizeInbox, parseAllowlistInput, permissionReasonText, setStrict, toggleEntry, toggleNode,
   withoutAlwaysTools, withoutItem,
 } from './node-allowlist-model';
@@ -39,6 +39,10 @@ ck('node_id 显示成别名;不在网络里的注明', entryLabel('n_a', choices
 // ── 收件白名单语法:user:<名>、user:*、!strict ──
 const humans = [{ user_id: 'u_1', username: 'bob', display_name: 'Bob Li' }];
 ck('user:* = 所有成员;user:bob / user:u_1 = 成员显示名', entryLabel(ANY_PERSON_ENTRY, choices) === '所有成员' && entryLabel('user:bob', choices, humans) === '成员 Bob Li' && entryLabel('user:u_1', choices, humans) === '成员 Bob Li');
+// 部门授权(admin 11-11「以部门去授权」):dept:<id>,显示带上级路径。
+const depts = deptChoices([{ id: 'd_top', name: 'TMAI', parent_id: null }, { id: 'd_kid', name: 'TM门户', parent_id: 'd_top' }, { id: 'd_loop', name: '环', parent_id: 'd_loop' }]);
+ck('部门路径按上级拼接并排序;成环不死循环', depts.map(d => d.path).join('|') === 'TMAI|TMAI / TM门户|环');
+ck('dept: 条目显示部门路径;不认识的显示 id', deptEntry('d_kid') === 'dept:d_kid' && entryLabel('dept:d_kid', choices, humans, depts) === '部门 TMAI / TM门户' && entryLabel('dept:d_x', choices, humans, depts) === '部门 d_x');
 ck('人员勾选切换', same(toggleEntry(null, 'user:bob'), ['user:bob']) && toggleEntry(['user:bob'], 'user:bob') === null);
 ck('严格:没有发送方时不能开', setStrict(null, true) === null && !isStrict(setStrict(null, true)));
 ck('严格:开 / 关', same(setStrict(['alpha'], true), ['alpha', STRICT_ENTRY]) && same(setStrict(['alpha', STRICT_ENTRY], false), ['alpha']) && setStrict([STRICT_ENTRY], false) === null);

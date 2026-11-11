@@ -42,6 +42,8 @@ export const nodePermissionTranslations = {
   'nodePerm.inbox.hint': ['空 = 谁都能发。填了以后，只有名单里的 Agent 和成员能给它派活、发消息。', 'Empty = anyone may send. Once set, only listed agents and people can send it tasks and messages.'],
   'nodePerm.inbox.saved': ['「接受来自」已保存，立即生效', '“Accepts from” saved. Effective now.'],
   'nodePerm.inbox.people': ['成员', 'People'],
+  'nodePerm.inbox.depts': ['部门（含子部门里的节点和人）', 'Departments (agents and people in sub-departments too)'],
+  'nodePerm.inbox.dept': ['部门 {name}', 'Department {name}'],
   'nodePerm.inbox.anyPerson': ['所有成员', 'Any person'],
   'nodePerm.inbox.person': ['成员 {name}', 'Person {name}'],
   'nodePerm.inbox.onlySelf': ['只有它自己', 'Only itself'],
