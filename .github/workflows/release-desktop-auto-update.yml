@@ -611,6 +611,10 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.515:
+            - 消息渲染：支持 `~~~` 波浪号代码围栏（CommonMark）。对端用 `~~~text` 写代码块时，以前整段会退化成正文 —— 围栏里的「1. 2.」被当成有序列表重新编号，看起来像消息渲染坏了；现在会正常显示为代码块。
+            - 说明：消息正文的 2000 字上限在**节点侧**（agent-node 的回执发送），已在 agent-node 修掉，节点升级到下一个版本后生效；本文只涉及客户端渲染。
+
             What's new in 0.2.514:
             - 节点页「定时任务」每一行加了删除按钮（垃圾桶）：确认后计划连同执行记录一起删掉，列表里不再出现；还在跑的会先停止再删。已取消的计划只剩删除按钮。需要 Hub 支持（新版 Hub 自动出现）。
 
