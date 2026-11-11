@@ -67,11 +67,16 @@ export function androidReleaseNotes(workflowText, version) {
 export function stripDesktopPackagingHeader(body) {
   const text = String(body ?? '').trim();
   const paragraphs = text.split(/\n\s*\n/);
-  if (paragraphs.length > 1 && /^Signed and notarized update for macOS\b/i.test(paragraphs[0].trim())) {
+  // 2026-11-12：开头段不再宣称签名（实测 0.2.518 的 Windows 产物未签名）。这里改成认「安装包清单」这一段的
+  // 两种写法（新句 + 旧句），避免把文案绑死在某一句话上（当时改一字就让两条测试变红）。
+  if (paragraphs.length > 1 && DESKTOP_PACKAGING_PREFIX.test(paragraphs[0].trim())) {
     return paragraphs.slice(1).join('\n\n').trim();
   }
   return text;
 }
+
+/** 开头段（桌面安装包清单）的两种写法：2026-11-12 之前 / 之后。 */
+const DESKTOP_PACKAGING_PREFIX = /^(macOS \(Apple Silicon\) and Windows \(x64\) installers\b|Signed and notarized update for macOS\b)/i;
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const [file, version] = process.argv.slice(2);

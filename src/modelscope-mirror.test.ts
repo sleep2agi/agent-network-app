@@ -199,10 +199,10 @@ const releaseWorkflow = readFileSync(new URL('../.github/workflows/release-deskt
 const pkgVersion = JSON.parse(readFileSync(new URL('../package.json', import.meta.url), 'utf8')).version as string;
 const bodyOf = extractReleaseBody(releaseWorkflow) ?? '';
 check('notes: releaseBody extracted from the real release workflow, indentation stripped',
-  bodyOf.startsWith('Signed and notarized') && bodyOf.includes(`What's new in ${pkgVersion}:`) && !/^\s/.test(bodyOf.split('\n')[2] ?? ''));
+  bodyOf.startsWith('macOS (Apple Silicon) and Windows (x64) installers') && bodyOf.includes(`What's new in ${pkgVersion}:`) && !/^\s/.test(bodyOf.split('\n')[2] ?? ''));
 check('notes: the current version has items (the bump PR wrote them)', versionItems(bodyOf, pkgVersion).length > 0);
 const notes = androidReleaseNotes(releaseWorkflow, pkgVersion);
-check('notes: notes.md = release body without the desktop packaging paragraph + trailing newline', typeof notes === 'string' && notes === `${stripDesktopPackagingHeader(bodyOf)}\n` && !notes.startsWith('Signed and notarized'));
+check('notes: notes.md = release body without the desktop packaging paragraph + trailing newline', typeof notes === 'string' && notes === `${stripDesktopPackagingHeader(bodyOf)}\n` && !notes.startsWith('macOS (Apple Silicon) and Windows (x64) installers'));
 check('notes: a body without the desktop header is left intact', stripDesktopPackagingHeader("Intro.\n\nWhat's new in 1.2.3:\n- x") === "Intro.\n\nWhat's new in 1.2.3:\n- x");
 check('notes: a version with no section → error (publish refuses)', androidReleaseNotes(releaseWorkflow, '99.0.0') instanceof Error);
 check('notes: no releaseBody block → error', androidReleaseNotes('jobs: {}\n', pkgVersion) instanceof Error);

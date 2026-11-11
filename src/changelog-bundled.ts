@@ -3,7 +3,7 @@
 // 设置 → 关于 → 更新日志 shows these notes when the mirror / GitHub cannot be reached (src/changelog-source.ts).
 
 export const BUNDLED_RELEASE_BODY: string = [
-  "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
+  "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
   "What's new in 0.2.518:",
   "- 聊天框下方「思考档位」：没有 daemon 中继、或快照不报档位的节点，档位从「思考档位（未知）」变成该模型真实的可选档位；选完沿用既有回读确认（快照优先，用节点自报的档位补齐缺口，谁都没报仍然显示未知）。",

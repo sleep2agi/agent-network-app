@@ -116,7 +116,7 @@ ck('include_linux=false 时回收 .deb/.deb.sig', JSON.stringify(staleAssetsFor(
 ck('include_linux=true 时不动 .deb', staleAssetsFor([{ id: 1, name: 'x_amd64.deb' }], { includeLinux: true }).length === 0);
 
 ck('从 workflow 解出 releaseBody 并替换 __VERSION__',
-  extractReleaseBody(wf, '0.2.287').startsWith('Signed and notarized update'));
+  extractReleaseBody(wf, '0.2.287').startsWith('macOS (Apple Silicon) and Windows (x64) installers'));
 
 // 6. dry run 仍能构建 + updater 写入串行 + 二进制上传走 uploads host
 ck('publish=false 的 dry run 仍会跑 build matrix（always() 保证 skipped prepare 不拖死 matrix）',
