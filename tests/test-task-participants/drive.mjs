@@ -69,7 +69,11 @@ const browser = await chromium.launch({ headless: true, executablePath: findChro
 for (const [name, V] of Object.entries(VIEWPORTS)) {
   for (const theme of ['light', 'dark']) {
     const where = `${name}/${theme}`;
-    const ctx = await browser.newContext({ viewport: { width: V.w, height: V.h }, ...(V.ua ? { userAgent: V.ua, hasTouch: true } : {}), colorScheme: theme, deviceScaleFactor: 2 });
+    // 🔴 断言里写死的是中文标签（「我负责的|2」/「我参与的|2」），而应用按
+    //    Intl.DateTimeFormat().resolvedOptions().locale 选语言。不钉 locale 时，
+    //    同一份代码在 GitHub 的 host runner 上是中文、在 Playwright 容器里是英文（en-US），
+    //    于是这个 drive 只在容器里红（2026-11-12 实测）。按仓里其它 drive 的既有做法钉 zh-CN。
+    const ctx = await browser.newContext({ viewport: { width: V.w, height: V.h }, ...(V.ua ? { userAgent: V.ua, hasTouch: true } : {}), colorScheme: theme, deviceScaleFactor: 2, locale: 'zh-CN' });
     const page = await ctx.newPage();
     const errors = [];
     page.on('pageerror', e => errors.push(e.message.split('\n')[0]));
