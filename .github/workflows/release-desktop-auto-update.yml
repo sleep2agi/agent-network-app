@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.
 
+            What's new in 0.2.509:
+            - 与 0.2.508 内容相同（0.2.508 的发布资产被一次重复的发版流程清空，重新发一版）。
+
             What's new in 0.2.508:
             - 模型面板：手动启动、还没上报模型清单的节点，不再只显示一段红字 —— 改用同类节点报的清单（会注明来源），可以直接换模型。
             - 模型面板：OpenCode 节点的思考档位（none / low / high / max）现在可以直接点选 —— 节点升级到 agent-node 2.5.0-preview.202 后会随模型清单一起上报档位，以前这里只能显示「未知」。
