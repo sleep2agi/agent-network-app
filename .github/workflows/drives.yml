@@ -134,7 +134,17 @@ jobs:
         if: env.RUN_DRIVES == 'true'
         run: |
           npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.58.2
-          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+          # 🔴 2026-11-11：`--with-deps` 会走 apt，而 runner 的镜像源指向 azure.archive.ubuntu.com；
+          #    那个域名在部分 runner 上偶发 DNS 解析失败（实测 15:21–15:31 整批 8 分片全红，
+          #    报错是 "Temporary failure resolving 'azure.archive.ubuntu.com'"），
+          #    于是「浏览器装不上」被当成代码失败。DNS 抖动通常几十秒内恢复 ⇒ 重试，而不是让 PR 红。
+          ok=0
+          for i in 1 2 3 4; do
+            if /tmp/pw/node_modules/.bin/playwright install --with-deps chromium; then ok=1; break; fi
+            echo "::warning::playwright install attempt $i failed (often apt/DNS); retrying in 20s"
+            sleep 20
+          done
+          [ "$ok" = "1" ] || { echo "::error::playwright install failed 4 times (apt/DNS), not a code failure"; exit 1; }
       - name: Run shard
         if: env.RUN_DRIVES == 'true'
         env:
