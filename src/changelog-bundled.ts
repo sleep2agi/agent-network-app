@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "Signed and notarized update for macOS (Apple Silicon), and signed update for Windows (x64). Ubuntu 24.04 (amd64) is included only when its installer is listed in this release.",
   "",
+  "What's new in 0.2.518:",
+  "- 聊天框下方「思考档位」：没有 daemon 中继、或快照不报档位的节点，档位从「思考档位（未知）」变成该模型真实的可选档位；选完沿用既有回读确认（快照优先，用节点自报的档位补齐缺口，谁都没报仍然显示未知）。",
+  "- 新增「停止当前回合」：只在有回合在飞时可点。Hub 回 accepted 不算成功 —— 以节点回执 interrupted=true 或回合真的结束为准；8 秒内没有真凭据会显示「已发送，节点未确认（可能仍在跑）」，之后迟到的真凭据仍会升级成「已停止」（需要 agent-node 2.5.0-preview.206 起）。",
+  "",
   "What's new in 0.2.517:",
   "- 节点「权限」里新增「管理权限」：可以让某个节点管理别人的定时任务，范围选整个网络、某个部门（含子部门）或指定节点，级别选只读或可编辑；任务看板稍后支持。只有网络 owner / 管理员能授全网，部门负责人只能授自己负责的部门（需要新版 Hub）。",
   "- 聊天框下方「思考档位」：没有 daemon 中继、或快照不报档位的节点，档位从「思考档位（未知）」变成该模型真实的可选档位；选完沿用既有回读确认（快照优先，用节点自报的档位补齐缺口，谁都没报仍然显示未知）。",
