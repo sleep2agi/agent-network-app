@@ -39,7 +39,7 @@ ck('idle state is not a success', idleInterrupt().phase === 'idle' && idleInterr
   const late = interruptAfterSend({ sent: 'ok', confirmed: false, timedOut: true });
   ck('no proof within the window ⇒ unconfirmed', late.phase === 'unconfirmed');
   ck('unconfirmed is not reported as interrupted', late.phase !== 'interrupted');
-  ck('confirm window is 3s as specified', INTERRUPT_CONFIRM_MS === 3000);
+  ck('confirm window covers one 5s message poll', INTERRUPT_CONFIRM_MS === 8000);
   const confirmed = interruptAfterSend({ sent: 'ok', confirmed: true, timedOut: true });
   ck('proof wins over the timeout', confirmed.phase === 'interrupted');
 }

@@ -11,8 +11,12 @@
 // 所以客户端只能：先给「已发送」，等**节点侧**的真凭据（回执文本 / 回合真的结束），
 // 3 秒内没等到就照实说「已发送，节点未确认」，绝不假装成功。
 
-/** 3 秒确认窗口。到点没有真凭据 ⇒ unconfirmed（不是失败）。 */
-export const INTERRUPT_CONFIRM_MS = 3000;
+/** 8 秒确认窗口。到点没有真凭据 ⇒ unconfirmed（不是失败）。
+ *
+ *  为什么是 8 秒：聊天页的消息轮询是 5 秒一次，而节点回执要走「Hub 入队 → 节点取 → 节点打断 →
+ *  回执再回来」一整圈。3 秒窗口在真机上几乎必然先判「未确认」，用户会以为没生效。
+ *  8 秒覆盖一次完整轮询；即使到点成了 unconfirmed，后续真凭据（回执 / 状态翻转）仍会把它升回 interrupted。 */
+export const INTERRUPT_CONFIRM_MS = 8000;
 
 export type InterruptPhase = 'idle' | 'sending' | 'waiting' | 'interrupted' | 'unconfirmed' | 'failed' | 'unsupported';
 

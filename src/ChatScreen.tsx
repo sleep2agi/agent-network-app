@@ -2156,7 +2156,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   useEffect(() => () => { if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current); }, []);
   // 真凭据之一：节点回执（`interrupt {"ok":true,"interrupted":true}`）作为新消息出现。
   useEffect(() => {
-    if (interrupt.phase !== 'waiting') return;
+    // unconfirmed 之后仍要继续听：超过窗口才到的真凭据（回执 / 状态翻转）照样把状态升回来，
+    // 否则用户只会停在一句「未确认」上，而其实早就停了。
+    if (interrupt.phase !== 'waiting' && interrupt.phase !== 'unconfirmed') return;
     const seen = interruptSeenRef.current;
     if (messages.some(m => !seen.has(interruptIdOf(m)) && replyProvesInterrupted(m.content ?? m.result ?? ''))) {
       setInterrupt({ phase: 'interrupted', detail: null });
@@ -2166,7 +2168,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   useEffect(() => {
     const prev = prevSessionStatusRef.current;
     prevSessionStatusRef.current = sessionStatus;
-    if (interrupt.phase === 'waiting' && statusFlipProvesInterrupted(prev, sessionStatus)) {
+    if ((interrupt.phase === 'waiting' || interrupt.phase === 'unconfirmed') && statusFlipProvesInterrupted(prev, sessionStatus)) {
       setInterrupt({ phase: 'interrupted', detail: null });
     }
   }, [sessionStatus, interrupt.phase]);
