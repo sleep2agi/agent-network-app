@@ -13,7 +13,7 @@ const src = readFileSync(new URL('./ComposerModelPalette.tsx', import.meta.url),
 ck('queue failure goes through the fallback', src.includes('if (!queued.ok) { failWith(queued.error); return; }'));
 ck('poll failure goes through the fallback', src.includes('if (!polled.ok) { failWith(polled.error); return; }'));
 ck('timeout goes through the fallback', src.includes("if (live) failWith('unavailable');"));
-ck('fallback prefers the node-reported catalogue', /const failWith = [^;]*reportedSnapshot\s*\?\s*\{ snapshot: reportedSnapshot/.test(src));
+ck('fallback prefers the node-reported catalogue', src.includes('if (reportedSnapshot) { setCatalog({ snapshot: reportedSnapshot, loading: false, error: null }); return; }'));
 ck('raw queue error is never shown', !src.includes('error: queued.error'));
 ck('node_not_found is translated', catalogErrorText('node_not_found') !== 'node_not_found' && catalogErrorText('node_not_found').includes('读不到模型列表'));
 
