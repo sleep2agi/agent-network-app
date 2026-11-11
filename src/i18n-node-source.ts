@@ -36,6 +36,13 @@ export const nodeSourcePaletteTranslations = {
   'sourcePalette.forkFolder.sameHint': ['接续原会话，共用文件', 'Continues the session, shares files'],
   'sourcePalette.forkSubmit': ['Fork', 'Fork'],
   'sourcePalette.disabledRowHint': ['灰掉的行都带着真实原因，点一下会说明为什么不能提交。', 'Disabled rows carry the real reason; tapping one explains why.'],
+  // #4495 —— 能力门控：缺哪个能力就说哪个，不用一句含糊的「不支持」。
+  'sourcePalette.cap.directory': ['这台服务器没有开启「列出已有项目 / 会话」的能力', 'This server has not enabled "list existing projects / sessions"'],
+  'sourcePalette.cap.projectNewSession': ['这台服务器没有开启「用已有项目新建会话」的能力', 'This server has not enabled "create a session from an existing project"'],
+  'sourcePalette.cap.attach': ['这台服务器没有开启「接入已有会话」的能力', 'This server has not enabled "attach to an existing session"'],
+  'sourcePalette.cap.fork': ['这台服务器没有开启 fork 能力（传输或投递缺一项）', 'This server has not enabled forking (transport or delivery is missing)'],
+  'sourcePalette.cap.notDaemon': ['这不是守护节点，没有可用的节点来源能力', 'This is not a daemon node, so it has no node-source capabilities'],
+  'sourcePalette.cap.hubUnsupported': ['当前 Hub 版本不提供该能力（升级 Hub 后可读）', 'This Hub version does not provide that capability (upgrade the Hub to read it)'],
 } as const;
 
 registerTranslations(nodeSourcePaletteTranslations);
