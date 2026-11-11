@@ -20,9 +20,10 @@ import {
   putNodeInboxAllowlist, putNodePeerAllowlist, putNodePermissionMode, putNodeToolAllowlist, type HubConfig, type HubNode,
 } from './api';
 import { fetchHumans } from './human-dm-api';
+import { fetchOrg } from './org-api';
 import type { Human } from './human-dm';
 import {
-  ALWAYS_TOOLS, ANY_PERSON_ENTRY, PERMISSION_REASON_CODES, allowlistErrorText, allowlistText, entryLabel, isAlwaysTool, isStrict,
+  ALWAYS_TOOLS, ANY_PERSON_ENTRY, INBOX_DEPT_CAPABILITY, deptChoices, deptEntry, type DeptChoice, PERMISSION_REASON_CODES, allowlistErrorText, allowlistText, entryLabel, isAlwaysTool, isStrict,
   listHasNode, mergeDraft, nodeChoices, normalizeInbox, parseAllowlistInput, permissionReasonText, personEntry, senderEntries,
   setStrict, toggleEntry, toggleNode, withoutAlwaysTools, withoutItem, type NodeChoice,
 } from './node-allowlist-model';
@@ -75,6 +76,9 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   const [humans, setHumans] = useState<Human[]>([]);
   /** Hub 有没有收件白名单(/health capabilities)。undefined = 还在读 ⇒ 先不画「收」。 */
   const [inboxSupported, setInboxSupported] = useState<boolean | undefined>(undefined);
+  /** 部门授权(Hub 报 node_inbox_allowlist_dept 才画)。admin 11-11「以部门去授权」。 */
+  const [deptSupported, setDeptSupported] = useState(false);
+  const [depts, setDepts] = useState<DeptChoice[]>([]);
 
   useEffect(() => { setMode(normalizeMode(node.permission_mode)); }, [node.node_id, node.permission_mode]);
   useEffect(() => {
@@ -82,15 +86,16 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
     void fetchHubNodes(cfg)
       .then(r => { if (alive) setChoices(nodeChoices(r.nodes ?? [], node)); })
       .catch(() => { if (alive) setChoices([]); });
-    void fetchHubHealthCapabilities(cfg).then(caps => { if (alive) setInboxSupported(supportsInboxAllowlist(caps, INBOX_ALLOWLIST_CAPABILITY)); });
+    void fetchHubHealthCapabilities(cfg).then(caps => { if (alive) { setInboxSupported(supportsInboxAllowlist(caps, INBOX_ALLOWLIST_CAPABILITY)); setDeptSupported(caps.includes(INBOX_DEPT_CAPABILITY)); } });
     return () => { alive = false; };
   }, [cfg, node.node_id, node.alias]);
   useEffect(() => {
     if (!inboxSupported || !cfg.networkId) return;
     let alive = true;
     void fetchHumans(cfg, cfg.networkId).then(h => { if (alive) setHumans(h); }).catch(() => { if (alive) setHumans([]); });
+    if (deptSupported) void fetchOrg(cfg, cfg.networkId).then(o => { if (alive) setDepts(deptChoices(o?.departments ?? [])); }).catch(() => { if (alive) setDepts([]); });
     return () => { alive = false; };
-  }, [cfg, inboxSupported]);
+  }, [cfg, inboxSupported, deptSupported]);
 
   useEffect(() => {
     setPeers(node.peer_allowlist ?? null);
@@ -147,7 +152,7 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   const layout = permissionLayout(compact);
   const options = nodePermissionOptions();
   const selected = optionFor(mode);
-  const label = (e: string) => entryLabel(e, choices, humans);
+  const label = (e: string) => entryLabel(e, choices, humans, depts);
   const showInbox = inboxSupported === true;
   const strict = isStrict(inbox);
   const card = { backgroundColor: colors.card, borderRadius: radius.surface, padding: spacing.lg, gap: spacing.md } as const;
@@ -261,6 +266,19 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
             picks={(
               <View style={{ gap: spacing.sm }}>
                 {choices.length ? <NodePicks testPrefix="node-inbox-allowlist-pick" choices={choices} list={inbox} busy={busy} onToggle={c => void saveList('inbox', toggleNode(inbox, c))} /> : null}
+                {deptSupported && depts.length ? (
+                  <View style={{ gap: 6 }}>
+                    <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('nodePerm.inbox.depts')}</Text>
+                    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID="node-inbox-allowlist-depts">
+                      {depts.map(d => {
+                        const entry = deptEntry(d.id);
+                        const on = !!inbox?.includes(entry);
+                        return <PickChip key={d.id} testID={`node-inbox-allowlist-dept-${d.id}`} text={d.path} on={on} busy={busy}
+                          onPress={() => void saveList('inbox', toggleEntry(inbox, entry))} />;
+                      })}
+                    </View>
+                  </View>
+                ) : null}
                 <View style={{ gap: 6 }}>
                   <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('nodePerm.inbox.people')}</Text>
                   <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID="node-inbox-allowlist-people">
