@@ -68,7 +68,8 @@ try {
     ck(`${name}: path group has count 1`, (await page.getByTestId('source-palette-group-fork:/work/current-project-count').innerText()) === '1');
     await bounds(page, viewport);
     await page.screenshot({ path: `${out}/${name}-open.png` });
-    await page.getByTestId('source-palette-search').fill('current-project');
+    // 只有一个源会话时 Fork 浮层不放搜索框（admin 11-11「有点丑」），也不摆 network / mode= 这类内部字段。
+    ck(`${name}: single-source fork has no search box and no internal ids`, await page.getByTestId('source-palette-search').count() === 0 && await page.getByTestId('source-fork-network').count() === 0 && !(await page.getByTestId('source-fork-frame').innerText()).includes('fork_independent'));
     await page.getByTestId('source-palette-row-ses_A123').click();
     await page.getByTestId('source-fork-child-name').fill('chat-fork-child');
     ck(`${name}: fork offers new-folder and same-folder`, await page.getByTestId('source-fork-folder-new').count() === 1 && await page.getByTestId('source-fork-folder-same').count() === 1);

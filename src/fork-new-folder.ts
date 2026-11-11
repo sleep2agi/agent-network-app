@@ -31,13 +31,13 @@ export function forkNewFolderStepLabel(step: ForkNewFolderStep): string {
  * 源目录名本身以 `-数字` 结尾时从主干往后数，与 agent-node clone-node.ts 的 planCloneWorkdir 同一规则）。 */
 export function forkFolderHint(folder: ForkFolder, sourcePath: string | null | undefined): string {
   const path = (sourcePath ?? '').trim().replace(/[\\/]+$/, '');
-  if (folder === 'same') return path ? `目录：${path}（与源节点同一个目录，接续原会话）` : '目录：与源节点同一个目录（接续原会话）';
-  if (!path) return '目录：源节点目录旁边新建 `<源目录名>-N`（N 从 2 起，取第一个没被占用的号）';
+  if (folder === 'same') return path ? `→ ${path}` : '→ 与源节点同一个目录';
+  if (!path) return '→ 源目录旁的 <源目录名>-2（被占用时自动顺延 -3、-4…）';
   const cut = Math.max(path.lastIndexOf('/'), path.lastIndexOf('\\'));
   const parent = cut >= 0 ? path.slice(0, cut + 1) : '';
   const name = cut >= 0 ? path.slice(cut + 1) : path;
   const stem = name.replace(/-\d+$/, '') || name;
-  return `新目录：${parent}${stem}-N（N 从 2 起，取第一个没被占用的号，如 ${stem}-2）`;
+  return `→ ${parent}${stem}-2（被占用时自动顺延 -3、-4…）`;
 }
 
 const clip = (s: string, n: number) => (s.length > n ? `${s.slice(0, n)}…（已截断）` : s);

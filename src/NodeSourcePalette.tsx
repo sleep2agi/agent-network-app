@@ -9,7 +9,7 @@
 //   · oses_ 是目录 ID，永远不能变成 fork 的 session_id；
 //   · 404 = gate 未开放：显示「未开放」，绝不 fallback 普通创建；unknown 不新开意图。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Platform, Pressable, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import {
@@ -74,7 +74,15 @@ import {
 import { forkFolderHint, forkNewFolderStepLabel, runForkToNewFolder, type ForkFolder } from './fork-new-folder';
 import { t } from './i18n';
 import './i18n-node-source';
-import { colors } from './theme';
+import { colors, radius, spacing, type as typeScale, weight } from './theme';
+import { ds } from './ui-scale';
+
+/** Fork 表单的字段名（小号、次要色、略加粗）。函数形式：colors 是 live binding，换主题要重新读。 */
+const forkLabelStyle = () => ({ color: colors.textSecondary, fontSize: ds(12), fontWeight: weight.strong });
+const forkInputStyle = () => ({
+  alignSelf: 'stretch' as const, height: 40, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border,
+  backgroundColor: colors.inputBg, color: colors.text, paddingHorizontal: 12, fontSize: ds(14),
+});
 import { nodeProviderDaemon } from './node-provider-target';
 
 interface Props {
@@ -500,19 +508,29 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           <Ionicons name="close" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
-      <Text style={styles.headerSub} numberOfLines={1} testID="source-fork-network">
-        {t('sourcePalette.sourceLine', { network: networkId ?? '—', node: sourceNodeId })}
-      </Text>
-      <PaletteSearch
+      {/* Fork 当前节点（admin 11-11「有点丑」）：不摆 network / node id、mode= 这类内部字段，改成一句人话；
+          只有一个源会话时也不放搜索框。完整命令面板（节点来源）保持原样。 */}
+      {forkOnly ? (
+        fork.candidates[0] ? (
+          <Text style={[styles.headerSub, { fontSize: typeScale.small, lineHeight: 18 }]} testID="source-fork-intro">
+            {t('sourcePalette.forkIntro', { name: fork.candidates[0].label })}
+          </Text>
+        ) : null
+      ) : (
+        <Text style={styles.headerSub} numberOfLines={1} testID="source-fork-network">
+          {t('sourcePalette.sourceLine', { network: networkId ?? '—', node: sourceNodeId })}
+        </Text>
+      )}
+      {forkOnly && fork.candidates.length <= 1 ? null : <PaletteSearch
         value={query}
         onChangeText={setQuery}
         placeholder={t('sourcePalette.search')}
         accessibilityLabel={t('sourcePalette.searchLabel')}
         testID="source-palette-search"
         autoFocus={Platform.OS === 'web'}
-      />
+      />}
 
-      {busy ? <PaletteLoading text={t('sourcePalette.submitting')} testID="source-palette-busy" /> : null}
+      {busy && !forkOnly ? <PaletteLoading text={t('sourcePalette.submitting')} testID="source-palette-busy" /> : null}
       {forkOnly && forkSourceError ? <PaletteError text={forkSourceError} testID="chat-fork-source-error" /> : null}
 
       <View testID="source-directory-section" style={{ flexShrink: 1, minHeight: 0 }}>
@@ -539,7 +557,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
                 <View key={section}>
                   {section === 'directory' ? <View style={styles.divider} /> : null}
                   <PaletteSectionLabel
-                    title={section === 'fork' ? t('sourcePalette.forkSection') : t('sourcePalette.directorySection')}
+                    title={section === 'fork' ? t(forkOnly ? 'sourcePalette.forkSourceSection' : 'sourcePalette.forkSection') : t('sourcePalette.directorySection')}
                     testID={`source-palette-section-${section}`}
                   />
                   {sectionError ? (
@@ -565,7 +583,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
                               ? `project-create-attach-${row.id}`
                               : `source-palette-row-${row.id}`}
                           label={row.kind === 'project' ? `新建空会话 · ${row.title}` : row.title}
-                          detail={row.disabledReason ?? row.detail}
+                          detail={row.disabledReason ?? (forkOnly ? undefined : row.detail)}
                           current={row.key === view.currentKey}
                           active={row.key === activeKey}
                           disabled={!!row.disabledReason}
@@ -597,6 +615,91 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
         </View>
       ) : null}
 
+      {forkOnly ? (
+        <View style={[styles.confirm, { gap: spacing.sm, paddingHorizontal: 6, paddingTop: spacing.md }]} testID="source-palette-confirm">
+          {target === 'fork' && selectedRow ? (
+            <>
+              <View style={{ gap: 6 }}>
+                <Text style={forkLabelStyle()}>{t('sourcePalette.forkName')}</Text>
+                <TextInput
+                  testID="source-fork-child-name"
+                  value={childName}
+                  onChangeText={value => { setChildName(value); setChildNameTouched(true); setErrorText(null); }}
+                  placeholder={t('sourcePalette.forkName')}
+                  placeholderTextColor={colors.textMuted}
+                  editable={!busy}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  accessibilityLabel={t('sourcePalette.forkName')}
+                  style={[forkInputStyle(), !!nameIssue && childName.length > 0 && { borderColor: colors.failed }]}
+                />
+                {nameIssue && childName.length > 0 ? (
+                  <Text style={styles.errorDetail} testID="source-palette-name-error">{nameIssue}</Text>
+                ) : null}
+              </View>
+              <View style={{ gap: 6 }}>
+                <Text style={forkLabelStyle()}>{t('sourcePalette.forkFolder')}</Text>
+                <View style={{ flexDirection: 'row', gap: 4, padding: 3, borderRadius: radius.control, backgroundColor: colors.inputBg }} testID="source-fork-folder" accessibilityRole="radiogroup">
+                  {(['new', 'same'] as const).map(folder => {
+                    const on = forkFolder === folder;
+                    return (
+                      <Pressable
+                        key={folder}
+                        testID={`source-fork-folder-${folder}`}
+                        accessibilityRole="radio"
+                        accessibilityState={{ selected: on, disabled: busy }}
+                        disabled={busy}
+                        onPress={() => { setForkFolder(folder); setErrorText(null); }}
+                        style={({ pressed }) => [{
+                          flex: 1, minWidth: 0, paddingVertical: 6, paddingHorizontal: spacing.sm, borderRadius: radius.item,
+                          alignItems: 'center', justifyContent: 'center', gap: 1,
+                          backgroundColor: on ? colors.card : 'transparent',
+                          borderWidth: 1, borderColor: on ? colors.border : 'transparent',
+                        }, pressed && !busy && { opacity: 0.85 }]}
+                      >
+                        <Text style={{ color: on ? colors.text : colors.textSecondary, fontSize: typeScale.small, fontWeight: on ? weight.strong : weight.regular }} numberOfLines={1}>
+                          {t(`sourcePalette.forkFolder.${folder}`)}
+                        </Text>
+                        <Text style={{ color: colors.textMuted, fontSize: ds(11) }} numberOfLines={1}>{t(`sourcePalette.forkFolder.${folder}Hint`)}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <Text style={{ color: colors.textMuted, fontSize: ds(11), lineHeight: 16, fontFamily: Platform.OS === 'web' ? 'ui-monospace, SFMono-Regular, Menlo, monospace' : undefined }} numberOfLines={2} testID="source-fork-folder-path">
+                  {forkFolderHint(forkFolder, selectedRow?.path)}
+                </Text>
+              </View>
+            </>
+          ) : null}
+          {receipt ? (
+            <Text style={[styles.confirmSelection, { paddingHorizontal: 0 }]} testID="source-fork-status">
+              {forkOutcome?.kind === 'registration-receipt'
+                ? `注册回执（非原生接受/存活）：${receipt.status}`
+                : `状态：${receipt.status}${receipt.childSessionId ? ` · child ${receipt.childSessionId}` : ''}${receipt.status === 'unknown_rotation_required' ? ' · 未能完成，最常见的原因是提交时源节点正在工作；等它空闲后换个名字重试' : ''}`}
+            </Text>
+          ) : null}
+          {notice ? <Text style={[styles.notice, { paddingHorizontal: 0, paddingTop: 0 }]} testID="project-create-status">{notice}</Text> : null}
+          {errorText ? <PaletteError text={errorText} testID="source-fork-message" textTestID="source-palette-action-error" /> : null}
+          <View style={{ flexDirection: 'row', justifyContent: 'flex-end', alignItems: 'center', gap: spacing.sm, paddingTop: spacing.xs }}>
+            <Pressable testID="source-palette-cancel" accessibilityRole="button" onPress={onClose}
+              style={({ pressed }) => [{ minHeight: 36, paddingHorizontal: spacing.lg, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.85 }]}>
+              <Text style={{ color: colors.textSecondary, fontSize: ds(13) }}>{t('sourcePalette.cancel')}</Text>
+            </Pressable>
+            {selectedRow && !selectedRow.disabledReason ? (
+              <Pressable
+                testID="source-fork-submit"
+                accessibilityRole="button"
+                accessibilityState={{ disabled: !canSubmit }}
+                disabled={!canSubmit}
+                onPress={() => void submit()}
+                style={[styles.primaryBtn, { minWidth: 88 }, !canSubmit && { opacity: 0.4 }]}
+              >
+                {busy ? <ActivityIndicator size="small" color={colors.onAccent} /> : <Text style={styles.primaryBtnText}>{t('sourcePalette.forkSubmit')}</Text>}
+              </Pressable>
+            ) : null}
+          </View>
+        </View>
+      ) : (
       <View style={styles.confirm} testID="source-palette-confirm">
         <View style={styles.confirmHead}>
           <Text style={styles.confirmMode} numberOfLines={2} testID="source-palette-mode">
@@ -683,8 +786,9 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           />
         ) : null}
       </View>
+      )}
 
-      {view.status === 'ready' && view.catalogTotal > 0 ? (
+      {view.status === 'ready' && view.catalogTotal > 0 && !forkOnly ? (
         <Text style={styles.source} numberOfLines={2} testID="source-palette-source">
           {forkOnly ? 'fork 源：当前节点的实时 /api/status 上报' : fork.kind === 'ready' && fork.candidates.length
             ? `fork 源：full /api/status 的受管会话（${fork.candidates.length}）· 目录：只读快照 ${snapshot?.snapshotId ?? '—'}`
