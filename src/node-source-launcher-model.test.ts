@@ -41,6 +41,7 @@ const a = pick.sources.find(s => s.node.node_id === 'a')!;
 const c = pick.sources.find(s => s.node.node_id === 'c')!;
 ck('B3 第二行 = 文件夹 · 模型', sourceDetail(a) === 'client-5x · xai/grok-4.7', sourceDetail(a));
 ck('B4 停止的节点标「已停止」', sourceDetail(c).includes('已停止') && !c.active);
+ck('B5 running / 缺失都算可用；start_failed 置灰', pickSourceNodes([nodes[0], n({ node_id: 'r', runtime: 'opencode-sdk', opencode_generation: 'v2', lifecycle_daemon_node_id: D, lifecycle_state: 'running' }), n({ node_id: 'x', runtime: 'opencode-sdk', opencode_generation: 'v2', lifecycle_daemon_node_id: D }), n({ node_id: 'f', runtime: 'opencode-sdk', opencode_generation: 'v2', lifecycle_daemon_node_id: D, lifecycle_state: 'start_failed' })], D).sources.map(s => `${s.node.node_id}:${s.active}`).join(',') === 'r:true,x:true,f:false');
 ck('C1 能按文件夹 / 模型 / 名字搜', sourceMatches(a, 'client-5x') && sourceMatches(a, 'GROK') && sourceMatches(a, 'B客户') && !sourceMatches(a, 'zzz'));
 
 const launcher = read('src/NodeSourceLauncher.tsx');

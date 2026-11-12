@@ -29,7 +29,9 @@ export function nodeWorkdir(configPath: string | null | undefined): string | nul
   return i > 0 ? configPath.slice(0, i) : null;
 }
 
-const isActive = (n: HubNode) => (n.lifecycle_state ?? 'active') === 'active';
+// 只有明确停掉的才置灰；'active' / 'running' / 缺失都算可用（Hub 和夹具两种写法都见过）。
+const STOPPED = new Set(['stopped', 'stopping', 'stop_failed', 'start_failed', 'deleted', 'archived']);
+const isActive = (n: HubNode) => !STOPPED.has(n.lifecycle_state ?? '');
 
 export function pickSourceNodes(nodes: readonly HubNode[], daemonNodeId: string): SourcePick {
   const daemon = nodes.find(n => n.node_id === daemonNodeId);
