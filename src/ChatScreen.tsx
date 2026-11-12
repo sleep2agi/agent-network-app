@@ -1951,7 +1951,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       if (outcome.phase === 'delivered') {
         setDraft('');
         setQuote(null);
-        setComposerNotice(t('chat.inject.delivered'));
+        // 注入的内容不会产生聊天气泡（它并进了正在跑的那一轮），所以提示里带上用户原话，
+        // 让「我刚才插了什么」在当下可回看。截断到 30 字，避免长文本把提示条撑爆。
+        setComposerNotice(t('chat.inject.deliveredExcerpt', { text: injected.length > 30 ? `${injected.slice(0, 30)}…` : injected }));
         return;
       }
       if (outcome.phase === 'missed') {
