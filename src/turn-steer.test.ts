@@ -96,6 +96,9 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
   ck('inject ack watcher accepts a node-sent row', /row\.from_name === alias/.test(screen));
   ck('inject ack watcher accepts an ack carried in result (with [alias] prefix)',
     /\/steer\\s\*\\\{\/\.test\(row\.result/.test(screen));
+  // #4685：点「插话」时如果回合已结束，不能悄悄落成普通发送 —— 那和「说了没反应」一样糟。
+  ck('inject never silently degrades to a normal send',
+    /opts\?\.inject === true && !canSteer\(sessionStatus\)[\s\S]{0,200}return;/.test(screen));
   ck('inject ack watcher does not treat user content as an ack', !/row\.content/.test(screen.split('readRecent')[1]?.slice(0, 400) ?? ''));
   ck('user-facing copy avoids the word steer', !/插话|steer/i.test(readFileSync(new URL('./i18n-chat.ts', import.meta.url), 'utf8').split('chat.steer.')[1]?.slice(0, 400) ?? ''));
 }

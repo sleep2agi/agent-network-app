@@ -1925,8 +1925,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // 拿不到凭据就**不发**：草稿保留 + 明确告知，绝不静默排队或假装已发出。
     // #4685 —— 「插话」：把这条**注入当前正在跑的那一轮**（原生 steer，不打断）。
     // 与「打断并发送」是两件事：这条不停上一轮，上一轮继续跑，只是把新内容并进去。
-    // 只有在飞时才走这条路；空闲时按钮根本不出现（就算出现也按普通发送走，不把普通消息变成 steer）。
-    if (opts?.inject === true && canSteer(sessionStatus)) {
+    // 只有在飞时才走这条路。按钮在空闲时本就不出现；但状态可能在这一拍翻走（轮询滞后/回合刚结束），
+    // 所以这里**不能**「不满足条件就落回普通发送」—— 用户点的是插话，悄悄变成普通消息等于骗他。
+    if (opts?.inject === true && !canSteer(sessionStatus)) {
+      setComposerNotice(t('chat.inject.missed'));
+      return;
+    }
+    if (opts?.inject === true) {
       if (attached.length) {
         // steer 只带文本：带附件的消息没法「插进」当前轮，说清楚而不是悄悄丢附件。
         setComposerNotice(t('chat.inject.attachments'));
