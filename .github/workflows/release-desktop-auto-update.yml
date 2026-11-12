@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.527:
+            - 转发 agent 的回复时，不能再把它发回同一个会话（之前会看起来像「你自己说了一段 agent 的话」）；要转发给别的节点仍然可以。
+
             What's new in 0.2.526:
             - 对话页现在会显示本节点发给别的节点、以及对方回给它的内容（之前只显示发给它的那一半）。
 
