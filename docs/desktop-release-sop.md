@@ -346,9 +346,9 @@ them in order and do not assume the workflow does either:
 
 **"Release complete" is defined by one thing only**: `main` / `feed` /
 `fallback` / both mirror `VERSION`s all equal the target version. When two
-people disagree about which one is stale, the one who ran
-`verify-release.py <ver>` is right — run the script, don't argue about whose
-snapshot is newer.
+people disagree about which one is stale, run
+`python3 scripts/verify-release.py <ver> --notes <kw>` (in this repo) — the
+script is right, don't argue about whose snapshot is newer.
 
 Publish is **not** part of the workflow. CI only ever creates a draft; a human
 must flip `draft=false` and `make_latest=true` or nobody downloads anything —
