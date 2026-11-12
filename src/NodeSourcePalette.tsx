@@ -8,6 +8,7 @@
 //   · fork：network_id + source_node_id + session_id(ses_) + mode=fork_independent + child_name + intent_id；
 //   · oses_ 是目录 ID，永远不能变成 fork 的 session_id；
 //   · 404 = gate 未开放：显示「未开放」，绝不 fallback 普通创建；unknown 不新开意图。
+import { isOpenCodeV2Node } from './opencode-v2-model-list';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -204,7 +205,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
         const rows = (data?.sessions ?? [])
           .filter(s => !!s?.node_id && typeof s.session_id === 'string' && s.session_id.startsWith('ses_'))
           .filter(s => s.network_id === networkId)
-          .filter(s => managed.nodes.some(node => node.node_id === s.node_id && node.runtime === 'opencode-cli' && node.opencode_generation === 'v2'))
+          .filter(s => managed.nodes.some(node => node.node_id === s.node_id && isOpenCodeV2Node(node)))
           .map(s => ({ sessionId: s.session_id as string, nodeId: s.node_id as string, label: s.alias || (s.session_id as string), path: s.project_dir ?? null }));
         setFork({ kind: 'ready', candidates: rows, error: null });
       })

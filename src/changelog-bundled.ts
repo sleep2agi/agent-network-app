@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.521:",
+  "- 新建节点 → 「从已有项目或会话创建」：修复 OpenCode V2 来源节点一个都列不出来（之前只认旧的 runtime 名）。来源列表改成卡片入口 + 每行显示文件夹和模型、可按名字 / 文件夹 / 模型搜索；没有可用来源时说清楚原因（例如「有 N 个节点但没被接管」）。",
+  "",
   "What's new in 0.2.520:",
   "- 新建节点 / 接入已有会话：入口现在按**那台服务器实际支持的能力**显示 —— 列已有项目、复用已有 Session、fork 分别判断；不支持时直接给原因（例如「这台服务器没有开启该能力」「当前 Hub 版本不提供该能力」），不再点了才发现不行。",
   "",

@@ -261,7 +261,7 @@ export function PaletteRow({ testID, label, detail, current, active, disabled, o
       aria-selected={current}
       aria-disabled={!!disabled}
       onPress={onPress}
-      style={({ pressed }) => [styles.row, current && styles.rowCurrent, !!active && styles.rowActive, pressed && { opacity: 0.7 }]}
+      style={({ pressed }) => [styles.row, current && styles.rowCurrent, !!active && styles.rowActive, !!disabled && styles.rowDisabled, pressed && !disabled && { opacity: 0.7 }]}
     >
       <View style={styles.rowMain}>
         <Text style={styles.rowLabel} numberOfLines={1}>{label}</Text>
