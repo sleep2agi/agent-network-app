@@ -1946,7 +1946,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         return;
       }
       setComposerNotice(t('chat.steer.interrupted'));
-      setSessionStatus('idle');
+      // #4592 自审：不要本地乐观改写会话状态。打断确认后立刻发新指令，状态马上又会变成 working，
+      // 写 idle 只会让 UI 闪一下；交给 30 秒状态轮询自然刷新。
     }
     // 引用条在前、正文在后;agent 端看到的是「@作者: 被引用内容」+ 正文,客户端渲染时再拆开。
     const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
