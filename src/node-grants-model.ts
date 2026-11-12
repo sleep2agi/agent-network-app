@@ -13,6 +13,10 @@ export const GRANT_CAPABILITIES = [
 
 export type GrantDraft = Pick<NodeGrant, 'capability' | 'scope_kind' | 'scope_id' | 'level'>;
 
+/** 服务器声明的能力清单下的可选性：没给清单（老 Hub）= 未知 ⇒ 放行；给了就按清单判。 */
+export const capabilityOffered = (serverCaps: readonly string[] | undefined, key: string): boolean =>
+  !serverCaps || serverCaps.includes(key);
+
 export const capabilityLabel = (c: string) => (c === 'schedules' || c === 'board' ? t(`nodeGrants.cap.${c}`) : c);
 
 export function scopeLabel(g: Pick<NodeGrant, 'scope_kind' | 'scope_id'>, depts: readonly DeptChoice[], nodes: readonly NodeChoice[]): string {

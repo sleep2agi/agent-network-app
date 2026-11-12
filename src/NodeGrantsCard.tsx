@@ -11,7 +11,7 @@ import './i18n-node-grants';
 import { useTranslation } from './i18n-react';
 import type { DeptChoice, NodeChoice } from './node-allowlist-model';
 import {
-  GRANT_CAPABILITIES, addGrant, draftComplete, grantErrorText, grantLine, removeGrant, type GrantDraft,
+  GRANT_CAPABILITIES, addGrant, capabilityOffered, draftComplete, grantErrorText, grantLine, removeGrant, type GrantDraft,
 } from './node-grants-model';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
 
@@ -35,6 +35,8 @@ export default function NodeGrantsCard({ cfg, nodeId, depts, nodes, compact }: {
   const [error, setError] = useState('');
   const [note, setNote] = useState('');
   const [adding, setAdding] = useState(false);
+  // 服务器声明的能力（GET /grants 的 capabilities）。undefined = 老 Hub 没这个字段 ⇒ 未知 ⇒ 放行（全仓口径）。
+  const [serverCaps, setServerCaps] = useState<readonly string[] | undefined>(undefined);
   const [draft, setDraft] = useState<GrantDraft>({ capability: 'schedules', scope_kind: 'network', scope_id: '', level: 'edit' });
 
   useEffect(() => {
@@ -42,11 +44,14 @@ export default function NodeGrantsCard({ cfg, nodeId, depts, nodes, compact }: {
     setGrants(null); setError('');
     void fetchNodeGrants(cfg, nodeId).then(r => {
       if (!alive) return;
-      if (r.ok) setGrants(r.grants.map(({ capability, scope_kind, scope_id, level }) => ({ capability, scope_kind, scope_id, level })));
+      if (r.ok) { setGrants(r.grants.map(({ capability, scope_kind, scope_id, level }) => ({ capability, scope_kind, scope_id, level }))); setServerCaps(r.capabilities); }
       else { setGrants([]); setError(grantErrorText(r)); }
     });
     return () => { alive = false; };
   }, [cfg, nodeId]);
+
+  // 能力是否真的可用：本地声明 **且** 服务器没明确排除。服务器没给清单 ⇒ 不知道 ⇒ 放行。
+  const capAvailable = (key: string) => capabilityOffered(serverCaps, key);
 
   const save = async (next: GrantDraft[]): Promise<boolean> => {
     setBusy(true); setError(''); setNote('');
@@ -94,8 +99,8 @@ export default function NodeGrantsCard({ cfg, nodeId, depts, nodes, compact }: {
         <View style={{ gap: spacing.sm, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.md }} testID="node-grants-form">
           {label(t('nodeGrants.capability'))}
           {row(GRANT_CAPABILITIES.map(c => (
-            <Chip key={c.key} testID={`node-grants-cap-${c.key}`} text={t(`nodeGrants.cap.${c.key}`)} on={draft.capability === c.key} disabled={!c.available || busy}
-              note={c.available ? undefined : t('nodeGrants.comingSoon')} onPress={() => setDraft(d => ({ ...d, capability: c.key }))} />
+            <Chip key={c.key} testID={`node-grants-cap-${c.key}`} text={t(`nodeGrants.cap.${c.key}`)} on={draft.capability === c.key} disabled={!c.available || !capAvailable(c.key) || busy}
+              note={c.available && capAvailable(c.key) ? undefined : t('nodeGrants.comingSoon')} onPress={() => setDraft(d => ({ ...d, capability: c.key }))} />
           )), 'node-grants-caps')}
           {label(t('nodeGrants.scope'))}
           {row((['network', 'department', 'node'] as const).map(k => (
