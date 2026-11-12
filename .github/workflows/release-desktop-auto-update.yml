@@ -611,6 +611,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.523:
+            - 「插话」成功的提示现在会带上你插进去的那句原话（前 30 字）：之前只有一个光秃秃的「已插入」，没有气泡可回看，插错一句也发现不了；现在一眼能确认插进去的到底是什么。
+
             What's new in 0.2.522:
             - 聊天框新增「插话」：一轮还在跑的时候，可以往正在跑的这一轮里直接塞一句（不会打断它、不用等它结束）。只有节点确认「已并入当前轮次」才显示成功；这一轮已经结束了就明确提示「未插入」，不会让你以为说了没反应。
             - 顺带修一处观感：点「打断并发送」后状态栏不再闪一下。
