@@ -334,6 +334,31 @@ asset while keeping its `.sig` breaks updates for every installed client.
 
 ## 6. Publish, verify the tag, then let the dynamic endpoint resolve it
 
+Publish is **not** part of the workflow. CI only ever creates a draft; a human
+must flip `draft=false` and `make_latest=true` or nobody downloads anything —
+a green run + uploaded draft + still-`0.2.5xx` feed is the expected state, not
+a fault. The exact mechanical step (one command):
+
+```bash
+gh release edit desktop-v<version> --draft=false --latest \
+  --repo sleep2agi/agent-network-app
+```
+
+Underneath it is `PATCH repos/{owner}/{repo}/releases/{id}` with
+`draft:false, make_latest:true`. Do not omit `--latest`: `make_latest` is what
+selects this release as the dynamic endpoint's "highest-semver published"
+winner and what the ModelScope mirror advances to.
+
+A second human step has the same "only one person knows" shape: the
+`fallback.json` sync. The watchdog dispatches `desktop-fallback-sync`, which
+rebuilds `docs-site/docs/public/desktop/update/fallback.json` and pushes the
+branch — but the org policy forbids Actions from opening PRs (#2346 / #4427),
+so the workflow stops at "branch pushed" and a human must open and merge the
+PR (`https://github.com/sleep2agi/agent-network/pull/new/<branch>`). The
+watchdog detects the merge and reports `verdict=merged`. This is not a fault
+and not the watchdog being down; it is the same human-in-the-loop step as
+publishing, one repo away.
+
 Publish the draft, then immediately confirm the tag GitHub just created points
 at the commit you audited:
 
