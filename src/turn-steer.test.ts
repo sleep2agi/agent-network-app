@@ -87,6 +87,8 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
     && !shouldInterruptBeforeSend('idle'));
   ck('no send when the interrupt is unconfirmed',
     /verdict !== 'confirmed'[\s\S]{0,400}return;/.test(screen));
+  // #4592 自审：确认停下后不要本地乐观把会话状态写成 idle —— 新指令马上又会是 working，会闪。
+  ck('confirm does not optimistically rewrite session status', !/setSessionStatus\('idle'\)/.test(screen));
   ck('reuses the #4591 proof helpers instead of a second copy',
     steer.includes("from './turn-interrupt'") && steer.includes('ackProvesInterrupted') && steer.includes('statusFlipProvesInterrupted'));
   ck('user-facing copy avoids the word steer', !/插话|steer/i.test(readFileSync(new URL('./i18n-chat.ts', import.meta.url), 'utf8').split('chat.steer.')[1]?.slice(0, 400) ?? ''));
