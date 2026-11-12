@@ -678,14 +678,17 @@ export const putNodeInboxAllowlist = async (cfg: HubConfig, nodeId: string, send
 /** 节点管理授权(Hub /health 报 node_grants 才有)。能力 × 范围 × 级别,见 node-grants-model.ts。 */
 export const NODE_GRANTS_CAPABILITY = 'node_grants';
 export type NodeGrant = { capability: string; scope_kind: 'network' | 'department' | 'node'; scope_id: string; level: 'read' | 'edit'; granted_by?: string | null; created_at?: string };
-export type NodeGrantsResult = { ok: true; grants: NodeGrant[] } | { ok: false; status: number; error: string; message?: string };
+export type NodeGrantsResult = { ok: true; grants: NodeGrant[]; capabilities?: string[] } | { ok: false; status: number; error: string; message?: string };
 
 const nodeGrantsCall = async (cfg: HubConfig, nodeId: string, init: RequestInit): Promise<NodeGrantsResult> => {
   try {
     const res = await withTimeout(signal => appFetch(`${cfg.serverUrl.replace(/\/$/, '')}/api/nodes/${encodeURIComponent(nodeId)}/grants`, { ...init, headers: headers(cfg), signal }));
     const body = (await res.json().catch(() => ({}))) as any;
     if (!res.ok || body?.ok === false) return { ok: false, status: res.status, error: body?.error || `HTTP ${res.status}`, message: typeof body?.message === 'string' ? body.message : undefined };
-    return { ok: true, grants: Array.isArray(body?.grants) ? body.grants : [] };
+    // 服务器自己声明支持哪些能力（新 Hub 返回 GRANT_CAPABILITIES；一期的 Hub 只返回 ["schedules"]）。
+    // 缺这个数组 = 老 Hub，能力未知 ⇒ undefined（调用方按「未知放行」处理，与全仓口径一致）。
+    const capabilities = Array.isArray(body?.capabilities) ? body.capabilities.filter((c: unknown): c is string => typeof c === 'string') : undefined;
+    return { ok: true, grants: Array.isArray(body?.grants) ? body.grants : [], ...(capabilities ? { capabilities } : {}) };
   } catch (e) {
     return { ok: false, status: 0, error: String((e as Error)?.message ?? e) };
   }

@@ -101,7 +101,9 @@ const initScript = ({ theme }) => {
       window.__grants ||= {};
       const id = decodeURIComponent(grants[1]);
       if (method === 'PUT') { const body = decode(data); (window.__grantPuts ||= []).push({ node: id, grants: body.grants }); window.__grants[id] = body.grants.map(g => ({ ...g, scope_id: g.scope_id || '' })); }
-      return { ok: true, node_id: id, grants: window.__grants[id] || [], capabilities: ['schedules'] };
+      // 能力清单可切换：默认「新 Hub」；设 sessionStorage.grantCaps=['schedules'] 可模拟一期 Hub。
+      const caps = (() => { try { const v = JSON.parse(sessionStorage.getItem('grantCaps') || 'null'); return Array.isArray(v) ? v : ['schedules', 'board']; } catch { return ['schedules', 'board']; } })();
+      return { ok: true, node_id: id, grants: window.__grants[id] || [], capabilities: caps };
     }
     if (p === '/api/networks/net-perm/departments') return { ok: true, departments: [{ id: 'd_top', name: '示例部门', parent_id: null, leader_user_id: null, sort: 0, member_count: 1 }, { id: 'd_kid', name: '子部门', parent_id: 'd_top', leader_user_id: null, sort: 1, member_count: 0 }], members: [] };
     if (p === '/health') return { ok: true, capabilities: sessionStorage.getItem('noInboxCap') ? ['node_permission_mode'] : ['node_permission_mode', 'node_inbox_allowlist', 'node_inbox_allowlist_dept', 'node_grants'] };
@@ -332,12 +334,34 @@ async function run(vp, viewport, ua, theme, phone) {
   record(tag, '11 管理权限: add department·read → one PUT, row shows path', {
     onePut: gPuts.length === 1 && gPuts[0].grants.length === 1 && gPuts[0].grants[0].scope_kind === 'department' && gPuts[0].grants[0].scope_id === 'd_kid' && gPuts[0].grants[0].level === 'read',
     row: gRow.includes('定时任务') && gRow.includes('示例部门 / 子部门') && gRow.includes('只读'),
-    boardComingSoon: boardDisabled === 'true',
+    boardAvailable: boardDisabled !== 'true',
   }, { gPuts, gRow, boardDisabled });
   await page.locator(tid('node-grant-revoke-schedules-department-d_kid')).click({ timeout: 3000 }).catch(() => {});
   await sleep(500);
   const gPuts2 = await page.evaluate(() => window.__grantPuts);
   record(tag, '12 管理权限: revoke → PUT []', { cleared: gPuts2.length === 2 && gPuts2[1].grants.length === 0 }, { gPuts2 });
+
+  // 13 一期 Hub（capabilities 只有 schedules）：board 必须「灰 + 即将支持 + 点了不发请求」。
+  // 这条守的是渲染分支（单测只覆盖纯函数 capabilityOffered）：board 从「永远禁用」改成「按能力清单条件禁用」。
+  await page.evaluate(() => sessionStorage.setItem('grantCaps', JSON.stringify(['schedules'])));
+  await openNode(page, '示例-主人');
+  await page.locator(`${tid('node-section-nav')} [role="tab"]`, { hasText: '权限' }).first().click({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-grants-card')).waitFor({ timeout: 5000 }).catch(() => {});
+  await page.evaluate(() => { window.__grantPuts = []; });
+  await page.locator(tid('node-grants-add')).click({ timeout: 3000 }).catch(() => {});
+  await sleep(300);
+  const oldBoardDisabled = await page.locator(tid('node-grants-cap-board')).getAttribute('aria-disabled').catch(() => null);
+  const oldBoardText = await page.locator(tid('node-grants-cap-board')).innerText().catch(() => '');
+  await page.locator(tid('node-grants-cap-board')).click({ timeout: 2000 }).catch(() => {});
+  await sleep(400);
+  const oldBoardPuts = await page.evaluate(() => window.__grantPuts || []);
+  const oldBoardDraft = await page.evaluate(() => document.querySelector('[data-testid="node-grants-cap-schedules"]')?.getAttribute('aria-checked') ?? null);
+  record(tag, '13 一期 Hub: board 灰 + 即将支持 + 点了不发请求', {
+    disabled: oldBoardDisabled === 'true',
+    soon: oldBoardText.includes('即将支持'),
+    noWrite: oldBoardPuts.length === 0,
+  }, { oldBoardDisabled, oldBoardText, oldBoardPuts, oldBoardDraft });
+  await page.evaluate(() => sessionStorage.removeItem('grantCaps'));
 
   // 10 Hub without the capability
   await page.evaluate(() => sessionStorage.setItem('noInboxCap', '1'));
