@@ -1,6 +1,6 @@
 import { setLanguagePreference } from './i18n';
 // 节点管理授权模型:显示文案、增删(同能力同范围替换级别)、草稿完整性、错误人话。
-import { addGrant, draftComplete, grantErrorText, grantLine, removeGrant, type GrantDraft } from './node-grants-model';
+import { addGrant, draftComplete, GRANT_CAPABILITIES, grantErrorText, grantLine, removeGrant, type GrantDraft } from './node-grants-model';
 
 setLanguagePreference('zh');
 let n = 0;
@@ -21,4 +21,10 @@ ck('撤销只删那一条', (() => { const l = removeGrant([net, dep, nod], dep)
 ck('部门 / 节点范围没选对象不能提交', draftComplete(net) && !draftComplete({ ...dep, scope_id: '' }) && !draftComplete({ ...nod, scope_id: '' }));
 ck('403 说清楚谁能授', grantErrorText({ status: 403, error: 'permission_denied' }).includes('节点主人不能'));
 ck('能力未开放', grantErrorText({ status: 400, error: 'capability_not_supported' }).includes('还不支持'));
+// 第二期·任务看板：Hub 侧 GRANT_CAPABILITIES_PLANNED 已清空 ⇒ 本端必须同步开闸，
+// 否则用户看到「即将支持」而 Hub 其实已经接受 board 授权（#4616 二期）。
+ck('board 可选（与 Hub 同步开闸）', GRANT_CAPABILITIES.find(c => c.key === 'board')?.available === true);
+ck('schedules 仍可选', GRANT_CAPABILITIES.find(c => c.key === 'schedules')?.available === true);
+ck('board 授权行显示任务看板', grantLine({ ...net, capability: 'board' }, depts, nodes) === '任务看板 · 整个网络 · 可编辑');
+ck('board 只读行', grantLine({ ...dep, capability: 'board' }, depts, nodes) === '任务看板 · 部门 TMAI / TMWork · 只读');
 console.log(`node grants model: ${n}/${n}`);

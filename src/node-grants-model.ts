@@ -1,5 +1,6 @@
 // 节点管理授权的纯模型(admin 11-11「节点的权限要好好设计」)。Hub 端见 agent-network server/src/node-grants.ts。
-// 能力 × 范围 × 级别:schedules(定时任务)现在可用;board(看板)计划中,界面里显示但不可选。
+// 能力 × 范围 × 级别:schedules(定时任务)与 board(任务看板)都可用 ——
+// Hub 侧 GRANT_CAPABILITIES_PLANNED 已清空(capability_not_supported 不再返回 board),本端随之开闸。
 import type { NodeGrant } from './api';
 import { t } from './i18n';
 import './i18n-node-grants';
@@ -7,7 +8,7 @@ import type { DeptChoice, NodeChoice } from './node-allowlist-model';
 
 export const GRANT_CAPABILITIES = [
   { key: 'schedules', available: true },
-  { key: 'board', available: false },
+  { key: 'board', available: true },
 ] as const;
 
 export type GrantDraft = Pick<NodeGrant, 'capability' | 'scope_kind' | 'scope_id' | 'level'>;

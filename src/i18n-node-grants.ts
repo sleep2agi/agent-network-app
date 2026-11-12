@@ -3,7 +3,7 @@ import { registerTranslations } from './i18n';
 /** 节点页「权限 → 管理权限」(节点管理授权,admin 11-11)。 */
 export const nodeGrantsTranslations = {
   'nodeGrants.title': ['管理权限', 'Management access'],
-  'nodeGrants.hint': ['让这个节点管理别人的定时任务（看板以后支持）。可以管整个网络、某个部门（含子部门），或指定节点。只有网络 owner / 管理员能授全网；部门负责人只能授自己负责的部门。', 'Let this node manage other people\'s schedules (task board coming later): the whole network, a department (with its sub-departments) or specific nodes. Only network owners/admins can grant network-wide; department heads can grant within the departments they lead.'],
+  'nodeGrants.hint': ['让这个节点管理别人的定时任务和任务看板。可以管整个网络、某个部门（含子部门），或指定节点。只有网络 owner / 管理员能授全网；部门负责人只能授自己负责的部门。', 'Let this node manage other people\'s schedules and the task board: the whole network, a department (with its sub-departments) or specific nodes. Only network owners/admins can grant network-wide; department heads can grant within the departments they lead.'],
   'nodeGrants.none': ['还没有任何管理权限：这个节点只能管自己建的、和发给自己的定时任务。', 'No management access yet: this node can only manage schedules it created or that target it.'],
   'nodeGrants.add': ['添加授权', 'Add access'],
   'nodeGrants.save': ['添加', 'Add'],
