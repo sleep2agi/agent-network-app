@@ -80,7 +80,11 @@ const checks: Array<[string, boolean]> = [
   ['ChatScreen resolves a sender per message',
     /const sender = resolveSender\(item, currentUsername\)/.test(screen)],
   // 2026-09-16:作者行后面跟时刻(「· HH:mm」),别名仍是 resolveSender 的结果
-  ['the author line renders the resolved alias', /<ChatMetaLine name=\{sender\.alias\} time=\{item\.created_at \? formatChatHeader\(item\.created_at\) : ''\}/.test(screen)],
+  // 2026-11-12：#4685 可见性修复后，发送侧作者是 sentAuthor —— 普通情况就是 resolveSender 的结果，
+  // 只有「本 agent 发给别的节点」才写成「A → B」。
+  ['the author line renders the resolved alias',
+    /const sentAuthor = outgoing \? `\$\{alias\} → \$\{item\.to_name \?\? ''\}` : sender\.alias;/.test(screen)
+    && screen.includes('<ChatMetaLine name={sentAuthor}')],
   ['the avatar renders the resolved alias', screen.includes('<AliasAvatar alias={sender.alias} size={36} />')],
   ['nothing in the screen still hardcodes the viewer as the sender',
     !screen.includes('alias={currentUsername}')],
@@ -88,8 +92,10 @@ const checks: Array<[string, boolean]> = [
   // a message the viewer did not send.
   // 0.2.72: a foreign request renders on the received side, credited
   // 「<sender> → <agent>」, with the sender's avatar — not in the viewer's row.
+  // 2026-11-12：发送侧条件变成 (sender.isCurrentUser || outgoing) —— 出站行也走发送侧；
+  // 但「非本人、非出站」的行仍然必须落到 foreignRow（收到侧）。
   ['foreign requests take the received-side branch',
-    /sender\.isCurrentUser \? \(/.test(screen) && screen.includes('styles.foreignRow')],
+    /\(sender\.isCurrentUser \|\| outgoing\) \? \(/.test(screen) && screen.includes('styles.foreignRow')],
   ['foreign requests are labelled sender → agent',
     screen.includes('{`${sender.alias} → ${alias}`}')],
   ['foreign requests show the sender avatar on the left',

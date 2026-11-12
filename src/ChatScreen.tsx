@@ -72,6 +72,7 @@ import ComposerStopButton from './ComposerStopButton';
 import ComposerInjectButton from './ComposerInjectButton';
 import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
 import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
+import { isOutgoingRow, mergeConversationSides, outgoingReplyAuthor } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
@@ -636,6 +637,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         setLoaded(true);
       };
       const results = await loadChatSources({
+        // 只等入站（to_name=本 agent）先画：首屏不能被第二次请求拖慢（drives 的首屏/时延断言就是量这个）。
         tasks: () => fetchTasks(cfg, params),
         proactive: () => fetchChatUserMessages(cfg),
         isCurrent,
@@ -646,6 +648,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
           confirmed.forEach(outboxRemove);
           paint('tasks', rows, fetched, confirmed);
+          // 出站（from_name=本 agent）再补一次：这些行 to_name 是别的节点，result 才是**对方回给它的**内容，
+          // 只拉入站会让「节点回给它的那半」永远不出现。**不阻塞首屏**，回来后再合并重画一次。
+          void fetchTasks(cfg, { from_name: alias, limit: params.limit, skipStats: true })
+            .then(out => {
+              if (!isCurrent()) return;
+              const outgoingRows = (out.tasks ?? []).filter(r => (r.from_name ?? '') === alias);
+              if (!outgoingRows.length) return;
+              paint('tasks', mergeConversationSides(rows, outgoingRows, params.limit), fetched, confirmed);
+            })
+            .catch(() => { /* 出站补拉失败就保持入站视图，不清空已画内容 */ });
         },
         onProactive: data => paint('proactive', proactiveItemsForAgent(data.messages as any, alias, cfg.username)),
       });
@@ -2676,6 +2688,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             // 网络里任何节点都能派单给这个 alias,一律记成本人会把别人的指令
             // 显示成自己说过的话。
             const sender = resolveSender(item, currentUsername);
+            // 本 agent 发给别的节点的行：画在发送侧，作者写「本 agent → 收件人」，别当成「别人的来信」。
+            const outgoing = isOutgoingRow(item, alias);
+            const sentAuthor = outgoing ? `${alias} → ${item.to_name ?? ''}` : sender.alias;
             // 微信式引用条:开头的「@作者: 文本」不进气泡,渲染成气泡下方的灰条
             const sentQuoted = parseQuoted(item.content);
             const sentGridNames = sentAttachmentViews(item, cfg.serverUrl).filter(gridRenderable).map(a => a.name);
@@ -2697,13 +2712,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </Pressable>
                 ) : null}
                 <View style={selectionMode ? styles.selectBody : undefined} pointerEvents={selectionMode ? 'none' : 'auto'}>
-                {!item._proactive ? sender.isCurrentUser ? (
+                {!item._proactive ? (sender.isCurrentUser || outgoing) ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent, bubbleCap]}>
-                    <ChatMetaLine name={sender.alias} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-sent" />
+                    <ChatMetaLine name={sentAuthor} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-sent" />
                     <Pressable
                       {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'sent' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:sent`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
-                      onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:sent`, { item, text: item.content ?? '', author: sender.alias }, 'sent')}
+                      onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:sent`, { item, text: item.content ?? '', author: sentAuthor }, 'sent')}
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
@@ -2759,7 +2774,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                     <AliasAvatar alias={alias} size={36} />
                     <View style={[styles.messageContent, bubbleCap, item.late ? { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.sm } : null]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
-                      <ChatMetaLine name={`${alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
+                      <ChatMetaLine name={`${outgoing ? outgoingReplyAuthor(item, alias) : alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
                       <Pressable
                         {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:reply`, { item, text: item.result ?? item.reply ?? '', author: alias }, 'reply')}
