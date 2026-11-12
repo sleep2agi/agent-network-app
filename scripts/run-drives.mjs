@@ -82,6 +82,15 @@ for (const d of picked) {
     // The tail of a red drive's log, so the CI summary says why without downloading the artifact.
     const tail = readFileSync(join(r.dir, 'log.txt'), 'utf8').split('\n').filter(l => /FAIL|Error|"ok":false|✗/.test(l)).slice(0, 8);
     for (const l of tail) console.log(`    ${l.slice(0, 240)}`);
+    // 2026-11-12: a red drive used to leave only "exit code 1" in the check annotations — reviewers had to
+    // read drive source to guess the assertion. Emit one ::error:: with the most specific line so the
+    // failure is legible from the PR page without a token or artifact.
+    if (process.env.GITHUB_ACTIONS) {
+      const why = (tail[0] ?? `exit ${r.code} after ${r.secs}s`).replace(/\r?\n/g, ' ').slice(0, 900);
+      // `,` and `%` are the only characters GitHub's command syntax needs escaped in these fields.
+      const esc = (v) => v.replace(/%/g, '%25').replace(/\r?\n/g, '%0A').replace(/,/g, '%2C');
+      console.log(`::error title=drive ${esc(r.path)}::${esc(why)}`);
+    }
   }
 }
 const red = results.filter(r => !r.ok);
