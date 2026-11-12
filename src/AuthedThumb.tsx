@@ -162,6 +162,7 @@ export function AuthedVideo({
   serverUrl: string;
   token: string;
 }) {
+  const { t } = useTranslation();
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -194,17 +195,24 @@ export function AuthedVideo({
     );
   }
 
+  // admin 2026-11-12「视频怎么下载不下来」：在对话里播完就没有任何保存入口。
+  // 和图片的「下载原图」同一条路：鉴权下载（命中缓存）→ 系统分享面板（保存到文件 / 相册 / 发给别的应用）。
+  const save = <AttachmentFile fileId={fileId} name={name} mime={mime} serverUrl={serverUrl} token={token} label={t('chat.downloadVideo')} />;
+
   if (localUri) {
-    return <VideoFrame uri={localUri} />;
+    return <View testID="authed-video">{<VideoFrame uri={localUri} />}{save}</View>;
   }
 
   return (
-    <Pressable style={styles.videoPlaceholder} onPress={load} hitSlop={6}>
-      <Text style={styles.videoTitle}>{busy ? '⏳' : '▶'} {name}</Text>
-      <Text style={[styles.videoHint, error && { color: colors.failed }]}>
-        {error ?? '点击下载并播放'}
-      </Text>
-    </Pressable>
+    <View testID="authed-video">
+      <Pressable style={styles.videoPlaceholder} onPress={load} hitSlop={6}>
+        <Text style={styles.videoTitle}>{busy ? '⏳' : '▶'} {name}</Text>
+        <Text style={[styles.videoHint, error && { color: colors.failed }]}>
+          {error ?? '点击下载并播放'}
+        </Text>
+      </Pressable>
+      {save}
+    </View>
   );
 }
 
