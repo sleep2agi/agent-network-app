@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.524:",
+  "- 「插话」更可靠了，修三处：回执现在两种落库位置都认（之前有时明明插进去了却显示「未确认」）；回合刚好结束时不再悄悄发成一条普通消息（现在明确提示「未插入」、草稿保留）；连点也不会发出两条。",
+  "",
   "What's new in 0.2.523:",
   "- 对话里的视频现在有「下载 / 保存视频」：播放前、播放中都能点，弹出系统分享面板，可以存到文件 / 相册或发给别的应用（之前在对话里播完就没有保存入口）。",
   "- 「插话」成功的提示里带上你说的原话。",
