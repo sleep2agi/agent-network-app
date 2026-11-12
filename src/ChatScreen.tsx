@@ -1937,9 +1937,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       const { outcome } = await steerThenConfirm({
         send: () => steerInFlight(cfg, alias, injected),
         readRecent: async () => (conversations.peek(visibleConversationKeyRef.current)?.messages ?? [])
-          // 只认**节点发来的**行：把我们自己发出去的那条（to_name=本节点）当回执，
-          // 会让「用户正文里恰好写了 steer {...}」变成假成功。
-          .filter(row => row.to_name !== alias)
+          // 回执可能以两种形状到达：①节点另发一条消息（from_name=节点）②作为 result 挂在我们那条上。
+          // 所以不能只按 to_name 过滤 —— 那会把 ② 整类回执丢掉，表现就是「永远未确认」。
+          // 节点回执统一带 `[alias] ` 前缀（cli.ts: `[${alias}] steer ${json}`），所以这里**不能加行首锚点**，
+          // 否则真实回执永远匹配不上、界面表现为「永远未确认」。
+          // 只认 result 里含 `steer {`；不放行 content —— 否则用户自己正文写的 steer {...} 会变回假成功。
+          .filter(row => row.from_name === alias || /steer\s*\{/.test(row.result ?? ''))
           .map(row => ({
             text: [row.content, row.result].filter(Boolean).join('\n'),
             at: Date.parse(row.created_at ?? row.updated_at ?? '') || 0,
