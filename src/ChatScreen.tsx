@@ -2090,7 +2090,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 窗口内没等到就照实说「已发送，节点未确认」，不假装成功（同档位那套 pending≠applied）；迟到凭据 30s 内仍可升级。
   const [interrupt, setInterrupt] = useState<InterruptState>(idleInterrupt);
   const interruptSeenRef = useRef<Set<string>>(new Set());
-  const prevSessionStatusRef = useRef('');
+  /** 点击那一刻的会话状态：判「回合真的结束了」要跟**点击时**比，不能跟上一次轮询比。
+   *  否则状态在工具回执回来之前就翻 idle（停止很快时会这样），翻走这一拍就被「上一拍」吃掉，
+   *  之后再也等不到第二次翻转 ⇒ 界面永远停在「节点未确认」。 */
+  const interruptBaselineRef = useRef('');
   const interruptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 点击时刻：迟到凭据只在这个时间点之后 LATE_EVIDENCE_MS 内算数（否则会把自然结束当成停止成功）。 */
   const interruptSentAtRef = useRef(0);
@@ -2240,6 +2243,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     if (interruptBusy || !interruptable(sessionStatus)) return;
     interruptSeenRef.current = new Set(messages.map(interruptIdOf));
     interruptSentAtRef.current = Date.now();
+    interruptBaselineRef.current = sessionStatus ?? '';
     setInterrupt({ phase: 'sending', detail: null });
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     void interruptTurn(cfg, alias).then(res => {
@@ -2270,10 +2274,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   }, [messages, interrupt.phase]);
   // 真凭据之二：会话状态从「在飞」翻走（回合真的结束）。只在刚发过停止时才算。
   useEffect(() => {
-    const prev = prevSessionStatusRef.current;
-    prevSessionStatusRef.current = sessionStatus;
-    if ((interrupt.phase === 'waiting' || (interrupt.phase === 'unconfirmed' && lateEvidenceAllowed()))
-      && statusFlipProvesInterrupted(prev, sessionStatus)) {
+    // 跟「点击那一刻」比，而不是跟上一拍比：停止很快时状态会在工具回执回来前就翻掉，
+    // 那一拍如果被当成「上一拍」就会把唯一一次证据吃掉（真机 chuqi 报的「明明停了却显示未确认」就是这个）。
+    if (!(interrupt.phase === 'waiting' || (interrupt.phase === 'unconfirmed' && lateEvidenceAllowed()))) return;
+    if (statusFlipProvesInterrupted(interruptBaselineRef.current, sessionStatus)) {
       setInterrupt({ phase: 'interrupted', detail: null });
     }
   }, [sessionStatus, interrupt.phase]);
@@ -2281,6 +2285,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 全量行:能力位很少变,不跟 30s 轮询(全量投影比 light 大一个量级)。失败就保留上一次 / 退回 light。
   // 换了聊天对象先清掉,别让上一个 agent 的能力位挂在这一个的聊天信息里。
   useEffect(() => { setFullCaps(null); setControlSession(null); }, [cfg, alias]);
+  // #4591 真机回访：停止的「未确认」提示是**这个会话**的状态，切到别的节点必须清掉，
+  // 否则上一次的提示会挂在另一个节点的聊天框上（用户会以为这个节点也没停）。
+  useEffect(() => {
+    if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
+    interruptSeenRef.current = new Set();
+    interruptSentAtRef.current = 0;
+    interruptBaselineRef.current = '';
+    setInterrupt(idleInterrupt());
+    setComposerNotice(null);
+  }, [cfg, alias]);
   useEffect(() => {
     let live = true;
     fetchNodeStatus(cfg, alias)

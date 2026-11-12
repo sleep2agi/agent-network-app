@@ -85,6 +85,14 @@ ck('empty status is not a flip', !statusFlipProvesInterrupted('working', ''));
     screen.includes("interrupt.phase !== 'waiting' && interrupt.phase !== 'unconfirmed'"));
   ck('status flip also counts while unconfirmed (bounded by LATE_EVIDENCE_MS)',
     /interrupt\.phase === 'unconfirmed' && lateEvidenceAllowed\(\)/.test(screen));
+  // 真机 chuqi 报的「明明停了却显示未确认」：状态在工具回执回来前就翻 idle，
+  // 如果拿「上一拍」比，这一拍会被吃掉；必须跟点击那一刻的 baseline 比。
+  ck('status flip is compared against the click-time baseline, not the previous tick',
+    screen.includes('interruptBaselineRef') && !screen.includes('prevSessionStatusRef.current = sessionStatus'));
+  ck('baseline is captured at click time', /interruptBaselineRef\.current = sessionStatus/.test(screen));
+  // 切节点必须清掉上一次的「未确认」提示与会话级状态。
+  ck('switching conversations resets interrupt state and notice',
+    /\[cfg, alias\]\)[\s\S]{0,400}setInterrupt\(idleInterrupt\(\)\)[\s\S]{0,120}setComposerNotice\(null\)/.test(screen));
   ck('late evidence has an upper bound so a natural turn end cannot be misread as a stop',
     screen.includes('lateEvidenceAllowed') && screen.includes('LATE_EVIDENCE_MS'));
 }
