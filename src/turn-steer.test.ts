@@ -91,6 +91,12 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
   ck('confirm does not optimistically rewrite session status', !/setSessionStatus\('idle'\)/.test(screen));
   ck('reuses the #4591 proof helpers instead of a second copy',
     steer.includes("from './turn-interrupt'") && steer.includes('ackProvesInterrupted') && steer.includes('statusFlipProvesInterrupted'));
+  // #4685 自审：插话回执可能落在两种形状（节点另发一条 / 挂在我们那条的 result 上），
+  // 少认一种就会表现为「永远未确认」——这是比「假成功」更难发现的失败。
+  ck('inject ack watcher accepts a node-sent row', /row\.from_name === alias/.test(screen));
+  ck('inject ack watcher accepts an ack carried in result (with [alias] prefix)',
+    /\/steer\\s\*\\\{\/\.test\(row\.result/.test(screen));
+  ck('inject ack watcher does not treat user content as an ack', !/row\.content/.test(screen.split('readRecent')[1]?.slice(0, 400) ?? ''));
   ck('user-facing copy avoids the word steer', !/插话|steer/i.test(readFileSync(new URL('./i18n-chat.ts', import.meta.url), 'utf8').split('chat.steer.')[1]?.slice(0, 400) ?? ''));
 }
 
