@@ -597,6 +597,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // Updated during render, before effects: an async send from the previous
   // sidebar selection must see the new owner immediately.
   const visibleConversationKeyRef = useRef(conversationKeyFor);
+  // #4685：插话要等回执（最长 ~10s）。这期间再点一次会真的发两条 steer，所以用同步 ref 防连点
+  // （state 来不及，点击间隔 < 一次渲染）。
+  const injectBusyRef = useRef(false);
   visibleConversationKeyRef.current = conversationKeyFor;
   const requestGateRef = useRef<ReturnType<typeof createConversationRequestGate> | null>(null);
   if (!requestGateRef.current) requestGateRef.current = createConversationRequestGate();
@@ -1925,52 +1928,63 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // 拿不到凭据就**不发**：草稿保留 + 明确告知，绝不静默排队或假装已发出。
     // #4685 —— 「插话」：把这条**注入当前正在跑的那一轮**（原生 steer，不打断）。
     // 与「打断并发送」是两件事：这条不停上一轮，上一轮继续跑，只是把新内容并进去。
-    // 只有在飞时才走这条路；空闲时按钮根本不出现（就算出现也按普通发送走，不把普通消息变成 steer）。
-    if (opts?.inject === true && canSteer(sessionStatus)) {
-      if (attached.length) {
-        // steer 只带文本：带附件的消息没法「插进」当前轮，说清楚而不是悄悄丢附件。
-        setComposerNotice(t('chat.inject.attachments'));
-        return;
-      }
-      const injected = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
-      setComposerNotice(t('chat.inject.waiting'));
-      const { outcome } = await steerThenConfirm({
-        send: () => steerInFlight(cfg, alias, injected),
-        readRecent: async () => (conversations.peek(visibleConversationKeyRef.current)?.messages ?? [])
-          // 回执可能以两种形状到达：①节点另发一条消息（from_name=节点）②作为 result 挂在我们那条上。
-          // 所以不能只按 to_name 过滤 —— 那会把 ② 整类回执丢掉，表现就是「永远未确认」。
-          // 节点回执统一带 `[alias] ` 前缀（cli.ts: `[${alias}] steer ${json}`），所以这里**不能加行首锚点**，
-          // 否则真实回执永远匹配不上、界面表现为「永远未确认」。
-          // 只认 result 里含 `steer {`；不放行 content —— 否则用户自己正文写的 steer {...} 会变回假成功。
-          .filter(row => row.from_name === alias || /steer\s*\{/.test(row.result ?? ''))
-          .map(row => ({
-            text: [row.content, row.result].filter(Boolean).join('\n'),
-            at: Date.parse(row.created_at ?? row.updated_at ?? '') || 0,
-          })),
-        sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
-        windowMs: STEER_ACK_WINDOW_MS,
-        pollMs: 1000,
-      });
-      if (outcome.phase === 'delivered') {
-        setDraft('');
-        setQuote(null);
-        // 注入的内容不会产生聊天气泡（它并进了正在跑的那一轮），所以提示里带上用户原话，
-        // 让「我刚才插了什么」在当下可回看。截断到 30 字，避免长文本把提示条撑爆。
-        setComposerNotice(t('chat.inject.deliveredExcerpt', { text: injected.length > 30 ? `${injected.slice(0, 30)}…` : injected }));
-        return;
-      }
-      if (outcome.phase === 'missed') {
-        // 节点明确说「没有在跑的轮次了」⇒ 这条没进去。草稿留着，让用户自己决定发不发。
-        setComposerNotice(t('chat.inject.missed'));
-        return;
-      }
-      if (outcome.phase === 'failed') {
-        setComposerNotice(t('chat.inject.failed', { message: outcome.detail ?? '' }));
-        return;
-      }
-      // 只拿到 accepted 就拿不到回执 ⇒ 只能如实说未确认，不写「已并入」。
-      setComposerNotice(t('chat.inject.unconfirmed'));
+    // 只有在飞时才走这条路。按钮在空闲时本就不出现；但状态可能在这一拍翻走（轮询滞后/回合刚结束），
+    // 所以这里**不能**「不满足条件就落回普通发送」—— 用户点的是插话，悄悄变成普通消息等于骗他。
+    if (opts?.inject === true && !canSteer(sessionStatus)) {
+      setComposerNotice(t('chat.inject.missed'));
       return;
+    }
+    if (opts?.inject === true) {
+      if (injectBusyRef.current) return;
+      injectBusyRef.current = true;
+      try {
+        if (attached.length) {
+          // steer 只带文本：带附件的消息没法「插进」当前轮，说清楚而不是悄悄丢附件。
+          setComposerNotice(t('chat.inject.attachments'));
+          return;
+        }
+        const injected = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
+        setComposerNotice(t('chat.inject.waiting'));
+        const { outcome } = await steerThenConfirm({
+          send: () => steerInFlight(cfg, alias, injected),
+          readRecent: async () => (conversations.peek(visibleConversationKeyRef.current)?.messages ?? [])
+            // 回执可能以两种形状到达：①节点另发一条消息（from_name=节点）②作为 result 挂在我们那条上。
+            // 所以不能只按 to_name 过滤 —— 那会把 ② 整类回执丢掉，表现就是「永远未确认」。
+            // 节点回执统一带 `[alias] ` 前缀（cli.ts: `[${alias}] steer ${json}`），所以这里**不能加行首锚点**，
+            // 否则真实回执永远匹配不上、界面表现为「永远未确认」。
+            // 只认 result 里含 `steer {`；不放行 content —— 否则用户自己正文写的 steer {...} 会变回假成功。
+            .filter(row => row.from_name === alias || /steer\s*\{/.test(row.result ?? ''))
+            .map(row => ({
+              text: [row.content, row.result].filter(Boolean).join('\n'),
+              at: Date.parse(row.created_at ?? row.updated_at ?? '') || 0,
+            })),
+          sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+          windowMs: STEER_ACK_WINDOW_MS,
+          pollMs: 1000,
+        });
+        if (outcome.phase === 'delivered') {
+          setDraft('');
+          setQuote(null);
+          // 注入的内容不会产生聊天气泡（它并进了正在跑的那一轮），所以提示里带上用户原话，
+          // 让「我刚才插了什么」在当下可回看。截断到 30 字，避免长文本把提示条撑爆。
+          setComposerNotice(t('chat.inject.deliveredExcerpt', { text: injected.length > 30 ? `${injected.slice(0, 30)}…` : injected }));
+          return;
+        }
+        if (outcome.phase === 'missed') {
+          // 节点明确说「没有在跑的轮次了」⇒ 这条没进去。草稿留着，让用户自己决定发不发。
+          setComposerNotice(t('chat.inject.missed'));
+          return;
+        }
+        if (outcome.phase === 'failed') {
+          setComposerNotice(t('chat.inject.failed', { message: outcome.detail ?? '' }));
+          return;
+        }
+        // 只拿到 accepted 就拿不到回执 ⇒ 只能如实说未确认，不写「已并入」。
+        setComposerNotice(t('chat.inject.unconfirmed'));
+        return;
+      } finally {
+        injectBusyRef.current = false;
+      }
     }
     if (opts?.interruptFirst === true && shouldInterruptBeforeSend(sessionStatus)) {
       setComposerNotice(t('chat.steer.interrupting'));
