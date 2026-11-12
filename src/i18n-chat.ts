@@ -47,6 +47,7 @@ export const chatTranslations = {
   'chat.forwardUncertain': ['转发结果待确认', 'Forwarding not confirmed'],
   'chat.checkDestination': ['可能已经送达。为避免重复转发，请先在目标会话确认。', 'It may have arrived. Check the destination chat before forwarding again.'],
   'chat.downloadOriginal': ['下载原图', 'Download original'],
+  'chat.downloadVideo': ['下载 / 保存视频', 'Download / save video'],
   'chat.uploadQueued': ['等待上传', 'Waiting to upload'],
   // #1051 P2 —— 文件卡片的状态文案必须走 i18n，否则英文界面里显示中文（Codex review 指出）。
   'chat.fileStatus.queued': ['等待上传', 'Waiting to upload'],
