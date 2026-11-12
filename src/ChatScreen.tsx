@@ -183,7 +183,9 @@ type ChatItem = HubTask & {
 };
 
 // selectedText:桌面端右键时气泡里已有的鼠标选区(只在这个气泡内才算),菜单据此给「复制选中内容」。
-type MessageSelection = { item: ChatItem; text: string; author?: string; selectedText?: string };
+type MessageSelection = { item: ChatItem; text: string; author?: string; selectedText?: string;
+  /** 这条内容来自「我自己发的」还是「agent 的回复」—— 转发策略不同（回复不能回灌同一会话）。 */
+  kind?: 'sent' | 'reply' };
 
 // Received tasks carry attachments inside meta_json (#221). Images get
 // tappable thumbnails (Vincent tg 748), other files a 📎 line.
@@ -1108,10 +1110,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const openSelect = (bubbleKey: string, selection: MessageSelection, tone: MessageSelectTarget['tone']) => {
     const el = bubbleViews.current.get(bubbleKey) as unknown as { measureInWindow?: (cb: (x: number, y: number, w: number, h: number) => void) => void } | undefined;
     // 量不到(极少:气泡刚被回收)就退回原来的底部菜单,长按至少有反应。
-    if (!el?.measureInWindow) { setMenuFor(selection); return; }
+    if (!el?.measureInWindow) { setMenuFor({ ...selection, kind: tone }); return; }
     el.measureInWindow((x, y, width, height) => {
       if (!(width > 0 && height > 0)) { setMenuFor(selection); return; }
-      setSelectFor({ rect: { x, y, width, height }, raw: selection.text, tone, selection });
+      setSelectFor({ rect: { x, y, width, height }, raw: selection.text, tone, selection: { ...selection, kind: tone } });
     });
   };
   // 光标定位的菜单要夹在窗口内,否则贴右/贴底时会被切掉。
@@ -1390,9 +1392,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     setForwardUiOwner(conversationKeyFor);
     setForwardQuery('');
     setForwardAmbiguous(false);
+    // 转发 agent 的回复时，不允许把它原样回灌到**同一个会话**：
+    // 那会变成「用户自己发了一段 agent 的话」，观感上是假消息，Hub 里也查不清是谁说的。
+    const forwardingReply = (forwardBatch ?? [selection]).some(sel => sel.kind === 'reply');
     try {
       const data = await fetchStatus(cfg);
-      setForwardTargets((data.sessions ?? []).filter(session => session.alias));
+      setForwardTargets((data.sessions ?? [])
+        .filter(session => session.alias)
+        .filter(session => !(forwardingReply && session.alias === alias)));
     } catch {
       setForwardTargets([]);
     }
@@ -1411,6 +1418,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     let lastResponse: Awaited<ReturnType<typeof sendTask>> | null = null;
     try {
       for (const selection of queue) {
+        // 兜底（选择器理论上已过滤）：agent 回复不许静默回灌同一会话。
+        if (selection.kind === 'reply' && target === alias) {
+          setComposerNotice(t('chat.forwardReplySameChat'));
+          return;
+        }
         const begun = beginForward(startedKey, target, selection.text, createDashboardRequestId);
         forwardOperationKeyRef.current = begun.operation.key;
         if (!begun.started) {

@@ -286,6 +286,7 @@ export const chatTranslations = {
   'chat.inject.missed': ['这一轮已结束，未插入（草稿还在，可直接发送）', 'That turn had already ended, so this was not inserted (your draft is kept — you can send it normally)'],
   'chat.inject.failed': ['插话失败：{message}（草稿还在）', 'Could not insert: {message} (your draft is kept)'],
   'chat.inject.unconfirmed': ['已投递，但节点没确认是否并入当前轮（草稿还在）', 'Sent, but the node did not confirm it joined the running turn (your draft is kept)'],
+  'chat.forwardReplySameChat': ['这条是 agent 的回复，不能转发回同一个会话（要发给别的节点请选目标）', 'That is the agent\'s reply — it cannot be forwarded back into the same conversation (pick another target)'],
   'chat.inject.attachments': ['插话只能带文字，附件请用普通发送', 'Insert carries text only — send attachments normally'],
 } satisfies Record<string, readonly [string, string]>;
 registerTranslations(chatTranslations);
