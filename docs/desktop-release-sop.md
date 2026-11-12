@@ -334,6 +334,22 @@ asset while keeping its `.sig` breaks updates for every installed client.
 
 ## 6. Publish, verify the tag, then let the dynamic endpoint resolve it
 
+There are **two manual points** — both are "only a human can click them", so do
+them in order and do not assume the workflow does either:
+
+1. **publish** — `gh release edit desktop-v<ver> --draft=false --latest`. CI only
+   ever builds the draft.
+2. **fallback 收口** — confirm the `ci/desktop-fallback-0-2-<ver>` branch is
+   pushed (org policy #4427 forbids Actions from opening the PR), then open the
+   PR, merge it, and the next watchdog tick flips anet.sh. Missing any step
+   leaves "feed new, fallback old" — the expected state, not a fault.
+
+**"Release complete" is defined by one thing only**: `main` / `feed` /
+`fallback` / both mirror `VERSION`s all equal the target version. When two
+people disagree about which one is stale, the one who ran
+`verify-release.py <ver>` is right — run the script, don't argue about whose
+snapshot is newer.
+
 Publish is **not** part of the workflow. CI only ever creates a draft; a human
 must flip `draft=false` and `make_latest=true` or nobody downloads anything —
 a green run + uploaded draft + still-`0.2.5xx` feed is the expected state, not
