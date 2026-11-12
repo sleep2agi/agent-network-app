@@ -20,7 +20,7 @@ import { localFileStatus } from './attachment-file-model';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
 import { sendFailureReason, type SendFailureReason } from './send-failure-reason';
-import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, interruptTurn, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, interruptTurn, steerInFlight, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
@@ -69,8 +69,10 @@ import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerMo
 import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ComposerStopButton from './ComposerStopButton';
+import ComposerInjectButton from './ComposerInjectButton';
 import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
 import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
+import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
 import { useDesktopWindowPin } from './DesktopWindowPin';
@@ -1884,7 +1886,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     }
   };
 
-  const submit = async (opts?: { interruptFirst?: boolean }) => {
+  const submit = async (opts?: { interruptFirst?: boolean; inject?: boolean }) => {
     const parsed = parseBtwFirstToken(draft);
     if (parsed.kind === 'invalid') {
       Alert.alert(t('chat.btwQuestion'), parsed.message);
@@ -1921,6 +1923,50 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // 理由：status 可能是陈旧的（心跳/轮询滞后），隐式打断会让「只想排队」的人误杀自己的回合，
     // 也会把发送延迟从 <500ms 变成最多 8s（#518 的体感就是被这条破坏的）。
     // 拿不到凭据就**不发**：草稿保留 + 明确告知，绝不静默排队或假装已发出。
+    // #4685 —— 「插话」：把这条**注入当前正在跑的那一轮**（原生 steer，不打断）。
+    // 与「打断并发送」是两件事：这条不停上一轮，上一轮继续跑，只是把新内容并进去。
+    // 只有在飞时才走这条路；空闲时按钮根本不出现（就算出现也按普通发送走，不把普通消息变成 steer）。
+    if (opts?.inject === true && canSteer(sessionStatus)) {
+      if (attached.length) {
+        // steer 只带文本：带附件的消息没法「插进」当前轮，说清楚而不是悄悄丢附件。
+        setComposerNotice(t('chat.inject.attachments'));
+        return;
+      }
+      const injected = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
+      setComposerNotice(t('chat.inject.waiting'));
+      const { outcome } = await steerThenConfirm({
+        send: () => steerInFlight(cfg, alias, injected),
+        readRecent: async () => (conversations.peek(visibleConversationKeyRef.current)?.messages ?? [])
+          // 只认**节点发来的**行：把我们自己发出去的那条（to_name=本节点）当回执，
+          // 会让「用户正文里恰好写了 steer {...}」变成假成功。
+          .filter(row => row.to_name !== alias)
+          .map(row => ({
+            text: [row.content, row.result].filter(Boolean).join('\n'),
+            at: Date.parse(row.created_at ?? row.updated_at ?? '') || 0,
+          })),
+        sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+        windowMs: STEER_ACK_WINDOW_MS,
+        pollMs: 1000,
+      });
+      if (outcome.phase === 'delivered') {
+        setDraft('');
+        setQuote(null);
+        setComposerNotice(t('chat.inject.delivered'));
+        return;
+      }
+      if (outcome.phase === 'missed') {
+        // 节点明确说「没有在跑的轮次了」⇒ 这条没进去。草稿留着，让用户自己决定发不发。
+        setComposerNotice(t('chat.inject.missed'));
+        return;
+      }
+      if (outcome.phase === 'failed') {
+        setComposerNotice(t('chat.inject.failed', { message: outcome.detail ?? '' }));
+        return;
+      }
+      // 只拿到 accepted 就拿不到回执 ⇒ 只能如实说未确认，不写「已并入」。
+      setComposerNotice(t('chat.inject.unconfirmed'));
+      return;
+    }
     if (opts?.interruptFirst === true && shouldInterruptBeforeSend(sessionStatus)) {
       setComposerNotice(t('chat.steer.interrupting'));
       const { verdict, detail } = await interruptThenConfirm({
@@ -3083,6 +3129,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
                 </Pressable>
               ) : null}
+              {canSteer(sessionStatus) ? (
+                <ComposerInjectButton
+                  enabled={canSend(draft, attached.length > 0, sending) && attached.length === 0}
+                  desktop
+                  onPress={() => void submit({ inject: true })}
+                />
+              ) : null}
               <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
@@ -3183,6 +3236,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Ionicons name="flash-outline" size={12} color={colors.textMuted} />
                   <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
                 </Pressable>
+              ) : null}
+              {canSteer(sessionStatus) ? (
+                <ComposerInjectButton
+                  enabled={canSend(draft, attached.length > 0, sending) && attached.length === 0}
+                  desktop
+                  onPress={() => void submit({ inject: true })}
+                />
               ) : null}
       </View>
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
