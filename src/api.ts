@@ -2159,6 +2159,32 @@ export const interruptTurn = async (cfg: HubConfig, alias: string): Promise<Inte
   return { ok: true, payload: r.payload };
 };
 
+export type SteerSendResult =
+  | { ok: true; payload: any }
+  | { ok: false; unsupported: boolean; error: string };
+
+/** #4685 —— 把一条消息注入**当前在跑的轮次**（原生 steer，不打断）。
+ *  Hub 侧只用 `steer:true`（与 control 互斥）；本函数不做版本探测：
+ *  老 agent-node 不读 meta.delivery ⇒ 会按普通消息处理（Hub 侧已确认，无需客户端兜底判断）。
+ *  ⚠️ 同步响应里的 `accepted` 只表示入队；是否真的并入当前轮，要等节点回执
+ *  （`steer {"ok":true,"delivered":"steer"}` / `missed` / `failed`，见 steer-delivery.ts）。 */
+export const steerInFlight = async (cfg: HubConfig, alias: string, message: string): Promise<SteerSendResult> => {
+  const networkId = cfg.networkId ?? (await fetchNetworkId(cfg));
+  const r = await callHubTool(cfg, 'send_message', {
+    alias,
+    message,
+    steer: true,
+    ...(networkId ? { network_id: networkId } : {}),
+  });
+  if (r.kind === 'unsupported') return { ok: false, unsupported: true, error: r.error };
+  if (r.kind === 'error') return { ok: false, unsupported: false, error: r.error };
+  const payload = r.payload;
+  if (!payload || payload.ok !== true) {
+    return { ok: false, unsupported: false, error: String(payload?.error ?? 'Hub 返回空响应') };
+  }
+  return { ok: true, payload };
+};
+
 const enqueueSkills = async (
   cfg: HubConfig,
   tool: 'list_node_skills' | 'read_node_skill',
