@@ -101,7 +101,7 @@ const initScript = ({ theme }) => {
       window.__grants ||= {};
       const id = decodeURIComponent(grants[1]);
       if (method === 'PUT') { const body = decode(data); (window.__grantPuts ||= []).push({ node: id, grants: body.grants }); window.__grants[id] = body.grants.map(g => ({ ...g, scope_id: g.scope_id || '' })); }
-      return { ok: true, node_id: id, grants: window.__grants[id] || [], capabilities: ['schedules'] };
+      return { ok: true, node_id: id, grants: window.__grants[id] || [], capabilities: ['schedules', 'board'] };
     }
     if (p === '/api/networks/net-perm/departments') return { ok: true, departments: [{ id: 'd_top', name: '示例部门', parent_id: null, leader_user_id: null, sort: 0, member_count: 1 }, { id: 'd_kid', name: '子部门', parent_id: 'd_top', leader_user_id: null, sort: 1, member_count: 0 }], members: [] };
     if (p === '/health') return { ok: true, capabilities: sessionStorage.getItem('noInboxCap') ? ['node_permission_mode'] : ['node_permission_mode', 'node_inbox_allowlist', 'node_inbox_allowlist_dept', 'node_grants'] };
