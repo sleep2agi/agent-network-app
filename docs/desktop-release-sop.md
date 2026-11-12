@@ -349,6 +349,16 @@ Underneath it is `PATCH repos/{owner}/{repo}/releases/{id}` with
 selects this release as the dynamic endpoint's "highest-semver published"
 winner and what the ModelScope mirror advances to.
 
+A second human step has the same "only one person knows" shape: the
+`fallback.json` sync. The watchdog dispatches `desktop-fallback-sync`, which
+rebuilds `docs-site/docs/public/desktop/update/fallback.json` and pushes the
+branch — but the org policy forbids Actions from opening PRs (#2346 / #4427),
+so the workflow stops at "branch pushed" and a human must open and merge the
+PR (`https://github.com/sleep2agi/agent-network/pull/new/<branch>`). The
+watchdog detects the merge and reports `verdict=merged`. This is not a fault
+and not the watchdog being down; it is the same human-in-the-loop step as
+publishing, one repo away.
+
 Publish the draft, then immediately confirm the tag GitHub just created points
 at the commit you audited:
 
