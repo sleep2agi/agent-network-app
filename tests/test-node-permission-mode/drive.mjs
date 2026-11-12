@@ -332,7 +332,7 @@ async function run(vp, viewport, ua, theme, phone) {
   record(tag, '11 管理权限: add department·read → one PUT, row shows path', {
     onePut: gPuts.length === 1 && gPuts[0].grants.length === 1 && gPuts[0].grants[0].scope_kind === 'department' && gPuts[0].grants[0].scope_id === 'd_kid' && gPuts[0].grants[0].level === 'read',
     row: gRow.includes('定时任务') && gRow.includes('示例部门 / 子部门') && gRow.includes('只读'),
-    boardComingSoon: boardDisabled === 'true',
+    boardAvailable: boardDisabled !== 'true',
   }, { gPuts, gRow, boardDisabled });
   await page.locator(tid('node-grant-revoke-schedules-department-d_kid')).click({ timeout: 3000 }).catch(() => {});
   await sleep(500);
