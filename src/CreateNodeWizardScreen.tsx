@@ -1022,8 +1022,18 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // header 42px below the status-bar inset and failed the app-wide layout sweep (case
   // "wizard", column b). It belongs in the body: the header must stay at the top.
   const sourceEntry = phase === 'form' ? (
-    <Pressable testID="create-source-open" accessibilityRole="button" onPress={() => setSourceOpen(true)} style={{ padding: spacing.md }}>
-      <Text style={{ color: colors.accent }}>OpenCode V2 · 已有项目 / 已有会话 / 新会话</Text>
+    <Pressable testID="create-source-open" accessibilityRole="button" accessibilityLabel="从已有项目或会话创建（OpenCode V2）" onPress={() => setSourceOpen(true)}
+      style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginHorizontal: spacing.md, marginTop: spacing.md,
+        paddingVertical: spacing.md, paddingHorizontal: spacing.md, borderRadius: radius.surface, borderWidth: 1, borderColor: colors.border,
+        backgroundColor: colors.card, opacity: pressed ? 0.7 : 1 })}>
+      <View style={{ width: 32, height: 32, borderRadius: radius.control, backgroundColor: colors.tonalBg, alignItems: 'center', justifyContent: 'center' }}>
+        <Ionicons name="folder-open-outline" size={18} color={colors.accent} />
+      </View>
+      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+        <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: '600' }} numberOfLines={1}>从已有项目或会话创建</Text>
+        <Text style={{ color: colors.textMuted, fontSize: typeScale.small }} numberOfLines={2}>OpenCode V2 · 选已有项目、接入已有会话，或在其中开新会话</Text>
+      </View>
+      <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
     </Pressable>
   ) : null;
 
@@ -1033,7 +1043,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
     >
       {/* Header */}
-      {sourceOpen ? <NodeSourceLauncher cfg={cfg} daemonNodeId={daemon.daemon_node_id} onClose={() => setSourceOpen(false)} /> : null}
+      {sourceOpen ? <NodeSourceLauncher cfg={cfg} daemonNodeId={daemon.daemon_node_id} daemonLabel={daemon.alias} onClose={() => setSourceOpen(false)} /> : null}
       {paneShowsBack(desktop) ? (
         <View style={styles.header} testID="screen-header">
           <Pressable

@@ -283,6 +283,8 @@ export interface HubNode {
   model?: string | null;
   server?: string | null;
   hostname?: string | null;
+  /** /api/nodes 带的节点配置文件路径（真机路径）；只用来显示工作目录，缺失就不显示。 */
+  config_path?: string | null;
   role?: string | null;
   /** 节点显式归属的部门(Hub nodes.department_id;/api/nodes 已带)。旧 Hub 没有 ⇒ undefined。 */
   department_id?: string | null;
