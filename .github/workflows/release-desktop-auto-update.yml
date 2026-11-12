@@ -611,6 +611,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.524:
+            - 「插话」现在会等你那句真的并入本轮才算成功：之前节点其实已经并入，界面却一直显示「未确认」。
+            - 回合刚好结束时点「插话」，不会再被悄悄当成普通消息发出去 —— 会明确告诉你「这一轮已结束，未插入」，草稿留着。
+            - 连点「插话」只发一条：之前等回执的那几秒里连点两次，节点会收到两条。
+
             What's new in 0.2.523:
             - 对话里的视频现在有「下载 / 保存视频」：播放前、播放中都能点，弹出系统分享面板，可以存到文件 / 相册或发给别的应用（之前在对话里播完就没有保存入口）。
             - 「插话」成功的提示里带上你说的原话。
