@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.528:",
+  "- 节点「管理权限」里，除了定时任务，现在也能给「任务看板」授权：能管整个网络、某个部门（含子部门）或指定节点。",
+  "- 如果连的是还没开放看板权限的服务器，这一项会显示「即将支持」并且点不动 —— 不会再点了才报错。",
+  "",
   "What's new in 0.2.527:",
   "- 转发 agent 的回复时，不能再把它发回同一个会话（之前会看起来像「你自己说了一段 agent 的话」）；要转发给别的节点仍然可以。",
   "",
