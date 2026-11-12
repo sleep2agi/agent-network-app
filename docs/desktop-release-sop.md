@@ -334,6 +334,21 @@ asset while keeping its `.sig` breaks updates for every installed client.
 
 ## 6. Publish, verify the tag, then let the dynamic endpoint resolve it
 
+Publish is **not** part of the workflow. CI only ever creates a draft; a human
+must flip `draft=false` and `make_latest=true` or nobody downloads anything —
+a green run + uploaded draft + still-`0.2.5xx` feed is the expected state, not
+a fault. The exact mechanical step (one command):
+
+```bash
+gh release edit desktop-v<version> --draft=false --latest \
+  --repo sleep2agi/agent-network-app
+```
+
+Underneath it is `PATCH repos/{owner}/{repo}/releases/{id}` with
+`draft:false, make_latest:true`. Do not omit `--latest`: `make_latest` is what
+selects this release as the dynamic endpoint's "highest-semver published"
+winner and what the ModelScope mirror advances to.
+
 Publish the draft, then immediately confirm the tag GitHub just created points
 at the commit you audited:
 
