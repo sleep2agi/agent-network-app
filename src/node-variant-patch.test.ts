@@ -140,9 +140,12 @@ ck('窗口文案有已等/最长秒数',
 
 // 6) 组件源码契约：确认用**顶层** modelVariant，提交后进窗口、不单次读回即判死
 const sectionSrc = readFileSync(new URL('./NodeModelSection.tsx', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
+// #4460：判定抽到 variant-outcome.ts（纯模块，可被单测直接调用）；组件仍走同一个 helper。
+const outcomeSrc = readFileSync(new URL('./variant-outcome.ts', import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
 ck('section 按顶层 modelVariant 确认档位（双条件判定走同一个 helper）',
-  sectionSrc.includes('variantMatches: !!v && v.modelVariant !== undefined && v.modelVariant === write.target')
-  && (sectionSrc.match(/variantOutcomeOf\(/g) ?? []).length >= 3);
+  outcomeSrc.includes('variantMatches: !!v && v.modelVariant !== undefined && v.modelVariant === write.target')
+  && sectionSrc.includes("from './variant-outcome'")
+  && (sectionSrc.match(/variantOutcomeOf\(/g) ?? []).length >= 2);
 ck('section 不用 config_snapshot 兼容投影 model_variant 当判据', !sectionSrc.includes('model_variant'));
 ck('section 提交后进 60s 观测窗口（不再单次 reload 即判失败）',
   sectionSrc.includes('VARIANT_TIMEOUT_MS') && sectionSrc.includes('VARIANT_MAX_POLLS')

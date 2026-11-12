@@ -47,6 +47,7 @@ import {
   validateModelId,
   type ModelChangePhase,
 } from './node-model-change';
+import { variantOutcomeOf } from './variant-outcome';
 import { suggestedModels } from './runtime-catalog';
 import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
 import { opencodeFlagsOf,
@@ -84,28 +85,6 @@ async function reportedModelList(cfg: HubConfig, nodeId: string): Promise<string
   } catch {
     return [];
   }
-}
-
-/**
- * #4099 一次档位写入的读回判定（观测窗口与「再检查一次」共用，避免两条判定走样）。
- *
- * 双条件：Hub 的 `last_update` 必须真的 applied 且 update_id 与本次提交对齐，
- * **且**顶层 `modelVariant` 已经等于目标（清除档位时目标是 null）。
- * 顶层 modelVariant 才是 server 的真相；config_snapshot 的兼容投影滞后更多，不当判据。
- */
-function variantOutcomeOf(
-  v: NodeConfigRead | null,
-  write: { target: string | null; effectiveModel?: string | null; updateId?: string },
-): VariantOutcome {
-  const ack = lastUpdateApplied(v?.last_update, write.updateId, write.effectiveModel);
-  return describeVariantOutcome({
-    applied: ack.applied,
-    variantMatches: !!v && v.modelVariant !== undefined && v.modelVariant === write.target,
-    target: write.target,
-    // 有 error 就原样给；没有就把 last_update 的对齐原因说清楚（比一个裸 status 好读）。
-    lastError: v?.last_update?.error ?? (ack.applied ? null : ack.reason),
-    lastStatus: v?.last_update?.status ?? null,
-  });
 }
 
 export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiveConfig }: { cfg: HubConfig; node: HubNode; runtimeVersion?: string | null; onEffectiveConfig?: (value: NodeConfigRead | null) => void }) {
