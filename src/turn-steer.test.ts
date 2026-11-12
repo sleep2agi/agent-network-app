@@ -97,6 +97,9 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
   ck('inject ack watcher accepts an ack carried in result (with [alias] prefix)',
     /\/steer\\s\*\\\{\/\.test\(row\.result/.test(screen));
   // #4685：点「插话」时如果回合已结束，不能悄悄落成普通发送 —— 那和「说了没反应」一样糟。
+  // #4685：插话要等回执，连点会真的发两条 steer；用同步 ref 挡住。
+  ck('inject is guarded against double taps',
+    /injectBusyRef\.current\) return;/.test(screen) && /finally \{[\s\S]{0,80}injectBusyRef\.current = false/.test(screen));
   ck('inject never silently degrades to a normal send',
     /opts\?\.inject === true && !canSteer\(sessionStatus\)[\s\S]{0,200}return;/.test(screen));
   ck('inject ack watcher does not treat user content as an ack', !/row\.content/.test(screen.split('readRecent')[1]?.slice(0, 400) ?? ''));
