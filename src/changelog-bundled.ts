@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.522:",
+  "- 聊天框新增「插话」：一轮还在跑的时候，可以往正在跑的这一轮里直接塞一句（不会打断它、不用等它结束）。只有节点确认「已并入当前轮次」才显示成功；这一轮已经结束了就明确提示「未插入」，不会让你以为说了没反应。",
+  "- 顺带修一处观感：点「打断并发送」后状态栏不再闪一下。",
+  "",
   "What's new in 0.2.521:",
   "- 新建节点 → 「从已有项目或会话创建」：修复 OpenCode V2 来源节点一个都列不出来（之前只认旧的 runtime 名）。来源列表改成卡片入口 + 每行显示文件夹和模型、可按名字 / 文件夹 / 模型搜索；没有可用来源时说清楚原因（例如「有 N 个节点但没被接管」）。",
   "",
