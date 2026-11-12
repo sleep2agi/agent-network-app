@@ -281,6 +281,7 @@ export const chatTranslations = {
   'chat.inject.actionHint': ['不打断当前回合，把这条内容并入正在跑的这一轮', 'Do not interrupt: fold this into the turn that is already running'],
   'chat.inject.waiting': ['已投递，等节点确认…', 'Sent — waiting for the node to confirm…'],
   'chat.inject.delivered': ['已并入当前轮次', 'Folded into the running turn'],
+  'chat.inject.deliveredExcerpt': ['已并入当前轮次：{text}', 'Folded into the running turn: {text}'],
   'chat.inject.missed': ['这一轮已结束，未插入（草稿还在，可直接发送）', 'That turn had already ended, so this was not inserted (your draft is kept — you can send it normally)'],
   'chat.inject.failed': ['插话失败：{message}（草稿还在）', 'Could not insert: {message} (your draft is kept)'],
   'chat.inject.unconfirmed': ['已投递，但节点没确认是否并入当前轮（草稿还在）', 'Sent, but the node did not confirm it joined the running turn (your draft is kept)'],
