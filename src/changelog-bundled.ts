@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.525:",
+  "- 修「停止」后界面仍显示「未确认」：之前回合其实已经停了，但客户端在等一个已经错过的状态翻转，一直显示「未确认」；现在按「点击那一刻」判断，真的停了就显示「已停止」，切到别的节点也会清掉残留提示。",
+  "",
   "What's new in 0.2.524:",
   "- 「插话」现在会等你那句真的并入本轮才算成功：之前节点其实已经并入，界面却一直显示「未确认」。",
   "- 回合刚好结束时点「插话」，不会再被悄悄当成普通消息发出去 —— 会明确告诉你「这一轮已结束，未插入」，草稿留着。",
