@@ -637,15 +637,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         setLoaded(true);
       };
       const results = await loadChatSources({
-        // 入站（to_name=本 agent）+ 出站（from_name=本 agent）都要：出站行的 result 是**别的节点回给它的**，
-        // 只拉入站会让「节点回给它的那半」永远不出现（真机 chuqi 报的可见性问题）。
-        tasks: async () => {
-          const [inbound, outgoing] = await Promise.all([
-            fetchTasks(cfg, params),
-            fetchTasks(cfg, { from_name: alias, limit: params.limit, skipStats: true }),
-          ]);
-          return { tasks: mergeConversationSides(inbound.tasks ?? [], outgoing.tasks ?? [], params.limit) };
-        },
+        // 只等入站（to_name=本 agent）先画：首屏不能被第二次请求拖慢（drives 的首屏/时延断言就是量这个）。
+        tasks: () => fetchTasks(cfg, params),
         proactive: () => fetchChatUserMessages(cfg),
         isCurrent,
         onTasks: data => {
@@ -655,6 +648,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
           confirmed.forEach(outboxRemove);
           paint('tasks', rows, fetched, confirmed);
+          // 出站（from_name=本 agent）再补一次：这些行 to_name 是别的节点，result 才是**对方回给它的**内容，
+          // 只拉入站会让「节点回给它的那半」永远不出现。**不阻塞首屏**，回来后再合并重画一次。
+          void fetchTasks(cfg, { from_name: alias, limit: params.limit, skipStats: true })
+            .then(out => {
+              if (!isCurrent()) return;
+              const outgoingRows = (out.tasks ?? []).filter(r => (r.from_name ?? '') === alias);
+              if (!outgoingRows.length) return;
+              paint('tasks', mergeConversationSides(rows, outgoingRows, params.limit), fetched, confirmed);
+            })
+            .catch(() => { /* 出站补拉失败就保持入站视图，不清空已画内容 */ });
         },
         onProactive: data => paint('proactive', proactiveItemsForAgent(data.messages as any, alias, cfg.username)),
       });
