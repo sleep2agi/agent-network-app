@@ -77,5 +77,17 @@ ck('node_not_found is translated', catalogErrorText('node_not_found') !== 'node_
   ck('palette merges the ready snapshot before showing it', src.includes('mergeReportedVariants(polled.snapshot'));
 }
 
+// admin 2026-11-13：非 V2 节点只给说明卡，不弹搜索；V2 节点自报清单先画，不等 daemon 代读。
+{
+  const gate = src.indexOf('if (node && !v2) {');
+  const search = src.indexOf('testID="model-palette-search"');
+  ck('non-V2 nodes return the read-only card before the search UI', gate > 0 && search > gate);
+  const card = src.slice(gate, src.indexOf('\n  return (', gate));
+  ck('read-only card has no search / list / variant', !card.includes('TextInput') && !card.includes('model-palette-list') && !card.includes('node-variant-row'));
+  ck('read-only card explains why', card.includes("t('chat.modelPicker.runtimeReadOnly'"));
+  const early = src.indexOf('if (reportedSnapshot) setCatalog({ snapshot: reportedSnapshot, loading: false, error: null });');
+  ck('reported catalogue renders before the daemon relay is queued', early > 0 && early < src.indexOf('await queueOpenCodeCatalog('));
+}
+
 console.log(`composer-model-palette-fallback: ${passed}/${total}`);
 process.exit(passed === total ? 0 : 1);

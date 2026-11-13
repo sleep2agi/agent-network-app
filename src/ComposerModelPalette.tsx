@@ -155,6 +155,9 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         }
       }).catch(() => { if (live) setCatalog({ snapshot: null, loading: false, error: catalogErrorText(error) }); });
     };
+    // admin 2026-11-13：V2 节点有 daemon 时代读要排队 + 轮询（最长 15s），转圈很久。节点早已自报过清单，
+    // 先把它画出来，代读回来再静默换成更新鲜的快照；代读失败就保持自报清单（failWith 同口径）。
+    if (reportedSnapshot) setCatalog({ snapshot: reportedSnapshot, loading: false, error: null });
     const daemonNodeId = nodeProviderDaemon(node);
     if (!daemonNodeId) {
       // A node started by hand (`anet node start`, opencode-cli co-presence) has no daemon
@@ -385,6 +388,35 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       setBusy(false);
     }
   };
+
+  // admin 2026-11-13（营销神明等 claude-code 节点截图）：不是 OpenCode V2 的节点在聊天里切不了模型，
+  // 以前照样弹出整个搜索面板，再给一段红字「不是 OpenCode V2」。现在只给一张说明卡：当前模型 + 原因，
+  // 不出搜索框 / 列表 / 档位 / agent。
+  if (node && !v2) {
+    return (
+      <View style={styles.card} testID="composer-model-sheet">
+        <View style={styles.searchBar} testID="model-palette-readonly">
+          <Ionicons name="cube-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.searchInput} numberOfLines={1} testID="model-palette-readonly-model">
+            {currentModel || t('chat.modelUnknown')}
+          </Text>
+          <Pressable
+            testID="model-palette-close"
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.modelPicker.close')}
+            hitSlop={8}
+            onPress={() => closeRef.current()}
+            style={{ marginLeft: 8, padding: 2 }}
+          >
+            <Ionicons name="close" size={18} color={colors.textMuted} />
+          </Pressable>
+        </View>
+        <Text style={styles.source} testID="model-palette-readonly-note">
+          {t('chat.modelPicker.runtimeReadOnly', { runtime: node.runtime || t('chat.modelUnknown') })}
+        </Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.card} testID="composer-model-sheet">
