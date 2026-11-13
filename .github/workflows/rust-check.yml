@@ -81,7 +81,8 @@ jobs:
       # 默认值是别人的实现细节,不该由我们赌。
       - uses: dtolnay/rust-toolchain@6bed0761d98439e5a578e2877258200ad565ba87 # stable
         with:
-          toolchain: stable
+          # 与 release 腿同一个编译器：cargo 1.100 的新 build-dir 布局让 tauri-build 2.6.3 拷错 sidecar 位置。
+          toolchain: '1.99.1'
 
       # #4406 —— 与 release 腿同一个理由：版本号 bump 会改 Cargo.toml/lock，
       # 默认哈希进 key ⇒ 每次 bump 都是新 key ⇒ 全量重编，还会把缓存总量推过 10 GB 驱逐线。
