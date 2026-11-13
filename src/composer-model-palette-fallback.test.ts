@@ -79,12 +79,16 @@ ck('node_not_found is translated', catalogErrorText('node_not_found') !== 'node_
 
 // admin 2026-11-13：非 V2 节点只给说明卡，不弹搜索；V2 节点自报清单先画，不等 daemon 代读。
 {
-  const gate = src.indexOf('if (node && !v2) {');
+  const gate = src.indexOf('if (knownNonV2) {');
   const search = src.indexOf('testID="model-palette-search"');
   ck('non-V2 nodes return the read-only card before the search UI', gate > 0 && search > gate);
   const card = src.slice(gate, src.indexOf('\n  return (', gate));
   ck('read-only card has no search / list / variant', !card.includes('TextInput') && !card.includes('model-palette-list') && !card.includes('node-variant-row'));
   ck('read-only card explains why', card.includes("t('chat.modelPicker.runtimeReadOnly'"));
+  // 边界（#1428 审阅）：只读卡只给「明确不是 V2」的节点；runtime 没读到的节点按「未知放行」，
+  // 否则老 Hub / 字段缺失会把整个面板锁死，与本仓「未知≠不支持」的口径冲突。
+  ck('read-only gate needs explicit evidence, not a missing runtime',
+    src.includes("generation === 'v1' || (!!node.runtime && !v2)"));
   const early = src.indexOf('if (reportedSnapshot) setCatalog({ snapshot: reportedSnapshot, loading: false, error: null });');
   ck('reported catalogue renders before the daemon relay is queued', early > 0 && early < src.indexOf('await queueOpenCodeCatalog('));
 }
