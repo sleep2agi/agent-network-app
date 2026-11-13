@@ -43,7 +43,10 @@ jobs:
       - name: Export RN web bundle
         run: npx expo export -p web
 
+      # cargo 1.100 的新 build-dir 布局让 tauri-build 2.6.3 把 externalBin 拷到 target/release/build/（0.2.529 Windows smoke 两次红）。固定到 1.99.1，tauri-build 适配后再放开。
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.1'
 
       - name: Build pinned local CommHub sidecar
         shell: bash
@@ -122,7 +125,10 @@ jobs:
       - name: Export RN web bundle
         run: npx expo export -p web
 
+      # cargo 1.100 的新 build-dir 布局让 tauri-build 2.6.3 把 externalBin 拷到 target/release/build/（0.2.529 Windows smoke 两次红）。固定到 1.99.1，tauri-build 适配后再放开。
       - uses: dtolnay/rust-toolchain@stable
+        with:
+          toolchain: '1.99.1'
 
       - name: Build pinned local CommHub sidecar
         shell: bash
