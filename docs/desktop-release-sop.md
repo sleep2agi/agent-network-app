@@ -387,6 +387,20 @@ The SHA must equal the `targetCommitish` from section 5 and the commit passed
 to the workflow. If it does not match, stop and escalate — do not attempt to
 correct it by moving the tag (section 8).
 
+Then advance the Android channel explicitly. The release workflow's
+`trigger-android-mirror-gate` job runs while the release is still a **draft**,
+so the gate it starts compares the mirror with the *previous* published version
+and cannot advance the new APK (app#1430, 0.2.530). Dispatch the gate once more
+after publishing; it finds this version's `android-build` run and publishes it:
+
+```bash
+gh workflow run android-mirror-lag.yml --repo sleep2agi/agent-network-app --ref main
+```
+
+If the Android mirror is already ahead of the newest published release (for
+example an APK shipped while its desktop build failed), the gate reports
+`AHEAD` and exits green without dispatching a rollback.
+
 Then start the China mirror explicitly (section 10) — do not count on the
 `release: published` trigger:
 

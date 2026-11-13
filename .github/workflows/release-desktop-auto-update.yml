@@ -3168,6 +3168,8 @@ jobs:
     # （同一仓库的 modelscope-mirror 定时任务是跑了的）。护栏自己不响，比没有护栏更糟。
     #
     # 发布完成是这条链上唯一确定已知的时刻，所以在这里显式触发一次，不指望 cron 醒来。
+    # ⚠️ app#1430（0.2.530）：这里其实只是**草稿**完成 —— publish 是 SOP §6 的人工一步。此刻闸看到的
+    #    「最新已发布」是上一版，推不动本版 APK；publish 之后要再派发一次闸（SOP §6）。镜像领先时闸报 AHEAD 不派发。
     # 不等待它跑完：闸自己会等镜像最多 20 分钟，那是闸的职责，不是发布链的职责。
     needs: [normalize-updater-manifest]
     if: inputs.publish == true

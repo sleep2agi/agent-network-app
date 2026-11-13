@@ -61,6 +61,16 @@ export const selectNewestPublishedRelease = (releases) => (Array.isArray(release
   .filter((candidate) => candidate.version !== null)
   .sort((left, right) => compareDesktopVersions(right.version, left.version))[0]?.release ?? null;
 
+// app#1430（0.2.530，2026-11-13）：release workflow 里的 trigger-android-mirror-gate 在**草稿阶段**就派发本闸，
+// 那时「最新已发布」还是上一版。若安卓镜像已经领先（例如上一版桌面失败、APK 先发），旧逻辑会派发
+// 上一版 APK，publish 侧的「只前进」保护拒绝回退，20 分钟后本闸判 [c] 红 —— 一次注定失败的派发 + 一个假红灯。
+// 镜像比最新已发布 release 更新时：不派发、不判红，写明原因（真正的追平等 publish 之后的下一次比对）。
+export const mirrorAheadOfRelease = (mirrorVersion, releaseVersion) => {
+  const mirror = parseDesktopTag(`desktop-v${mirrorVersion}`);
+  const release = parseDesktopTag(`desktop-v${releaseVersion}`);
+  return !!mirror && !!release && compareDesktopVersions(mirror, release) > 0;
+};
+
 export const isSha = (value) => /^[0-9a-f]{40}$/.test(String(value ?? ''));
 
 // tag 解引用:轻量 tag 直接是 commit,annotated tag 要再取一层。
@@ -242,6 +252,11 @@ export const gate = async ({
     say(`OK  android mirror is in sync: ${version}`);
     return { code: 0, lines };
   }
+  if (mirrorAheadOfRelease(mirror.version, version)) {
+    say(`AHEAD  android mirror ${mirror.version} is newer than the newest published release ${version} — nothing to publish (the mirror only moves forward). `
+      + `Usually the newer desktop release is still a draft; run this gate again after publishing it (app#1430).`);
+    return { code: 0, lines };
+  }
   say(`LAG  android mirror is ${mirror.version}, release is ${version}`);
 
   // 4. release 提交上成功的 android-build
@@ -319,6 +334,12 @@ const selfTest = () => {
   expect('mirror version accepts X.Y.Z with newline', parseMirrorVersion('0.2.497\n') === '0.2.497');
   expect('mirror version rejects HTML', parseMirrorVersion('<html>404</html>') === null);
   expect('mirror version rejects empty', parseMirrorVersion('  \n') === null);
+  // app#1430：镜像领先 → 不派发；落后 / 相等 → 不算领先；数字按段比较，不按字符串。
+  expect('mirror ahead: 0.2.529 vs release 0.2.528', mirrorAheadOfRelease('0.2.529', '0.2.528') === true);
+  expect('mirror behind is not ahead', mirrorAheadOfRelease('0.2.528', '0.2.530') === false);
+  expect('equal is not ahead', mirrorAheadOfRelease('0.2.530', '0.2.530') === false);
+  expect('segment-wise compare: 0.2.10 is ahead of 0.2.9', mirrorAheadOfRelease('0.2.10', '0.2.9') === true);
+  expect('unparsable never counts as ahead', mirrorAheadOfRelease('x', '0.2.9') === false);
 
   const newest = selectNewestPublishedRelease([
     release('desktop-v0.2.494'),
