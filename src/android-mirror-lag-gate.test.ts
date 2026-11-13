@@ -150,6 +150,16 @@ const buildRun = run(424242);
     result.code === 0 && s.dispatches.length === 0 && result.lines.some(l => l.startsWith('OK') && l.includes(NEW)));
 }
 
+// 1b) app#1430：镜像比最新已发布 release 新（新版本桌面还是草稿）→ 绿,不 dispatch,不去读 android-build
+{
+  const s = stub({ releases: [release('desktop-v0.2.528'), release('desktop-v0.2.530', { draft: true })], mirror: ['0.2.529\n'], buildRuns: [buildRun] });
+  const result = await gate({ ...base, ...s });
+  check('(app#1430) mirror ahead of newest published → exit 0, AHEAD line, no rollback dispatch',
+    result.code === 0 && s.dispatches.length === 0
+    && result.lines.some(l => l.startsWith('AHEAD') && l.includes('0.2.529') && l.includes('0.2.528'))
+    && !s.calls.some(c => c.includes('/actions/workflows/android-build.yml/runs')));
+}
+
 // 2) (a) 落后但没有成功的 android-build run → 红,什么都不发
 {
   const s = stub({ releases: [release('desktop-v0.2.497')], mirror: [OLD], buildRuns: [] });
