@@ -2,7 +2,10 @@ import { Fragment, useCallback, useEffect, useRef, useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
-import { createNode, CreateNodeRequest, fetchNodeStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
+import { createNode, CreateNodeRequest, fetchHubHealthCapabilities, fetchNodeStatus, HostSupervisorDaemon, HubConfig, Session, fetchCreateRequestStatus } from './api';
+import { fetchAuthMe } from './user-admin-api';
+import { fetchOrg } from './org-api';
+import { CREATE_NODE_DEPARTMENT_CAPABILITY, defaultDepartment, departmentChoices, departmentLabel, deptScopeFor, type DeptChoice } from './create-node-department';
 import { creationConfirmed, createRequestVerdict, timeoutMessage, type CreateRequestVerdict } from './create-request-status';
 import { colors, onThemeChange, spacing, radius, type as typeScale } from './theme';
 import { advancedExpanded, advancedRuntimesOf, primaryRuntimes, runtimeDisplayLabel, showsAdvancedToggle, type WizardRuntime } from './wizard-runtime-groups';
@@ -158,6 +161,29 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
   // 工作目录:null = 没改过,跟着名字走(<root>/<name>);改过之后固定为用户填的值。
   const [workdirEdited, setWorkdirEdited] = useState<string | null>(null);
   const [workdirOpen, setWorkdirOpen] = useState(false);
+  // 2026-11-14「所属部门」:Hub 报 create_node_department 且有部门才出现;选项按权限给,一个就预选,兼多个不预选。
+  const [deptSupported, setDeptSupported] = useState(false);
+  const [deptChoices, setDeptChoices] = useState<DeptChoice[]>([]);
+  const [deptValue, setDeptValue] = useState<string | null>(null);
+  const [deptOpen, setDeptOpen] = useState(false);
+  useEffect(() => {
+    let alive = true;
+    void (async () => {
+      const caps = await fetchHubHealthCapabilities(cfg).catch(() => [] as string[]);
+      if (!alive || !caps.includes(CREATE_NODE_DEPARTMENT_CAPABILITY)) return;
+      const me = await fetchAuthMe(cfg).catch(() => null);
+      const netId = cfg.networkId || (typeof me?.current_network === 'string' ? me.current_network : me?.current_network?.network_id) || '';
+      if (!alive || !netId) return;
+      const org = await fetchOrg(cfg, netId).catch(() => null);
+      if (!alive) return;
+      const scope = deptScopeFor(me, netId, org);
+      const choices = departmentChoices(org, scope);
+      setDeptChoices(choices);
+      setDeptValue(defaultDepartment(choices, scope));
+      setDeptSupported(choices.length > 0);
+    })();
+    return () => { alive = false; };
+  }, [cfg.serverUrl, cfg.token, cfg.networkId]);
   // 名字转不出 ASCII 时的兜底目录名;整个向导里固定一个,不随重渲染变。
   const [workdirFallback] = useState(() => `node-${randomHex6()}`);
   // #652 —— 第 1 步名字下面的「文件夹」:null = 没改过,跟着名字走(workdirSlug);改过之后固定为用户填的值。
@@ -434,6 +460,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
     const res = await createNode(cfg, {
       daemon_node_id: daemon.daemon_node_id,
       node_spec,
+      ...(deptSupported && deptValue ? { department_id: deptValue } : {}),
     });
     if (res.ok) {
       // Hub accepted dispatch. Now POLL to confirm child registered.
@@ -924,6 +951,44 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                   ) : null}
                 </>
               ) : null}
+              {deptSupported ? (
+                <>
+                  <Divider />
+                  <View style={styles.summaryRow} testID="create-department-row">
+                    <Text style={styles.summaryKey}>所属部门</Text>
+                    <View style={styles.summaryValWithAction}>
+                    <Text style={styles.summaryVal} numberOfLines={1} testID="create-department-value">{departmentLabel(deptChoices, deptValue)}</Text>
+                    <Pressable
+                      testID="create-department-edit"
+                      onPress={() => setDeptOpen(o => !o)}
+                      hitSlop={8}
+                      accessibilityLabel={deptOpen ? '收起所属部门' : '修改所属部门'}
+                      style={({ pressed }) => [styles.summaryEdit, pressed && { opacity: 0.6 }]}
+                    >
+                      <Text style={styles.summaryEditText}>{deptOpen ? '收起' : '改'}</Text>
+                    </Pressable>
+                    </View>
+                  </View>
+                  {deptOpen ? (
+                    <View style={styles.summaryEditor} testID="create-department-list">
+                      {[{ id: null as string | null, name: '暂不分配', depth: 0 }, ...deptChoices].map(c => (
+                        <Pressable
+                          key={c.id ?? '__none'}
+                          testID={c.id ? `create-department-${c.id}` : 'create-department-none'}
+                          accessibilityRole="radio"
+                          accessibilityState={{ selected: deptValue === c.id }}
+                          onPress={() => { setDeptValue(c.id); setDeptOpen(false); }}
+                          style={({ pressed }) => [styles.deptOption, pressed && { opacity: 0.6 }]}
+                        >
+                          <Text style={[styles.deptOptionText, { paddingLeft: c.depth * spacing.md }, deptValue === c.id && styles.deptOptionOn]} numberOfLines={1}>{c.name}</Text>
+                          {deptValue === c.id ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : null}
+                        </Pressable>
+                      ))}
+                      <Text style={styles.hint}>{deptValue ? '节点第一次上线时放进这个部门。' : '不分配部门：以后可以在「组织与权限」里再调整。'}</Text>
+                    </View>
+                  ) : null}
+                </>
+              ) : null}
             </View>
             {runtimeId === 'opencode-cli' && opencodeGeneration === 'v2' ? (
               <Text testID="opencode-v2-confirm-warning" style={styles.hint}>{OPENCODE_V2_WARNING} 已显式允许所有本地工具。</Text>
@@ -1313,6 +1378,9 @@ const makeStyles = () => StyleSheet.create({
   folderLine: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   folderText: { flex: 1, minWidth: 0, color: colors.text, fontSize: 13 },
   summaryEditText: { color: colors.accent, fontSize: 13, fontWeight: '600' },
+  deptOption: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: 10, gap: spacing.sm },
+  deptOptionText: { flex: 1, fontSize: 14, color: colors.text },
+  deptOptionOn: { color: colors.accent, fontWeight: '600' },
   summaryEditor: { gap: spacing.xs, paddingHorizontal: spacing.lg, paddingBottom: spacing.md },
   divider: { height: 1, backgroundColor: colors.border, marginLeft: spacing.lg },
 
