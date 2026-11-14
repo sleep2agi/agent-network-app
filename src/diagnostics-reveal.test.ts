@@ -65,7 +65,8 @@ ck('nothing in the move writes / clears the stored flag on its own (no migration
 const wide = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
 const phone = readFileSync(new URL('./SettingsPhonePages.tsx', import.meta.url), 'utf8');
 // 版本行现在带平台后缀(2026-11-01):v0.2.391 · iOS —— 只要求「版本号 + 可点」,不钉死具体文案
-ck('desktop/wide: version row is tappable', /settings\.copy\.77'\)} value=\{`v\$\{APP_VERSION\}[^`]*`\} onPress=\{onVersionTap\}/.test(wide));
+// 2026-11-14 关于页重排:版本号做成品牌头里的胶囊(仍是 testID settings-version-row,连点同样揭开)。
+ck('desktop/wide: version row is tappable', /<Pressable onPress=\{onVersionTap\} testID="settings-version-row"/.test(wide));
 ck('desktop/wide: 诊断 group gated by the reveal', /showPooledHttpDiagnostics\(versionTaps\.revealed, platform\)[^\n]*\?[\s\S]{0,120}settings-diagnostics-group/.test(wide));
 ck('phone pages: version row is tappable', /settings-version-row[^\n]*onPress=\{ctx\.onVersionTap\}/.test(phone));
 ck('phone pages: 诊断 group gated by ctx.showPooledHttp', /\{ctx\.showPooledHttp \? \([\s\S]{0,120}settings-diagnostics-group/.test(phone));

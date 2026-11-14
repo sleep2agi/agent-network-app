@@ -6,6 +6,7 @@ import './i18n-chat';
 import './i18n-composer-agent';
 import './i18n-daemon';
 import './i18n-agent-org';
+import './i18n-about';
 import './i18n-settings';
 import './i18n-rail';
 import './i18n-tasks';

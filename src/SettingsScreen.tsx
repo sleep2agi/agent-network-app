@@ -40,6 +40,8 @@ import { BUNDLED_RELEASE_BODY } from './changelog-bundled';
 import { entriesFromBody, rollbackReleaseUrl, rollbackTarget } from './changelog-model';
 import { APP_VERSION } from './version';
 import { BrandMark } from './brand-mark';
+import { aboutPlatformLabel, COPIED_FLASH_MS } from './about-model';
+import './i18n-about';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 import { describeUpdateRow } from './update-check-state';
 import { IOS_UPDATE_ROW, openTestFlight } from './ios-testflight';
@@ -162,6 +164,15 @@ export default function SettingsScreen({
   // #695 连点「版本」5 下揭开「诊断」组(本次打开有效,不落盘)。
   const [versionTaps, setVersionTaps] = useState(VERSION_TAPS_INITIAL);
   const onVersionTap = () => setVersionTaps(prev => tapVersion(prev, Date.now()));
+  // 关于页:复制类行点了显示「已复制」一小会儿(以前点了没任何回执,不知道复制上没有)。
+  const [copiedRow, setCopiedRow] = useState<'diagnostics' | 'version' | null>(null);
+  const copiedTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const flashCopied = (row: 'diagnostics' | 'version') => {
+    setCopiedRow(row);
+    if (copiedTimer.current) clearTimeout(copiedTimer.current);
+    copiedTimer.current = setTimeout(() => setCopiedRow(null), COPIED_FLASH_MS);
+  };
+  useEffect(() => () => { if (copiedTimer.current) clearTimeout(copiedTimer.current); }, []);
   const onPooledHttpChange = (value: boolean) => { setPooledHttpEnabled(value); setPooledHttp(value); };
   const lastFatal = useLastFatalReport();
   // 多用户:auth/me 原样留一份,判断「用户管理」该不该出现(Hub 管理员 / 当前网络 owner、admin)。
@@ -389,6 +400,7 @@ export default function SettingsScreen({
   }, [cfg]);
 
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
+  const aboutPlatform = aboutPlatformLabel(Platform.OS, tauriDesktop, (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ?? '');
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
   const usersAvailable = canManageUsers(authMe, me.networkId);
   // 「组织与权限」记住的页签按账号 + 网络区分(换账号不沿用上一个人的页签)。
@@ -1275,43 +1287,23 @@ export default function SettingsScreen({
           {sectionsToRender.includes('about') && !showWideChangelog ? (
             <View style={sectionStyle}>
               {heading('about')}
-              <BrandMark size={36} style={{ marginTop: 8, marginBottom: 12 }} />
-              <SettingsGroup>
-                {show('about', 'version') ? <SettingsRow label={tr('settings.copy.77')} value={`v${APP_VERSION} · ${platformShortLabel(Platform.OS)}`} onPress={onVersionTap} testID="settings-version-row" /> : null}
-                {/* 反馈问题时经常要「你什么版本、什么平台」:一键复制,不用手打。 */}
-                {show('about', 'version') ? (
-                  <SettingsRow label={tr('settings.copy.286')} onPress={() => {
-                    // 诊断信息（不含 token / 账号 / 完整地址）—— 反馈问题时贴这一行就够定位环境。
-                    const line = diagnosticsLine({
-                      version: APP_VERSION,
-                      platform: Platform.OS,
-                      source: (update as { source?: string }).source,
-                      updateKind: update.kind,
-                      maskedHost: maskedHubHost(cfg.serverUrl),
-                    });
-                    void Clipboard.setStringAsync(line).catch(() => undefined);
-                  }} testID="settings-copy-diagnostics" />
-                ) : null}
-                {show('about', 'version') ? (
-                  <SettingsRow label={tr('settings.copy.285')} onPress={() => {
-                    void Clipboard.setStringAsync(`v${APP_VERSION} · ${Platform.OS}`).catch(() => undefined);
-                  }} testID="settings-copy-version" />
-                ) : null}
-                {/* 关于页放两个官方链接:App Store 审核会找「隐私政策」入口,用户找客服也得有路可走。
-                    用 openExternal(iOS 上先 canOpenURL),不走内嵌 webview。 */}
-                {show('about', 'version') ? (
-                  <SettingsRow label={tr('settings.copy.292')} onPress={() => { void openExternal('https://www.anet.sh/privacy'); }} testID="settings-privacy-link" />
-                ) : null}
-                {show('about', 'version') ? (
-                  <SettingsRow label={tr('settings.copy.293')} onPress={() => { void openExternal('https://www.anet.sh'); }} testID="settings-support-link" />
-                ) : null}
-                {show('about', 'version') ? (
-                  // 回滚入口:新版本出问题时用户得有路退回上一版,而不是只能等修。
-                  // subtitle 直接告诉他该装哪一版(从内置更新日志里算,拿不到就不写)。
-                  <SettingsRow label={tr('settings.copy.294')}
-                    subtitle={ROLLBACK_TARGET ? `${tr('settings.copy.295')} v${ROLLBACK_TARGET}` : undefined}
-                    onPress={() => { void openExternal(rollbackReleaseUrl(ROLLBACK_TARGET)); }} testID="settings-history-releases-link" />
-                ) : null}
+              {/* 管理员 2026-11-14「感觉这个页面也很难看」:原来 8 行平铺一张卡。改成 品牌头(图标 / 名字 / 一句话 / 版本)
+                  + 三组(更新 / 帮助与支持 / 排障)+ 页脚。testID 全部保留,行为不变;复制类行点了有「已复制」回执。 */}
+              {show('about', 'version') ? (
+                <View style={styles.aboutHero} testID="settings-about-hero">
+                  <BrandMark size={64} />
+                  <Text style={styles.aboutName}>ANet</Text>
+                  <Text style={styles.aboutTagline}>{tr('about.tagline')}</Text>
+                  {/* 连点版本号 = 打开隐藏诊断(onVersionTap);单击不复制,复制在「排障」组里。 */}
+                  <Pressable onPress={onVersionTap} testID="settings-version-row" accessibilityRole="button"
+                    accessibilityLabel={tr('about.versionA11y', { version: `v${APP_VERSION} · ${aboutPlatform}` })}
+                    style={({ pressed }) => [styles.aboutVersionPill, pressed && { opacity: 0.7 }]}>
+                    <Text selectable style={styles.aboutVersion}>{`v${APP_VERSION} · ${aboutPlatform}`}</Text>
+                  </Pressable>
+                </View>
+              ) : null}
+              {show('about', 'update') || show('about', 'changelog') ? (
+                <SettingsGroup title={tr('about.groupUpdates')}>
                 {show('about', 'update') ? (() => {
                   // 「点击更新好像没用」:每次手动检查都要落到一句看得见、和上一次不同的话上
                   // (版本号 + 刚刚检查 / 失败原因),而不是闪一下转圈又回到同一句。
@@ -1343,15 +1335,54 @@ export default function SettingsScreen({
                 {show('about', 'changelog') ? (
                   <SettingsRow label={tr('changelog.title')} subtitle={tr('changelog.rowHint')} onPress={() => { setWideChangelog(true); paneScrollRef.current?.scrollTo({ y: 0, animated: false }); }} testID="settings-changelog-row" />
                 ) : null}
+                </SettingsGroup>
+              ) : null}
+              {/* 关于页放两个官方链接:App Store 审核会找「隐私政策」入口,用户找客服也得有路可走。
+                  用 openExternal(iOS 上先 canOpenURL),不走内嵌 webview。 */}
+              {show('about', 'version') ? (
+                <SettingsGroup title={tr('about.groupSupport')}>
+                  <SettingsRow label={tr('settings.copy.293')} value="anet.sh" onPress={() => { void openExternal('https://www.anet.sh'); }} testID="settings-support-link" />
+                  <SettingsRow label={tr('settings.copy.292')} onPress={() => { void openExternal('https://www.anet.sh/privacy'); }} testID="settings-privacy-link" />
+                </SettingsGroup>
+              ) : null}
+              {show('about', 'version') || (lastFatal && show('about', 'lastCrash')) ? (
+                <SettingsGroup title={tr('about.groupTroubleshoot')}>
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.286')} subtitle={tr('about.diagnosticsHint')} value={copiedRow === 'diagnostics' ? tr('about.copied') : undefined} onPress={() => {
+                    // 诊断信息（不含 token / 账号 / 完整地址）—— 反馈问题时贴这一行就够定位环境。
+                    const line = diagnosticsLine({
+                      version: APP_VERSION,
+                      platform: Platform.OS,
+                      source: (update as { source?: string }).source,
+                      updateKind: update.kind,
+                      maskedHost: maskedHubHost(cfg.serverUrl),
+                    });
+                    void Clipboard.setStringAsync(line).then(() => flashCopied('diagnostics')).catch(() => undefined);
+                  }} testID="settings-copy-diagnostics" />
+                ) : null}
+                {show('about', 'version') ? (
+                  <SettingsRow label={tr('settings.copy.285')} value={copiedRow === 'version' ? tr('about.copied') : `v${APP_VERSION}`} onPress={() => {
+                    void Clipboard.setStringAsync(`v${APP_VERSION} · ${aboutPlatform}`).then(() => flashCopied('version')).catch(() => undefined);
+                  }} testID="settings-copy-version" />
+                ) : null}
+                {show('about', 'version') ? (
+                  // 回滚入口:新版本出问题时用户得有路退回上一版,而不是只能等修。
+                  // subtitle 直接告诉他该装哪一版(从内置更新日志里算,拿不到就不写)。
+                  <SettingsRow label={tr('settings.copy.294')}
+                    subtitle={ROLLBACK_TARGET ? `${tr('settings.copy.295')} v${ROLLBACK_TARGET}` : undefined}
+                    onPress={() => { void openExternal(rollbackReleaseUrl(ROLLBACK_TARGET)); }} testID="settings-history-releases-link" />
+                ) : null}
                 {lastFatal && show('about', 'lastCrash') ? (
                   <SettingsActionRow label={tr('fatal.copyRow')} subtitle={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} testID="settings-last-crash-row" />
                 ) : null}
-              </SettingsGroup>
+                </SettingsGroup>
+              ) : null}
               {showPooledHttpDiagnostics(versionTaps.revealed, platform) && !searching ? (
                 <SettingsGroup title={tr('settings.copy.281')} testID="settings-diagnostics-group">
                   <SettingsSwitchRow label={tr('settings.copy.277')} subtitle={tr('settings.copy.278')} value={pooledHttp} onValueChange={onPooledHttpChange} testID="settings-pooled-http-row" />
                 </SettingsGroup>
               ) : null}
+              {show('about', 'version') && !searching ? <Text style={styles.aboutFooter} testID="settings-about-footer">{tr('about.footer')}</Text> : null}
             </View>
           ) : null}
         </ScrollView>
@@ -1615,6 +1646,12 @@ const makeStyles = () =>
   segmentTextSelected: { color: colors.text, fontWeight: '600' },
   quietRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   updateValue: { fontSize: 15, textAlign: 'right', flexShrink: 1 },
+  aboutHero: { alignItems: 'center', paddingTop: spacing.lg, paddingBottom: spacing.xl, gap: 6 },
+  aboutName: { fontSize: 22, fontWeight: '600', color: colors.text, marginTop: spacing.sm, letterSpacing: 0.2 },
+  aboutTagline: { fontSize: 13, color: colors.textMuted },
+  aboutVersionPill: { marginTop: spacing.sm, paddingHorizontal: 12, paddingVertical: 4, borderRadius: radius.pill, backgroundColor: colors.rowHover },
+  aboutVersion: { fontSize: 12, color: colors.textMuted, fontVariant: ['tabular-nums'] },
+  aboutFooter: { textAlign: 'center', fontSize: 12, color: colors.textMuted, marginTop: spacing.lg, marginBottom: spacing.md },
   updateDetail: { fontSize: 12, color: colors.textMuted, marginTop: 2, marginRight: 18 + spacing.sm, textAlign: 'right' },
   // 右侧 › 的格子:和设置积木的 accessory 同宽(18),› 右边缘和其他行对齐。
   accessoryCell: { width: 18, height: 18, marginLeft: spacing.sm, alignItems: 'center', justifyContent: 'center' },
