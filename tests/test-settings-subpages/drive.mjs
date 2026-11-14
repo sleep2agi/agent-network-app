@@ -161,7 +161,8 @@ const measureTree = () => {
 // 这一页是已知的「非卡片」布局（b78a5d60 之后）。按页名直接走树分支，并显式等树出现：
 // 之前用「先看树在不在」判分流，浅色通过、深色仍会因树晚一拍落到卡片分支量出 0。
 // 若树在 8 s 内没出现，下面的「至少一行」会红——那是真实问题（该页没渲染），不是被等待掩盖。
-const TREE_PAGES = new Set(['agentTeams']);
+// 2026-11-14:「组织与权限」默认页签是部门树(原 agentTeams 页)。
+const TREE_PAGES = new Set(['users']);
 
 const checkPage = async (page, name, theme) => {
   if (TREE_PAGES.has(name) || await page.locator(TREE).count()) {

@@ -272,7 +272,7 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   const adminApi = read('./user-admin-api.ts');
   ck('G3 API:PUT /members/:uid {role}、DELETE /members/:uid', /members\/\$\{net\(userId\)\}`, \{ method: 'PUT', body: \{ role \} \}/.test(adminApi) && /members\/\$\{net\(userId\)\}`, \{ method: 'DELETE' \}/.test(adminApi));
   const phonePages = read('./SettingsPhonePages.tsx');
-  ck('手机:成员是设置三级页 userMember', phonePages.includes("if (ctx.detail === 'userMember' || ctx.detail === 'userGroup') return <>{ctx.renderUsers(ctx.detail)}</>;") && settings.includes("openDetail('userMember')"));
+  ck('手机:成员是设置三级页 userMember', phonePages.includes("const detail = ctx.detail === 'userMember' || ctx.detail === 'userGroup' ? ctx.detail : null;") && phonePages.includes('renderMembers={() => ctx.renderUsers(detail)}') && settings.includes("openDetail('userMember')"));
   const app = read('../App.tsx');
   ck('登录页有注册入口并调 /api/auth/register', app.includes('registerHubAccount(') && app.includes('login-mode-toggle'));
 }

@@ -24,7 +24,8 @@ ck('换了网络 → 不沿用;没记过 → 不沿用', rememberedTab({ scope: 
 
 const src = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8');
 const page = src('./OrgAccessPage.tsx');
-ck('页签条只在多于一个页签时画', page.includes('tabs.length > 1 ?'));
+ck('页签条只在多于一个页签、且没开三级页时画', page.includes('tabs.length > 1 && !detailOpen ?'));
+ck('🔴 三级页开着时成员面板留在同一树位置(强制成员页,不换组件),编辑状态不丢', page.includes("detailOpen && canManageMembers ? 'members'") && src('./SettingsPhonePages.tsx').includes('detailOpen={!!detail}') && !src('./SettingsPhonePages.tsx').includes('return <>{ctx.renderUsers(ctx.detail)}</>'));
 ck('页签是 tab 角色并带选中态(读屏)', page.includes('accessibilityRole="tab"') && page.includes('accessibilityState={{ selected: tab === k }}'));
 ck('从成员三级页返回后仍停在上次的页签', page.includes('let lastTab') && page.includes('lastTab = { scope, tab: k }') && page.includes('rememberedTab(lastTab, scope)'));
 ck('🔴 桌面原地搜索:initialTab 变了页签跟着变(只跟非空值,不覆盖手动点的)', /useEffect\(\(\) => \{ if \(initialTab\) setWantState\(initialTab\); \}, \[initialTab\]\);/.test(page));

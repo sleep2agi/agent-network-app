@@ -113,7 +113,8 @@ async function openDesktop(theme, { old = false } = {}) {
   if (!win) throw new Error('settings window did not open');
   win.on('pageerror', e => errors.push(String(e).split('\n')[0]));
   await win.setViewportSize({ width: 1440, height: 900 });
-  await win.getByRole('button', { name: '设置分类 用户管理' }).click({ timeout: 20000 });
+  await win.getByRole('button', { name: '设置分类 组织与权限' }).click({ timeout: 20000 });
+  await win.locator(tid('org-access-tab-members')).click({ timeout: 10000 });
   await win.locator(tid('user-row-lin.design')).click({ timeout: 10000 });
   await win.locator(tid('grants-dialog')).waitFor({ timeout: 10000 });
   await win.locator(tid('grant-toggle-设计1号')).waitFor({ timeout: 10000 });
@@ -270,6 +271,7 @@ for (const theme of ['light', 'dark']) {
     await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 20000 });
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'settings' }));
     await page.locator(tid('settings-row-users')).click({ timeout: 10000 });
+    await page.locator(tid('org-access-tab-members')).click({ timeout: 10000 });
     await page.locator(tid('user-row-lin.design')).click({ timeout: 10000 });
     await page.locator(tid('member-page')).waitFor({ timeout: 10000 });
     await page.locator(tid('member-picked-agents')).waitFor({ timeout: 10000 });

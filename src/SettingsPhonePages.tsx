@@ -137,8 +137,11 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
     case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
     case 'users':
       // 成员 / 分组的三级页照旧直接画;列表层是「组织与权限」两个页签(org-access-model.ts)。
-      if (ctx.detail === 'userMember' || ctx.detail === 'userGroup') return <>{ctx.renderUsers(ctx.detail)}</>;
-      return <OrgAccessPage canManageMembers={ctx.usersAvailable} scope={ctx.orgAccessScope} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(null)} />;
+      // 三级页(成员 / 分组)开着时也走同一个 OrgAccessPage,成员面板留在原树位置,编辑状态不丢。
+      {
+        const detail = ctx.detail === 'userMember' || ctx.detail === 'userGroup' ? ctx.detail : null;
+        return <OrgAccessPage canManageMembers={ctx.usersAvailable} scope={ctx.orgAccessScope} detailOpen={!!detail} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(detail)} />;
+      }
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;
     case 'notifications': return ctx.detail === 'quietHours' ? <QuietHoursEditPage ctx={ctx} /> : <NotificationsPage ctx={ctx} />;
