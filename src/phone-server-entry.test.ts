@@ -58,8 +58,10 @@ ck('Settings: the 服务器 row is in the phone list', listStart >= 0 && serverR
 // #4093 v3:服务器行并进「通用」组当第一行;没有「通用」组时退回原来的独立一组。
 ck('Settings: the 服务器 row is defined before the category groups render', serverRowAt > 0 && serverRowAt < firstGroups);
 ck('Settings: the row only renders when onOpenServer is passed', /const serverRow = onOpenServer \? \(\s*<SettingsRow/.test(settings));
-ck('Settings: the row is the first row of the 通用 group', /<SettingsGroup key=\{group\.title[^>]*>\s*\{group\.title === PHONE_SERVER_GROUP_TITLE \? serverRow : null\}/.test(settings));
-ck('Settings: falls back to its own group when there is no 通用 group', /\{serverRow && !hasGeneral \? <SettingsGroup testID="settings-group-server">\{serverRow\}<\/SettingsGroup> : null\}/.test(settings));
+// 2026-11-14(admin:设置页心智负担重):「Hub 设置」不再占「通用」第一行,单独一组放在分类分组之后。
+ck('Settings: the row is no longer inside the 通用 group', !/group\.title === PHONE_SERVER_GROUP_TITLE \? serverRow/.test(settings));
+const serverGroupAt = settings.indexOf('{serverRow ? <SettingsGroup testID="settings-group-server">{serverRow}</SettingsGroup> : null}');
+ck('Settings: the row renders in its own group after the category groups', serverGroupAt > firstGroups);
 // #427 v2:列表行是设置积木的 SettingsRow(有 onPress 就画 ›),和其他分类行同一套。
 ck('Settings: the row uses the grouped-list row style and chevron', /<SettingsRow\s+testID=\{`settings-row-\$\{PHONE_SETTINGS_SERVER_ENTRY\.key\}`\}[\s\S]*?onPress=\{onOpenServer\}/.test(settings.slice(serverRowAt - 80, firstGroups)));
 const server = read('src/ServerScreen.tsx');

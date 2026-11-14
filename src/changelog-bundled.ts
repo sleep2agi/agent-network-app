@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.531:",
+  "- 设置里的「用户管理」和「Agent 组织架构」合成一个「组织与权限」：「部门与 Agent」页人人可看，管理员多一个「成员与权限」页。",
+  "- 「Hub 设置」从「通用」第一行挪到设置最下面单独一组，日常不再占眼。",
+  "- 没人用的「Agent 团队」「Agent 分组」在没有数据时不再显示。",
+  "",
   "What's new in 0.2.530:",
   "- 聊天框「选模型」：不是 OpenCode V2 的节点（如 Claude Code）不再弹出整个搜索面板再报红字，改成一张说明卡：当前模型 + 为什么在聊天里切不了。",
   "- OpenCode V2 节点打开模型列表不用再转圈等十几秒：先显示节点自己上报的清单，后台读到最新目录后自动刷新。",

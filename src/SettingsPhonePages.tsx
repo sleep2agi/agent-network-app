@@ -1,3 +1,4 @@
+import OrgAccessPage from './OrgAccessPage';
 import { t as tr } from './i18n';
 import { maskedHubHost } from './mask-hub-address';
 import { useTranslation } from './i18n-react';
@@ -56,6 +57,8 @@ export type PhonePagesCtx = {
   /** 用户管理子页(宽屏右栏同一个组件)。memberOpen = 三级页「成员」开着(点了某个成员)。 */
   renderUsers: (detail: 'userMember' | 'userGroup' | null) => ReactNode;
   renderAgentOrg: () => ReactNode;
+  /** 能管成员(Hub 管理员 / 网络 owner、admin):「组织与权限」多一个「成员与权限」页签。 */
+  usersAvailable: boolean;
   show: (cat: SettingsCategoryKey, row: string) => boolean;
   detail: SettingsDetailKey | null;
   openDetail: (key: SettingsDetailKey) => void;
@@ -130,8 +133,10 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
   useTranslation();
   switch (page) {
     case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
-    case 'users': return <>{ctx.renderUsers(ctx.detail === 'userMember' ? 'userMember' : ctx.detail === 'userGroup' ? 'userGroup' : null)}</>;
-    case 'agentTeams': return <>{ctx.renderAgentOrg()}</>;
+    case 'users':
+      // 成员 / 分组的三级页照旧直接画;列表层是「组织与权限」两个页签(org-access-model.ts)。
+      if (ctx.detail === 'userMember' || ctx.detail === 'userGroup') return <>{ctx.renderUsers(ctx.detail)}</>;
+      return <OrgAccessPage canManageMembers={ctx.usersAvailable} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(null)} />;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;
     case 'notifications': return ctx.detail === 'quietHours' ? <QuietHoursEditPage ctx={ctx} /> : <NotificationsPage ctx={ctx} />;

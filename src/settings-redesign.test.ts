@@ -27,7 +27,7 @@ console.log('# 1 宽屏右栏:每一段都在卡片里');
   // 取集:按 sectionsToRender.includes('<分类>') 切段 —— 先证明切到了全部分类,再判每段。
   const marks = [...settings.matchAll(/sectionsToRender\.includes\('(\w+)'\)/g)].map(m => ({ key: m[1], at: m.index! }));
   const keys = [...new Set(marks.map(m => m.key))];
-  ck(`取集:切到全部分类(${keys.join(',')})`, ['account', 'users', 'agentTeams', 'localHub', 'appearance', 'notifications', 'voice', 'shortcuts', 'about'].every(k => keys.includes(k)));
+  ck(`取集:切到全部分类(${keys.join(',')})`, ['account', 'users', 'localHub', 'appearance', 'notifications', 'voice', 'shortcuts', 'about'].every(k => keys.includes(k)));
   const bare: string[] = [];
   marks.forEach((m, i) => {
     const body = settings.slice(m.at, i + 1 < marks.length ? marks[i + 1].at : settings.indexOf('</ScrollView>', m.at));

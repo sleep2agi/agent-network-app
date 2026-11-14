@@ -2,6 +2,7 @@
 // 桌面:左边团队树(最后一行「未分组」),右边选中团队的 Agent(负责的 Agent 标「负责」)、负责人、子团队;按钮在详情里,选择都是居中弹窗。
 // 手机:全屏逐层点进(团队 → 子团队 / Agent),点 Agent 或「更多」弹底部面板,选择推整页 —— 和桌面是两套交互。
 // 只画看的人能做的事(teamPerms);Hub 拒了照 agent-teams.ts 的一句人话说。旧 Hub 不走到这里(UserManagementPanel 只放一行提示)。
+import { showWhenUsed } from './org-access-model';
 import { useCallback, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import { useTranslation } from './i18n-react';
 import { Modal, Platform, Pressable, ScrollView, View } from 'react-native';
@@ -340,6 +341,8 @@ function AgentTeamsScoped({ cfg, networkId, me, people, phone }: Omit<Props, 'te
   const [open, setOpen] = useState(false);
   if (loadError) return <SettingsGroup title={t('teams.title')} testID="team-load-error"><SettingsRow label={t('teams.loadFailed')} value={t('teams.retry')} onPress={reload} testID="team-load-retry" /></SettingsGroup>;
   if (teams === undefined) return null;
+  // 2026-11-14「组织与权限」:没人用的机制有数据才出现。生产上 Agent 团队 0 条;旧 Hub(null)也不再占一行提示。
+  if (!showWhenUsed(teams)) return null;
   return (
     <SettingsGroup title="Agent 组织" footer={teams ? 'Agent 自己的组织树,和人的部门互不影响;一个 Agent 最多归一个团队。' : undefined} separators={false} testID="team-group">
       {teams === null ? <SettingsRow label={`需要 Hub ≥ ${HUB_MIN}`} testID="team-old-hub" /> : phone ? (
