@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.535:
+            - 侧栏「分组 · 部门」按组织架构排：父部门在前，子部门缩进跟在下面、只写自己的名字（不再每行重复「TMAI /」），「未归属」放最后。
+
             What's new in 0.2.534:
             - 「关于」页重排：顶部是品牌头（图标 + ANet + 版本号），下面分成「更新 / 帮助与支持 / 排障」三组，不再是 8 行平铺。
             - 桌面版版本号旁边现在显示真实系统名（macOS / Windows / Linux），以前在 Mac 上写的是「Web」。
