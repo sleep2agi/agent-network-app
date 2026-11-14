@@ -27,7 +27,7 @@ import {
 import { catalogErrorText, isOpenCodeV2Node, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
-import { variantValueError, variantWritable } from './node-variant-patch';
+import { buildConfigPatch, variantValueError, variantWritable } from './node-variant-patch';
 import { composerVariantLabel } from './composer-model-label';
 import { composerAgentCurrent, composerAgentSectionVisible, composerAgentSwitchable, composerAgents, confirmComposerAgentSwitch } from './composer-agent';
 import './i18n-composer-agent';
@@ -364,7 +364,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       const res = await updateNodeConfig(cfgRef.current, {
         nodeId: node.node_id,
         baseRevision: config.config_revision,
-        patch: { model: effectiveModel, modelVariant: next },
+        // 走契约 helper：null=清除 / 省略=不改 的语义只有一处定义，避免生产代码另拼一份。
+        patch: buildConfigPatch({ model: effectiveModel, modelVariant: next }),
       });
       if (!res.ok) {
         if (res.conflict) await reloadConfig();

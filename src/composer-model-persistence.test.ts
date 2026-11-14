@@ -18,9 +18,23 @@ const chat = src('./ChatScreen.tsx');
 // 1) 写节点配置：这是「按节点记忆」的承载物。
 ck('切换写节点配置：带 nodeId / baseRevision / patch.model',
   /updateNodeConfig\(cfgRef\.current,\s*\{[\s\S]{0,160}nodeId:\s*node\.node_id[\s\S]{0,120}baseRevision:\s*config\.config_revision[\s\S]{0,80}patch:\s*\{\s*model:\s*row\.key\s*\}/.test(palette));
-// 档位与模型同一个补丁里写；`next` 为 null 表示显式清除（省略=不动），与 node-variant-patch 契约一致。
-ck('档位也写节点配置（model + modelVariant 同一次补丁）',
-  /patch:\s*\{\s*model:\s*effectiveModel,\s*modelVariant:\s*next\s*\}/.test(palette));
+// 档位与模型同一个补丁里写，且**形状来自契约 helper**（null=清除 / 省略=不改 只在一处定义）。
+ck('档位的 patch 形状来自 buildConfigPatch（不再就地拼字段）',
+  /patch:\s*buildConfigPatch\(\{\s*model:\s*effectiveModel,\s*modelVariant:\s*next\s*\}\)/.test(palette));
+ck('不再有「就地拼 {model, modelVariant}」的第二份实现',
+  !/patch:\s*\{\s*model:\s*effectiveModel,\s*modelVariant:/.test(palette));
+// helper 语义锚点：显式 null 必须落 key（清除），省略必须不落 key（不动）。这两条一旦变，
+// 走 helper 的调用点会跟着变，而就地拼的调用点不会 —— 这正是收口的原因。
+{
+  const { buildConfigPatch } = await import('./node-variant-patch');
+  const cleared = buildConfigPatch({ model: 'p/m', modelVariant: null });
+  const omitted = buildConfigPatch({ model: 'p/m' });
+  const picked = buildConfigPatch({ model: 'p/m', modelVariant: 'high' });
+  ck('helper：null 落 key（清除）、省略不落 key（不改）、string 落值',
+    Object.prototype.hasOwnProperty.call(cleared, 'modelVariant') && cleared.modelVariant === null
+    && !Object.prototype.hasOwnProperty.call(omitted, 'modelVariant')
+    && picked.modelVariant === 'high');
+}
 ck('冲突时重新拉配置（revision 已抬高，不能拿旧值硬写）',
   palette.includes('res.conflict') && palette.includes('reloadConfig()'));
 
