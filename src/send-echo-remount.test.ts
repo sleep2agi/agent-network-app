@@ -122,7 +122,7 @@ ck('ChatScreen load() confirms outbox entries with confirmedOutboxIds(outboxForA
 // #781 paints sources independently: filter confirmed echoes before replacing only task rows.
 ck('ChatScreen load() keeps only echoes not confirmed and not superseded',
   chat.includes('const kept = prev.filter(t => !t._localId || (!confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)));')
-  && chat.includes('mergeChatSource(kept, rows, source)') && chat.includes("paint('tasks', rows, fetched, confirmed)"));
+  && chat.includes('mergeChatSource(kept, rows, source)') && chat.includes("paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, params.limit), fetched, confirmed)"));
 ck('ChatScreen sends the echo id as the hub request id', chat.includes('sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId))'));
 ck('ChatScreen restores outbox entries with their pending state', chat.includes("_pending: e.state === 'pending',"));
 

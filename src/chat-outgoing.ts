@@ -30,6 +30,24 @@ export function mergeConversationSides<T extends ConversationRow>(inbound: T[], 
   return merged.slice(0, Math.max(1, limit));
 }
 
+/**
+ * 2026-11-14 admin「消息一直在跳和闪,最后一条一直显示一直消失」:每次刷新先只画入站,
+ * 出站行(本 agent 发给别的节点)被整源替换掉;几百毫秒后出站补拉回来再画回去 → 每轮刷新闪一次。
+ * 先画的那一帧要带上**上一轮已知的出站行**(同一个 agent 的),补拉回来再换成新的。
+ */
+export type OutgoingCache<T> = { alias: string; rows: T[] };
+
+/** 上一轮补拉到的出站行;换了 agent 就不算(别把 A 的出站画进 B 的对话)。 */
+export function cachedOutgoing<T>(cache: OutgoingCache<T> | null, alias: string): T[] {
+  return cache && cache.alias === alias ? cache.rows : [];
+}
+
+/** 入站先画的那一帧:有已知出站就一起合并,没有就原样。 */
+export function firstPaintRows<T extends ConversationRow>(inbound: T[], cache: OutgoingCache<T> | null, alias: string, limit: number): T[] {
+  const known = cachedOutgoing(cache, alias);
+  return known.length ? mergeConversationSides(inbound, known, limit) : inbound;
+}
+
 /** 这行是不是「本 agent 发给别的节点」——用于把它画在发送侧，作者写「A → B」。 */
 export function isOutgoingRow(row: ConversationRow, alias: string): boolean {
   return (row.from_name ?? '') === alias && (row.to_name ?? '') !== alias;

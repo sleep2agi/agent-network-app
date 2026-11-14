@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.532:
+            - 修对话页消息一直「跳和闪」：节点发给别的节点的消息（比如最后一条）每次刷新都会先消失再出现，现在刷新时保持原样，读到新内容后再更新。
+
             What's new in 0.2.531:
             - 设置里的「用户管理」和「Agent 组织架构」合成一个「组织与权限」：「部门与 Agent」页人人可看，管理员多一个「成员与权限」页。
             - 「Hub 设置」从「通用」第一行挪到设置最下面单独一组，日常不再占眼。
