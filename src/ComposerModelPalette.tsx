@@ -379,7 +379,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         nodeId: node.node_id,
         baseRevision: config.config_revision,
         // 走契约 helper：null=清除 / 省略=不改 的语义只有一处定义，避免生产代码另拼一份。
-        patch: buildConfigPatch({ model: effectiveModel, modelVariant: next }),
+        // #4823 —— **只发档位，不带 model**：这里只是换档位，模型没变。
+        //   daemon 侧 writeStock 判的是 `patch.model !== undefined`（key 在不在，不是值变没变），
+        //   所以固定带上当前 model 会让「单改档位」在**旧 agent-node** 上被拒 unsupported。
+        //   客户端不知道对面 agent-node 版本 ⇒ 发最小补丁在任何版本都安全。
+        patch: buildConfigPatch({ modelVariant: next }),
       });
       if (!res.ok) {
         if (res.conflict) await reloadConfig();

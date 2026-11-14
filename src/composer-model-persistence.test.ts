@@ -20,7 +20,12 @@ ck('切换写节点配置：带 nodeId / baseRevision / patch（model 由 helper
   /updateNodeConfig\(cfgRef\.current,\s*\{[\s\S]{0,200}nodeId:\s*node\.node_id[\s\S]{0,140}baseRevision:\s*config\.config_revision[\s\S]{0,120}patch:\s*buildConfigPatch\(\{\s*model:\s*row\.key\s*\}\)/.test(palette));
 // 档位与模型同一个补丁里写，且**形状来自契约 helper**（null=清除 / 省略=不改 只在一处定义）。
 ck('档位的 patch 形状来自 buildConfigPatch（不再就地拼字段）',
-  /patch:\s*buildConfigPatch\(\{\s*model:\s*effectiveModel,\s*modelVariant:\s*next\s*\}\)/.test(palette));
+  /patch:\s*buildConfigPatch\(\{\s*modelVariant:\s*next\s*\}\)/.test(palette));
+// #4823 —— 换档位不换模型时，补丁里**不得**出现 model key。
+//   daemon 侧 writeStock 判的是 `patch.model !== undefined`（key 在不在，不是值变没变），
+//   固定带当前 model 会让「单改档位」在旧 agent-node 上被拒 unsupported ⇒ 发最小补丁。
+ck('换档位的补丁不带 model key（最小补丁，跨 agent-node 版本安全）',
+  !/patch:\s*buildConfigPatch\(\{[^}]*\bmodel:\s*effectiveModel[^}]*modelVariant:/.test(palette));
 ck('不再有「就地拼 {model, modelVariant}」的第二份实现',
   !/patch:\s*\{\s*model:\s*effectiveModel,\s*modelVariant:/.test(palette));
 // helper 语义锚点：显式 null 必须落 key（清除），省略必须不落 key（不动）。这两条一旦变，
