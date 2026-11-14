@@ -1,10 +1,7 @@
-// #4086 负控：军团 3D 面板必须**真的画出东西**，不能只是一块深色空面板。
-//
-// 渲染态 web export + 页面内 Hub fixture（不是真机、不是线上）。断言：
-//   ① 至少一个 legion3d-body-* 的盒子 ≥ 2×2 且可见（非空渲染负控）
-//   ② 至少一个 legion3d-label 有非空文本
-//   ③ 没有同时出现「空/错误提示」与大量体（二选一，不能既空白又报错）
-// 失败时打印观察值并截图到 OUT 目录，便于对照管理员截图。
+// 2026-11-14 起:军团 3D 已从设置「组织与权限」页下掉(管理员:「感觉没必要放这里」)。
+// 本 drive 改为负控:渲染态 web export + 页面内 Hub fixture,打开「组织与权限」后
+//   ① 没有 legion3d-canvas 面板 ② 没有「查看/收起军团 3D」按钮 ③ 组织管理内容仍在。
+// (原 #4086「面板非空」断言随入口一起退役;组件仍在 src/legion3d-view.tsx,有单测。)
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
@@ -108,15 +105,14 @@ try {
   obs.firstErrors = errors.slice(0, 3);
   console.log('OBSERVATIONS ' + JSON.stringify(obs, null, 2));
 
-  assert.ok(obs.panelCount > 0, '设置页应能渲染军团 3D 面板');
-  assert.ok(obs.panelBox && obs.panelBox.height > 100, '面板应有实际高度');
-  assert.ok(obs.bodies >= 1, '面板里至少要有一个图元（体）');
-  assert.equal(obs.oversizedBodies, 0, `单个体不应超过面板一半（会看起来像空/纯色面板）；实际 ${JSON.stringify(obs.bodySizes)}`);
-  assert.ok(obs.paintedBodies >= 3, '至少三个体可见（核心 + 部门 + 人/Agent）');
-  assert.ok(obs.paintedBodies >= 1, `至少一个体是画出来的（≥2×2）；实际 ${JSON.stringify(obs.bodySizes)}`);
-  assert.ok(obs.labels >= 1 && obs.labelTexts.some(t => t.length > 0), '至少一个可见标签有文本');
-  assert.equal(obs.stateNodes, 0, `不应同时出现空/错误提示：${obs.stateText}`);
-  console.log('LEGION3D-NONEMPTY PASS');
+  // 2026-11-14 管理员要求把军团 3D 从「组织与权限」页下掉:这里改成负控 —— 页面不应再出现面板和开关,
+  // 组织管理内容照常渲染。
+  obs.toggleCount = await page.locator('[data-testid="settings-legion3d-toggle"]').count();
+  obs.orgSection = await page.locator('[data-testid="settings-section-agent-teams"]').count();
+  assert.equal(obs.panelCount, 0, '「组织与权限」页不应再渲染军团 3D 面板');
+  assert.equal(obs.toggleCount, 0, '「组织与权限」页不应再有「查看/收起军团 3D」按钮');
+  assert.ok(obs.orgSection > 0, '组织管理内容仍应渲染');
+  console.log('LEGION3D-REMOVED PASS');
 } catch (e) {
   code = 1;
   console.log('OBSERVATIONS ' + JSON.stringify(obs, null, 2));

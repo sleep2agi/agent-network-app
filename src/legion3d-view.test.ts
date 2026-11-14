@@ -45,8 +45,9 @@ ck('空/错误状态各自成屏，且不被「军团没人」掩盖',
 ck('没有网络时不发请求、直接说明原因',
   view.includes("if (!net) { setState({ phase: 'empty'") && view.includes("'还没选网络，先在上面选一个网络'"));
 
-ck('设置页入口可折叠，且只有展开时才挂载 3D 视图（不展开不发请求）',
-  settings.includes('settings-legion3d-toggle') && settings.includes('{showLegion3D ? <Legion3DView'));
+ck('设置「组织与权限」页不再挂军团 3D（2026-11-14 管理员要求下掉）',
+  !settings.includes('settings-legion3d-toggle') && !settings.includes('<Legion3DView')
+  && !settings.includes("from './legion3d-view'"));
 
 ck('自转有帧率上限（定时器 50ms，不用 rAF 60fps）',
   view.includes('SPIN_TICK_MS') && view.includes('setInterval') && !view.includes('requestAnimationFrame'));
@@ -73,10 +74,6 @@ ck('失败原因分得开（没网络 / 没组织架构 / 请求失败 / 真没�
   view.includes("reason: 'no-network'") && view.includes("reason: 'no-org-data'")
   && view.includes("reason: 'fetch-failed'") && view.includes("reason: 'no-people'")
   && view.includes('legion3d-${state.phase}-${state.reason}'));
-
-ck('默认展开，但存过的选择优先（三态：没存过 ≠ 选过收起）',
-  settings.includes('useState(true)') && settings.includes('loadLegion3DOpen')
-  && settings.includes('saveLegion3DOpen') && settings.includes('open !== null'));
 
 ck('汇总行不数图元（全图用布局统计，聚焦用子树统计；0.2.458 起统一走 focusStatsLine）',
   view.includes('focusStatsLine(layout, focusId)') && view.includes('`${bodies.length} 个节点`'));
