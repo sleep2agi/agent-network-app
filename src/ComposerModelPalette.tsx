@@ -27,7 +27,7 @@ import {
 import { catalogErrorText, isOpenCodeV2Node, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
-import { variantValueError, variantWritable } from './node-variant-patch';
+import { buildConfigPatch, variantAfterModelSwitch, variantValueError, variantWritable } from './node-variant-patch';
 import { composerVariantLabel } from './composer-model-label';
 import { composerAgentCurrent, composerAgentSectionVisible, composerAgentSwitchable, composerAgents, confirmComposerAgentSwitch } from './composer-agent';
 import './i18n-composer-agent';
@@ -295,7 +295,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       const res = await updateNodeConfig(cfgRef.current, {
         nodeId: node.node_id,
         baseRevision: config.config_revision,
-        patch: { model: row.key },
+        // 同样走契约 helper：model-only 补丁 = 省略 modelVariant（不改档）。
+        patch: buildConfigPatch({ model: row.key }),
       });
       if (!res.ok) {
         if (res.conflict) await reloadConfig();
@@ -316,6 +317,19 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         setErrorText(t('chat.modelPicker.failed', { message: t('chat.modelPicker.acceptedUnconfirmed') }));
         setErrorDetail(verdict.reason);
         return;
+      }
+      // #4822/#4823：档位是独立字段；换模型**不自动清除**档位（省略=不改），也不把“未知”当默认。
+      // 若原档位在新模型上不成立，就如实提示重选（不静默写 modelVariant:null）。
+      const carry = variantAfterModelSwitch({
+        previousModel: currentKey,
+        nextModel: row.key,
+        currentVariant,
+        nextModelVariants: row.choices.kind === 'unknown' ? undefined : row.choices.kind === 'none' ? [] : row.choices.options,
+      });
+      if (carry.action === 'must-reselect') {
+        setNotice(t('chat.modelPicker.variantNeedsReselect', { reason: carry.reason }));
+        readbackRef.current(after);
+        return;   // 不关面板：让用户当场重选深度
       }
       if (verdict.ackOnly) {
         // 没有会话级读回，footer 不能冒充 model_effective；只给明确的回执提示，不关面板。
@@ -364,7 +378,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       const res = await updateNodeConfig(cfgRef.current, {
         nodeId: node.node_id,
         baseRevision: config.config_revision,
-        patch: { model: effectiveModel, modelVariant: next },
+        // 走契约 helper：null=清除 / 省略=不改 的语义只有一处定义，避免生产代码另拼一份。
+        patch: buildConfigPatch({ model: effectiveModel, modelVariant: next }),
       });
       if (!res.ok) {
         if (res.conflict) await reloadConfig();

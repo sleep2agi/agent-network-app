@@ -1,5 +1,11 @@
 // #4130 第一主线（只读）：聊天页模型行的「查询"当前模型/Provider/可用档位"」面板模型。
 //
+// ⚠️ 2026-11-14 状态更正（#4823）：本文件是 #4130 时期的**只读**面板模型，现在**没有任何生产代码引用它**
+// （`grep "from './composer-model-sheet'" src/` 只剩它自己的测试）。线上在用的是
+// `ComposerModelPalette.tsx` —— 那里的切换**已启用**：写节点配置（`updateNodeConfig` + `baseRevision`）
+// 并做「本次 update_id 终局 ACK + 真实读回」双条件判定。所以下面那句「切换未启用」只描述本文件的历史形态，
+// 不代表当前客户端行为；不要再拿它当现状引用。是否删除本文件见 #4823 的后续决定（不在此次改动内）。
+//
 // 口径（admin 2026-11-07）：
 // · 只展示**可信来源**：当前模型来自定向会话上报（scope+35s TTL，见 composer-model-label.ts）；
 //   Provider / 模型清单来自 `read_opencode_catalog`（指定 node/daemon，只读、不启动 server）；
