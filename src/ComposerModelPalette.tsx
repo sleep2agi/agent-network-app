@@ -326,15 +326,18 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         currentVariant,
         nextModelVariants: row.choices.kind === 'unknown' ? undefined : row.choices.kind === 'none' ? [] : row.choices.options,
       });
-      if (carry.action === 'must-reselect') {
-        setNotice(t('chat.modelPicker.variantNeedsReselect', { reason: carry.reason }));
-        readbackRef.current(after);
-        return;   // 不关面板：让用户当场重选深度
-      }
+      // #4823 review —— 顺序很重要：ackOnly 的意思是「只收到 ACK、没读回到新模型」，
+      // 这时连「模型已切换」都不能断言。所以 ackOnly 必须先判，再谈档位要不要重选。
       if (verdict.ackOnly) {
         // 没有会话级读回，footer 不能冒充 model_effective；只给明确的回执提示，不关面板。
         setNotice(t('chat.modelPicker.appliedNoReadback', { model: row.key }));
         return;
+      }
+      if (carry.action === 'must-reselect') {
+        // 提示里只说「为什么要重选」，不展示 helper 的 reason 原文（那是开发判据，且中文会插进英文界面）。
+        setNotice(t(`chat.modelPicker.variantNeedsReselect.${carry.code}`));
+        readbackRef.current(after);
+        return;   // 不关面板：让用户当场重选深度
       }
       readbackRef.current(after);
       closeRef.current();
@@ -379,7 +382,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         nodeId: node.node_id,
         baseRevision: config.config_revision,
         // 走契约 helper：null=清除 / 省略=不改 的语义只有一处定义，避免生产代码另拼一份。
-        patch: buildConfigPatch({ model: effectiveModel, modelVariant: next }),
+        // #4823 —— **只发档位，不带 model**：这里只是换档位，模型没变。
+        //   daemon 侧 writeStock 判的是 `patch.model !== undefined`（key 在不在，不是值变没变），
+        //   所以固定带上当前 model 会让「单改档位」在**旧 agent-node** 上被拒 unsupported。
+        //   客户端不知道对面 agent-node 版本 ⇒ 发最小补丁在任何版本都安全。
+        patch: buildConfigPatch({ modelVariant: next }),
       });
       if (!res.ok) {
         if (res.conflict) await reloadConfig();

@@ -20,7 +20,12 @@ ck('切换写节点配置：带 nodeId / baseRevision / patch（model 由 helper
   /updateNodeConfig\(cfgRef\.current,\s*\{[\s\S]{0,200}nodeId:\s*node\.node_id[\s\S]{0,140}baseRevision:\s*config\.config_revision[\s\S]{0,120}patch:\s*buildConfigPatch\(\{\s*model:\s*row\.key\s*\}\)/.test(palette));
 // 档位与模型同一个补丁里写，且**形状来自契约 helper**（null=清除 / 省略=不改 只在一处定义）。
 ck('档位的 patch 形状来自 buildConfigPatch（不再就地拼字段）',
-  /patch:\s*buildConfigPatch\(\{\s*model:\s*effectiveModel,\s*modelVariant:\s*next\s*\}\)/.test(palette));
+  /patch:\s*buildConfigPatch\(\{\s*modelVariant:\s*next\s*\}\)/.test(palette));
+// #4823 —— 换档位不换模型时，补丁里**不得**出现 model key。
+//   daemon 侧 writeStock 判的是 `patch.model !== undefined`（key 在不在，不是值变没变），
+//   固定带当前 model 会让「单改档位」在旧 agent-node 上被拒 unsupported ⇒ 发最小补丁。
+ck('换档位的补丁不带 model key（最小补丁，跨 agent-node 版本安全）',
+  !/patch:\s*buildConfigPatch\(\{[^}]*\bmodel:\s*effectiveModel[^}]*modelVariant:/.test(palette));
 ck('不再有「就地拼 {model, modelVariant}」的第二份实现',
   !/patch:\s*\{\s*model:\s*effectiveModel,\s*modelVariant:/.test(palette));
 // helper 语义锚点：显式 null 必须落 key（清除），省略必须不落 key（不动）。这两条一旦变，
@@ -60,7 +65,16 @@ ck('快照带 TTL，过期不显示（不拿旧节点值冒充当前）',
 ck('换模型后档位需要重选 → 提示并留在面板（不自动清除）',
   /variantAfterModelSwitch\(\{[\s\S]{0,220}nextModelVariants: row\.choices\.kind === 'unknown' \? undefined/.test(palette)
   && palette.includes('variantNeedsReselect')
-  && /carry\.action === 'must-reselect'[\s\S]{0,160}return;/.test(palette));
+  && /carry\.action === 'must-reselect'[\s\S]{0,320}return;/.test(palette));
+// #4823 review（ANet负责人 2026-11-15）：
+//   a) 用户提示里不能塞 helper 的 reason 原文 —— 那是开发判据，英文界面会插进中文；按判别码给 i18n key。
+//   b) ackOnly（只收到 ACK、没读回到新模型）必须先判 —— 否则「模型已切换」这句说过头了。
+ck('档位重选提示按判别码取文案，不展示 reason 原文',
+  /variantNeedsReselect\.\$\{carry\.code\}/.test(palette)
+  && !/variantNeedsReselect[\s\S]{0,80}reason:/.test(palette));
+ck('ackOnly 判断在 must-reselect 之前（ACK-only 时不说「模型已切换」）',
+  palette.indexOf("verdict.ackOnly") > -1
+  && palette.indexOf("verdict.ackOnly") < palette.indexOf("carry.action === 'must-reselect'"));
 ck('换模型的补丁里不带 modelVariant（省略=不改档）',
   /patch:\s*buildConfigPatch\(\{\s*model:\s*row\.key\s*\}\)/.test(palette));
 {
