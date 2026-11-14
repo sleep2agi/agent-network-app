@@ -17,7 +17,11 @@ export const chatTranslations = {
   'chat.modelPicker.variantApplied': ['已生效：{value}', 'Applied: {value}'],
   // #4823/#4822 —— 换模型后原档位在新模型上未必成立。我们不自动清除档位（省略=不改），
   // 也不拿“未知”当默认；只如实告知需要重选，避免用户以为深度还在生效。
-  'chat.modelPicker.variantNeedsReselect': ['模型已切换；原档位在新模型上未确认，请重新选择思考深度（{reason}）', 'Model switched; the previous thinking level is not confirmed for this model — pick a level again ({reason})'],
+  // #4823 review —— 用户的提示里不放 reason 原文：那是给开发看的判据（而且中文会插进英文界面）。
+  // 按判别码给三句，各自说清「为什么需要重选」，不泄露内部措辞。
+  'chat.modelPicker.variantNeedsReselect.noVariant': ['模型已切换；新模型没有可选思考深度，原档位不再生效，请重新选择', 'Model switched; the new model has no thinking levels, so the previous one no longer applies — pick again'],
+  'chat.modelPicker.variantNeedsReselect.notInList': ['模型已切换；原档位不在新模型的可选档位里，请重新选择思考深度', 'Model switched; the previous thinking level is not offered by this model — pick a level again'],
+  'chat.modelPicker.variantNeedsReselect.unknown': ['模型已切换；暂时读不到新模型的档位，请稍后重选思考深度', 'Model switched; this model\'s thinking levels could not be read — pick a level again later'],
   'chat.modelPicker.variantUnknownDetail': ['{reason}（读回值 unknown 或未匹配）', '{reason} (readback unknown or mismatched)'],
   'chat.modelPicker.failed': ['失败:{message}', 'Failed: {message}'],
   'chat.modelPicker.conflict': ['配置在别处被改过了，已重新加载，请再选一次。', 'The config changed elsewhere. Reloaded; pick again.'],
