@@ -73,8 +73,6 @@ import UserManagementPanel from './UserManagementPanel';
 import AgentOrgScreen from './AgentOrgScreen';
 import OrgAccessPage from './OrgAccessPage';
 import { tabForSettingsRow } from './org-access-model';
-import Legion3DView from './legion3d-view';
-import { loadLegion3DOpen, saveLegion3DOpen } from './agent-list-prefs';
 import { ManageDepartmentPhone } from './ManageDepartment';
 import { managedDepartmentIds } from './org-model';
 import { canManageUsers, type AuthMe } from './user-admin';
@@ -207,15 +205,6 @@ export default function SettingsScreen({
   // 起服务是异步的(onStartCommand 稍后才跑):开关拨动后 1.5 s 再读一次真实状态。
   const [, bumpKeepAlive] = useState(0);
   const [guideVisible, setGuideVisible] = useState(!!notifyPreview?.guideOpen);
-  // 军团 3D 预览:默认收起,点了才去读组织架构(不给每次进设置都加一次请求)。
-  // 展开状态持久化 —— 每次进设置都被收起,用户会以为这功能没了。
-  // 默认展开(功能已经不只是预览);存过的选择优先 —— 老用户没存过时不会被当成「选过收起」。
-  const [showLegion3D, setShowLegion3D] = useState(true);
-  useEffect(() => {
-    let live = true;
-    void loadLegion3DOpen().then((open) => { if (live && open !== null) setShowLegion3D(open); }).catch(() => undefined);
-    return () => { live = false; };
-  }, []);
   const [testMessage, setTestMessage] = useState('');
   const saveNotify = (next: NotifySettings) => { saveNotifySettings(next); };
   // 0.2.109「免打扰时仍然提醒」:勿扰权限的真实读数(从系统页回来要重读)。
@@ -1016,17 +1005,7 @@ export default function SettingsScreen({
                 initialTab={searching ? tabForSettingsRow(filtered.find(c => c.key === 'users')?.rows[0]?.key) : null}
                 renderOrg={() => (
                   <View testID="settings-section-agent-teams">
-                    {/* 军团 3D(2026-11-05):只读预览。 */}
-                    <Pressable accessibilityRole="button" testID="settings-legion3d-toggle"
-                      onPress={() => setShowLegion3D((v) => {
-                        const next = !v;
-                        void saveLegion3DOpen(next).catch(() => undefined);
-                        return next;
-                      })}
-                      style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 6, marginBottom: spacing.sm }, pressed && { opacity: 0.7 }]}>
-                      <Text style={{ color: colors.accent, fontSize: 12 }}>{showLegion3D ? tr('settings.legion3d.hide') : tr('settings.legion3d.show')}</Text>
-                    </Pressable>
-                    {showLegion3D ? <Legion3DView cfg={cfg} networkId={me.networkId || cfg.networkId} /> : null}
+                    {/* 军团 3D 预览 2026-11-14 按管理员要求从这里下掉(组件仍在 src/legion3d-view.tsx)。 */}
                     <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />
                   </View>
                 )}
