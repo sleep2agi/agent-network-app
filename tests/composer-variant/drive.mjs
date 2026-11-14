@@ -39,7 +39,9 @@ try {
         const update_id = `u_${window.__variantWrites.length}`;
         if (window.__variantMode === 'failure') return mcp({ ok: false, error: 'synthetic refusal' });
         n.modelVariant = args.patch.modelVariant;
-        n.last_update = { update_id, status: 'applied', terminal: true, requested_model: args.patch.model };
+        // #4823 —— 换档位是最小补丁（不带 model）⇒ 真实 daemon 会作用在**当前模型**上，
+        // 回执里的 requested_model 也应是当前模型。stub 照这个行为回，别回 undefined。
+        n.last_update = { update_id, status: 'applied', terminal: true, requested_model: args.patch.model ?? n.model_effective };
         if (window.__variantMode === 'wrong-id') n.last_update.update_id = 'unrelated';
         if (window.__variantMode === 'nonterminal') n.last_update.terminal = false;
         return mcp({ ok: true, update_id, apply_mode: 'hot' });
@@ -83,7 +85,13 @@ try {
   await waitFooter('high');
   ck('same-model change reaches footer after ack readback', (await text()).includes('high'));
   ck('same-turn double press is singleflight', await page.evaluate(() => window.__variantWrites.length === 1));
-  ck('write uses effective model', await page.evaluate(() => window.__variantWrites[0].patch.model === 'stub/effective'));
+  // #4823 —— 换档位是**最小补丁**：不带 model key。
+  //   daemon 侧 writeStock 判 `patch.model !== undefined`（key 存在与否，不看值变没变），
+  //   固定带当前 model 会让单改档位在旧 agent-node 上被判成「组合写」而拒绝。
+  ck('variant write carries no model key (minimal patch)', await page.evaluate(() => {
+    const p = window.__variantWrites[0].patch;
+    return !('model' in p) && p.modelVariant === 'high';
+  }));
   await page.getByTestId('node-variant-clear').click();
   await waitFooter('默认');
   ck('explicit clear reaches footer after matching ack', (await text()).includes('默认'));
