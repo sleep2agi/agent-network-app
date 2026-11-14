@@ -70,9 +70,9 @@ try {
   await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'settings' }));
   await page.waitForTimeout(1500);
 
-  // 设置页先落到侧栏；点「Agent 组织架构」才渲染这一节（管理员截图也是这一步之后的画面）。
-  if (await page.getByText('Agent 组织架构', { exact: true }).count() > 0) {
-    await page.getByText('Agent 组织架构', { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
+  // 设置页先落到侧栏；点「组织与权限」(默认页签「部门与 Agent」)才渲染这一节（管理员截图也是这一步之后的画面）。
+  if (await page.getByText('组织与权限', { exact: true }).count() > 0) {
+    await page.getByText('组织与权限', { exact: true }).first().click({ timeout: 5000 }).catch(() => {});
     await page.waitForTimeout(1200);
   }
   const panel = page.locator('[data-testid="legion3d-canvas"]').first();

@@ -102,7 +102,8 @@ async function run(vp, viewport, ua) {
   await page.locator(tid('settings-phone-list') + ',' + tid('settings-pane') + ',' + tid('settings-back')).first().waitFor({ timeout: 8000 });
   for (let i = 0; i < 3 && await page.locator(tid('settings-back')).isVisible().catch(() => false); i++) { await page.locator(tid('settings-back')).click(); await sleep(200); }
   if (await page.locator(tid('settings-row-users')).isVisible().catch(() => false)) await page.locator(tid('settings-row-users')).click();
-  else await page.locator(tid('settings-sidebar')).getByText('用户管理', { exact: true }).click();
+  else await page.locator(tid('settings-sidebar')).getByText('组织与权限', { exact: true }).click();
+  await page.locator(tid('org-access-tab-members')).click({ timeout: 10000 });
   await page.locator(tid('user-management-new')).click({ timeout: 10000 });
   await page.locator(tid('new-user-dialog')).waitFor({ timeout: 8000 });
   await page.locator(tid('new-user-username')).fill('guard_user');

@@ -35,8 +35,8 @@ try {
       await page.goto(`${url}?theme=${c.theme}`);
       if (c.phone) await page.getByText('设置', { exact: true }).last().click();
       else await page.locator('[data-testid="desktop-rail"] [aria-label="设置"]').click();
-      if (c.phone) await page.getByTestId('settings-row-agentTeams').click();
-      else await page.getByTestId('settings-sidebar').getByText('Agent 组织架构', { exact: true }).click();
+      if (c.phone) await page.getByTestId('settings-row-users').click();
+      else await page.getByTestId('settings-sidebar').getByText('组织与权限', { exact: true }).click();
       await el('tree').waitFor();
     };
     const back = async () => { if (c.phone) await el('back').click(); };

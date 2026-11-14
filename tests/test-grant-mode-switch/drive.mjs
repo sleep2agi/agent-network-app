@@ -72,8 +72,10 @@ async function openUsers() {
   await page.locator(tid('mobile-tab-settings')).click();
   await page.locator(tid('settings-phone-list') + ',' + tid('settings-pane') + ',' + tid('settings-back')).first().waitFor({ timeout: 8000 });
   for (let i = 0; i < 3 && await page.locator(tid('settings-back')).isVisible().catch(() => false); i++) { await page.locator(tid('settings-back')).click(); await sleep(200); }
-  if (wide) await page.locator(tid('settings-sidebar')).getByText('用户管理', { exact: true }).click();
+  if (wide) await page.locator(tid('settings-sidebar')).getByText('组织与权限', { exact: true }).click();
   else { await page.locator(tid('settings-row-users')).click(); await page.locator(tid('settings-subpage-users')).waitFor({ timeout: 5000 }); }
+  // 2026-11-14「组织与权限」:成员在第二个页签。
+  await page.locator(tid('org-access-tab-members')).click({ timeout: 10000 });
   await page.locator(tid('user-row-legacy_bob')).waitFor({ timeout: 10000 });
   await sleep(300);
 }

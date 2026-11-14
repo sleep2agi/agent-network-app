@@ -302,6 +302,10 @@ const copy = [
   ['官网与支持', 'Website & support'],
   ['下载历史版本（回滚用）', 'Older versions (rollback)'],
   ['建议回滚到', 'Suggested rollback:'],
+  // 末尾追加(编号按位置):2026-11-14「组织与权限」合并入口。
+  ['组织与权限', 'Organization & access'],
+  ['部门与 Agent', 'Departments & agents'],
+  ['成员与权限', 'Members & access'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

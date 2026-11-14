@@ -7,7 +7,7 @@
 // 纯逻辑,不 import react-native。
 
 import { settingsPair } from './i18n-settings';
-export type SettingsCategoryKey = 'account' | 'users' | 'agentTeams' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
+export type SettingsCategoryKey = 'account' | 'users' | 'localHub' | 'appearance' | 'notifications' | 'voice' | 'shortcuts' | 'about';
 
 export type SettingsRow = {
   readonly key: string;
@@ -17,6 +17,8 @@ export type SettingsRow = {
   readonly keywords?: readonly string[];
   /** 只在这些运行平台上出现(不写 = 全平台)。0.2.107:安卓的「后台保持连接」等。 */
   readonly platforms?: readonly SettingsPlatform[];
+  /** 只给能管成员的人(available.users === true)。分类本身对所有人可见时用它挡掉管理行。 */
+  readonly adminOnly?: boolean;
 };
 
 /** desktop = Tauri 桌面壳;web = 浏览器里的网页版。 */
@@ -50,21 +52,17 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     ],
   },
   {
-    // 多用户账号与 Agent 权限(hub agent-network#2084):只给 Hub 管理员 / 当前网络的 owner、admin。
+    // 2026-11-14(admin「心智负担那么重」):原来「用户管理」+「Agent 组织架构」两个入口、同一棵部门树分两处管。
+    // 合成一个「组织与权限」:所有人都能进来看部门与 Agent;成员管理那几行只给 Hub 管理员 / 网络 owner、admin(adminOnly)。
+    // 多用户账号与 Agent 权限:hub agent-network#2084;部门与 Agent 归属:AgentOrgScreen。
     key: 'users',
-    label: '用户管理',
+    label: '组织与权限',
     icon: 'people-outline',
-    conditional: true,
     rows: [
-      { key: 'members', label: '成员与可访问的 Agent', keywords: ['用户', '成员', '权限', '授权', '分配', 'agent', 'user', 'member', 'permission', 'access', 'grant'] },
-      { key: 'newUser', label: '新建用户', keywords: ['添加用户', '创建用户', '注册', 'create user', 'new user', 'add user'] },
+      { key: 'org', label: '部门与 Agent', keywords: ['agent', 'team', 'organization', '负责人', '组织架构', 'Agent 组织架构', 'department', 'owner', '部门', '归属', '团队'] },
+      { key: 'members', label: '成员与可访问的 Agent', adminOnly: true, keywords: ['用户', '用户管理', '成员', '权限', '授权', '分配', 'agent', 'user', 'member', 'permission', 'access', 'grant'] },
+      { key: 'newUser', label: '新建用户', adminOnly: true, keywords: ['添加用户', '创建用户', '注册', 'create user', 'new user', 'add user'] },
     ],
-  },
-  {
-    key: 'agentTeams',
-    label: 'Agent 组织架构',
-    icon: 'git-network-outline',
-    rows: [{ key: 'teams', label: 'Agent 团队', keywords: ['agent', 'team', 'organization', '负责人', '组织架构', 'department', 'owner', '部门'] }],
   },
   {
     key: 'localHub',
@@ -198,7 +196,7 @@ export function filterSettings(
   for (const cat of categories) {
     if (cat.conditional && available[cat.key] !== true) continue;
     const catHit = q.length > 0 && (normalize(cat.label).includes(q) || pairHit(cat.label, q));
-    const rows = cat.rows.filter((r) => rowOnPlatform(r, platform) && (catHit || rowMatches(r, query)));
+    const rows = cat.rows.filter((r) => rowOnPlatform(r, platform) && (!r.adminOnly || available.users === true) && (catHit || rowMatches(r, query)));
     if (rows.length) out.push({ ...cat, rows });
   }
   return out;
@@ -286,7 +284,7 @@ export type PhoneSettingsGroup = { readonly title: string | null; readonly keys:
 
 export const PHONE_SETTINGS_GROUPS: readonly PhoneSettingsGroup[] = [
   { title: null, keys: ['account'] },
-  { title: '通用', keys: ['users', 'agentTeams', 'notifications', 'appearance', 'localHub'] },
+  { title: '通用', keys: ['users', 'notifications', 'appearance', 'localHub'] },
   { title: '功能', keys: ['voice', 'shortcuts'] },
   { title: '帮助与关于', keys: ['about'] },
 ];
@@ -302,7 +300,6 @@ export const PHONE_SERVER_GROUP_TITLE = '通用';
 export const PHONE_ICON_COLOR: Partial<Record<SettingsCategoryKey | 'server', string>> = {
   server: '#0369a1',
   users: '#0f766e',
-  agentTeams: '#7c3aed',
   notifications: '#e11d48',
   appearance: '#b45309',
   localHub: '#2563eb',

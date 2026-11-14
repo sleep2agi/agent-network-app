@@ -31,7 +31,7 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
 
 // —— 「用户管理」分类只在允许时出现,且在手机分组里 ——
 {
-  ck('不允许 → 设置里没有用户管理', !filterSettings('', {}).some(c => c.key === 'users'));
+  ck('不允许 → 设置里没有成员管理行(「组织与权限」只剩部门与 Agent)', !filterSettings('', {}).find(c => c.key === 'users')?.rows.some(r => r.key === 'members' || r.key === 'newUser'));
   ck('允许 → 出现', filterSettings('', { users: true }).some(c => c.key === 'users'));
   ck('搜「权限」能搜到', filterSettings('权限', { users: true }).some(c => c.key === 'users'));
   ck('搜英文 permission 也能搜到', filterSettings('permission', { users: true }).some(c => c.key === 'users'));
@@ -266,13 +266,13 @@ const ck = (name: string, ok: boolean) => { n++; if (ok) { p++; console.log(`  �
   ck('批量:两端都写明「一次性,以后新建的不会自动加入」', (editor.match(/users\.oneTimeNote/g) ?? []).length === 2);
   ck('批量:节点带上 hostname / runtime(分组依据)', editor.includes('hostname: n.hostname ?? null, runtime: n.runtime ?? null') && panel.includes('hostname: n.hostname ?? null, runtime: n.runtime ?? null'));
   ck('分组:保存只在 Hub 支持时带 group_grants', model.includes('...(d.groups ? { group_grants: groupGrantsPayload(d.groups.after, d.nextRole) } : {})') && editor.includes('...(groupsSupported ? { groups: { before: groupsBefore, after: groupSel } } : {})'));
-  ck('分组:旧 Hub(404)→ agentGroups=null → 整块不显示', panel.includes('{Array.isArray(agentGroups) ? (') && read('./user-admin-api.ts').includes('e.status === 404') && editor.includes('pickerTabs(groups.length > 0)'));
+  ck('分组:旧 Hub(404)→ agentGroups=null → 整块不显示', panel.includes('{showWhenUsed(agentGroups) ? (') && read('./user-admin-api.ts').includes('e.status === 404') && editor.includes('pickerTabs(groups.length > 0)'));
   ck('分组:编辑复用同一套选择器(桌面 + 手机)', (panel.match(/<DesktopAgentPicker p=\{g\.picker\}/g) ?? []).length === 1 && (panel.match(/<PhoneAgentPicker p=\{g\.picker\}/g) ?? []).length === 1);
   ck('分组:接口 GET/POST/PATCH/PUT members/DELETE', ['fetchAgentGroups', 'createAgentGroup', 'renameAgentGroup', 'saveAgentGroupMembers', 'deleteAgentGroup'].every(f => panel.includes(f)));
   const adminApi = read('./user-admin-api.ts');
   ck('G3 API:PUT /members/:uid {role}、DELETE /members/:uid', /members\/\$\{net\(userId\)\}`, \{ method: 'PUT', body: \{ role \} \}/.test(adminApi) && /members\/\$\{net\(userId\)\}`, \{ method: 'DELETE' \}/.test(adminApi));
   const phonePages = read('./SettingsPhonePages.tsx');
-  ck('手机:成员是设置三级页 userMember', phonePages.includes("ctx.detail === 'userMember' ? 'userMember'") && settings.includes("openDetail('userMember')"));
+  ck('手机:成员是设置三级页 userMember', phonePages.includes("const detail = ctx.detail === 'userMember' || ctx.detail === 'userGroup' ? ctx.detail : null;") && phonePages.includes('renderMembers={() => ctx.renderUsers(detail)}') && settings.includes("openDetail('userMember')"));
   const app = read('../App.tsx');
   ck('登录页有注册入口并调 /api/auth/register', app.includes('registerHubAccount(') && app.includes('login-mode-toggle'));
 }

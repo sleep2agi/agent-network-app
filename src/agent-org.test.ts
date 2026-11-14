@@ -242,9 +242,9 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   const forbidden = ['setMemberDepartment', 'deleteDepartment', 'appFetch', 'fetchOrg', 'listRequirementPeople', "method: 'POST'", "method: 'PUT'", "method: 'PATCH'", "method: 'DELETE'", 'AgentTeamsEntry'];
   ck('department edits reuse shared APIs, never move people or delete', forbidden.every(s => !screen.includes(s)) && screen.includes('await createDepartment(') && screen.includes('await updateDepartment('));
   // admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:这一页不再改部门结构,
-  // 只调 Agent 归属;增删改统一在「用户管理 → 成员与部门」。
+  // 只调 Agent 归属;增删改统一在「组织与权限 → 成员与权限」。
   ck('department create/rename/reparent actions are gone from the agent page', ['agent-org-new-department', 'agent-org-new-child', 'agent-org-rename-department', 'agent-org-reparent-department'].every(id => !screen.includes(`testID="${id}"`)));
-  ck('the page points at 用户管理 → 成员与部门 instead', screen.includes('testID="agent-org-departments-elsewhere"') && /agentOrg\.departmentsElsewhere/.test(screen));
+  ck('the page points at 组织与权限 → 成员与权限 instead', screen.includes('testID="agent-org-departments-elsewhere"') && /agentOrg\.departmentsElsewhere/.test(screen));
   ck('editor uses bounded keyboard-safe frame with pinned save and shared-tree warning', screen.includes('testID="agent-org-department-editor"') && screen.includes('footer={<SettingsButton') && screen.includes('testID="agent-org-shared-tree-note"'));
   ck('editor validates Unicode name length and excludes entire subtree', screen.includes('[...name.trim()].length <= 40') && screen.includes('subtreeIds(tree, p.editor.dept.id)') && screen.includes('filter(row => !excluded.has(row.dept.id))'));
   ck('patches preserve leader and sort by omission', screen.includes("? { name: name.trim() } : { parent_id: parent }") && !screen.includes('leader_user_id:') && !screen.includes('sort:'));
@@ -255,7 +255,7 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   ck('department errors and shared warning have both languages', ['sharedTree', 'departmentForbidden', 'departmentUnsupported', 'departmentConflict', 'departmentHierarchyInvalid', 'departmentRefreshFailed'].every(key => (agentOrgTranslations as Record<string, readonly string[]>)[`agentOrg.${key}`]?.length === 2));
   ck('调整按钮调用真实写接口,失败回滚', screen.includes('moveAgentDepartment(p.cfg, p.networkId, nodeId, pickDept)') && screen.includes('previous ? [...rest, previous] : rest'));
   ck('页面根始终在,且不再有演示条', screen.includes('testID="agent-org-page"') && !screen.includes('return null') && !screen.includes('agent-org-demo-banner'));
-  ck('桌面和手机都挂这页,并带上已保存的网络', settings.includes('<AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />') && settings.includes('renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />') && phone.includes("case 'agentTeams': return <>{ctx.renderAgentOrg()}</>"));
+  ck('桌面和手机都挂这页,并带上已保存的网络', settings.includes('<AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />') && settings.includes('renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />') && phone.includes('renderOrg={ctx.renderAgentOrg}'));
   ck('设置里不再挂会点空的团队入口', !settings.includes('AgentTeamsEntry') && !phone.includes('renderAgentTeams') && !existsSync(new URL('./AgentTeamsEntry.tsx', import.meta.url)));
   ck('手机列表行会进入子页', settings.includes('onPress={() => openPage(cat.key)}'));
   ck('不再有演示文案,标题/hint 指向真实保存', !('agentOrg.demoBanner' in agentOrgTranslations) && agentOrgTranslations['agentOrg.demoTitle'][0] === '调整结构' && agentOrgTranslations['agentOrg.demoHint'][0].includes('写入 Hub'));

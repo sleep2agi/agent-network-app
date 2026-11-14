@@ -30,8 +30,10 @@ export async function run(out, scenario, matrix = cases) {
         await page.goto(`${url}?theme=${c.theme}&safeAreaSim=${c.phone ? '32,0,24,0' : '0,0,0,0'}${c.scale ? `&osFontScale=${c.scale}&uiScaleSim=legacy` : ''}`);
         if (c.phone) await page.getByText('设置', { exact: true }).last().click();
         else await page.locator('[data-testid="desktop-rail"] [aria-label="设置"]').click();
-        if (c.phone) await page.getByTestId(`settings-row-${category}`).click();
-        else await page.getByTestId('settings-sidebar').getByText(category === 'users' ? '用户管理' : 'Agent 组织架构', { exact: true }).click();
+        // 2026-11-14「组织与权限」:原 users / agentTeams 两个分类合成 users;成员在第二个页签。
+        if (c.phone) await page.getByTestId('settings-row-users').click();
+        else await page.getByTestId('settings-sidebar').getByText('组织与权限', { exact: true }).click();
+        if (category === 'users') await page.getByTestId('org-access-tab-members').click();
       };
       try { await scenario({ c, page, test, shot, navigate, state, mode: async query => fetch(`${url}__fixture/mode?${query}`, { method: 'POST' }) }); }
       catch (e) { test('scenario completed', false, e.stack); await shot('failure'); writeFileSync(resolve(out, `${c.name}-failure.txt`), await page.locator('body').innerText()); }

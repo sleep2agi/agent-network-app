@@ -104,8 +104,11 @@ async function desktop(theme, opts, body) {
     if (!win) throw new Error('settings window did not open');
     win.on('pageerror', e => errors.push(String(e).split('\n')[0]));
     await win.setViewportSize({ width: 1440, height: 900 });
-    await win.getByRole('button', { name: '设置分类 用户管理' }).click({ timeout: 20000 });
-    await win.locator(tid('team-group')).scrollIntoViewIfNeeded({ timeout: 10000 });
+    await win.getByRole('button', { name: '设置分类 组织与权限' }).click({ timeout: 20000 });
+    await win.locator(tid('org-access-tab-members')).click({ timeout: 10000 });
+    // 2026-11-14:Agent 团队有数据才出现;旧 Hub(teams=null)整块不画。
+    if (opts?.oldHub) await win.locator(tid('user-management-search')).waitFor({ timeout: 10000 });
+    else await win.locator(tid('team-group')).scrollIntoViewIfNeeded({ timeout: 10000 });
     await win.waitForTimeout(400);
   });
   if (win) await body({ where, win, step });
@@ -171,8 +174,8 @@ for (const theme of ['light', 'dark']) {
   });
   await desktop(theme, { role: 'owner', oldHub: true }, async ({ where, win, step }) => {
     await step('old-hub', async () => {
-      const text = (await win.locator(tid('team-group')).innerText()).replace(/\s+/g, ' ');
-      record(where, 'old Hub: one version line, nothing else', { note: (await win.locator(tid('team-old-hub')).count()) === 1 && text.includes('需要 Hub ≥ 0.9.0-preview.116'), noPanel: (await win.locator(tid('team-desktop')).count()) === 0 }, { text });
+      // 2026-11-14「组织与权限」(#1432):Agent 团队有数据才出现,旧 Hub 不再留一行版本提示,整块不画。
+      record(where, 'old Hub: team block not rendered at all', { noGroup: (await win.locator(tid('team-group')).count()) === 0, noNote: (await win.locator(tid('team-old-hub')).count()) === 0, noPanel: (await win.locator(tid('team-desktop')).count()) === 0 });
     });
   });
 }
@@ -194,6 +197,7 @@ for (const theme of ['light', 'dark']) {
     await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 20000 });
     await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'settings' }));
     await page.locator(tid('settings-row-users')).click({ timeout: 10000 });
+    await page.locator(tid('org-access-tab-members')).click({ timeout: 10000 });
     await page.locator(tid('team-open')).tap({ timeout: 10000 });
     await page.locator(tid('team-phone')).waitFor({ timeout: 5000 });
     await page.waitForTimeout(300);
@@ -241,17 +245,18 @@ for (const phone of [false, true]) for (const role of ['member', 'viewer', 'team
     if (phone) {
       await page.waitForFunction(() => !!window.__anetLayoutSweep);
       await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'settings' }));
-      record(where, 'no admin entry', { hidden: await page.locator(tid('settings-row-users')).count() === 0 });
-      await page.locator(tid('settings-row-agentTeams')).tap();
+      // 2026-11-14「组织与权限」:人人有这个入口,但非管理员没有「成员与权限」页签。
+      await page.locator(tid('settings-row-users')).tap();
       await page.locator(tid('agent-org-page')).waitFor({ timeout: 10000 });
+      record(where, 'no admin entry', { hidden: await page.locator(tid('org-access-tab-members')).count() === 0 && await page.locator(tid('org-access-tabs')).count() === 0 });
     } else {
       await page.getByRole('tab', { name: '设置', exact: true }).click();
       screen = await openStubWindow(page, 'settings', scripts);
       if (!screen) throw Error('settings window missing');
       await screen.setViewportSize({ width: 1200, height: 800 });
-      record(where, 'no admin entry', { hidden: await screen.getByRole('button', { name: '设置分类 用户管理', exact: true }).count() === 0 });
-      await screen.getByRole('button', { name: '设置分类 Agent 组织架构', exact: true }).click();
+      await screen.getByRole('button', { name: '设置分类 组织与权限', exact: true }).click();
       await screen.locator(tid('agent-org-page')).waitFor({ timeout: 10000 });
+      record(where, 'no admin entry', { hidden: await screen.locator(tid('org-access-tab-members')).count() === 0 && await screen.locator(tid('org-access-tabs')).count() === 0 });
     }
     const bannerCount = await screen.locator(tid('agent-org-demo-banner')).count();
     record(where, 'org page opens and does not write', {

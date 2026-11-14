@@ -5,6 +5,7 @@
 //   宽屏 —— 双栏弹窗(左:角色 / 任务权限;右:可访问的 Agent);
 //   手机 —— 设置三级页「成员」+ 推入的「选择 Agent」/「授权的项目」,保存在顶栏。
 // 分组编辑(新建 / 改名 / 成员 / 删除)仍在本文件。纯判断在 user-admin.ts / member-editor.ts。
+import { showWhenUsed } from './org-access-model';
 import { fetchOrg } from './org-api';
 import type { OrgData } from './org-model';
 import { OrgDesktopPanel, OrgPhoneModal } from './OrgChart';
@@ -183,7 +184,8 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
           );
         })}
       </SettingsGroup>
-      {Array.isArray(agentGroups) ? (
+      {/* 2026-11-14「组织与权限」:Agent 分组有数据才出现(生产上 1 个分组、0 条授权)。 */}
+      {showWhenUsed(agentGroups) ? (
         <>
           <SettingsGroup title={tr('users.agentGroups')} footer={tr('users.agentGroupsFooter')} testID="agent-groups">
             {agentGroups.map(g => (

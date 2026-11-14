@@ -61,7 +61,7 @@ import LanguageSettings from './LanguageSettings';
 import ShortcutsSettings from './ShortcutsSettings';
 import { ds } from './ui-scale';
 import { playChime } from './chime';
-import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, clearPendingSettingsDetail, closeSettingsPage, peekPendingSettingsDetail, filterSettings, phoneRowLabel, phoneSettingsGroups, PHONE_ICON_COLOR, PHONE_SERVER_GROUP_TITLE, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
+import { SETTINGS_CATEGORIES, SETTINGS_DETAIL_TITLE, activeCategoryKey, clearPendingSettingsDetail, closeSettingsPage, peekPendingSettingsDetail, filterSettings, phoneRowLabel, phoneSettingsGroups, PHONE_ICON_COLOR, rememberSettingsCategory, rememberSettingsScroll, rememberedSettingsView, settingsBackTarget, settingsPlatform, visibleRowKeys, type SettingsCategoryKey, type SettingsDetailKey, type SettingsHeaderOverride, type SettingsPlatform } from './settings-model';
 import SettingsPhonePage, { accountSubtitle, type PhonePagesCtx } from './SettingsPhonePages';
 import { PHONE_SETTINGS_SERVER_ENTRY } from './nav-chrome';
 import { SETTINGS_ROW_PAD_X, settingsRowMinHeight, SettingsAccountRow, SettingsActionRow, SettingsButton, SettingsCardContent, SettingsControlRow, SettingsGroup, SettingsProfileCard, SettingsRow, SettingsSwitchRow, settingsPageContentStyle } from './settings-kit';
@@ -71,6 +71,8 @@ import { withBasePadding } from './modal-safe-area';
 import { elevated, buttonStyle, buttonTextStyle } from './elevation';
 import UserManagementPanel from './UserManagementPanel';
 import AgentOrgScreen from './AgentOrgScreen';
+import OrgAccessPage from './OrgAccessPage';
+import { tabForSettingsRow } from './org-access-model';
 import Legion3DView from './legion3d-view';
 import { loadLegion3DOpen, saveLegion3DOpen } from './agent-list-prefs';
 import { ManageDepartmentPhone } from './ManageDepartment';
@@ -400,6 +402,8 @@ export default function SettingsScreen({
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
   const usersAvailable = canManageUsers(authMe, me.networkId);
+  // 「组织与权限」记住的页签按账号 + 网络区分(换账号不沿用上一个人的页签)。
+  const orgAccessScope = `${cfg.serverUrl}|${authMe?.user?.user_id ?? ''}|${me.networkId ?? ''}`;
   // 部门负责人(RFC-040,Hub ≥ .91):手机设置列表最上面一组「管理本部门」(电脑在侧栏「人员」上方)。旧 Hub ⇒ 空,不出现。
   const managedDepts = managedDepartmentIds(authMe, me.networkId);
   const [manageDeptOpen, setManageDeptOpen] = useState(false);
@@ -546,7 +550,6 @@ export default function SettingsScreen({
             onPress={onOpenServer}
           />
         ) : null;
-        const hasGeneral = groups.some(g => g.title === PHONE_SERVER_GROUP_TITLE);
         const accountName = phoneValue('account') || tr('settings.copy.12');
         const host = maskedHubHost(cfg.serverUrl);
         const profileSub = [host, me.networkName].filter(Boolean).join(' · ');
@@ -562,13 +565,12 @@ export default function SettingsScreen({
                 onPress={() => openPage('account')}
               />
             ) : null}
-            {serverRow && !hasGeneral ? <SettingsGroup testID="settings-group-server">{serverRow}</SettingsGroup> : null}
             {managedDepts.length && me.networkId ? (
               <SettingsGroup testID="settings-group-manage-dept">
                 <SettingsRow
                   testID="settings-row-manageDepartment"
                   icon="git-network-outline"
-                  iconColor={PHONE_ICON_COLOR.agentTeams}
+                  iconColor={PHONE_ICON_COLOR.users}
                   label={tr('dept.manage')}
                   accessibilityLabel={tr('dept.manage')}
                   onPress={() => setManageDeptOpen(true)}
@@ -580,7 +582,6 @@ export default function SettingsScreen({
               if (!rows.length) return null;
               return (
                 <SettingsGroup key={group.title ?? `g${gi}`} title={group.title ? settingsText(group.title) : undefined} testID={`settings-group-${gi}`}>
-                  {group.title === PHONE_SERVER_GROUP_TITLE ? serverRow : null}
                   {rows.map(cat => (
                     <SettingsRow
                       key={cat.key}
@@ -596,6 +597,9 @@ export default function SettingsScreen({
                 </SettingsGroup>
               );
             })}
+            {/* 2026-11-14:「Hub 设置」不再占「通用」第一行(admin:心智负担重)。日常用不到,单独一组放到最下面;
+                顶部账号卡片上已经显示 Hub 地址。 */}
+            {serverRow ? <SettingsGroup testID="settings-group-server">{serverRow}</SettingsGroup> : null}
           </>
         );
       })()}
@@ -715,6 +719,8 @@ export default function SettingsScreen({
     setQuietEnd,
     renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail, setHeader: setHeaderOverride, scrollTop: scrollPaneTop }} />,
     renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />,
+    usersAvailable,
+    orgAccessScope,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
     updateView: isIOS ? IOS_UPDATE_ROW : isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
@@ -1000,30 +1006,32 @@ export default function SettingsScreen({
             </View>
           ) : null}
 
-          {sectionsToRender.includes('agentTeams') ? (
-            <View style={sectionStyle} testID="settings-section-agent-teams">
-              {heading('agentTeams')}
-              {/* 军团 3D(2026-11-05):先给一个只读预览,确认投影/密度在真机上看得清,
-                  再决定要不要做成常驻入口与自转动画。 */}
-              <Pressable accessibilityRole="button" testID="settings-legion3d-toggle"
-                onPress={() => setShowLegion3D((v) => {
-                  const next = !v;
-                  void saveLegion3DOpen(next).catch(() => undefined);
-                  return next;
-                })}
-                style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 6, marginBottom: spacing.sm }, pressed && { opacity: 0.7 }]}>
-                <Text style={{ color: colors.accent, fontSize: 12 }}>{showLegion3D ? tr('settings.legion3d.hide') : tr('settings.legion3d.show')}</Text>
-              </Pressable>
-              {showLegion3D ? <Legion3DView cfg={cfg} networkId={me.networkId || cfg.networkId} /> : null}
-              <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />
-            </View>
-          ) : null}
-
-          {sectionsToRender.includes('users') && usersAvailable ? (
+          {sectionsToRender.includes('users') ? (
             <View style={sectionStyle} testID="settings-section-users">
               {heading('users')}
-              {/* 用户管理自己就是几组设置积木卡片,不再套一层 WideCard(v2:卡片里套卡片)。 */}
-              <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />
+              {/* 2026-11-14「组织与权限」:原「Agent 组织架构」+「用户管理」两个分类合成一个,两页签(OrgAccessPage)。 */}
+              <OrgAccessPage
+                canManageMembers={usersAvailable}
+                scope={orgAccessScope}
+                initialTab={searching ? tabForSettingsRow(filtered.find(c => c.key === 'users')?.rows[0]?.key) : null}
+                renderOrg={() => (
+                  <View testID="settings-section-agent-teams">
+                    {/* 军团 3D(2026-11-05):只读预览。 */}
+                    <Pressable accessibilityRole="button" testID="settings-legion3d-toggle"
+                      onPress={() => setShowLegion3D((v) => {
+                        const next = !v;
+                        void saveLegion3DOpen(next).catch(() => undefined);
+                        return next;
+                      })}
+                      style={({ pressed }) => [{ alignSelf: 'flex-start', borderWidth: 1, borderColor: colors.accent, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: 6, marginBottom: spacing.sm }, pressed && { opacity: 0.7 }]}>
+                      <Text style={{ color: colors.accent, fontSize: 12 }}>{showLegion3D ? tr('settings.legion3d.hide') : tr('settings.legion3d.show')}</Text>
+                    </Pressable>
+                    {showLegion3D ? <Legion3DView cfg={cfg} networkId={me.networkId || cfg.networkId} /> : null}
+                    <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />
+                  </View>
+                )}
+                renderMembers={() => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />}
+              />
             </View>
           ) : null}
 

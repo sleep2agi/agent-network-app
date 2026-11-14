@@ -25,9 +25,16 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('空查询 = 全部分类', all.length === SETTINGS_CATEGORIES.length);
   const noLocal = filterSettings('', {});
   ck('本地 Hub 未装 → 该类不出现', !noLocal.some((c) => c.key === 'localHub'));
-  ck('普通成员有独立 Agent 组织入口但没有用户管理', noLocal.some(c => c.key === 'agentTeams') && !noLocal.some(c => c.key === 'users'));
-  ck('团队入口支持英文搜索', filterSettings('organization', {}).some(c => c.key === 'agentTeams'));
-  ck('组织架构 / department / owner 都能搜到入口', ['组织架构', 'department', 'owner', '部门'].every(q => filterSettings(q, {}).some(c => c.key === 'agentTeams')));
+  // 2026-11-14「组织与权限」:人人有这个入口(部门与 Agent);成员管理那几行只给管理员(adminOnly)。
+  const memberOrg = noLocal.find(c => c.key === 'users');
+  ck('普通成员也有「组织与权限」入口,但只有「部门与 Agent」一行', !!memberOrg && JSON.stringify(memberOrg.rows.map(r => r.key)) === JSON.stringify(['org']));
+  const adminOrg = filterSettings('', { users: true }).find(c => c.key === 'users');
+  ck('管理员多出成员管理与新建用户两行', JSON.stringify(adminOrg?.rows.map(r => r.key)) === JSON.stringify(['org', 'members', 'newUser']));
+  ck('不再有独立的「Agent 组织架构」分类', !SETTINGS_CATEGORIES.some(c => (c.key as string) === 'agentTeams'));
+  ck('组织入口支持英文搜索', filterSettings('organization', {}).some(c => c.key === 'users'));
+  ck('组织架构 / department / owner / 旧名 都能搜到入口', ['组织架构', 'department', 'owner', '部门', 'Agent 组织架构'].every(q => filterSettings(q, {}).some(c => c.key === 'users')));
+  ck('普通成员搜「新建用户」搜不到(adminOnly 行不漏给非管理员)', !filterSettings('新建用户', {}).some(c => c.key === 'users'));
+  ck('管理员搜「用户管理」(旧名)仍能找到成员行', filterSettings('用户管理', { users: true }).find(c => c.key === 'users')?.rows.some(r => r.key === 'members') === true);
 
   const r = filterSettings('提示音', { localHub: true });
   ck('搜「提示音」只剩通知类', r.length === 1 && r[0].key === 'notifications');
@@ -63,8 +70,8 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('左栏(分类列表)', src.includes('testID="settings-sidebar"'));
   ck('右栏(内容面板)', src.includes('testID="settings-pane"'));
   ck('搜索框', src.includes("accessibilityLabel={tr('settings.copy.3')}"));
-  ck('桌面独立挂载组织入口', src.includes("sectionsToRender.includes('agentTeams')") && src.includes('<AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />'));
-  ck('手机独立挂载组织入口', src.includes('renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />') && norm('./SettingsPhonePages.tsx').includes("case 'agentTeams': return <>{ctx.renderAgentOrg()}</>"));
+  ck('桌面:组织与权限一页,两页签挂部门与 Agent / 成员', src.includes("sectionsToRender.includes('users') ? (") && src.includes('<OrgAccessPage') && src.includes('<AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />') && src.includes('renderMembers={() => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />}'));
+  ck('手机:组织与权限页签挂部门与 Agent / 成员', src.includes('renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />') && norm('./SettingsPhonePages.tsx').includes('<OrgAccessPage canManageMembers={ctx.usersAvailable} scope={ctx.orgAccessScope} detailOpen={!!detail} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(detail)} />'));
   ck('手机列表行仍会打开子页', src.includes('onPress={() => openPage(cat.key)}'));
   const org = norm('./AgentOrgScreen.tsx');
   ck('组织页换账号和网络时重挂', org.includes('key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])}') && org.includes('testID="agent-org-page"') && !org.includes('return null'));

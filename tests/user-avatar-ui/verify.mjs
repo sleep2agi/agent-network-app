@@ -115,7 +115,8 @@ await run(out.pathname, async ({ c, page, test, shot, navigate, state }) => {
     await shot('uploaded');
     // Remount through real Settings navigation to verify persisted profile reads.
     if (c.phone) { await el('settings-back').click(); await el('settings-row-users').click(); }
-    else await el('settings-sidebar').getByText('用户管理', { exact: true }).click();
+    else await el('settings-sidebar').getByText('组织与权限', { exact: true }).click();
+    await el('org-access-tab-members').click({ timeout: 10000 });
     await account();
     test('user profile reread contains committed avatar', profiles.at(-1)?.avatar_url === '/api/users/self/avatar/v1.png' && (await preview()).startsWith('blob:'));
     const committed = await preview();
