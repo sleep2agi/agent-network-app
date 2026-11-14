@@ -92,3 +92,23 @@ ck('列表只从节点自报或服务器目录来，不含内置模型常量',
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);
+
+// #4823 review（ANet负责人 2026-11-15）—— 真的挡住「key 原样显示给用户」：
+//   只查源码长相不够。这里按**实际能返回的 code 全集**逐个查 i18n 表，
+//   并要求中英文都存在。kebab/camel 写岔一次，这条就红。
+{
+  const { variantAfterModelSwitch } = await import('./node-variant-patch');
+  const { chatTranslations } = await import('./i18n-chat');
+  // 用「一定会走 must-reselect」的输入逐一触发，收集真实 code。
+  const codes = new Set<string>();
+  for (const nextModelVariants of [[], ['low'], undefined]) {
+    const r = variantAfterModelSwitch({ previousModel: 'p/a', nextModel: 'p/b', currentVariant: 'high', nextModelVariants });
+    if (r.action === 'must-reselect') codes.add(r.code);
+  }
+  ck('must-reselect 的每个 code 都有中英文文案（防 key 原样显示）',
+    codes.size >= 2 && [...codes].every(code => {
+      const row = (chatTranslations as Record<string, readonly string[]>)[`chat.modelPicker.variantNeedsReselect.${code}`];
+      return Array.isArray(row) && row.length >= 2 && row[0]?.trim() && row[1]?.trim()
+        && !String(row[0]).includes('chat.modelPicker') && !String(row[1]).includes('chat.modelPicker');
+    }));
+}
