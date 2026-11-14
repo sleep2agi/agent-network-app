@@ -1443,6 +1443,8 @@ export interface CreateNodeRequest {
     /** 只在 daemon 带 default_workdir_root 时发送(老 daemon 会忽略它,节点落在别处)。 */
     workdir?: string;
   };
+  /** 2026-11-14:新节点归哪个部门(Hub /health 报 create_node_department 才发)。不发 = 不指定。 */
+  department_id?: string;
 }
 import type { CreateRequestRow } from './create-request-status';
 export type CreateNodeResult =
