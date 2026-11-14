@@ -242,9 +242,9 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   const forbidden = ['setMemberDepartment', 'deleteDepartment', 'appFetch', 'fetchOrg', 'listRequirementPeople', "method: 'POST'", "method: 'PUT'", "method: 'PATCH'", "method: 'DELETE'", 'AgentTeamsEntry'];
   ck('department edits reuse shared APIs, never move people or delete', forbidden.every(s => !screen.includes(s)) && screen.includes('await createDepartment(') && screen.includes('await updateDepartment('));
   // admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:这一页不再改部门结构,
-  // 只调 Agent 归属;增删改统一在「用户管理 → 成员与部门」。
+  // 只调 Agent 归属;增删改统一在「组织与权限 → 成员与权限」。
   ck('department create/rename/reparent actions are gone from the agent page', ['agent-org-new-department', 'agent-org-new-child', 'agent-org-rename-department', 'agent-org-reparent-department'].every(id => !screen.includes(`testID="${id}"`)));
-  ck('the page points at 用户管理 → 成员与部门 instead', screen.includes('testID="agent-org-departments-elsewhere"') && /agentOrg\.departmentsElsewhere/.test(screen));
+  ck('the page points at 组织与权限 → 成员与权限 instead', screen.includes('testID="agent-org-departments-elsewhere"') && /agentOrg\.departmentsElsewhere/.test(screen));
   ck('editor uses bounded keyboard-safe frame with pinned save and shared-tree warning', screen.includes('testID="agent-org-department-editor"') && screen.includes('footer={<SettingsButton') && screen.includes('testID="agent-org-shared-tree-note"'));
   ck('editor validates Unicode name length and excludes entire subtree', screen.includes('[...name.trim()].length <= 40') && screen.includes('subtreeIds(tree, p.editor.dept.id)') && screen.includes('filter(row => !excluded.has(row.dept.id))'));
   ck('patches preserve leader and sort by omission', screen.includes("? { name: name.trim() } : { parent_id: parent }") && !screen.includes('leader_user_id:') && !screen.includes('sort:'));
