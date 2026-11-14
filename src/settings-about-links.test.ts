@@ -33,7 +33,7 @@ check('「下载历史版本」行给出该装哪一版（从内置更新日志�
   settings.includes("tr('settings.copy.295')") && settings.includes('v${ROLLBACK_TARGET}')
   && settings.includes("rollbackTarget(versions, APP_VERSION)"));
 // 版本行要带平台短名(截图报问题时看得出是 iOS 还是安卓)
-check('版本行显示版本 + 平台', settings.includes('value={`v${APP_VERSION} · ${platformShortLabel(Platform.OS)}`}'));
+check('版本行显示版本 + 平台(桌面按 UA 认 macOS / Windows / Linux,不再写 Web)', settings.includes('{`v${APP_VERSION} · ${aboutPlatform}`}') && settings.includes('aboutPlatformLabel(Platform.OS, tauriDesktop,'));
 check('平台短名映射齐全', (() => {
   const src = settings;
   return ['ios', 'android', 'macos', 'windows', 'linux', 'web'].every((k) => src.includes(`case '${k}':`));
