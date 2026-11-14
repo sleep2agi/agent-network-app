@@ -65,7 +65,16 @@ ck('快照带 TTL，过期不显示（不拿旧节点值冒充当前）',
 ck('换模型后档位需要重选 → 提示并留在面板（不自动清除）',
   /variantAfterModelSwitch\(\{[\s\S]{0,220}nextModelVariants: row\.choices\.kind === 'unknown' \? undefined/.test(palette)
   && palette.includes('variantNeedsReselect')
-  && /carry\.action === 'must-reselect'[\s\S]{0,160}return;/.test(palette));
+  && /carry\.action === 'must-reselect'[\s\S]{0,320}return;/.test(palette));
+// #4823 review（ANet负责人 2026-11-15）：
+//   a) 用户提示里不能塞 helper 的 reason 原文 —— 那是开发判据，英文界面会插进中文；按判别码给 i18n key。
+//   b) ackOnly（只收到 ACK、没读回到新模型）必须先判 —— 否则「模型已切换」这句说过头了。
+ck('档位重选提示按判别码取文案，不展示 reason 原文',
+  /variantNeedsReselect\.\$\{carry\.code\}/.test(palette)
+  && !/variantNeedsReselect[\s\S]{0,80}reason:/.test(palette));
+ck('ackOnly 判断在 must-reselect 之前（ACK-only 时不说「模型已切换」）',
+  palette.indexOf("verdict.ackOnly") > -1
+  && palette.indexOf("verdict.ackOnly") < palette.indexOf("carry.action === 'must-reselect'"));
 ck('换模型的补丁里不带 modelVariant（省略=不改档）',
   /patch:\s*buildConfigPatch\(\{\s*model:\s*row\.key\s*\}\)/.test(palette));
 {

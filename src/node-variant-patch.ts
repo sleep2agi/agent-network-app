@@ -174,15 +174,16 @@ export function variantAfterModelSwitch(input: {
   nextModel?: string | null;
   currentVariant?: string | null;
   nextModelVariants?: unknown;
-}): { action: 'keep' | 'clear' | 'must-reselect'; reason: string } {
+}): { action: 'keep' | 'clear' | 'must-reselect'; reason: string; code: 'model-unchanged' | 'no-variant' | 'not-in-list' | 'unknown' } {
   const prev = (input.previousModel ?? '').trim();
   const next = (input.nextModel ?? '').trim();
   const cur = typeof input.currentVariant === 'string' ? input.currentVariant.trim() : '';
-  if (!cur) return { action: 'keep', reason: '当前没有档位' };
-  if (prev && next && prev === next) return { action: 'keep', reason: '模型未变，档位保持' };
+  if (!cur) return { action: 'keep', reason: '当前没有档位', code: 'model-unchanged' };
+  if (prev && next && prev === next) return { action: 'keep', reason: '模型未变，档位保持', code: 'model-unchanged' };
   const choices = variantChoices(input.nextModelVariants);
-  if (choices.kind === 'list' && choices.options.includes(cur)) return { action: 'keep', reason: '新模型支持同一档位' };
+  if (choices.kind === 'list' && choices.options.includes(cur)) return { action: 'keep', reason: '新模型支持同一档位', code: 'model-unchanged' };
   // 我们**不会**自动发 modelVariant:null —— 省略就是「不改档」。所以这里只提示需要用户决定。
-  if (choices.kind === 'none') return { action: 'must-reselect', reason: '新模型没有可选档位：不会自动清除，请手动选择或清除档位' };
-  return { action: 'must-reselect', reason: '新模型的档位未知或不含原档位 → 要求重新选择，不拼后缀、不硬编码' };
+  if (choices.kind === 'none') return { action: 'must-reselect', reason: '新模型没有可选档位：不会自动清除，请手动选择或清除档位', code: 'no-variant' };
+  if (choices.kind === 'unknown') return { action: 'must-reselect', reason: '新模型的档位未知 → 要求重新选择，不拼后缀、不硬编码', code: 'unknown' };
+  return { action: 'must-reselect', reason: '新模型的档位不含原档位 → 要求重新选择，不拼后缀、不硬编码', code: 'not-in-list' };
 }
