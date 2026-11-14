@@ -90,9 +90,6 @@ ck('换模型的补丁里不带 modelVariant（省略=不改档）',
 ck('列表只从节点自报或服务器目录来，不含内置模型常量',
   !/const\s+(BUILTIN|DEFAULT)_?MODELS?\b/.test(palette) && /opencode_catalog/.test(palette));
 
-console.log(`\n${p}/${t} 通过`);
-if (p !== t) process.exit(1);
-
 // #4823 review（ANet负责人 2026-11-15）—— 真的挡住「key 原样显示给用户」：
 //   只查源码长相不够。这里按**实际能返回的 code 全集**逐个查 i18n 表，
 //   并要求中英文都存在。kebab/camel 写岔一次，这条就红。
@@ -112,3 +109,6 @@ if (p !== t) process.exit(1);
         && !String(row[0]).includes('chat.modelPicker') && !String(row[1]).includes('chat.modelPicker');
     }));
 }
+
+console.log(`\n${p}/${t} 通过`);
+process.exit(p === t ? 0 : 1);
