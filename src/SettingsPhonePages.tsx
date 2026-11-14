@@ -59,6 +59,8 @@ export type PhonePagesCtx = {
   renderAgentOrg: () => ReactNode;
   /** 能管成员(Hub 管理员 / 网络 owner、admin):「组织与权限」多一个「成员与权限」页签。 */
   usersAvailable: boolean;
+  /** 账号 + 网络,给「组织与权限」记页签用。 */
+  orgAccessScope: string;
   show: (cat: SettingsCategoryKey, row: string) => boolean;
   detail: SettingsDetailKey | null;
   openDetail: (key: SettingsDetailKey) => void;
@@ -136,7 +138,7 @@ export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategor
     case 'users':
       // 成员 / 分组的三级页照旧直接画;列表层是「组织与权限」两个页签(org-access-model.ts)。
       if (ctx.detail === 'userMember' || ctx.detail === 'userGroup') return <>{ctx.renderUsers(ctx.detail)}</>;
-      return <OrgAccessPage canManageMembers={ctx.usersAvailable} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(null)} />;
+      return <OrgAccessPage canManageMembers={ctx.usersAvailable} scope={ctx.orgAccessScope} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(null)} />;
     case 'localHub': return <LocalHubPage ctx={ctx} />;
     case 'appearance': return <AppearancePage ctx={ctx} />;
     case 'notifications': return ctx.detail === 'quietHours' ? <QuietHoursEditPage ctx={ctx} /> : <NotificationsPage ctx={ctx} />;

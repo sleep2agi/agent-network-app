@@ -402,6 +402,8 @@ export default function SettingsScreen({
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
   const usersAvailable = canManageUsers(authMe, me.networkId);
+  // 「组织与权限」记住的页签按账号 + 网络区分(换账号不沿用上一个人的页签)。
+  const orgAccessScope = `${cfg.serverUrl}|${authMe?.user?.user_id ?? ''}|${me.networkId ?? ''}`;
   // 部门负责人(RFC-040,Hub ≥ .91):手机设置列表最上面一组「管理本部门」(电脑在侧栏「人员」上方)。旧 Hub ⇒ 空,不出现。
   const managedDepts = managedDepartmentIds(authMe, me.networkId);
   const [manageDeptOpen, setManageDeptOpen] = useState(false);
@@ -718,6 +720,7 @@ export default function SettingsScreen({
     renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail, setHeader: setHeaderOverride, scrollTop: scrollPaneTop }} />,
     renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />,
     usersAvailable,
+    orgAccessScope,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
     updateView: isIOS ? IOS_UPDATE_ROW : isAndroid
       ? describeAndroidUpdateRow(androidUpdate, { currentVersion: APP_VERSION, lastCheckedAt: androidUpdateLastCheckedAt(), now: Date.now() })
@@ -1009,6 +1012,7 @@ export default function SettingsScreen({
               {/* 2026-11-14「组织与权限」:原「Agent 组织架构」+「用户管理」两个分类合成一个,两页签(OrgAccessPage)。 */}
               <OrgAccessPage
                 canManageMembers={usersAvailable}
+                scope={orgAccessScope}
                 initialTab={searching ? tabForSettingsRow(filtered.find(c => c.key === 'users')?.rows[0]?.key) : null}
                 renderOrg={() => (
                   <View testID="settings-section-agent-teams">

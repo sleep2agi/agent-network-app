@@ -1,26 +1,30 @@
 // 设置 →「组织与权限」(2026-11-14):一个入口,两个页签。页签逻辑在 org-access-model.ts;
 // 两页的内容仍是原来的组件(AgentOrgScreen / UserManagementPanel),Hub 接口与数据都不变。
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { useTranslation } from './i18n-react';
 import { settingsText } from './i18n-settings';
-import { ORG_ACCESS_TAB_LABEL, orgAccessTabs, resolveOrgAccessTab, type OrgAccessTab } from './org-access-model';
+import { ORG_ACCESS_TAB_LABEL, orgAccessTabs, rememberedTab, resolveOrgAccessTab, type OrgAccessTab } from './org-access-model';
 
-// 点进成员再返回会重新挂载这一页;记住上次的页签,别把人弹回第一页。
-let lastTab: OrgAccessTab | null = null;
+// 点进成员再返回会重新挂载这一页;记住上次的页签,别把人弹回第一页。按账号 + 网络记(rememberedTab)。
+let lastTab: { scope: string; tab: OrgAccessTab } | null = null;
 
-export default function OrgAccessPage({ canManageMembers, initialTab, renderOrg, renderMembers }: {
+export default function OrgAccessPage({ canManageMembers, initialTab, scope = '', renderOrg, renderMembers }: {
   canManageMembers: boolean;
+  /** 账号 + 网络:换了就不沿用上次的页签。 */
+  scope?: string;
   initialTab?: OrgAccessTab | null;
   renderOrg: () => ReactNode;
   renderMembers: () => ReactNode;
 }) {
   useTranslation();
   const tabs = orgAccessTabs(canManageMembers);
-  const [want, setWantState] = useState<OrgAccessTab | null>(initialTab ?? lastTab);
-  const setWant = (k: OrgAccessTab) => { lastTab = k; setWantState(k); };
+  const [want, setWantState] = useState<OrgAccessTab | null>(initialTab ?? rememberedTab(lastTab, scope));
+  const setWant = (k: OrgAccessTab) => { lastTab = { scope, tab: k }; setWantState(k); };
+  // 桌面:已经站在这页时原地搜索,initialTab 跟着搜索词变;只在非空时跟,不覆盖手动点的页签(#1432 审阅)。
+  useEffect(() => { if (initialTab) setWantState(initialTab); }, [initialTab]);
   const tab = resolveOrgAccessTab(want, tabs);
   return (
     <View testID="org-access-page">

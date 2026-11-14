@@ -102,7 +102,8 @@ console.log('# 接线');
 const ui = src('./AgentTeams.tsx'), um = src('./UserManagementPanel.tsx');
 ck('入口:用户管理里紧跟「组织架构」之后', um.indexOf('<AgentTeamsSection') > um.indexOf('<OrgDesktopPanel') && um.includes("import { AgentTeamsSection } from './AgentTeams'"));
 ck('人的组织架构照旧(OrgDesktopPanel / OrgPhoneModal 仍在)', um.includes('<OrgDesktopPanel cfg={cfg}') && um.includes('<OrgPhoneModal cfg={cfg}'));
-ck('旧 Hub:只一行版本提示', ui.includes("teams === null ? <SettingsRow label={`需要 Hub ≥ ${HUB_MIN}`}") && HUB_MIN === '0.9.0-preview.116');
+// 2026-11-14「组织与权限」(#1432):Agent 团队有数据才出现;旧 Hub(teams=null)整块不画,不再留一行版本提示。
+ck('旧 Hub / 没有团队:整块不画', ui.includes('if (!showWhenUsed(teams)) return null;') && !ui.includes('team-old-hub') && HUB_MIN === '0.9.0-preview.116');
 ck('不碰部门接口', !/departments|setMemberDepartment|org-api/.test(ui + src('./agent-teams.ts')));
 ck('删除:有子团队就灰掉并说原因', ui.includes("'team-delete', 'danger', kids.length > 0)") && ui.includes('team-delete-reason'));
 ck('删除先确认', ui.includes("kind: 'delete'") && ui.includes('team-delete-confirm'));

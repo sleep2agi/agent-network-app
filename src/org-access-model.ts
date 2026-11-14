@@ -20,6 +20,14 @@ export function resolveOrgAccessTab(want: OrgAccessTab | null | undefined, tabs:
   return want && tabs.includes(want) ? want : tabs[0];
 }
 
+/**
+ * 记住上次的页签(点进成员三级页再返回会重新挂载),但**按账号 + 网络**记:
+ * 管理员 A 退出、B 登录,不该继承 A 停在的页签(#1432 审阅)。
+ */
+export function rememberedTab(memory: { scope: string; tab: OrgAccessTab } | null, scope: string): OrgAccessTab | null {
+  return memory && memory.scope === scope ? memory.tab : null;
+}
+
 /** 搜索命中的是哪一行,就先打开哪一页(搜「新建用户」直接落在成员页)。 */
 export function tabForSettingsRow(rowKey: string | null | undefined): OrgAccessTab | null {
   if (rowKey === 'members' || rowKey === 'newUser') return 'members';

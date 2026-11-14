@@ -17,7 +17,7 @@ import { fetchHubNodes, type HubConfig } from './api';
 import type { AuthMe, NetworkMember } from './user-admin';
 import { SettingsGroup, SettingsRow } from './settings-kit';
 import {
-  HUB_MIN, childTeams, createTeam, deleteTeam, fetchAgentTeams, flattenTeams, patchTeam, setNodeTeam, teamNodeName, teamOfNode, teamPerms, unassigned,
+  childTeams, createTeam, deleteTeam, fetchAgentTeams, flattenTeams, patchTeam, setNodeTeam, teamNodeName, teamOfNode, teamPerms, unassigned,
   type AgentTeam, type TeamNode, type TeamPerms,
 } from './agent-teams';
 
@@ -344,11 +344,11 @@ function AgentTeamsScoped({ cfg, networkId, me, people, phone }: Omit<Props, 'te
   // 2026-11-14「组织与权限」:没人用的机制有数据才出现。生产上 Agent 团队 0 条;旧 Hub(null)也不再占一行提示。
   if (!showWhenUsed(teams)) return null;
   return (
-    <SettingsGroup title="Agent 组织" footer={teams ? 'Agent 自己的组织树,和人的部门互不影响;一个 Agent 最多归一个团队。' : undefined} separators={false} testID="team-group">
-      {teams === null ? <SettingsRow label={`需要 Hub ≥ ${HUB_MIN}`} testID="team-old-hub" /> : phone ? (
+    <SettingsGroup title="Agent 组织" footer="Agent 自己的组织树,和人的部门互不影响;一个 Agent 最多归一个团队。" separators={false} testID="team-group">
+      {phone ? (
         <SettingsRow label="Agent 团队" value={`${teams.length} 个团队`} onPress={() => setOpen(true)} testID="team-open" />
       ) : <AgentTeamsDesktop cfg={cfg} networkId={networkId} me={me} people={people} teams={teams} nodes={nodes} reload={reload} />}
-      {open && teams ? <AgentTeamsPhone cfg={cfg} networkId={networkId} me={me} people={people} teams={teams} nodes={nodes} reload={reload} onClose={() => setOpen(false)} /> : null}
+      {open ? <AgentTeamsPhone cfg={cfg} networkId={networkId} me={me} people={people} teams={teams} nodes={nodes} reload={reload} onClose={() => setOpen(false)} /> : null}
     </SettingsGroup>
   );
 }
