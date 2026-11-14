@@ -707,7 +707,7 @@ export default function SettingsScreen({
     setQuietStart,
     setQuietEnd,
     renderUsers: detail => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} phone={{ memberOpen: detail === 'userMember', groupOpen: detail === 'userGroup', openMember: () => openDetail('userMember'), openGroup: () => openDetail('userGroup'), closeMember: closeDetail, setHeader: setHeaderOverride, scrollTop: scrollPaneTop }} />,
-    renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />,
+    renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone canManageStructure={usersAvailable} />,
     usersAvailable,
     orgAccessScope,
     renderShortcuts: () => <ShortcutsSettings s={styles} showNav={show('shortcuts', 'nav')} showChat={show('shortcuts', 'chat')} showSend={show('shortcuts', 'send')} />,
@@ -1006,7 +1006,7 @@ export default function SettingsScreen({
                 renderOrg={() => (
                   <View testID="settings-section-agent-teams">
                     {/* 军团 3D 预览 2026-11-14 按管理员要求从这里下掉(组件仍在 src/legion3d-view.tsx)。 */}
-                    <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />
+                    <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} canManageStructure={usersAvailable} />
                   </View>
                 )}
                 renderMembers={() => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />}

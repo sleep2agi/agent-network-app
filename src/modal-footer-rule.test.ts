@@ -40,6 +40,7 @@ const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; key
   'AccountRowActions.tsx': { count: 2, kinds: ['menu', 'sheet'], keyboard: 'n/a: 两个 <Modal 都没有输入框(桌面 ⋯ 锚定菜单 / 手机账号 ⋯ 底部动作面板,固定几行);文件里的 TextInput 在编辑弹窗里,编辑弹窗是 DialogFrame(自带键盘避让)', note: '⋯ 菜单高度按条目数算、夹进窗口(#427);动作面板高度由固定行数决定,取消在最底;编辑走 DialogFrame' },
   'AttachmentTextPreview.tsx': { count: 1, kinds: ['dialog'], note: 'admin 2026-11-11 文本附件预览:面板 height 86% 有界,内容在 flex:1 的 ScrollView 里;只读、没有输入框和按钮行,关闭在标题栏(点背景也关)' },
   'AccountSwitcher.tsx': { count: 1, kinds: ['dialog', 'sheet'], note: '80% / 85% 有界,列表 flexGrow:0 直接子节点,取消在外' },
+  'AgentOrgScreen.tsx': { count: 1, kinds: ['menu'], keyboard: 'n/a: 唯一的 <Modal 是部门树右键 / 长按菜单(固定几项,没有输入框);文件里的 TextInput 在 DialogFrame 编辑框(自带键盘避让)和页内搜索框', note: '管理员 2026-11-14 部门右键菜单:anchorRowMenu 按条目数算高度、夹进窗口(触屏夹安全区);新建 / 改名 / 移动 / 删除走 DialogFrame' },
   'AgentRowMenu.tsx': { count: 1, kinds: ['menu'], note: 'anchorRowMenu 算好高度,固定条目' },
   'AndroidUpdatePrompt.tsx': { count: 1, kinds: ['fullscreen'], note: '全屏页(2026-09-30):ScrollView flex:1 装头部 + 完整说明,主按钮 / 进度条在 footer 里、在外' },
   'ChatInfoPanel.tsx': { count: 1, kinds: ['fullscreen'], note: '页面 flex:1 + ScrollView flex:1' },
