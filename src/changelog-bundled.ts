@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.536:",
+  "- 聊天框下方「模型 / 思考深度」：现在可以**同时换模型和换档位**，一次生效（以前同时改会失败）。深度读不到时如实显示「未知」，不再拿默认值冒充。",
+  "- 换档位只发必要的那个字段，老版本节点上也能改（以前在旧节点上会被判成「同时改两项」而拒绝）。",
+  "- 提示文案修正：只收到回执、还没读回到生效模型时，不再说「已切换」，改说「已接受，生效模型未确认」。",
+  "",
   "What's new in 0.2.535:",
   "- 侧栏「分组 · 部门」按组织架构排：父部门在前，子部门缩进跟在下面、只写自己的名字（不再每行重复「TMAI /」），「未归属」放最后。",
   "",
