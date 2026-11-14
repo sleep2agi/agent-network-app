@@ -9,6 +9,7 @@ import * as Clipboard from 'expo-clipboard';
 import { fetchDepartmentNodes, fetchOrg } from './org-api';
 import { departmentLabelsByAlias, groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
 import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
+import { deptHeaderLayout, deptTreeRank } from './agent-list-dept-tree';
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -507,6 +508,7 @@ export default function AgentsScreen({
     for (const s of tabbedSessions) m.set(s.alias, s.runtime ?? null);
     return m;
   }, [tabbedSessions]);
+  const deptRank = useMemo(() => deptTreeRank(org), [org]);
   const sections = useMemo(
     () => buildSections(applyAgentFilter(tabbedSessions, activeFilter), query, {
       // 搜索也命中部门名:分区改成按部门之后,「搜 TMWork 找到这一部门的 agent」比
@@ -527,9 +529,10 @@ export default function AgentsScreen({
           : (deptByAlias.size ? (deptByAlias.get(alias) ?? '未归属') : undefined)),
       // 在线态分区要固定顺序(正在工作→在线→异常→离线→未上报),否则离线会因为「在线人数同为 0」
       // 跟「未上报」按拼音混排。部门分区不传,保持原行为。
-      teamOrder: viewGroupBy === 'status' ? statusGroupRank : viewGroupBy === 'runtime' ? runtimeGroupRank : undefined,
+      // 部门分区按组织树排(父在前、子跟在后,未归属最后;管理员 2026-11-14)。
+      teamOrder: viewGroupBy === 'status' ? statusGroupRank : viewGroupBy === 'runtime' ? runtimeGroupRank : deptByAlias.size ? deptRank : undefined,
     }),
-    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, viewGroupBy, statusByAlias, runtimeByAlias],
+    [tabbedSessions, activeFilter, query, pinnedAliases, floatInput, activityByAlias, deptByAlias, viewGroupBy, statusByAlias, runtimeByAlias, deptRank],
   );
   // #725: only rows that prove a registered identity, minus aliases the list already
   // shows as real sessions (double-rendering the same name would be worse than hiding it).
@@ -544,6 +547,8 @@ export default function AgentsScreen({
   }, [agentDirectory.rows, sessions, query]);
   const shownCount = countShown(sections);
   const shownSections = useMemo(() => applyCollapsed(sections, collapsed, query), [sections, collapsed, query]);
+  const deptTreeView = viewGroupBy === 'department' && deptByAlias.size > 0;
+  const shownTitleSet = useMemo(() => new Set(shownSections.map(x => x.title)), [shownSections]);
   // 更紧凑 (two-pane): tell the nav rail where the first row is and how tall rows are, so rail item n
   // sits beside row n (list-rail-align.ts). Only when the first section has rows on screen
   // (row height/pitch is not measured: both sides compute it with denserRowPitch).
@@ -1111,7 +1116,10 @@ export default function AgentsScreen({
       onScroll={markListActive}
       scrollEventThrottle={100}
       stickySectionHeadersEnabled={false}
-      renderSectionHeader={({ section }) => (
+      renderSectionHeader={({ section }) => {
+        // 部门视图:子部门缩进跟在父部门下面,只写自己的名字;父部门不在列表里时前缀灰着留下。
+        const layout = deptTreeView ? deptHeaderLayout(section.title, shownTitleSet) : { depth: 0, prefix: null, leaf: section.title };
+        return (
         // Small section label + online/total; tap folds the group (not 新消息, not while searching).
         <>
         <Pressable
@@ -1125,19 +1133,28 @@ export default function AgentsScreen({
           // admin 2026-10-26「军团里面能分组吗…有明显的划分区，有点小发光，就是要震撼」:
           // 每个团之间一条发丝分隔线(第一组不画),标题前缀一条 brand 色的微光竖条。
           style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg },
-            section !== shownSections[0] ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null]}
+            // 子部门不画分隔线(和父部门是一块),只缩进;顶层部门之间才分隔。
+            section !== shownSections[0] && layout.depth === 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null,
+            layout.depth ? { paddingLeft: ds(AGENT_ROW_PAD_X) + layout.depth * 14, paddingTop: 4 } : null]}
         >
           {/* 整组都离线时竖条不发亮、标题转灰:一眼看出这一团现在没人(不是没数据)。 */}
-          <View testID={`agent-group-glow-${section.title}`} style={section.online === 0 ? {
+          {layout.depth ? (
+            // 子部门:一条细竖线代替发光条,一眼看出挂在上面那个部门下。
+            <View testID={`agent-group-branch-${section.title}`} style={{ width: StyleSheet.hairlineWidth * 2, height: 13, marginRight: 6, backgroundColor: colors.border }} />
+          ) : <View testID={`agent-group-glow-${section.title}`} style={section.online === 0 ? {
             width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.border,
           } : {
             width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.accent,
             shadowColor: colors.accent, shadowOpacity: 0.45, shadowRadius: 6, shadowOffset: { width: 0, height: 0 },
-          }} />
+          }} />}
           {section.collapsible ? (
             <Ionicons name={section.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
           ) : null}
-          <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: section.online === 0 ? colors.textMuted : colors.text }]}>{section.title}</Text>
+          <Text selectable={false} numberOfLines={1} testID={`agent-group-title-${section.title}`}
+            style={[rowStyles.groupTitle, { color: section.online === 0 ? colors.textMuted : colors.text }, layout.depth ? { fontWeight: weight.regular } : null]}>
+            {layout.prefix ? <Text style={{ color: colors.textMuted, fontWeight: weight.regular }}>{layout.prefix}</Text> : null}
+            {layout.leaf}
+          </Text>
           {/* 分组未读总数:一眼看出哪一团在喊你(admin 2026-10-28 之后的分组细化)。 */}
           {(() => {
             const unread = section.data.reduce((n, item) => n + (floatInput.counts[item.alias] ?? 0), 0);
@@ -1164,7 +1181,8 @@ export default function AgentsScreen({
           );
         })()}
         </>
-      )}
+        );
+      }}
       ItemSeparatorComponent={compact ? undefined : () => (
         <View style={[rowStyles.separator, { backgroundColor: colors.border }]} />
       )}

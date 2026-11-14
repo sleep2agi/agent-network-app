@@ -600,6 +600,10 @@
     "composer-model-palette/drive.mjs": {
       "kind": "stub",
       "secs": 15
+    },
+    "sidebar-dept-tree/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
     }
   }
 }
