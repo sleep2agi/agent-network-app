@@ -3095,11 +3095,26 @@ jobs:
           # android-build is triggered by the push that produced the bump commit and
           # usually finishes after the desktop release starts. Wait for THIS commit's
           # run instead of silently skipping the attach.
-          for attempt in $(seq 1 40); do
+          # 0.2.532 教训（#1438）：发布目标 commit 可能**不是**那个改 package.json 的 bump commit
+          # （例：#1434 d3d72148 只是功能提交 ⇒ android-build 从没对它跑过，按 head_sha 精确查必然落空）。
+          # 正确做法不是复用更早 sha 的 APK（APK 内嵌该 commit 的 JS bundle，安卓用户会拿不到本版改动），
+          # 而是**对本 commit 补派一次构建**；已有 run 就不重派，避免同一 sha 多条 run。
+          dispatched=0
+          for attempt in $(seq 1 60); do
             line=$(gh api "repos/$GITHUB_REPOSITORY/actions/workflows/android-build.yml/runs?head_sha=$COMMIT&per_page=1" --jq '.workflow_runs[0] | "\(.id // "") \(.status // "") \(.conclusion // "")"')
             read -r run_id status conclusion <<<"$line"
             if [ -z "$run_id" ]; then
-              require_apk "no android-build run exists for $COMMIT（这一版的 bump commit 没有触发构建）"
+              if [ "$dispatched" = "0" ]; then
+                echo "no android-build run for $COMMIT; dispatching one for this exact commit"
+                gh workflow run android-build.yml --repo "$GITHUB_REPOSITORY" --ref main -f commit="$COMMIT" \
+                  || require_apk "could not dispatch android-build for $COMMIT"
+                dispatched=1
+                sleep 20
+                continue
+              fi
+              echo "waiting for the dispatched android-build to appear ($attempt/60)"
+              sleep 20
+              continue
             fi
             if [ "$status" = "completed" ]; then
               if [ "$conclusion" != "success" ]; then
@@ -3109,10 +3124,10 @@ jobs:
               echo "using android-build $run_id"
               exit 0
             fi
-            echo "android-build $run_id is $status; waiting ($attempt/40)"
-            sleep 30
+            echo "android-build $run_id is $status; waiting ($attempt/60)"
+            sleep 20
           done
-          require_apk "android-build for $COMMIT did not finish in 20 minutes (run may still be going)"
+          require_apk "android-build for $COMMIT did not finish in ~20 minutes (run may still be going)"
       - name: Attach the APK with the updater's file name
         if: steps.find.outputs.run_id != ''
         env:
