@@ -16,8 +16,8 @@ const palette = src('./ComposerModelPalette.tsx');
 const chat = src('./ChatScreen.tsx');
 
 // 1) 写节点配置：这是「按节点记忆」的承载物。
-ck('切换写节点配置：带 nodeId / baseRevision / patch.model',
-  /updateNodeConfig\(cfgRef\.current,\s*\{[\s\S]{0,160}nodeId:\s*node\.node_id[\s\S]{0,120}baseRevision:\s*config\.config_revision[\s\S]{0,80}patch:\s*\{\s*model:\s*row\.key\s*\}/.test(palette));
+ck('切换写节点配置：带 nodeId / baseRevision / patch（model 由 helper 产出）',
+  /updateNodeConfig\(cfgRef\.current,\s*\{[\s\S]{0,200}nodeId:\s*node\.node_id[\s\S]{0,140}baseRevision:\s*config\.config_revision[\s\S]{0,120}patch:\s*buildConfigPatch\(\{\s*model:\s*row\.key\s*\}\)/.test(palette));
 // 档位与模型同一个补丁里写，且**形状来自契约 helper**（null=清除 / 省略=不改 只在一处定义）。
 ck('档位的 patch 形状来自 buildConfigPatch（不再就地拼字段）',
   /patch:\s*buildConfigPatch\(\{\s*model:\s*effectiveModel,\s*modelVariant:\s*next\s*\}\)/.test(palette));
@@ -54,6 +54,23 @@ ck('scopeToken 含 profileId / serverUrl / networkId / alias / 节点',
   /\[cfg\.profileId, cfg\.serverUrl, cfg\.networkId, alias, wantedNodeId\]/.test(chat));
 ck('快照带 TTL，过期不显示（不拿旧节点值冒充当前）',
   /expiresAt: Date\.now\(\) \+ 35_000/.test(chat) && /activeComposerModelValue\(/.test(chat));
+
+// 5) #4822：档位是独立字段。换模型**不自动清除**档位（省略=不改），也不把“未知”当默认；
+//    原档位在新模型上不成立时，如实提示重选并**留在面板里**（不静默写 modelVariant:null）。
+ck('换模型后档位需要重选 → 提示并留在面板（不自动清除）',
+  /variantAfterModelSwitch\(\{[\s\S]{0,220}nextModelVariants: row\.choices\.kind === 'unknown' \? undefined/.test(palette)
+  && palette.includes('variantNeedsReselect')
+  && /carry\.action === 'must-reselect'[\s\S]{0,160}return;/.test(palette));
+ck('换模型的补丁里不带 modelVariant（省略=不改档）',
+  /patch:\s*buildConfigPatch\(\{\s*model:\s*row\.key\s*\}\)/.test(palette));
+{
+  const { variantAfterModelSwitch } = await import('./node-variant-patch');
+  const keep = variantAfterModelSwitch({ previousModel: 'a/b', nextModel: 'a/c', currentVariant: 'high', nextModelVariants: ['high', 'low'] });
+  const none = variantAfterModelSwitch({ previousModel: 'a/b', nextModel: 'a/c', currentVariant: 'high', nextModelVariants: [] });
+  const unknown = variantAfterModelSwitch({ previousModel: 'a/b', nextModel: 'a/c', currentVariant: 'high', nextModelVariants: undefined });
+  ck('契约：列表含档位→keep；明确没有/未知→must-reselect（不猜、不清除）',
+    keep.action === 'keep' && none.action === 'must-reselect' && unknown.action === 'must-reselect');
+}
 
 // 4) 不写死模型表：列表只来自节点自报/服务器目录。
 ck('列表只从节点自报或服务器目录来，不含内置模型常量',

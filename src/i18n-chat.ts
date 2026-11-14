@@ -15,6 +15,9 @@ export const chatTranslations = {
   'chat.modelPicker.acceptedUnconfirmed': ['已接受，但生效模型未确认', 'Accepted, but the effective model is not confirmed'],
   'chat.modelPicker.variantAcceptedUnconfirmed': ['已接受，但当前档位未确认', 'Accepted, but the current variant is not confirmed'],
   'chat.modelPicker.variantApplied': ['已生效：{value}', 'Applied: {value}'],
+  // #4823/#4822 —— 换模型后原档位在新模型上未必成立。我们不自动清除档位（省略=不改），
+  // 也不拿“未知”当默认；只如实告知需要重选，避免用户以为深度还在生效。
+  'chat.modelPicker.variantNeedsReselect': ['模型已切换；原档位在新模型上未确认，请重新选择思考深度（{reason}）', 'Model switched; the previous thinking level is not confirmed for this model — pick a level again ({reason})'],
   'chat.modelPicker.variantUnknownDetail': ['{reason}（读回值 unknown 或未匹配）', '{reason} (readback unknown or mismatched)'],
   'chat.modelPicker.failed': ['失败:{message}', 'Failed: {message}'],
   'chat.modelPicker.conflict': ['配置在别处被改过了，已重新加载，请再选一次。', 'The config changed elsewhere. Reloaded; pick again.'],
