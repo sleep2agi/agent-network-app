@@ -70,8 +70,8 @@ const norm = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf-8').r
   ck('左栏(分类列表)', src.includes('testID="settings-sidebar"'));
   ck('右栏(内容面板)', src.includes('testID="settings-pane"'));
   ck('搜索框', src.includes("accessibilityLabel={tr('settings.copy.3')}"));
-  ck('桌面:组织与权限一页,两页签挂部门与 Agent / 成员', src.includes("sectionsToRender.includes('users') ? (") && src.includes('<OrgAccessPage') && src.includes('<AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} />') && src.includes('renderMembers={() => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />}'));
-  ck('手机:组织与权限页签挂部门与 Agent / 成员', src.includes('renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone />') && norm('./SettingsPhonePages.tsx').includes('<OrgAccessPage canManageMembers={ctx.usersAvailable} scope={ctx.orgAccessScope} detailOpen={!!detail} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(detail)} />'));
+  ck('桌面:组织与权限一页,两页签挂部门与 Agent / 成员', src.includes("sectionsToRender.includes('users') ? (") && src.includes('<OrgAccessPage') && src.includes('<AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} canManageStructure={usersAvailable} />') && src.includes('renderMembers={() => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />}'));
+  ck('手机:组织与权限页签挂部门与 Agent / 成员', src.includes('renderAgentOrg: () => <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone canManageStructure={usersAvailable} />') && norm('./SettingsPhonePages.tsx').includes('<OrgAccessPage canManageMembers={ctx.usersAvailable} scope={ctx.orgAccessScope} detailOpen={!!detail} renderOrg={ctx.renderAgentOrg} renderMembers={() => ctx.renderUsers(detail)} />'));
   ck('手机列表行仍会打开子页', src.includes('onPress={() => openPage(cat.key)}'));
   const org = norm('./AgentOrgScreen.tsx');
   ck('组织页换账号和网络时重挂', org.includes('key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])}') && org.includes('testID="agent-org-page"') && !org.includes('return null'));

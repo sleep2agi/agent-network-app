@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { FlatList, Pressable, ScrollView, StyleSheet, View, type PressableStateCallbackType } from 'react-native';
+import { FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type PressableStateCallbackType } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, spacing, type as typeScale, radius } from './theme';
 import { Ionicons } from './icons';
@@ -10,13 +10,20 @@ import type { HubConfig } from './api';
 import { loadAgentOrg, moveAgentDepartment } from './agent-org-api';
 import { agentCount, agentsDirectlyIn, orgTree, placeAgents, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
 import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
-import { createDepartment, updateDepartment, OrgRequestError } from './org-api';
+import { createDepartment, deleteDepartment, updateDepartment, OrgRequestError } from './org-api';
+import { blockersFromDetail, canEditAnyDepartment, DEPT_MENU_LABEL_KEY, deleteBlockers, deptMenuActions, isDeleteBlocked, type DeleteBlockers, type DeptMenuAction } from './agent-org-dept-menu';
+import { anchorRowMenu, rowMenuHeight, rowMenuMetrics } from './agent-row-menu';
+import { elevated } from './elevation';
+import { uiScale } from './ui-scale';
+import { useModalSafePadding } from './safe-area-runtime';
+import { pointerUi } from './pointer-ui';
 import { SettingsButton, SettingsChoiceRow, SettingsGroup, SettingsRow } from './settings-kit';
 import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
 
-type Props = { cfg: HubConfig; networkId?: string; phone: boolean };
+/** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
+type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStructure?: boolean };
 
 export default function AgentOrgScreen(p: Props) {
   const [, refreshTheme] = useState(0);
@@ -24,7 +31,7 @@ export default function AgentOrgScreen(p: Props) {
   return (
     <View testID="agent-org-page" style={styles.page}>
       {p.networkId
-        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} />
+        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} />
         : <NoNetwork />}
     </View>
   );
@@ -35,7 +42,7 @@ function NoNetwork() {
   return <SettingsGroup testID="agent-org-no-network"><SettingsRow label={t('agentOrg.noNetwork')} /></SettingsGroup>;
 }
 
-function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
+function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<{ kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; data: AgentOrgData | null }>({ kind: 'loading' });
@@ -48,6 +55,9 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
   const [deptEditor, setDeptEditor] = useState<{ dept?: Department; parent: string | null; mode: 'create' | 'rename' | 'reparent' } | null>(null);
   const [deptNote, setDeptNote] = useState('');
   const [infoOpen, setInfoOpen] = useState(false);
+  // 管理员 2026-11-14「右键可以新建组织、重命名组织」:部门树右键(桌面)/ 长按(手机)出菜单。dept null = 空白处 / 未归属行。
+  const [deptMenu, setDeptMenu] = useState<{ dept: Department | null; x: number; y: number; touch: boolean } | null>(null);
+  const [deleting, setDeleting] = useState<Department | null>(null);
   const bulkPending = useRef(false);
 
   useEffect(() => {
@@ -73,6 +83,41 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
   const data = phase.kind === 'ready' ? phase.data : null;
   const placed = useMemo(() => (data ? placeAgents(data, moves) : []), [data, moves]);
   const showTree = !p.phone || focus === undefined;
+  const treeApi = !!data?.departmentsApi;
+  const openDeptMenu = (dept: Department | null, x: number, y: number, touch: boolean): boolean => {
+    if (!deptMenuActions(dept, p.canManageStructure, treeApi).length) return false;
+    setDeptMenu({ dept, x, y, touch });
+    return true;
+  };
+  // 同 AgentsScreen:在 document 捕获阶段拦 contextmenu —— 冒泡阶段 WKWebView 可能已经弹了自己的「重新载入」菜单。
+  // 只管部门树里面(data-org-dept-tree);行上挂 data-org-dept=部门 id,没有 = 空白处 / 未归属。
+  const openRef = useRef(openDeptMenu);
+  openRef.current = openDeptMenu;
+  useEffect(() => {
+    const doc = (globalThis as { document?: { addEventListener?: (t: string, f: (e: any) => void, c: boolean) => void; removeEventListener?: (t: string, f: (e: any) => void, c: boolean) => void } }).document;
+    if (Platform.OS !== 'web' || !doc?.addEventListener || !data) return;
+    const onContextMenu = (event: any) => {
+      if (!event.target?.closest?.('[data-org-dept-tree]')) return;
+      const id = event.target.closest('[data-org-dept]')?.getAttribute?.('data-org-dept') ?? null;
+      const dept = id ? data.departments.find(d => d.id === id) ?? null : null;
+      if (id && !dept) return;
+      if (!openRef.current(dept, event.clientX ?? 0, event.clientY ?? 0, false)) return;
+      event.preventDefault?.();
+      event.stopPropagation?.();
+      event.stopImmediatePropagation?.();
+    };
+    doc.addEventListener('contextmenu', onContextMenu, true);
+    return () => doc.removeEventListener?.('contextmenu', onContextMenu, true);
+  }, [data]);
+  const runMenu = (action: DeptMenuAction, dept: Department | null) => {
+    setDeptMenu(null);
+    setDeptNote('');
+    if (action === 'createRoot') setDeptEditor({ parent: null, mode: 'create' });
+    else if (!dept) return;
+    else if (action === 'createChild') setDeptEditor({ parent: dept.id, mode: 'create' });
+    else if (action === 'rename' || action === 'reparent') setDeptEditor({ dept, parent: dept.parent_id ?? null, mode: action });
+    else if (action === 'delete') setDeleting(dept);
+  };
   const showDetail = !!data && (p.phone ? focus !== undefined : true);
 
   return (
@@ -99,12 +144,14 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
             {/* admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:部门结构不在这里改。
                 这棵树是 Hub 的网络级部门(人和 Agent 共用),增删改统一收在「用户管理 → 成员与部门」;
                 这一页只负责 Agent 归属。 */}
-            <Text testID="agent-org-departments-elsewhere" style={styles.note}>{t('agentOrg.departmentsElsewhere')}</Text>
+            {canEditAnyDepartment(data.departments, p.canManageStructure, treeApi)
+              ? <Text testID="agent-org-departments-edit-hint" style={styles.note}>{t(pointerUi() ? 'agentOrg.departmentsEditHint' : 'agentOrg.departmentsEditHint.touch')}</Text>
+              : <Text testID="agent-org-departments-elsewhere" style={styles.note}>{t('agentOrg.departmentsElsewhere')}</Text>}
           </View>
           <View style={!p.phone ? styles.columns : undefined}>
           {showTree ? (
             <View testID="agent-org-navigation" style={!p.phone ? styles.navigation : undefined}>
-              <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} />
+              <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />
             </View>
           ) : null}
           {showDetail ? (
@@ -186,6 +233,20 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean }) {
           }}
         />
       ) : null}
+      {data && deptMenu ? <DeptContextMenu target={deptMenu} actions={deptMenuActions(deptMenu.dept, p.canManageStructure, treeApi)} onClose={() => setDeptMenu(null)} onPick={a => runMenu(a, deptMenu.dept)} /> : null}
+      {data && deleting ? <DeleteDepartmentDialog cfg={p.cfg} networkId={p.networkId} dept={deleting}
+        blockers={deleteBlockers(deleting, data.departments, agentsDirectlyIn(placed, deleting.id).length)}
+        onClose={() => setDeleting(null)}
+        onDeleted={async () => {
+          const gone = deleting;
+          const refreshed = await loadAgentOrg(p.cfg, p.networkId);
+          if (!refreshed) throw new Error('refresh');
+          setPhase({ kind: 'ready', data: refreshed });
+          setMoves([]);
+          if (focus === gone.id) setFocus(p.phone ? undefined : (gone.parent_id ?? null));
+          setDeptNote(t('agentOrg.deleted', { name: gone.name }));
+          setDeleting(null);
+        }} /> : null}
       {data && deptEditor ? <DepartmentEditor cfg={p.cfg} networkId={p.networkId} data={data} editor={deptEditor} onClose={() => setDeptEditor(null)} onSaved={async department => {
         const refreshed = await loadAgentOrg(p.cfg, p.networkId);
         if (!refreshed?.departmentsApi || !refreshed.departments.some(d => d.id === department.id)) throw new Error('refresh');
@@ -268,11 +329,11 @@ function DepartmentEditor(p: { cfg: HubConfig; networkId: string; data: AgentOrg
   </DialogFrame>;
 }
 
-function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void }) {
+function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void; onMenu?: (dept: Department | null, x: number, y: number) => void }) {
   const { t } = useTranslation();
   const rows = flattenTree(orgTree(p.data));
   return (
-    <View testID="agent-org-departments" style={{ padding: spacing.sm }}>
+    <View testID="agent-org-departments" style={{ padding: spacing.sm }} {...({ dataSet: { orgDeptTree: '1' } } as object)}>
       <Text style={styles.sectionLabel}>{t('agentOrg.departments')}</Text>
       <ScrollView style={{ maxHeight: 560 }}>
       {rows.length ? rows.map(row => (
@@ -284,6 +345,8 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
           selected={p.focus === row.dept.id}
           count={agentCount(p.placed, p.data, row.dept.id)}
           onPress={() => p.onFocus(row.dept.id)}
+          deptId={row.dept.id}
+          onMenuAt={p.onMenu ? (x, y) => p.onMenu!(row.dept, x, y) : undefined}
         />
       )) : <SettingsRow label={t('agentOrg.empty')} testID="agent-org-empty" />}
       {p.data.directory || agentCount(p.placed, p.data, null) > 0 ? (
@@ -293,6 +356,7 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
           selected={p.focus === null}
           count={agentCount(p.placed, p.data, null)}
           onPress={() => p.onFocus(null)}
+          onMenuAt={p.onMenu ? (x, y) => p.onMenu!(null, x, y) : undefined}
         />
       ) : null}
       </ScrollView>
@@ -300,9 +364,13 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
   );
 }
 
-function DepartmentRow(p: { testID: string; label: string; depth?: number; selected: boolean; count: number; onPress: () => void }) {
+function DepartmentRow(p: { testID: string; label: string; depth?: number; selected: boolean; count: number; onPress: () => void; deptId?: string; onMenuAt?: (x: number, y: number) => void }) {
   const { t } = useTranslation();
+  const pointer = pointerUi();
   return <Pressable testID={p.testID} accessibilityRole="button" accessibilityLabel={`${p.label}, ${t('agentOrg.agentsCount', { count: p.count })}`} accessibilityState={{ selected: p.selected }} aria-selected={p.selected} onPress={p.onPress}
+    {...(p.deptId ? ({ dataSet: { orgDept: p.deptId } } as object) : {})}
+    // 触屏长按出同一份菜单;鼠标(pointer)走右键 —— document 捕获见 OrgBody。
+    onLongPress={pointer ? undefined : p.onMenuAt ? e => p.onMenuAt!(e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined}
     style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRow, { paddingLeft: spacing.sm + (p.depth ?? 0) * 16 }, (pressed || hovered) && { backgroundColor: colors.rowHover }, p.selected && { backgroundColor: colors.railActiveBg }]}>
     <Ionicons name={p.testID === 'agent-org-dept-unassigned' ? 'file-tray-outline' : 'folder-outline'} size={17} color={p.selected ? colors.accent : colors.textMuted} />
     <Text testID={`${p.testID}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: p.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: p.selected ? '600' : '400' }}>{p.label}</Text>
@@ -396,6 +464,76 @@ function AgentLine(p: { agent: PlacedAgent }) {
       <Text numberOfLines={1} style={styles.note}>{subtitle}</Text>
     </View>
   </View>;
+}
+
+function DeptContextMenu(p: { target: { dept: Department | null; x: number; y: number; touch: boolean }; actions: DeptMenuAction[]; onClose: () => void; onPick: (a: DeptMenuAction) => void }) {
+  const { t } = useTranslation();
+  const win = useWindowDimensions();
+  useEffect(() => listenEscapeClose(p.onClose), [p.onClose]);
+  const safe = useModalSafePadding('fullScreen');
+  const m = rowMenuMetrics(p.target.touch, uiScale().densityFactor, uiScale().denseFontMultiplier);
+  // 遮罩铺满(按下点是窗口坐标);安全区只用来把菜单夹在刘海 / 手势条以内。
+  const pos = anchorRowMenu({ x: p.target.x, y: p.target.y, menuWidth: m.width, menuHeight: rowMenuHeight(m, p.actions.length), viewportWidth: win.width, viewportHeight: win.height,
+    insets: p.target.touch ? { top: safe.paddingTop, bottom: safe.paddingBottom, left: safe.paddingLeft, right: safe.paddingRight } : undefined });
+  const scrim = p.target.touch ? 'rgba(0,0,0,0.18)' : 'transparent';
+  return <Modal visible transparent animationType="none" statusBarTranslucent onRequestClose={p.onClose}>
+    <View style={{ flex: 1 }} testID="agent-org-dept-menu-layer">
+      <Pressable testID="agent-org-dept-menu-scrim" accessibilityLabel={t('agentOrg.close')} onPress={p.onClose}
+        style={{ position: 'absolute', left: 0, top: 0, right: 0, bottom: 0, backgroundColor: scrim }}
+        {...({ onContextMenu: (e: { preventDefault?: () => void }) => { e?.preventDefault?.(); p.onClose(); } } as object)} />
+      <View testID="agent-org-dept-menu" accessibilityRole="menu"
+        accessibilityLabel={p.target.dept ? t('agentOrg.menu.label', { name: p.target.dept.name }) : t('agentOrg.menu.rootLabel')}
+        style={{ position: 'absolute', left: pos.left, top: pos.top, width: m.width, paddingVertical: m.padY, borderRadius: m.radius, backgroundColor: colors.card, overflow: 'hidden', ...elevated('floating') }}>
+        {p.actions.map(a => (
+          <Pressable key={a} testID={`agent-org-dept-menu-${a}`} accessibilityRole="menuitem" accessibilityLabel={t(DEPT_MENU_LABEL_KEY[a])} onPress={() => p.onPick(a)}
+            style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => ({ height: m.itemHeight, paddingHorizontal: m.padX, justifyContent: 'center', backgroundColor: pressed || hovered ? colors.rowHover : 'transparent' })}>
+            <Text dense selectable={false} numberOfLines={1} style={{ color: a === 'delete' ? colors.failed : colors.text, fontSize: m.fontSize }}>{t(DEPT_MENU_LABEL_KEY[a])}</Text>
+          </Pressable>
+        ))}
+      </View>
+    </View>
+  </Modal>;
+}
+
+function blockerText(t: (k: string, o?: Record<string, string | number>) => string, b: DeleteBlockers): string {
+  return [b.children ? t('agentOrg.blockChildren', { count: b.children }) : '', b.members ? t('agentOrg.blockMembers', { count: b.members }) : '', b.agents ? t('agentOrg.blockAgents', { count: b.agents }) : '']
+    .filter(Boolean).join('、');
+}
+
+function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: Department; blockers: DeleteBlockers; onClose: () => void; onDeleted: () => Promise<void> }) {
+  const { t } = useTranslation();
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState('');
+  const [hubBlockers, setHubBlockers] = useState<DeleteBlockers | null>(null);
+  const [done, setDone] = useState(false);
+  const pending = useRef(false);
+  const close = () => { if (!pending.current) p.onClose(); };
+  useEffect(() => listenEscapeClose(close), [p.onClose]);
+  const blockers = hubBlockers ?? p.blockers;
+  const blocked = isDeleteBlocked(blockers);
+  const run = async () => {
+    if (pending.current || blocked) return;
+    pending.current = true;
+    setBusy(true); setError('');
+    try {
+      if (!done) { await deleteDepartment(p.cfg, p.networkId, p.dept.id); setDone(true); }
+      await p.onDeleted();
+    } catch (e) {
+      if (e instanceof OrgRequestError && e.code === 'department_not_empty') setHubBlockers(blockersFromDetail(e.detail));
+      else setError(t(done ? 'agentOrg.departmentRefreshFailed'
+        : e instanceof OrgRequestError && (e.status === 401 || e.status === 403) ? 'agentOrg.departmentForbidden'
+        : e instanceof OrgRequestError && e.code === 'department_not_found' ? 'agentOrg.saveNoDepartment'
+        : e instanceof OrgRequestError && (e.status === 405 || e.status === 501 || e.status === 404) ? 'agentOrg.departmentUnsupported'
+        : 'agentOrg.saveFailed'));
+    } finally { pending.current = false; setBusy(false); }
+  };
+  return <DialogFrame title={t('agentOrg.deleteTitle')} closeLabel={t('agentOrg.close')} onClose={close} testID="agent-org-delete-dialog"
+    footer={<SettingsButton variant={done ? 'primary' : 'destructive'} label={t(busy ? 'agentOrg.deleting' : done ? 'agentOrg.retryRefresh' : 'agentOrg.deleteAction')} disabled={busy || blocked} onPress={() => void run()} testID="agent-org-delete-confirm" />}>
+    {blocked
+      ? <Text testID="agent-org-delete-blocked" style={styles.note}>{t('agentOrg.deleteBlocked', { name: p.dept.name, what: blockerText(t, blockers) })}</Text>
+      : <Text testID="agent-org-delete-text" style={styles.note}>{t('agentOrg.deleteConfirm', { name: p.dept.name })}</Text>}
+    {error ? <Text accessibilityRole="alert" testID="agent-org-delete-error" style={[styles.note, { color: colors.failed }]}>{error}</Text> : null}
+  </DialogFrame>;
 }
 
 function DemoAdjust(p: {

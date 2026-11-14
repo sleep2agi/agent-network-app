@@ -593,6 +593,10 @@
       "kind": "stub",
       "secs": 60
     },
+    "org-dept-context-menu/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "composer-model-palette/drive.mjs": {
       "kind": "stub",
       "secs": 15
