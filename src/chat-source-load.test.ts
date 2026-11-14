@@ -45,7 +45,7 @@ async function main() {
   ck('repeated task refresh does not duplicate rows', mergeChatSource(two, tasks, 'tasks').length === 3);
   ck('successful empty source clears only that source', mergeChatSource(two, [], 'proactive').map(r => r.task_id || r._localId).join() === 'echo,task');
   const screen = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
-  ck('screen invokes the tested parallel source loader', screen.includes('await loadChatSources({') && screen.includes("paint('tasks', rows, fetched, confirmed)") && screen.includes("paint('proactive', proactiveItemsForAgent("));
+  ck('screen invokes the tested parallel source loader', screen.includes('await loadChatSources({') && screen.includes("paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, params.limit), fetched, confirmed)") && screen.includes("paint('proactive', proactiveItemsForAgent("));
   ck('state updater rechecks ownership before cache and state writes', /setMessages\(prev => \{\s*if \(!isCurrent\(\)\) return prev;/.test(screen));
   ck('unread readiness waits for both successful reads, not first paint', screen.includes('if (results.every(Boolean)) setConversationReady(true)'));
   ck('older overlapping refresh cannot supersede newer issued read', screen.includes('sequence === loadSequenceRef.current'));

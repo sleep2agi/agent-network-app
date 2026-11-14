@@ -72,7 +72,7 @@ import ComposerStopButton from './ComposerStopButton';
 import ComposerInjectButton from './ComposerInjectButton';
 import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
 import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
-import { isOutgoingRow, mergeConversationSides, outgoingReplyAuthor } from './chat-outgoing';
+import { firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
@@ -579,6 +579,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const limitRef = useRef(PAGE);
   // #745:当前会话已拉到的 hub 行(newest-first)。轮询刷新最新一页、往上翻按游标接更早的一页,都只改它。
   const hubRowsRef = useRef<HubTask[]>([]);
+  // 上一轮补拉到的出站行(按 alias);入站先画时一起带上,免得每轮刷新出站行先消失再出现(chat-outgoing.ts firstPaintRows)。
+  const outgoingCacheRef = useRef<OutgoingCache<HubTask> | null>(null);
   const loadSequenceRef = useRef(0);
 
   // app#166 —— 微信式「聊天记录搜索」:范围永远是当前会话;结果只认开始搜索时的会话 key。
@@ -649,14 +651,18 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           const rows = hubRowsRef.current = mergeNewestPage(hubRowsRef.current, fetched, params.limit);
           const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
           confirmed.forEach(outboxRemove);
-          paint('tasks', rows, fetched, confirmed);
+          // 先画入站 + 上一轮已知的出站(同一 agent),出站行不再每轮刷新先消失再出现。
+          paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, params.limit), fetched, confirmed);
           // 出站（from_name=本 agent）再补一次：这些行 to_name 是别的节点，result 才是**对方回给它的**内容，
           // 只拉入站会让「节点回给它的那半」永远不出现。**不阻塞首屏**，回来后再合并重画一次。
           void fetchTasks(cfg, { from_name: alias, limit: params.limit, skipStats: true })
             .then(out => {
               if (!isCurrent()) return;
               const outgoingRows = (out.tasks ?? []).filter(r => (r.from_name ?? '') === alias);
-              if (!outgoingRows.length) return;
+              const hadOutgoing = cachedOutgoing(outgoingCacheRef.current, alias).length > 0;
+              outgoingCacheRef.current = { alias, rows: outgoingRows };
+              // 原来没有、现在也没有 → 不用重画;原来有、现在没了 → 照实重画(行确实不在了)。
+              if (!outgoingRows.length && !hadOutgoing) return;
               paint('tasks', mergeConversationSides(rows, outgoingRows, params.limit), fetched, confirmed);
             })
             .catch(() => { /* 出站补拉失败就保持入站视图，不清空已画内容 */ });
