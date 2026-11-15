@@ -112,6 +112,8 @@ const LIGHT: typeof DARK = {
   ...ACCENT.light,
 };
 
+import { loadDesktopThemeMode } from './desktop-theme-storage';
+
 export type ThemeMode = 'dark' | 'light';
 const PALETTES: Record<ThemeMode, typeof DARK> = { dark: DARK, light: LIGHT };
 
@@ -152,6 +154,18 @@ let mode: ThemeMode = 'dark';
 // 内存里的初始偏好就是新装默认;冷启动读到存储后由 setThemePreference 覆盖。
 let preference: ThemePreference = DEFAULT_THEME_PREFERENCE;
 let systemScheme: ThemeMode | null = null;
+
+// #4866 —— 冷启动**第一帧**也要跟已保存的偏好，否则 boot 画面用 DARK、读完存储才切，
+// 浅色用户会看到一次「深→浅」闪变（桌面 localStorage 是同步可读的，没有理由等异步）。
+// 注意：这里只处理 light/dark；'system'/未保存仍保持 DARK，等 matchMedia 与存储读完再定。
+try {
+  const bootPref = loadDesktopThemeMode();
+  if (bootPref === 'light' || bootPref === 'dark') {
+    mode = bootPref;
+    preference = bootPref;
+    Object.assign(colors, PALETTES[bootPref]);
+  }
+} catch { /* 读不到就按原默认，别让首帧抛错 */ }
 const listeners: Array<(m: ThemeMode) => void> = [];
 const preferenceListeners: Array<() => void> = [];
 
