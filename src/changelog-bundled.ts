@@ -6,7 +6,7 @@ export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
   "What's new in 0.2.543:",
-  "- 节点页「概览」最上面新增「职责介绍」：这个节点负责什么、能干什么、什么事找它、不做什么，给其他节点和同事看（不是它自己的 AGENTS.md）。有权限的人可以直接编辑，空着时可一键填模板。需要 Hub 0.9.0-preview.283 及以上。",
+  "- 节点页「概览」最上面新增「职责介绍」：这个节点负责什么、能干什么、什么事找它、不做什么，给其他节点和同事看（不是它自己的 AGENTS.md）。有权限的人可以直接编辑，空着时可一键填模板。需要 Hub .283 及以上。",
   "- 「组织」里选中部门后有「Agent / 成员」两个页签：成员页管这个部门的人（负责人、部门群、调动、移出、添加成员）；「成员与权限」里不再嵌第二棵部门树。",
   "- 「组织」读取中改成居中转圈。",
   "- 「架构图」放上了 ANet 标志（概览左上角、根节点、页脚）。",
