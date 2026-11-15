@@ -66,6 +66,10 @@ record('② child under shown parent: leaf only + branch line, no glow',
   await text('TMAI / TMWork'));
 record('③ parent not in list: keeps 「B 站 / 」 prefix, top-level glow kept',
   (await text('B 站 / 运营')) === 'B 站 / 运营' && await has('agent-group-glow-B 站 / 运营'), await text('B 站 / 运营'));
+// 2026-11-15「UI/UX 再变好一点」:子部门里的 agent 行跟着缩进;顶层部门的 agent 不缩进。
+const left = async (alias) => page.locator(`[data-testid="agent-row-${alias}"]`).first().evaluate(el => el.getBoundingClientRect().left).catch(() => null);
+const lChild = await left('TMWork前端'), lTop = await left('ANet负责人'), lParent = await left('TM总监');
+record('④ 子部门的 agent 行比顶层部门的缩进一级', lChild !== null && lTop !== null && lParent !== null && lChild - lTop >= 12 && Math.abs(lParent - lTop) <= 1, { lChild, lTop, lParent });
 record('no page errors', errors.length === 0, errors);
 
 await browser.close();

@@ -62,7 +62,8 @@ ck('tap opens chat; long-press opens the row menu at the press point (node detai
 ck('rows are flat: no card style / border in the phone row', !phoneRow.includes('styles.card') && !/borderWidth/.test(phoneRow));
 ck('hairline separators between phone rows only', /ItemSeparatorComponent=\{compact \? undefined : \(\) => \(/.test(agents) && agents.includes('separator: { height: StyleSheet.hairlineWidth, marginLeft: rowGeom().padX + rowGeom().avatar + rowGeom().gap,'));
 ck('rows are full-bleed on the phone (no list side padding)', agents.includes('contentContainerStyle={compact ? { paddingHorizontal: spacing.sm, paddingBottom: spacing.sm } : { paddingBottom: spacing.sm }}'));
-ck('renderItem picks the desktop or phone row', agents.includes('renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}'));
+// 2026-11-15:renderItem 还要按子部门深度包一层缩进(agent-row-indent-*),选桌面 / 手机行的那一句不变。
+ck('renderItem picks the desktop or phone row', agents.includes('renderItem={({ item, section }) => {') && agents.includes('const row = compact ? renderCompactRow(item) : renderPhoneRow(item);'));
 ck('rowStyles hold no theme colours', agents.includes('const makeRowStyles = () => ({') && !/colors\./.test(agents.slice(agents.indexOf('const makeRowStyles = () => ({'))));
 ck('preview line uses the same snapshot as the counts', agents.includes('latestMessageByAgent(preview') && agents.includes(': unreadSnap), [preview, unreadSnap]);'));
 
