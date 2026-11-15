@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.541:
+            - 任务详情的「标签」按路径显示，例如「TMWork / TMWork客户端 / 飞书」：一行一条，卡上也挂着的上级标签并进那一行，不再一块一块散着；窄栏里路径折行，不会把最后一级截掉。
+
             What's new in 0.2.540:
             - 「组织」新增「架构图」：顶部品牌横幅（Agent / 部门 / 运行中 / 负责人四个大数字 + 头像墙），下面是带头像的架构树，每个根部门一栏、子部门挂在下面，适合直接截图宣传；点部门回到列表。
             - 「组织」左边改成一整条侧栏：标题「组织」在侧栏顶上，「成员与权限」成为侧栏一项，不再有页签和外框。
