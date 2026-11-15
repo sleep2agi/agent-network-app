@@ -14,6 +14,7 @@ import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
+import { BrandMark } from './brand-mark';
 import { colors, onThemeChange, radius, spacing, type as typeScale } from './theme';
 import { useTranslation } from './i18n-react';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
@@ -57,7 +58,13 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
       <View testID="org-showcase-hero" style={styles.hero}>
         <View style={styles.heroTop}>
           <View style={{ flex: 1, minWidth: 240, gap: spacing.sm }}>
-            <Text style={styles.kicker}>{here ? t('agentOrg.showcase.kickerDept') : t('agentOrg.showcase.kicker')}</Text>
+            {/* 管理员 2026-11-15「不放点 ANet 的 LOGO 吗？」:概览左上角品牌行(截图拿去宣传时一眼认得出是 ANet)。 */}
+            <View style={styles.brandRow} testID="org-showcase-brand">
+              <BrandMark size={28} />
+              <Text style={styles.brandName}>ANet</Text>
+              <View style={styles.brandDot} />
+              <Text style={styles.kicker}>{here ? t('agentOrg.showcase.kickerDept') : t('agentOrg.showcase.kicker')}</Text>
+            </View>
             <Text style={styles.heroTitle}>{here ? here.name : t('agentOrg.showcase.headline')}</Text>
             <Text style={styles.heroSub}>{here
               ? t('agentOrg.showcase.subDept', { agents: stats.agents, departments: stats.departments, running: stats.running })
@@ -102,7 +109,7 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
             <View style={{ width: Math.max(rowW, COL_W) }}>
               <View style={styles.rootWrap}>
                 <View style={styles.root} testID="org-showcase-root">
-                  <Ionicons name={here ? 'business-outline' : 'git-network-outline'} size={16} color={colors.bg} />
+                  {here ? <Ionicons name="business-outline" size={16} color={colors.bg} /> : <View style={styles.rootMark}><BrandMark size={18} /></View>}
                   <Text style={styles.rootText}>{here ? here.name : p.title}</Text>
                   <Text style={styles.rootCount}>{stats.agents}</Text>
                 </View>
@@ -130,7 +137,10 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
           </ScrollView>
         )}
       </View>
-      <Text style={styles.footer}>{t('agentOrg.showcase.footer')}</Text>
+      <View style={styles.footerRow} testID="org-showcase-footer">
+        <BrandMark size={16} />
+        <Text style={styles.footer}>{t('agentOrg.showcase.footer')}</Text>
+      </View>
     </ScrollView>
   );
 }
@@ -281,6 +291,11 @@ const makeStyles = () => StyleSheet.create({
   agentDot: { position: 'absolute', right: 0, bottom: 0, width: 12, height: 12, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.card },
   agentName: { color: colors.text, fontSize: typeScale.body, fontWeight: '600', marginTop: spacing.xs, maxWidth: '100%' },
   footer: { color: colors.textMuted, fontSize: typeScale.small, textAlign: 'center' },
+  footerRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs },
+  brandRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  brandName: { color: colors.text, fontSize: typeScale.title, fontWeight: '600', letterSpacing: 0.3 },
+  brandDot: { width: 4, height: 4, borderRadius: radius.pill, backgroundColor: colors.border },
+  rootMark: { width: 24, height: 24, borderRadius: radius.pill, backgroundColor: colors.bg, alignItems: 'center', justifyContent: 'center' },
 });
 let styles = makeStyles();
 onThemeChange(() => { styles = makeStyles(); });
