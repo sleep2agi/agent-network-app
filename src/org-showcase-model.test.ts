@@ -1,0 +1,33 @@
+import { DEPT_HUES, pickAvatars, showcaseColumns, showcaseStats } from './org-showcase-model';
+import type { AgentOrgData, PlacedAgent } from './agent-org-model';
+
+let p = 0, t = 0;
+const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? '✓' : '✗'} ${name}`); };
+
+const dept = (id: string, name: string, parent_id: string | null = null, sort = 0) => ({ id, name, parent_id, leader_user_id: null, sort });
+const data = { departments: [dept('a', 'A'), dept('a1', 'A1', 'a'), dept('a11', 'A11', 'a1'), dept('b', 'B', null, 1)], owners: [], unowned: [], directory: true, departmentsApi: true, agentDepartmentSupported: true } as unknown as AgentOrgData;
+const agent = (nodeId: string, alias: string, departmentId: string | null, owner: string | null, live: boolean): PlacedAgent =>
+  ({ nodeId, alias, departmentId, ownerUserId: owner, ownerName: owner, sourceDepartmentId: departmentId, demo: false, lifecycleState: live ? 'active' : 'stopped' } as PlacedAgent);
+const placed = [
+  agent('1', '甲', 'a', 'u1', true), agent('2', '乙', 'a1', 'u1', false), agent('3', '丙', 'a11', 'u2', true),
+  agent('4', '丁', 'b', null, false), agent('5', '戊', null, 'u3', true),
+];
+
+const s = showcaseStats(data, placed);
+ck('stats: agents / departments / running / owners / unassigned', s.agents === 5 && s.departments === 4 && s.running === 3 && s.owners === 3 && s.unassigned === 1);
+
+const cols = showcaseColumns(data, placed);
+ck('one column per root department, in sort order', cols.map(c => c.dept.id).join() === 'a,b');
+ck('root totals include every sub-level', cols[0].total === 3 && cols[0].running === 2 && cols[1].total === 1);
+ck('children flatten in tree order with depth', cols[0].children.map(c => `${c.dept.id}:${c.depth}`).join() === 'a1:1,a11:2');
+ck('child totals include their own sub-levels', cols[0].children[0].total === 2 && cols[0].children[1].total === 1);
+ck('hues rotate by column', cols[0].hue === DEPT_HUES[0] && cols[1].hue === DEPT_HUES[1]);
+ck('unassigned agents are not in any column', !cols.some(c => c.avatars.includes('戊')));
+
+const many = Array.from({ length: 9 }, (_, i) => agent(`m${i}`, `m${i}`, 'a', null, i % 2 === 0));
+const pick = pickAvatars(many, 4);
+ck('avatars: running first, then +N for the rest', pick.aliases.length === 4 && pick.aliases.every(a => Number(a.slice(1)) % 2 === 0) && pick.more === 5);
+ck('avatars: fewer than n → no +N', pickAvatars(many.slice(0, 2), 4).more === 0);
+
+console.log(`${p}/${t} passed`);
+process.exit(p === t ? 0 : 1);
