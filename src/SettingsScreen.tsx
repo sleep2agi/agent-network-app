@@ -2,6 +2,7 @@ import * as Clipboard from 'expo-clipboard';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { diagnosticsLine } from './diagnostics-copy';
 import { maskedHubHost } from './mask-hub-address';
+import { accountRowDetail, groupProfilesByHub, shortNetworkId } from './account-groups';
 import { t as tr } from './i18n';
 import './i18n-fatal';
 import { fatalSummary } from './fatal-report';
@@ -512,7 +513,7 @@ export default function SettingsScreen({
       key={profile.profileId}
       testID={`settings-profile-${profile.profileId}`}
       name={profile.displayName || profile.username || tr('settings.copy.12')}
-      subtitle={accountSubtitle(profile)}
+      subtitle={isCurrent ? accountSubtitle(profile) : accountRowDetail(profile, tr('accounts.network')) || undefined}
       warning={profile.requiresReauth ? tr('settings.copy.15') : undefined}
       current={isCurrent ? tr('accounts.currentPill') : undefined}
       badge={profile.profileId === LOCAL_HUB_PROFILE_ID ? tr('accounts.localPill') : undefined}
@@ -931,20 +932,35 @@ export default function SettingsScreen({
               {show('account', 'profiles') ? (
                 profiles.length ? (
                   <>
+                    {/* 2026-11-15(管理员「这页也特别丑」):当前账号 = 主色身份卡(和手机设置首页同一张),
+                        其他账号按 Hub 分组(组标题是 Hub 地址),行里只写用户名 / 网络短码;「添加」单独一组收尾。 */}
                     {currentProfile ? (
-                      <SettingsGroup title={tr('accounts.groupCurrent')} highlight testID="settings-account-current">
-                        {accountRow(currentProfile, true)}
-                      </SettingsGroup>
+                      <View testID="settings-account-current" style={{ marginBottom: spacing.lg }}>
+                        <SettingsProfileCard
+                          testID={`settings-profile-${currentProfile.profileId}`}
+                          name={currentProfile.displayName || currentProfile.username || tr('settings.copy.12')}
+                          pill={tr('accounts.currentPill')}
+                          extraPill={usersAvailable ? tr('users.role.admin') : currentProfile.profileId === LOCAL_HUB_PROFILE_ID ? tr('accounts.localPill') : undefined}
+                          subtitle={[maskedHubHost(currentProfile.serverUrl), me.networkName || (currentProfile.networkId ? `${tr('accounts.network')} ${shortNetworkId(currentProfile.networkId)}` : '')].filter(Boolean).join(' · ')}
+                          warning={currentProfile.requiresReauth ? tr('settings.copy.15') : undefined}
+                          onMore={el => openProfileMore(currentProfile, el)}
+                          moreLabel={tr('accounts.more', { name: accountName(currentProfile) })}
+                        />
+                      </View>
                     ) : null}
-                    <SettingsGroup
-                      title={otherProfiles.length ? tr('accounts.groupOthers') : undefined}
-                      footer={profileError || (otherProfiles.length ? tr(pointer ? 'accounts.othersFooter' : 'accounts.othersFooterTouch') : undefined)}
-                      footerTone={profileError ? 'danger' : undefined}
-                      testID="settings-account-others"
-                    >
-                      {otherProfiles.map(profile => accountRow(profile, false))}
-                      {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /> : null}
-                    </SettingsGroup>
+                    <View testID="settings-account-others">
+                      {groupProfilesByHub(otherProfiles).map(g => (
+                        <SettingsGroup key={g.key} title={g.local ? tr('accounts.localHubGroup') : tr('accounts.hubGroup', { host: g.host })} testID={`settings-account-hub-${g.local ? 'local' : g.host}`}>
+                          {g.profiles.map(profile => accountRow(profile, false))}
+                        </SettingsGroup>
+                      ))}
+                      <SettingsGroup
+                        footer={profileError || (otherProfiles.length ? tr(pointer ? 'accounts.othersFooter' : 'accounts.othersFooterTouch') : undefined)}
+                        footerTone={profileError ? 'danger' : undefined}
+                      >
+                        {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={onAddAccount} testID="settings-add-account-row" /> : null}
+                      </SettingsGroup>
+                    </View>
                   </>
                 ) : (
                   <SettingsGroup>

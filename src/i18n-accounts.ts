@@ -14,6 +14,10 @@ registerTranslations({
   'accounts.othersFooterTouch': ['点一下切换 · 点 ⋯ 管理', 'Tap to switch · ⋯ to manage'],
   'accounts.currentPill': ['当前', 'Current'],
   'accounts.localPill': ['本机', 'This device'],
+  // 2026-11-15 账号页重排:其他账号按 Hub 分组,行里网络 id 只写短码。
+  'accounts.network': ['网络', 'Network'],
+  'accounts.hubGroup': ['Hub · {host}', 'Hub · {host}'],
+  'accounts.localHubGroup': ['本机工作区', 'This device'],
   'accounts.more': ['{name} 的更多操作', 'More actions for {name}'],
   'accounts.switchTo': ['切换到这个账号', 'Switch to this account'],
   'accounts.copyAddress': ['复制账号信息', 'Copy account details'],

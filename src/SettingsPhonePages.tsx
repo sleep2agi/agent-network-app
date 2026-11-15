@@ -1,4 +1,5 @@
 import OrgAccessPage from './OrgAccessPage';
+import { accountRowDetail, groupProfilesByHub } from './account-groups';
 import { t as tr } from './i18n';
 import { maskedHubHost } from './mask-hub-address';
 import { useTranslation } from './i18n-react';
@@ -172,7 +173,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
       key={profile.profileId}
       testID={`settings-profile-${profile.profileId}`}
       name={profileName(profile)}
-      subtitle={accountSubtitle(profile)}
+      subtitle={isCurrent ? accountSubtitle(profile) : accountRowDetail(profile, tr('accounts.network')) || undefined}
       warning={profile.requiresReauth ? tr('settings.copy.15') : undefined}
       current={isCurrent ? tr('accounts.currentPill') : undefined}
       badge={profile.profileId === LOCAL_HUB_PROFILE_ID ? tr('accounts.localPill') : undefined}
@@ -187,15 +188,21 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
       {show('account', 'profiles') && profiles.length ? (
         <>
           {current ? <SettingsGroup title={tr('accounts.groupCurrent')} highlight testID="settings-account-current">{row(current, true)}</SettingsGroup> : null}
-          <SettingsGroup
-            title={others.length ? tr('accounts.groupOthers') : undefined}
-            testID="settings-account-profiles"
-            footer={ctx.profileError || (others.length ? tr(ctx.pointer ? 'accounts.othersFooter' : 'accounts.othersFooterTouch') : undefined)}
-            footerTone={ctx.profileError ? 'danger' : undefined}
-          >
-            {others.map(profile => row(profile, false))}
-            {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={ctx.onAddAccount} testID="settings-add-account" /> : null}
-          </SettingsGroup>
+          {/* 2026-11-15:其他账号按 Hub 分组(组标题 = Hub 地址),行里只写用户名 / 网络短码;「添加」单独一组收尾。 */}
+          <>
+            {groupProfilesByHub(others).map(g => (
+              <SettingsGroup key={g.key} title={g.local ? tr('accounts.localHubGroup') : tr('accounts.hubGroup', { host: g.host })} testID={`settings-account-hub-${g.local ? 'local' : g.host}`}>
+                {g.profiles.map(profile => row(profile, false))}
+              </SettingsGroup>
+            ))}
+            <SettingsGroup
+              testID="settings-account-profiles"
+              footer={ctx.profileError || (others.length ? tr(ctx.pointer ? 'accounts.othersFooter' : 'accounts.othersFooterTouch') : undefined)}
+              footerTone={ctx.profileError ? 'danger' : undefined}
+            >
+              {show('account', 'addAccount') ? <SettingsRow label={tr('settings.copy.93')} tone="accent" icon="add" onPress={ctx.onAddAccount} testID="settings-add-account" /> : null}
+            </SettingsGroup>
+          </>
         </>
       ) : (
         <SettingsGroup>

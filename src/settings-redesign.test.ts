@@ -47,7 +47,9 @@ console.log('# 1 宽屏右栏:每一段都在卡片里');
 console.log('# 2 宽屏账号段');
 {
   const a = settings.slice(settings.indexOf("sectionsToRender.includes('account') && !showWideDevices"), settings.indexOf("sectionsToRender.includes('users')"));
-  ck('当前账号单独一组、置顶、主色细边', /<SettingsGroup title=\{tr\('accounts\.groupCurrent'\)\} highlight/.test(a) && a.indexOf("accounts.groupCurrent") < a.indexOf("accounts.groupOthers"));
+  // 2026-11-15 账号页重排:当前账号改成主色身份卡(SettingsProfileCard + ⋯),其他账号按 Hub 分组(account-groups.ts)。
+  ck('当前账号 = 置顶的主色身份卡,带 ⋯', /<SettingsProfileCard[\s\S]{0,900}onMore=\{el => openProfileMore\(currentProfile, el\)\}/.test(a) && a.indexOf('SettingsProfileCard') < a.indexOf('groupProfilesByHub'));
+  ck('其他账号按 Hub 分组', /groupProfilesByHub\(otherProfiles\)\.map/.test(a));
   ck('账号行 = SettingsAccountRow(头像 · 名字 · 当前 · ⋯)', /<SettingsAccountRow[\s\S]*?current=\{isCurrent \?[\s\S]*?onMore=\{el => openProfileMore\(profile, el\)\}/.test(settings));
   ck('行尾不再有文字按钮(复制 / 编辑 / 新窗口 / 移除)', !/tr\('accounts\.copy'\)|tr\('accounts\.edit'\)|tr\('settings\.copy\.16'\)|tr\('settings\.copy\.17'\)/.test(a) && !settings.includes('styles.inlineButton'));
   const danger = a.indexOf('testID="settings-account-danger"');
