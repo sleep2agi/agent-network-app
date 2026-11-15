@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.540:",
+  "- 「组织」新增「架构图」：顶部品牌横幅（Agent / 部门 / 运行中 / 负责人四个大数字 + 头像墙），下面是带头像的架构树，每个根部门一栏、子部门挂在下面，适合直接截图宣传；点部门回到列表。",
+  "- 「组织」左边改成一整条侧栏：标题「组织」在侧栏顶上，「成员与权限」成为侧栏一项，不再有页签和外框。",
+  "- 「已保存到 Hub」改成几秒后自动消失的小条，不再常驻两行。",
+  "- 新建节点时读不到项目 / 会话目录，会说清楚原因和下一步，不再显示一串错误码。",
+  "",
   "What's new in 0.2.539:",
   "- 「组织」页点 Agent 行：直接打开它的节点页，落在「权限」，可以改权限模式、可以发给谁；左上「← 组织」返回，部门和搜索都还在。",
   "",
