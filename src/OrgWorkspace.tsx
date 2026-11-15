@@ -32,24 +32,23 @@ export default function OrgWorkspace({ cfg }: { cfg: HubConfig }) {
   const scope = `${cfg.serverUrl}|${authMe?.user?.user_id ?? ''}|${networkId ?? ''}`;
   return (
     <View style={styles.root} testID="org-workspace">
-      <Text style={styles.title} accessibilityRole="header">{t('nav.org')}</Text>
-      <ScrollView style={styles.scroll} contentContainerStyle={styles.content}>
-        <OrgAccessPage
-          canManageMembers={canManage}
-          scope={scope}
-          renderOrg={() => <AgentOrgScreen cfg={cfg} networkId={networkId} phone={false} canManageStructure={canManage} fullWidth />}
-          renderMembers={() => <UserManagementPanel cfg={cfg} me={authMe} networkId={networkId} />}
-        />
-      </ScrollView>
+      <OrgAccessPage
+        fill
+        header={<Text style={styles.title} accessibilityRole="header">{t('nav.org')}</Text>}
+        canManageMembers={canManage}
+        scope={scope}
+        renderOrg={() => <AgentOrgScreen cfg={cfg} networkId={networkId} phone={false} canManageStructure={canManage} fullWidth />}
+        renderMembers={() => <ScrollView style={styles.scroll}><UserManagementPanel cfg={cfg} me={authMe} networkId={networkId} /></ScrollView>}
+      />
     </View>
   );
 }
 
 const makeStyles = () => StyleSheet.create({
-  root: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
-  title: { color: colors.text, fontSize: 20, fontWeight: weight.strong, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  // 整页不滚:标题 + 页签一行,下面的组织卡片撑到窗口底,树和列表各自滚(2026-11-15 UI/UX)。
+  root: { flex: 1, minHeight: 0, backgroundColor: colors.bg, paddingHorizontal: spacing.xl, paddingTop: spacing.lg, paddingBottom: spacing.lg },
+  title: { color: colors.text, fontSize: 20, fontWeight: weight.strong },
   scroll: { flex: 1, minHeight: 0 },
-  content: { paddingHorizontal: spacing.xl, paddingBottom: spacing.xl },
 });
 let styles = makeStyles();
 onThemeChange(() => { styles = makeStyles(); });
