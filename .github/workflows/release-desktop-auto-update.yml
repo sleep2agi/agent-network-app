@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.539:
+            - 「组织」页点 Agent 行：直接打开它的节点页，落在「权限」，可以改权限模式、可以发给谁；左上「← 组织」返回，部门和搜索都还在。
+
             What's new in 0.2.538:
             - 一级栏「组织」整页重排：标题和页签一行，不再套第二层「组织管理」；整页不滚，部门树和 Agent 列表各自滚到窗口底。
             - 部门可以折叠（会记住）；「未归属」置顶；部门列头有「+」新建部门，悬停部门出「⋯」菜单，不用先知道右键。
