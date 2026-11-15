@@ -3,7 +3,7 @@
 // 现在:部门由左侧栏选,这里画选中部门的人 —— 负责人、部门群、直属成员(调动 / 设为负责人 / 移出 / 添加成员)。
 // 数据:部门树 + 网络成员各读一次(和 UserManagementPanel 同一组接口);改完重读部门树。
 import { useCallback, useEffect, useState } from 'react';
-import { View } from 'react-native';
+import { ActivityIndicator, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, spacing, type as typeScale } from './theme';
 import type { HubConfig } from './api';
@@ -22,7 +22,7 @@ export default function OrgDeptPeople(p: { cfg: HubConfig; networkId: string; ne
     reloadOrg();
     void fetchNetworkMembers(p.cfg, p.networkId).then(setMembers).catch(() => setMembers(null));
   }, [p.cfg, p.networkId, reloadOrg]);
-  if (org === undefined || members === undefined) return <Note testID="org-dept-people-loading" text={t('agentOrg.people.loading')} />;
+  if (org === undefined || members === undefined) return <View testID="org-dept-people-loading" style={{ flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md, padding: spacing.xl }}><ActivityIndicator size="large" color={colors.accent} /><Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('agentOrg.people.loading')}</Text></View>;
   if (!org || !members) return <Note testID="org-dept-people-unavailable" text={t('agentOrg.people.unavailable')} />;
   return <OrgDesktopPanel cfg={p.cfg} networkId={p.networkId} networkName={p.networkName} org={org} people={members} onChanged={reloadOrg} embed={{ selected: p.deptId, onSelect: p.onSelect }} />;
 }

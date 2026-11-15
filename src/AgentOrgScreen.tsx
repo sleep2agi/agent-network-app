@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
-import { FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type PressableStateCallbackType } from 'react-native';
+import { ActivityIndicator, FlatList, Modal, Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions, type PressableStateCallbackType } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, spacing, type as typeScale, radius } from './theme';
 import { Ionicons } from './icons';
@@ -202,7 +202,10 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
     <View style={p.fill ? styles.fillRoot : undefined}>
       {deptNote && !p.fill ? <Text accessibilityLiveRegion="polite" testID="agent-org-department-result" style={[styles.note, { padding: spacing.md }]}>{deptNote}</Text> : null}
       {phase.kind === 'loading' ? (
-        <SettingsGroup testID="agent-org-loading"><SettingsRow label={t('agentOrg.loading')} /></SettingsGroup>
+        // 管理员 2026-11-15「改成动画吧,那种转圈的」:整页是居中转圈;设置里是带转圈的那一行。
+        p.fill
+          ? <View testID="agent-org-loading" style={styles.loadingFill}><ActivityIndicator size="large" color={colors.accent} /><Text style={styles.note}>{t('agentOrg.loading')}</Text></View>
+          : <SettingsGroup testID="agent-org-loading"><SettingsRow label={t('agentOrg.loading')} busy /></SettingsGroup>
       ) : null}
       {phase.kind === 'error' ? (
         <SettingsGroup testID="agent-org-error">
@@ -896,6 +899,7 @@ const makeStyles = () => StyleSheet.create({
   iconAction: { width: 28, height: 28, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   departmentRowDense: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingRight: spacing.xs, marginBottom: 1, borderRadius: radius.item },
   countSlot: { width: 32, height: 28, justifyContent: 'center' },
+  loadingFill: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
   segTabs: { flexDirection: 'row', backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: 3, gap: 2 },
   segTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.item },
   segTabOn: { backgroundColor: colors.card },

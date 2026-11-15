@@ -233,6 +233,26 @@ const open = async (theme, ctx0) => {
   record('暗色无页面报错', errors.length === 0, errors);
   await ctx.close();
 }
+{
+  // ⑪ 读取中:整页居中转圈(管理员「改成动画吧,那种转圈的」)
+  const ctx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 1240, height: 920 } });
+  const page = await ctx.newPage();
+  await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(fixture);
+  await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+  await page.locator('[data-testid="desktop-rail"]').waitFor({ timeout: 20000 });
+  await page.evaluate(() => { window.__stubDelayMs = 2500; });
+  await page.getByRole('tab', { name: '组织', exact: true }).click();
+  await page.locator('[data-testid="agent-org-loading"]').waitFor({ timeout: 5000 });
+  await page.screenshot({ path: `${OUT}/org-loading.png` });
+  const spin = await page.evaluate(() => {
+    const box = document.querySelector('[data-testid="agent-org-loading"]').getBoundingClientRect();
+    const spinner = document.querySelector('[data-testid="agent-org-loading"] [role="progressbar"]');
+    return { spinner: !!spinner, centred: Math.abs((box.top + box.bottom) / 2 - innerHeight / 2) < 80 };
+  });
+  record('⑪ 读取中是居中转圈,不是一行字', spin.spinner && spin.centred, spin);
+  await ctx.close();
+}
 await browser.close();
 web.close?.();
 const p = results.filter(Boolean).length, t = results.length;
