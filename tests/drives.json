@@ -608,6 +608,10 @@
     "rail-org-visibility/drive.mjs": {
       "kind": "stub",
       "secs": 30
+    },
+    "task-tag-collapse/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
     }
   }
 }

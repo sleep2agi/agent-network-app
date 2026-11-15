@@ -33,6 +33,9 @@ registerTranslations({
   'tags.depthExceeded': ['标签最多支持 4 层，请选择更上层的父标签。', 'Tags support at most 4 levels. Choose a higher-level parent.'],
   'tags.collapse': ['收起标签', 'Collapse tags'],
   'tags.expand': ['展开标签', 'Expand tags'],
+  // 2026-11-15 侧栏父标签折叠箭头(读屏用)。
+  'tags.expandOne': ['展开 {name}', 'Expand {name}'],
+  'tags.collapseOne': ['收起 {name}', 'Collapse {name}'],
   'tags.usage': ['{n} 个任务', '{n} tasks'],
   'tags.none': ['还没有标签。在任务详情里输入一个就会出现在这里。', 'No tags yet. Add one in a task\'s details and it shows up here.'],
   'tags.rename': ['改名', 'Rename'],

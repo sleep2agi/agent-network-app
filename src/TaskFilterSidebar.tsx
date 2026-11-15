@@ -49,6 +49,15 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   const [tagQ, setTagQ] = useState('');
   // #2102:树的折叠状态(只在 Hub 真的回了 parent_id 时才可能出现折叠箭头)。
   const [collapsedProjects, setCollapsedProjects] = useState<Set<string>>(() => new Set());
+  // 2026-11-15 管理员「父标签要支持收起来,这样可以展示全一点」:父标签前一个折叠箭头(和项目树同一做法),
+  // 折叠记在本机(localStorage),下次打开还是收着;搜索标签时不受折叠影响(要能搜到子标签)。
+  const [collapsedTags, setCollapsedTagsState] = useState<Set<string>>(() => loadCollapsedTags());
+  const toggleTag = (name: string) => setCollapsedTagsState(prev => {
+    const next = new Set(prev);
+    if (next.has(name)) next.delete(name); else next.add(name);
+    saveCollapsedTags(next);
+    return next;
+  });
   // #2122 F4:目录(标签父子)变了之后,旧的 tagDescendants 可能已经指向不存在的子孙,
   // 甚至在没有层级的 Hub 上让「精确匹配」变成「匹配一堆旧标签」。这里跟着目录重算。
   const tagParentsKey = JSON.stringify(tagCatalog?.parents ?? null);
@@ -245,10 +254,25 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
             {tagQ.trim() && !tagNames.some(n => pinyinMatch(n, tagQ)) ? (
               <Text style={[styles.itemText, { color: colors.textMuted, paddingHorizontal: spacing.sm, paddingVertical: 4 }]} numberOfLines={1}>{tr('tasks.copy.245')}</Text>
             ) : null}
-            {tagRows(tagNames.filter(n => !tagQ.trim() || pinyinMatch(n, tagQ)), tagCatalog?.parents ?? null).map(r => tagRow(
-              r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
-              tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
-            ))}
+            {tagRows(tagNames.filter(n => !tagQ.trim() || pinyinMatch(n, tagQ)), tagCatalog?.parents ?? null, tagQ.trim() ? undefined : collapsedTags).map(r => {
+              const rowEl = tagRow(
+                r.node.name, r.node.name, tagDot(r.node.name), tagCounts.get(r.node.name) ?? 0,
+                tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null),
+              );
+              if (!r.hasChildren || tagQ.trim()) return rowEl;
+              const folded = collapsedTags.has(r.node.name);
+              return (
+                // 箭头叠在行左侧留白里(不占一列):父标签的圆点和没有子标签的同级标签对齐。
+                <View key={`trow:${r.node.name}`} style={{ position: 'relative' }}>
+                  {rowEl}
+                  <Pressable accessibilityRole="button" accessibilityLabel={tr(folded ? 'tags.expandOne' : 'tags.collapseOne', { name: r.node.name })} {...a11yState({ expanded: !folded })}
+                    testID={`task-side-tag-toggle-${r.node.name}`} onPress={() => toggleTag(r.node.name)} hitSlop={4}
+                    style={{ position: 'absolute', left: tagDepth(r.node.name, tagCatalog?.depths ?? null, tagCatalog?.parents ?? null) * 14 - 2, top: 0, bottom: 0, width: 16, alignItems: 'center', justifyContent: 'center' }}>
+                    <Ionicons name={folded ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
+                  </Pressable>
+                </View>
+              );
+            })}
             {manageTags ? (
               <Pressable accessibilityRole="button" onPress={() => setManagingTags(true)} style={state => [styles.item, ((state as { hovered?: boolean }).hovered || state.pressed) && { backgroundColor: colors.rowHover }]} testID="task-side-manage-tags">
                 <View style={styles.icon}>{icon('settings-outline')}</View>
@@ -397,3 +421,15 @@ const makeSidebarStyles = () => StyleSheet.create({
   search: { height: 32, marginHorizontal: spacing.xs, marginVertical: spacing.xs, paddingHorizontal: spacing.sm, borderWidth: 1, borderRadius: radius.control, fontSize: 13 },
   divider: { height: StyleSheet.hairlineWidth, marginVertical: spacing.md, marginHorizontal: spacing.sm },
 });
+
+// 标签树折叠状态(本机记忆)。只存折叠了的父标签名;读不到 / 坏数据 ⇒ 全部展开。
+const COLLAPSED_TAGS_KEY = 'anet.taskSideCollapsedTags';
+function loadCollapsedTags(): Set<string> {
+  try {
+    const v = JSON.parse(globalThis.localStorage?.getItem(COLLAPSED_TAGS_KEY) ?? '[]');
+    return new Set(Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : []);
+  } catch { return new Set(); }
+}
+function saveCollapsedTags(set: ReadonlySet<string>): void {
+  try { globalThis.localStorage?.setItem(COLLAPSED_TAGS_KEY, JSON.stringify([...set])); } catch { /* 存不了就只在这次生效 */ }
+}

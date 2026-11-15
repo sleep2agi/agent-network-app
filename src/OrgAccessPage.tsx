@@ -11,8 +11,10 @@ import { ORG_ACCESS_TAB_LABEL, orgAccessTabs, rememberedTab, resolveOrgAccessTab
 // 点进成员再返回会重新挂载这一页;记住上次的页签,别把人弹回第一页。按账号 + 网络记(rememberedTab)。
 let lastTab: { scope: string; tab: OrgAccessTab } | null = null;
 
-export default function OrgAccessPage({ canManageMembers, initialTab, scope = '', detailOpen = false, renderOrg, renderMembers }: {
+export default function OrgAccessPage({ canManageMembers, initialTab, scope = '', detailOpen = false, phone = false, renderOrg, renderMembers }: {
   canManageMembers: boolean;
+  /** 手机(2026-11-15 管理员「这个感觉也有点丑」):页签条撑满一行、两段等宽,和下面的卡片左右对齐。 */
+  phone?: boolean;
   /**
    * 手机:成员 / 分组三级页开着。成员面板必须留在**同一个树位置**,否则点成员时它被重新挂载、
    * 「正在编辑谁」这份状态丢掉,三级页打不开(#1432 stub drive test-member-editor 抓到)。
@@ -35,7 +37,7 @@ export default function OrgAccessPage({ canManageMembers, initialTab, scope = ''
   return (
     <View testID="org-access-page">
       {tabs.length > 1 && !detailOpen ? (
-        <View style={styles.tabs} accessibilityRole="tablist" testID="org-access-tabs">
+        <View style={[styles.tabs, phone && styles.tabsPhone]} accessibilityRole="tablist" testID="org-access-tabs">
           {tabs.map(k => (
             <Pressable
               key={k}
@@ -43,7 +45,7 @@ export default function OrgAccessPage({ canManageMembers, initialTab, scope = ''
               accessibilityState={{ selected: tab === k }}
               aria-selected={tab === k}
               onPress={() => setWant(k)}
-              style={({ pressed }) => [styles.tab, tab === k && styles.tabOn, pressed && styles.pressed]}
+              style={({ pressed }) => [styles.tab, phone && styles.tabPhone, tab === k && styles.tabOn, pressed && styles.pressed]}
               testID={`org-access-tab-${k}`}
             >
               <Text style={[styles.tabText, tab === k && styles.tabTextOn]}>{settingsText(ORG_ACCESS_TAB_LABEL[k])}</Text>
@@ -57,7 +59,10 @@ export default function OrgAccessPage({ canManageMembers, initialTab, scope = ''
 }
 
 const makeStyles = () => StyleSheet.create({
-  tabs: { flexDirection: 'row', alignSelf: 'flex-start', backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: 3, marginBottom: spacing.md, gap: 2 },
+  // 左右和下面的组织卡片(AgentOrgScreen workspace,marginHorizontal: spacing.md)对齐。
+  tabs: { flexDirection: 'row', alignSelf: 'flex-start', backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: 3, marginBottom: spacing.md, marginHorizontal: spacing.md, gap: 2 },
+  tabsPhone: { alignSelf: 'stretch' },
+  tabPhone: { flex: 1, alignItems: 'center' },
   tab: { paddingHorizontal: spacing.md, paddingVertical: 7, borderRadius: radius.control },
   tabOn: { backgroundColor: colors.card },
   tabText: { fontSize: 14, color: colors.textMuted },
