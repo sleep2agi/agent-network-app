@@ -23,13 +23,15 @@ import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
 
 /** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
-type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStructure?: boolean };
+type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStructure?: boolean;
+  /** 一级栏「组织」整页(2026-11-15):用满主窗口内容区,不套设置页的 760 上限。 */
+  fullWidth?: boolean };
 
 export default function AgentOrgScreen(p: Props) {
   const [, refreshTheme] = useState(0);
   useEffect(() => onThemeChange(() => refreshTheme(n => n + 1)), []);
   return (
-    <View testID="agent-org-page" style={styles.page}>
+    <View testID="agent-org-page" style={[styles.page, p.fullWidth && { maxWidth: '100%' }]}>
       {p.networkId
         ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} />
         : <NoNetwork />}

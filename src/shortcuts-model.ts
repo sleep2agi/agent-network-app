@@ -27,6 +27,7 @@ export type ShortcutId =
   | 'nav.tab.scheduled'
   | 'nav.tab.messages'
   | 'nav.tab.server'
+  | 'nav.tab.org'
   | 'input.voiceHold'
   | 'input.voiceToggle';
 
@@ -49,6 +50,7 @@ export const SHORTCUTS: readonly ShortcutDef[] = [
   { id: 'nav.tab.scheduled', group: 'nav', label: '切换到 定时任务', defaultCombo: 'Mod+3' },
   { id: 'nav.tab.messages', group: 'nav', label: '切换到 消息', defaultCombo: 'Mod+4' },
   { id: 'nav.tab.server', group: 'nav', label: '切换到 Hub', defaultCombo: 'Mod+5' },
+  { id: 'nav.tab.org', group: 'nav', label: '切换到 组织', defaultCombo: 'Mod+6' },
   // 按着快捷键录音,放开键把识别文字插到输入框光标处(不发送);Esc 取消。见 voice-shortcut-model.ts。
   // 标签叫「按键说话」不叫「按住说话」:后者是手机的触摸手势说法(phone-only-ui 门),桌面说的是按着一个键。
   { id: 'input.voiceHold', group: 'input', label: '按键说话', defaultCombo: 'Mod+Shift+Space' },
@@ -63,6 +65,7 @@ export const TAB_FOR_SHORTCUT: Partial<Record<ShortcutId, string>> = {
   'nav.tab.scheduled': 'scheduled',
   'nav.tab.messages': 'messages',
   'nav.tab.server': 'server',
+  'nav.tab.org': 'org',
 };
 
 /** 固定的(别处写死、不可改)快捷键:只展示。combos 是「任一」关系。 */

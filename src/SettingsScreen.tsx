@@ -1,4 +1,5 @@
 import * as Clipboard from 'expo-clipboard';
+import { RAIL_HIDEABLE, setRailVisible, useRailHidden } from './rail-prefs';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { diagnosticsLine } from './diagnostics-copy';
 import { maskedHubHost } from './mask-hub-address';
@@ -403,6 +404,7 @@ export default function SettingsScreen({
   const aboutPlatform = aboutPlatformLabel(Platform.OS, tauriDesktop, (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ?? '');
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
   const usersAvailable = canManageUsers(authMe, me.networkId);
+  const railHidden = useRailHidden();
   // 「组织与权限」记住的页签按账号 + 网络区分(换账号不沿用上一个人的页签)。
   const orgAccessScope = `${cfg.serverUrl}|${authMe?.user?.user_id ?? ''}|${me.networkId ?? ''}`;
   // 部门负责人(RFC-040,Hub ≥ .91):手机设置列表最上面一组「管理本部门」(电脑在侧栏「人员」上方)。旧 Hub ⇒ 空,不出现。
@@ -1114,6 +1116,20 @@ export default function SettingsScreen({
                 {/* 字体大小 / 界面密度 + 预览 + 恢复默认 (src/UiScaleSettings.tsx, src/ui-scale.ts). */}
                 <UiScaleSettings s={styles} showFont={show('appearance', 'fontSize')} showDensity={show('appearance', 'density')} />
               </WideCard>
+              {/* 2026-11-15 管理员「设置里面可以设置一级是否显示和展示」:桌面主窗口左侧一级栏,每项一个开关。手机没有这条栏 ⇒ 不出现。 */}
+              {!compact && Platform.OS === 'web' && show('appearance', 'rail') ? (
+                <SettingsGroup title={tr('settings.copy.299')} footer={tr('settings.copy.300')} testID="settings-rail-group">
+                  {RAIL_HIDEABLE.map(key => (
+                    <SettingsSwitchRow
+                      key={key}
+                      label={tr(`nav.${key}`)}
+                      value={!railHidden.includes(key)}
+                      onValueChange={value => setRailVisible(key, value)}
+                      testID={`settings-rail-${key}`}
+                    />
+                  ))}
+                </SettingsGroup>
+              ) : null}
             </View>
           ) : null}
 
