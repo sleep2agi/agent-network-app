@@ -124,6 +124,7 @@ const open = async (theme, ctx0) => {
   record('⑥ 悬停出「移动到…」', op === '1', op);
   await page.locator('[data-testid="agent-org-agent-n_1-move"]').click();
   await page.locator('[data-testid="agent-org-selector"]').waitFor();
+  await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/org-move.png` });
   await page.locator('[data-testid="agent-org-move-dept-d_k5"]').click();
   await page.waitForTimeout(500);
