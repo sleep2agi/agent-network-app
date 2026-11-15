@@ -4,6 +4,7 @@
 import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { APP_VERSION } from './version';
@@ -25,48 +26,68 @@ export default function NotifyDiagnosticsPanel() {
     return () => { live = false; clearInterval(id); };
   }, []);
   const rows = diagnosticsRows(d, now);
-  const desktop = Platform.OS === 'web';
+  // 2026-11-15 管理员「这些里面有丑的一逼吧」:默认收起,只给一行结论(正常 / 几项要注意);
+  // 展开后是「标签左 · 值右」的细线分隔列表,复制按钮在最下面一整行。桌面不显示这块(SettingsScreen 判断)。
+  const warn = rows.filter(r => r.warn).length;
+  const [open, setOpen] = useState(false);
   return (
     <View style={s.wrap} testID="notify-diagnostics">
-      {desktop ? <Text style={s.hint}>桌面端的系统通知走系统栏(另一条链路);下面是手机端通知运行时的状态。</Text> : null}
-      {rows.map(r => (
-        <View key={r.label} style={s.row}>
-          <Text style={s.label}>{r.label}</Text>
-          <Text style={[s.value, r.warn && { color: colors.failed }]} selectable>{r.value}</Text>
+      <Pressable
+        accessibilityRole="button"
+        accessibilityState={{ expanded: open }}
+        testID="notify-diagnostics-toggle"
+        onPress={() => setOpen(v => !v)}
+        style={({ pressed }) => [s.summary, pressed && { opacity: 0.6 }]}
+      >
+        <View style={[s.dot, { backgroundColor: warn ? colors.failed : colors.running }]} />
+        <Text style={s.summaryText}>{warn ? `${warn} 项需要注意` : '运行正常'}</Text>
+        <Text style={s.summaryHint}>{open ? '收起' : `查看 ${rows.length} 项`}</Text>
+        <Ionicons name={open ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+      </Pressable>
+      {open ? (
+        <View testID="notify-diagnostics-rows">
+          {rows.map(r => (
+            <View key={r.label} style={s.row}>
+              <Text style={s.label} numberOfLines={2}>{r.label}</Text>
+              <Text style={[s.value, r.warn && { color: colors.failed }]} selectable>{r.value}</Text>
+            </View>
+          ))}
         </View>
-      ))}
-      <View style={s.actions}>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel="复制诊断信息"
-          testID="notify-diagnostics-copy"
-          onPress={() => {
-            void (async () => {
-              await refreshNotifyDiagnostics().catch(() => {});
-              const text = formatDiagnostics(getNotifyDiagnostics(), `ANet v${APP_VERSION} 通知诊断(${Platform.OS})`);
-              try { await Clipboard.setStringAsync(text); setCopied('已复制,可以直接粘贴发给维护者。'); }
-              catch (e) { setCopied(`复制失败:${String((e as Error)?.message ?? e)}`); }
-            })();
-          }}
-          style={({ pressed }) => [s.button, pressed && { opacity: 0.6 }]}
-        >
-          <Text style={s.buttonText}>复制诊断信息</Text>
-        </Pressable>
-        {copied ? <Text style={s.hint}>{copied}</Text> : null}
-      </View>
+      ) : null}
+      <Pressable
+        accessibilityRole="button"
+        accessibilityLabel="复制诊断信息"
+        testID="notify-diagnostics-copy"
+        onPress={() => {
+          void (async () => {
+            await refreshNotifyDiagnostics().catch(() => {});
+            const text = formatDiagnostics(getNotifyDiagnostics(), `ANet v${APP_VERSION} 通知诊断(${Platform.OS})`);
+            try { await Clipboard.setStringAsync(text); setCopied('已复制,可以直接粘贴发给维护者。'); }
+            catch (e) { setCopied(`复制失败:${String((e as Error)?.message ?? e)}`); }
+          })();
+        }}
+        style={({ pressed }) => [s.copy, pressed && { opacity: 0.6 }]}
+      >
+        <Ionicons name="copy-outline" size={16} color={colors.accent} />
+        <Text style={s.copyText}>复制诊断信息</Text>
+      </Pressable>
+      {copied ? <Text style={s.hint}>{copied}</Text> : null}
     </View>
   );
 }
 
 const makeStyles = () => StyleSheet.create({
-  wrap: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm, gap: 6 },
-  row: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start' },
-  label: { color: colors.textMuted, fontSize: 12, width: 132 },
-  value: { color: colors.text, fontSize: 12, flex: 1, minWidth: 0 },
-  hint: { color: colors.textMuted, fontSize: 12 },
-  actions: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginTop: spacing.sm, flexWrap: 'wrap' },
-  button: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, backgroundColor: colors.card },
-  buttonText: { color: colors.text, fontSize: 13 },
+  wrap: {},
+  summary: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 52 },
+  dot: { width: 8, height: 8, borderRadius: radius.pill },
+  summaryText: { color: colors.text, fontSize: 15, flex: 1, minWidth: 0 },
+  summaryHint: { color: colors.textMuted, fontSize: 13 },
+  row: { flexDirection: 'row', gap: spacing.md, alignItems: 'flex-start', paddingVertical: 10, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  label: { color: colors.textSecondary, fontSize: 13, flex: 1, minWidth: 0 },
+  value: { color: colors.text, fontSize: 13, flexShrink: 1, maxWidth: '60%', textAlign: 'right' },
+  hint: { color: colors.textMuted, fontSize: 12, paddingBottom: spacing.sm },
+  copy: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, minHeight: 48, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  copyText: { color: colors.accent, fontSize: 15 },
 });
 
 let s = makeStyles();

@@ -1259,7 +1259,9 @@ export default function SettingsScreen({
                   />
                 ) : null}
               </SettingsGroup>
-              {show('notifications', 'diagnostics') ? (
+              {/* 2026-11-15 管理员「这些里面有丑的一逼吧」:通知诊断只看手机端通知运行时,桌面(系统栏另一条链路)
+                  上全是「未运行 / 从未」的红字误报 ⇒ 桌面不显示;手机上默认收起成一行结论(NotifyDiagnosticsPanel)。 */}
+              {show('notifications', 'diagnostics') && Platform.OS !== 'web' ? (
                 <SettingsGroup title={tr('settings.copy.73')} caption={tr('settings.copy.74')} testID="notify-diagnostics-group">
                   {notifyPreview ? null : <SettingsCardContent><NotifyDiagnosticsPanel /></SettingsCardContent>}
                 </SettingsGroup>
