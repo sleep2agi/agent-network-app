@@ -7,6 +7,7 @@
 //   ④ 未归属置顶;有子部门的可折叠,折叠记在本机(刷新后还在)
 //   ⑤ 部门行悬停出「⋯」→ 同一份部门菜单;列头「+」→ 新建根部门
 //   ⑥ Agent 行悬停出「移动到…」→ 选部门 → PUT 写 Hub,行离开「未归属」
+//   ⑦ 点 Agent 行 → 组织页里打开它的节点页,落在「权限」;「← 组织」回来,部门选择还在
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
 
@@ -35,8 +36,8 @@ const fixture = () => {
     const p = u.pathname;
     if (p === '/api/auth/me') return { ok: true, user: { user_id: 'u_me', username: 'admin', role: 'admin' }, current_network: NET, networks: [{ network_id: NET, network_name: '网络', member_role: 'owner' }] };
     if (p === '/api/dm/threads') return { ok: true, threads: [] };
-    if (p === '/api/status') return { ok: true, sessions: [] };
-    if (p === '/api/nodes') return { ok: true, nodes: [] };
+    if (p === '/api/status') return { ok: true, sessions: [{ alias: '基建甲', status: 'idle', agent: 'claude-code', runtime: 'agent-node', node_id: 'n_100', updated_at: now }] };
+    if (p === '/api/nodes') return { ok: true, nodes: [{ node_id: 'n_100', alias: '基建甲', owner_user_id: 'u_me', permission_mode: 'default', department_id: 'd_k5', lifecycle_state: 'active', viewer_can: { permission_mode: true } }] };
     if (p === `/api/networks/${NET}/departments`) return { ok: true, departments: departments.map(d => ({ ...d, leader_user_id: null, viewer_can: { manage: true, create_child: true }, member_count: 0 })), members: [] };
     if (p === `/api/networks/${NET}/humans`) return { ok: true, humans: [{ user_id: 'u_me', username: 'admin' }] };
     if (/\/nodes\/[^/]+\/department$/.test(p) && method === 'PUT') { window.__puts.push({ p, body }); return { ok: true }; }
@@ -131,6 +132,20 @@ const open = async (theme, ctx0) => {
   const puts = await page.evaluate(() => window.__puts);
   record('⑥ 移动写 Hub(PUT …/nodes/n_1/department)', puts.length === 1 && puts[0].p.endsWith('/nodes/n_1/department') && puts[0].body.includes('d_k5'), puts);
   record('⑥ 行离开「未归属」', await page.locator('[data-testid="agent-org-agent-n_1"]').count() === 0, null);
+  await page.locator('[data-testid="agent-org-dept-d_k5"]').click();
+  await page.waitForTimeout(200);
+  await page.locator('[data-testid="agent-org-agent-n_100"]').click();
+  await page.locator('[data-testid="org-agent-detail"]').waitFor();
+  await page.waitForTimeout(600);
+  await page.screenshot({ path: `${OUT}/org-agent-detail.png` });
+  const crumb = await page.locator('[data-testid="org-agent-detail"]').innerText();
+  record('⑦ 点 Agent 行打开节点页(面包屑「组织 / 基建甲」)', crumb.includes('组织') && crumb.includes('基建甲'), crumb.slice(0, 80));
+  const content = await page.locator('[data-testid="node-page-content"]').innerText();
+  record('⑦ 落在「权限」(权限模式可改)', content.includes('权限模式') && content.includes('只读'), content.slice(0, 60));
+  record('⑦ 组织页藏起来了', !(await page.locator('[data-testid="agent-org-tree"]').isVisible()), null);
+  await page.locator('[data-testid="org-agent-detail-back"]').click();
+  await page.waitForTimeout(300);
+  record('⑦「← 组织」回来,还停在 TM基建', await page.locator('[data-testid="agent-org-dept-d_k5"]').getAttribute('aria-selected') === 'true' && await page.locator('[data-testid="org-agent-detail"]').count() === 0, null);
   record('无页面报错', errors.length === 0, errors);
   await ctx.close();
 }
