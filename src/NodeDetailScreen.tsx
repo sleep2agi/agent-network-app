@@ -70,6 +70,7 @@ import { nodeDegraded } from './node-degraded';
 import AvatarEditSection from './AvatarEditSection';
 import * as Clipboard from 'expo-clipboard';
 import { fetchOrg } from './org-api';
+import NodeDescriptionCard from './NodeDescriptionCard';
 import { fetchHostSupervisors, fetchHubNodes, fetchNodeConfig, fetchNodeStatus, runNodeLifecycleAction, type HostSupervisorDaemon, type HubConfig, type HubNode, type NodeLifecycleAction, type Session } from './api';
 import { styles } from './app-styles';
 import { colors, onThemeChange, radius, spacing, statusColor, type as typeScale, weight } from './theme';
@@ -677,6 +678,13 @@ export default function NodeDetailScreen({
   const content = (() => {
     if (section === 'overview') return (
       <View style={{ gap: spacing.xl }}>
+        {/* admin 2026-11-15:职责介绍放在概览最上面 —— 别的节点、同事打开这个节点最先想知道的就是「它负责什么」。
+            Hub 不支持(node 上没有 description 键)就不画。只读页(聊天里的「节点信息」)只看不改。 */}
+        {node && 'description' in node ? (
+          <NodeDescriptionCard key={node.node_id} cfg={cfg} node={node} canEdit={!readOnly}
+            onSaved={(description, attrsRevision) => setNode(prev => prev ? { ...prev, description, attrs_revision: attrsRevision } : prev)}
+            onConflict={() => { void load(); }} />
+        ) : null}
         <View>
           <SectionTitle title="概览" />
           <View style={[card, { flexDirection: 'row', flexWrap: 'wrap' }]}>
