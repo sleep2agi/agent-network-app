@@ -219,6 +219,7 @@ export default function NodeDetailScreen({
   desktop = false,
   onOpenScheduled,
   windowChrome = null,
+  initialSection = 'overview',
 }: {
   cfg: HubConfig;
   alias: string;
@@ -234,6 +235,8 @@ export default function NodeDetailScreen({
   /** 「定时任务」分区:点一行 / 「＋ 新建」→ 定时任务页落在那一条 / 打开预填了这个节点的新建表单。
    *  没有(独立聊天窗口)时分区只读:行不可点,不画新建。 */
   onOpenScheduled?: (request: ScheduleOpenRequest) => void;
+  /** 打开时落在哪一节(默认概览)。一级栏「组织」点 Agent 直接落在「权限」(管理员 2026-11-15「点击 AGENT,设置不了权限」)。 */
+  initialSection?: NodeSectionKey;
   /** 分离聊天窗:页头兼当标题栏(window-shell.ts popoutChatChrome)。其他地方不传。 */
   windowChrome?: PopoutChrome;
 }) {
@@ -248,7 +251,7 @@ export default function NodeDetailScreen({
   const [actionMessage, setActionMessage] = useState('');
   // board #585 —— 提交启动后等节点上线(只看页面本来就在轮询的节点 / 会话状态,不另起轮询)。
   const [startWatch, setStartWatch] = useState<{ deadline: number; sawStarting: boolean } | null>(null);
-  const [activeSection, setActiveSection] = useState<NodeSectionKey>('overview');
+  const [activeSection, setActiveSection] = useState<NodeSectionKey>(initialSection);
   // 「定时任务」分区标题上的「＋ 新建」:每按一次加一,NodeSchedulesSection 就地打开预填了这个节点的编辑器。
   const [scheduleCreateSeq, setScheduleCreateSeq] = useState(0);
   // Fold/unfold remounts this screen; keep the selected tab (概览/规则文件/技能/…)

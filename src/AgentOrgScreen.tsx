@@ -25,7 +25,9 @@ import './i18n-agent-org';
 /** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
 type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStructure?: boolean;
   /** 一级栏「组织」整页(2026-11-15):用满主窗口内容区,不套设置页的 760 上限。 */
-  fullWidth?: boolean };
+  fullWidth?: boolean;
+  /** 一级栏整页:点 Agent 行 → 打开它的节点页(权限等)。管理员 2026-11-15「点击 AGENT,设置不了权限」。 */
+  onOpenAgent?: (alias: string) => void };
 
 export default function AgentOrgScreen(p: Props) {
   const [, refreshTheme] = useState(0);
@@ -33,7 +35,7 @@ export default function AgentOrgScreen(p: Props) {
   return (
     <View testID="agent-org-page" style={[styles.page, p.fullWidth && styles.pageFill]}>
       {p.networkId
-        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} fill={!!p.fullWidth && !p.phone} />
+        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} fill={!!p.fullWidth && !p.phone} onOpenAgent={p.onOpenAgent} />
         : <NoNetwork />}
     </View>
   );
@@ -61,7 +63,7 @@ function writeCollapsed(ids: ReadonlySet<string>) {
   try { (globalThis as { localStorage?: Storage }).localStorage?.setItem(TREE_COLLAPSED_KEY, JSON.stringify([...ids])); } catch { /* 存不了就只在本次有效 */ }
 }
 
-function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean }) {
+function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean; onOpenAgent?: (alias: string) => void }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<{ kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; data: AgentOrgData | null }>({ kind: 'loading' });
@@ -228,6 +230,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                 note={p.fill ? adjustNote : ''}
                 onMove={p.fill && data.agentDepartmentSupported ? moveOne : undefined}
                 moveBusy={saving}
+                onOpenAgent={p.fill ? p.onOpenAgent : undefined}
                 actions={null}
                 bulkBusy={saving}
                 onBulkAssign={async (departmentId, nodeIds) => {
@@ -489,7 +492,7 @@ function DepartmentRow(p: { testID: string; label: string; depth?: number; selec
 }
 
 function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; actions: ReactNode; onBulkAssign?: (departmentId: string, nodeIds: string[]) => void; bulkBusy?: boolean;
-  fill?: boolean; note?: string; onMove?: (nodeId: string, departmentId: string | null) => void; moveBusy?: boolean }) {
+  fill?: boolean; note?: string; onMove?: (nodeId: string, departmentId: string | null) => void; moveBusy?: boolean; onOpenAgent?: (alias: string) => void }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [moving, setMoving] = useState<PlacedAgent | null>(null);
@@ -562,7 +565,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
           </Pressable>
         ))}
         {children.length && filtered.length ? <View style={[styles.treeDivider, { marginHorizontal: spacing.sm }]} /> : null}
-        {filtered.length ? shown.map(agent => <AgentLine key={agent.nodeId} agent={agent} fill onMove={p.onMove && !p.moveBusy ? () => setMoving(agent) : undefined} />) : (children.length ? null : <View testID={agents.length ? 'agent-org-no-results' : 'agent-org-no-agents'} style={styles.empty}>
+        {filtered.length ? shown.map(agent => <AgentLine key={agent.nodeId} agent={agent} fill onMove={p.onMove && !p.moveBusy ? () => setMoving(agent) : undefined} onOpen={p.onOpenAgent ? () => p.onOpenAgent!(agent.alias) : undefined} />) : (children.length ? null : <View testID={agents.length ? 'agent-org-no-results' : 'agent-org-no-agents'} style={styles.empty}>
           <Ionicons name={agents.length ? 'search-outline' : 'people-outline'} size={30} color={colors.textMuted} />
           <Text style={styles.note}>{t(agents.length ? 'agentOrg.noResults' : 'agentOrg.noAgents')}</Text>
         </View>)}
@@ -624,7 +627,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
   );
 }
 
-function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void }) {
+function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void; onOpen?: () => void }) {
   const { t } = useTranslation();
   const agent = p.agent;
   const subtitle = agent.ownerName ? t('agentOrg.owner', { name: agent.ownerName }) : t('agentOrg.noOwner');
@@ -632,7 +635,10 @@ function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void 
     // 整页:一行 48 高;负责人放右侧一列(以前每行第二行都是「负责人 admin」);
     // 有 lifecycle 的 Hub 在头像角上标运行 / 未运行;悬停出「移动到…」。
     const live = agent.lifecycleState == null ? null : agent.lifecycleState === 'active';
-    return <Pressable testID={`agent-org-agent-${agent.nodeId}`} focusable={false} style={({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.agentRowFill, hovered && { backgroundColor: colors.rowHover }]}>
+    // 整行可点 → 节点页(落在「权限」)。以前行不可点,点上去只会选中文字。
+    return <Pressable testID={`agent-org-agent-${agent.nodeId}`} focusable={!!p.onOpen} disabled={!p.onOpen} onPress={p.onOpen}
+      accessibilityRole={p.onOpen ? 'button' : undefined} accessibilityLabel={p.onOpen ? t('agentOrg.openAgent', { name: agent.alias }) : undefined}
+      style={({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.agentRowFill, p.onOpen && { cursor: 'pointer' } as object, hovered && { backgroundColor: colors.rowHover }]}>
       {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => <>
         <View>
           <AliasAvatar alias={agent.alias} size={30} />
@@ -640,12 +646,13 @@ function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void 
         </View>
         <Text testID={`agent-org-agent-${agent.nodeId}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: colors.text, fontSize: typeScale.body, fontWeight: '500' }}>{agent.alias}</Text>
         <Text numberOfLines={1} style={[styles.ownerCol, !agent.ownerName && { fontStyle: 'italic' }]}>{agent.ownerName ?? t('agentOrg.noOwner')}</Text>
-        <View style={styles.rowActionSlot}>
-          {p.onMove ? <Pressable testID={`agent-org-agent-${agent.nodeId}-move`} accessibilityRole="button" accessibilityLabel={`${t('agentOrg.moveTo')} ${agent.alias}`} onPress={p.onMove}
+        <View style={[styles.rowActionSlot, { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }]}>
+          {p.onMove ? <Pressable testID={`agent-org-agent-${agent.nodeId}-move`} accessibilityRole="button" accessibilityLabel={`${t('agentOrg.moveTo')} ${agent.alias}`} onPress={e => { e.stopPropagation?.(); p.onMove!(); }}
             style={({ hovered: h, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [styles.moveButton, { opacity: hovered || h ? 1 : 0 }, (h || pressed) && { backgroundColor: colors.rowActive }]}>
             <Ionicons name="return-up-forward-outline" size={14} color={colors.accent} />
             <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: '500' }}>{t('agentOrg.moveTo')}</Text>
           </Pressable> : null}
+          {p.onOpen ? <Ionicons name="chevron-forward" size={15} color={colors.textMuted} /> : null}
         </View>
       </>}
     </Pressable>;
@@ -824,7 +831,7 @@ const makeStyles = () => StyleSheet.create({
   folderBadge: { width: 30, height: 30, borderRadius: radius.pill, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' },
   liveDot: { position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.card },
   ownerCol: { width: 140, flexShrink: 1, color: colors.textMuted, fontSize: typeScale.small, textAlign: 'right' },
-  rowActionSlot: { width: 96, alignItems: 'flex-end' },
+  rowActionSlot: { width: 112, alignItems: 'flex-end' },
   moveButton: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 28, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },
   toolbarContext: { flexGrow: 1, flexShrink: 1, minWidth: 160, gap: spacing.xs },

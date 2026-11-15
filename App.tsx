@@ -1448,7 +1448,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'hubEnv' ? <HubSecretsPane cfg={cfg} onOpenTokens={() => setScreen({ name: 'hubTokens' })} />
   : screen.name === 'hubProviders' ? <HubProviderManagementScreen cfg={cfg} />
   : screen.name === 'hubTokens' ? <HubTokenManagementScreen cfg={cfg} />
-  : screen.name === 'org' ? <OrgWorkspace cfg={cfg} />
+  : screen.name === 'org' ? <OrgWorkspace cfg={cfg} onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : hubSectionForScreen(screen.name) ? <HubScopeScreen key={screen.name} section={hubSectionForScreen(screen.name)!} />
   : (
     <View style={desktopStyles.empty}>
