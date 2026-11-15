@@ -10,6 +10,11 @@ import { fetchDepartmentNodes, fetchOrg } from './org-api';
 import { departmentLabelsByAlias, groupPeopleByDepartment, managedDepartmentIds, type OrgData } from './org-model';
 import { ManageDepartmentDesktop, ManageDepartmentIcon } from './ManageDepartment';
 import { deptHeaderLayout, deptTreeRank } from './agent-list-dept-tree';
+
+/** 子部门每一级缩进多少(分组标题和组里的 agent 行同一个数)。 */
+const DEPT_INDENT = 14;
+/** 子部门那条竖线的 x:落在上一级缩进的中间,分组标题和组里的行共用。 */
+const deptGuideLeft = (depth: number) => ds(AGENT_ROW_PAD_X) + (depth - 1) * DEPT_INDENT + 7;
 import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Platform, Pressable, RefreshControl, SectionList, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
@@ -1135,12 +1140,13 @@ export default function AgentsScreen({
           style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg },
             // 子部门不画分隔线(和父部门是一块),只缩进;顶层部门之间才分隔。
             section !== shownSections[0] && layout.depth === 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null,
-            layout.depth ? { paddingLeft: ds(AGENT_ROW_PAD_X) + layout.depth * 14, paddingTop: 4 } : null]}
+            layout.depth ? { paddingLeft: ds(AGENT_ROW_PAD_X) + layout.depth * DEPT_INDENT, paddingTop: 4 } : null]}
         >
           {/* 整组都离线时竖条不发亮、标题转灰:一眼看出这一团现在没人(不是没数据)。 */}
           {layout.depth ? (
             // 子部门:一条细竖线代替发光条,一眼看出挂在上面那个部门下。
-            <View testID={`agent-group-branch-${section.title}`} style={{ width: StyleSheet.hairlineWidth * 2, height: 13, marginRight: 6, backgroundColor: colors.border }} />
+            // 和下面 agent 行左侧那条细线同一个 x(deptGuideLeft),标题 + 组内的行连成一条竖线。
+            <View testID={`agent-group-branch-${section.title}`} pointerEvents="none" style={{ position: 'absolute', left: deptGuideLeft(layout.depth), top: 4, bottom: 0, width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.border }} />
           ) : <View testID={`agent-group-glow-${section.title}`} style={section.online === 0 ? {
             width: 3, height: 13, borderRadius: radius.sm, marginRight: 6, backgroundColor: colors.border,
           } : {
@@ -1250,7 +1256,19 @@ export default function AgentsScreen({
           ) : null}
         </View>
       }
-      renderItem={({ item }) => (compact ? renderCompactRow(item) : renderPhoneRow(item))}
+      renderItem={({ item, section }) => {
+        const row = compact ? renderCompactRow(item) : renderPhoneRow(item);
+        // 管理员 2026-11-15「UI/UX 再变好一点」:子部门里的 agent 跟着部门标题缩进,左侧一条细线连到标题的竖线,
+        // 一眼看出这些人属于上面那个子部门(以前和顶层 agent 左边对齐,看不出归属)。
+        const depth = deptTreeView ? deptHeaderLayout(section.title, shownTitleSet).depth : 0;
+        if (!depth) return row;
+        return (
+          <View testID={`agent-row-indent-${item.alias}`} style={{ paddingLeft: depth * DEPT_INDENT }}>
+            <View pointerEvents="none" style={{ position: 'absolute', left: deptGuideLeft(depth), top: 0, bottom: 0, width: StyleSheet.hairlineWidth * 2, backgroundColor: colors.border }} />
+            {row}
+          </View>
+        );
+      }}
       ListHeaderComponent={lastHidden || groupsVisible ? (<>
         {/* 误点「不显示该对话」的 8 秒撤销条(admin 2026-10-28 转来的用户反馈:容易不小心归档了)。 */}
         {lastHidden ? (
