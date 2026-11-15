@@ -62,7 +62,7 @@ const open = async (hidden) => {
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/rail-org.png` });
   record('① 点「组织」→ 整页组织与权限,部门树在,没有会话侧栏',
-    await page.locator('[data-testid="org-access-page"]').isVisible()
+    await page.locator('[data-testid="agent-org-page"]').isVisible()
     && (await page.getByText('研发', { exact: true }).count()) > 0
     && (await page.locator('[data-testid="desktop-workspace-sidebar"]').count()) === 0);
   record('no page errors (default)', errors.length === 0, errors);

@@ -57,6 +57,7 @@ export const agentOrgTranslations = {
   'agentOrg.sharedTree': ['这里编辑的是与人类成员共用的部门树，不是独立的 Agent 部门树。新建、改名和调整层级也会影响人员组织架构；Agent 归属仍需单独保存。权限由 Hub 校验。', 'This is the department tree shared with human members, not a separate Agent tree. Creating, renaming or reparenting departments also changes the people organization. Agent placement is saved separately. The Hub enforces permissions.'],
   'agentOrg.departmentsElsewhere': ['部门结构由管理员维护（人和 Agent 共用这一棵树）；这一页调整 Agent 属于哪个部门。', 'Admins maintain the department structure (people and agents share this one tree); this page sets which department an agent belongs to.'],
   'agentOrg.departmentsEditHint': ['右键部门可新建子部门、重命名、移动或删除；人和 Agent 共用这一棵树。', 'Right-click a department to add a child, rename, move or delete it. People and agents share this tree.'],
+  'agentOrg.membersTitle': ['成员与权限', 'Members & permissions'],
   'agentOrg.openAgent': ['打开 {name} 的设置', 'Open settings for {name}'],
   'agentOrg.backToOrg': ['组织', 'Organization'],
   'agentOrg.moveTo': ['移动到…', 'Move to…'],

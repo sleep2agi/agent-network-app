@@ -1,7 +1,8 @@
 // 管理员 2026-11-15「提升一下 UI/UX 的体验」(一级栏「组织」截图)。
 //
 // 渲染态 web export + 页内 Hub fixture(不起 hub、不碰生产)。断言:
-//   ① 只有一层标题(没有「组织管理」);统计在部门列头;页签和标题同一行
+//   ① 只有一层标题(没有「组织管理」);左边整条侧栏贴着一级栏、撑满窗口高,标题「组织」和统计在侧栏顶上;
+//      「成员与权限」是侧栏里的一项(不再是页签),点它右侧换成成员面板;「已保存到 Hub」是几秒就消失的小条
 //   ② 整页不滚,卡片撑到窗口底;Agent 列表自己滚
 //   ③ 底部「调整结构」「说明」两块没了;说明收在部门列底部
 //   ④ 未归属置顶;有子部门的可折叠,折叠记在本机(刷新后还在)
@@ -72,25 +73,26 @@ const open = async (theme, ctx0) => {
   const body = await page.locator('[data-testid="org-workspace"]').innerText();
   record('① 没有第二层标题「组织管理」', !body.includes('组织管理'), null);
   record('① 统计在部门列头', (await page.locator('[data-testid="agent-org-summary"]').innerText()).includes('个未归属'), null);
-  const headY = await page.evaluate(() => {
-    const r = (sel) => document.querySelector(sel)?.getBoundingClientRect();
-    const h = [...document.querySelectorAll('[role="heading"]')].find(e => e.textContent === '组织')?.getBoundingClientRect();
-    const tabs = r('[data-testid="org-access-tabs"]');
-    return h && tabs ? Math.abs((h.top + h.bottom) / 2 - (tabs.top + tabs.bottom) / 2) : 999;
+  const side = await page.evaluate(() => {
+    const nav = document.querySelector('[data-testid="agent-org-navigation"]').getBoundingClientRect();
+    const rail = document.querySelector('[data-testid="desktop-rail"]').getBoundingClientRect();
+    const title = [...document.querySelectorAll('[data-testid="agent-org-navigation"] [role="heading"]')].map(e => e.textContent);
+    return { gap: nav.left - rail.right, top: nav.top, bottom: nav.bottom, vh: innerHeight, title, tabs: !!document.querySelector('[data-testid="org-access-tabs"]') };
   });
-  record('① 页签和标题在同一行', headY < 8, headY);
+  record('① 侧栏贴着一级栏、从顶到底', Math.abs(side.gap) <= 1 && side.top <= 1 && side.bottom >= side.vh - 1, side);
+  record('① 标题「组织」在侧栏顶上,没有页签条', side.title.includes('组织') && !side.tabs, side);
   const geo = await page.evaluate(() => {
     const card = document.querySelector('[data-testid="agent-org-tree"]').getBoundingClientRect();
     const list = document.querySelector('[data-testid="agent-org-member-list"]');
     const scrollers = [...document.querySelectorAll('[data-testid="org-workspace"] *')].filter(e => e.scrollHeight > e.clientHeight + 2 && getComputedStyle(e).overflowY !== 'visible' && getComputedStyle(e).overflowY !== 'hidden');
     return { cardBottom: card.bottom, vh: innerHeight, listScrolls: list.scrollHeight > list.clientHeight, scrollers: scrollers.map(e => e.getAttribute('data-testid') || e.tagName) };
   });
-  record('② 卡片撑到窗口底', geo.cardBottom > geo.vh - 40 && geo.cardBottom <= geo.vh, geo);
+  record('② 内容撑到窗口底', geo.cardBottom >= geo.vh - 1 && geo.cardBottom <= geo.vh, geo);
   record('② 只有 Agent 列表在滚(没有整页滚动)', geo.listScrolls && geo.scrollers.every(s => s === 'agent-org-member-list' || s === 'DIV'), geo);
   record('③ 底部「调整结构」没了', await page.locator('[data-testid="agent-org-demo"]').count() === 0, null);
   record('③ 说明收在部门列底部', await page.locator('[data-testid="agent-org-navigation"] [data-testid="agent-org-info-toggle"]').count() === 1, null);
   const order = await page.$$eval('[data-testid="agent-org-departments"] [role="button"][aria-selected]', els => els.map(e => e.getAttribute('data-testid')));
-  record('④ 未归属在树的第一行', order[0] === 'agent-org-dept-unassigned', order.slice(0, 3));
+  record('④ 部门里未归属在第一行(上面只有「成员与权限」)', order.filter(x => x !== 'agent-org-nav-members')[0] === 'agent-org-dept-unassigned', order.slice(0, 3));
 
   await page.locator('[data-testid="agent-org-dept-d_tmai-toggle"]').click();
   await page.waitForTimeout(200);
@@ -132,6 +134,13 @@ const open = async (theme, ctx0) => {
   const puts = await page.evaluate(() => window.__puts);
   record('⑥ 移动写 Hub(PUT …/nodes/n_1/department)', puts.length === 1 && puts[0].p.endsWith('/nodes/n_1/department') && puts[0].body.includes('d_k5'), puts);
   record('⑥ 行离开「未归属」', await page.locator('[data-testid="agent-org-agent-n_1"]').count() === 0, null);
+  record('⑥ 保存结果是小条提示(不是常驻文字)', (await page.locator('[data-testid="agent-org-toast"]').innerText()).includes('已保存') && await page.locator('[data-testid="agent-org-department-result"]').count() === 0, null);
+  await page.waitForTimeout(3000);
+  record('⑥ 小条几秒后消失', await page.locator('[data-testid="agent-org-toast"]').count() === 0, null);
+  await page.locator('[data-testid="agent-org-nav-members"]').click();
+  await page.waitForTimeout(400);
+  record('① 侧栏「成员与权限」→ 右侧成员面板', await page.locator('[data-testid="agent-org-members"]').isVisible() && await page.locator('[data-testid="agent-org-nav-members"]').getAttribute('aria-selected') === 'true', null);
+  await page.screenshot({ path: `${OUT}/org-members.png` });
   await page.locator('[data-testid="agent-org-dept-d_k5"]').click();
   await page.waitForTimeout(200);
   await page.locator('[data-testid="agent-org-agent-n_100"]').click();

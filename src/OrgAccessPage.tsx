@@ -11,12 +11,8 @@ import { ORG_ACCESS_TAB_LABEL, orgAccessTabs, rememberedTab, resolveOrgAccessTab
 // 点进成员再返回会重新挂载这一页;记住上次的页签,别把人弹回第一页。按账号 + 网络记(rememberedTab)。
 let lastTab: { scope: string; tab: OrgAccessTab } | null = null;
 
-export default function OrgAccessPage({ canManageMembers, initialTab, scope = '', detailOpen = false, phone = false, fill = false, header, renderOrg, renderMembers }: {
+export default function OrgAccessPage({ canManageMembers, initialTab, scope = '', detailOpen = false, phone = false, renderOrg, renderMembers }: {
   canManageMembers: boolean;
-  /** 桌面一级栏「组织」整页(2026-11-15):标题和页签同一行,内容撑满剩余高度(自己管滚动)。 */
-  fill?: boolean;
-  /** fill 时放在页签左边的标题。 */
-  header?: ReactNode;
   /** 手机(2026-11-15 管理员「这个感觉也有点丑」):页签条撑满一行、两段等宽,和下面的卡片左右对齐。 */
   phone?: boolean;
   /**
@@ -38,8 +34,10 @@ export default function OrgAccessPage({ canManageMembers, initialTab, scope = ''
   // 桌面:已经站在这页时原地搜索,initialTab 跟着搜索词变;只在非空时跟,不覆盖手动点的页签(#1432 审阅)。
   useEffect(() => { if (initialTab) setWantState(initialTab); }, [initialTab]);
   const tab = detailOpen && canManageMembers ? 'members' : resolveOrgAccessTab(want, tabs);
-  const tabBar = tabs.length > 1 && !detailOpen ? (
-        <View style={[styles.tabs, phone && styles.tabsPhone, fill && styles.tabsFill]} accessibilityRole="tablist" testID="org-access-tabs">
+  return (
+    <View testID="org-access-page">
+      {tabs.length > 1 && !detailOpen ? (
+        <View style={[styles.tabs, phone && styles.tabsPhone]} accessibilityRole="tablist" testID="org-access-tabs">
           {tabs.map(k => (
             <Pressable
               key={k}
@@ -54,16 +52,7 @@ export default function OrgAccessPage({ canManageMembers, initialTab, scope = ''
             </Pressable>
           ))}
         </View>
-      ) : null;
-  if (fill) return (
-    <View testID="org-access-page" style={styles.fill}>
-      <View style={styles.fillHead}>{header}<View style={{ flex: 1 }} />{tabBar}</View>
-      <View testID={`org-access-panel-${tab}`} style={styles.fill}>{tab === 'members' ? renderMembers() : renderOrg()}</View>
-    </View>
-  );
-  return (
-    <View testID="org-access-page">
-      {tabBar}
+      ) : null}
       <View testID={`org-access-panel-${tab}`}>{tab === 'members' ? renderMembers() : renderOrg()}</View>
     </View>
   );
@@ -79,9 +68,6 @@ const makeStyles = () => StyleSheet.create({
   tabText: { fontSize: 14, color: colors.textMuted },
   tabTextOn: { color: colors.text, fontWeight: '600' },
   pressed: { opacity: 0.7 },
-  fill: { flex: 1, minHeight: 0 },
-  fillHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, marginBottom: spacing.md },
-  tabsFill: { marginBottom: 0, marginHorizontal: 0 },
 });
 let styles = makeStyles();
 onThemeChange(() => { styles = makeStyles(); });

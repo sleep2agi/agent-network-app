@@ -27,7 +27,11 @@ type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStru
   /** 一级栏「组织」整页(2026-11-15):用满主窗口内容区,不套设置页的 760 上限。 */
   fullWidth?: boolean;
   /** 一级栏整页:点 Agent 行 → 打开它的节点页(权限等)。管理员 2026-11-15「点击 AGENT,设置不了权限」。 */
-  onOpenAgent?: (alias: string) => void };
+  onOpenAgent?: (alias: string) => void;
+  /** 一级栏整页:侧栏顶上的标题(「组织」)。 */
+  title?: string;
+  /** 一级栏整页:有权管成员时,侧栏多一项「成员与权限」,右侧画这个(代替原来的两个页签)。 */
+  renderMembers?: () => ReactNode };
 
 export default function AgentOrgScreen(p: Props) {
   const [, refreshTheme] = useState(0);
@@ -35,7 +39,7 @@ export default function AgentOrgScreen(p: Props) {
   return (
     <View testID="agent-org-page" style={[styles.page, p.fullWidth && styles.pageFill]}>
       {p.networkId
-        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} fill={!!p.fullWidth && !p.phone} onOpenAgent={p.onOpenAgent} />
+        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} fill={!!p.fullWidth && !p.phone} onOpenAgent={p.onOpenAgent} title={p.title} renderMembers={p.renderMembers} />
         : <NoNetwork />}
     </View>
   );
@@ -63,7 +67,7 @@ function writeCollapsed(ids: ReadonlySet<string>) {
   try { (globalThis as { localStorage?: Storage }).localStorage?.setItem(TREE_COLLAPSED_KEY, JSON.stringify([...ids])); } catch { /* 存不了就只在本次有效 */ }
 }
 
-function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean; onOpenAgent?: (alias: string) => void }) {
+function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean; onOpenAgent?: (alias: string) => void; title?: string; renderMembers?: () => ReactNode }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<{ kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; data: AgentOrgData | null }>({ kind: 'loading' });
@@ -87,6 +91,17 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
     return next;
   });
   const bulkPending = useRef(false);
+  // 整页:右侧是部门详情还是「成员与权限」(管理员 2026-11-15「做的更好一下」:左边做成一整条侧栏,页签收进侧栏)。
+  const [view, setView] = useState<'dept' | 'members'>('dept');
+  const focusDept = (id: string | null) => { setView('dept'); setFocus(id); };
+  // 整页:「已保存到 Hub」这类结果用底部小条提示几秒就消失,不再占一行常驻(以前上下各一条)。
+  const toast = p.fill ? (deptNote || adjustNote) : '';
+  const toastOk = !['saveForbidden', 'saveNoDepartment', 'saveNoNode', 'saveUnsupported', 'saveFailed', 'bulkNone', 'demoNeedPick'].some(k => toast === t(`agentOrg.${k}`));
+  useEffect(() => {
+    if (!toast) return;
+    const id = setTimeout(() => { setDeptNote(''); setAdjustNote(''); }, toastOk ? 2600 : 6000);
+    return () => clearTimeout(id);
+  }, [toast, toastOk]);
 
   useEffect(() => {
     let live = true;
@@ -180,7 +195,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
 
   return (
     <View style={p.fill ? styles.fillRoot : undefined}>
-      {deptNote ? <Text accessibilityLiveRegion="polite" testID="agent-org-department-result" style={[styles.note, { padding: spacing.md }]}>{deptNote}</Text> : null}
+      {deptNote && !p.fill ? <Text accessibilityLiveRegion="polite" testID="agent-org-department-result" style={[styles.note, { padding: spacing.md }]}>{deptNote}</Text> : null}
       {phase.kind === 'loading' ? (
         <SettingsGroup testID="agent-org-loading"><SettingsRow label={t('agentOrg.loading')} /></SettingsGroup>
       ) : null}
@@ -193,7 +208,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
         <SettingsGroup testID="agent-org-empty-hub"><SettingsRow label={t('agentOrg.oldHub')} /></SettingsGroup>
       ) : null}
       {data && (showTree || showDetail) ? (
-        <View testID="agent-org-tree" style={[styles.workspace, p.fill && styles.workspaceFill]}>
+        <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : styles.workspace}>
           {!p.fill ? <View style={styles.toolbar} testID="agent-org-department-actions">
             <View style={styles.toolbarContext}>
               <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>
@@ -208,7 +223,8 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
           {showTree ? (
             <View testID="agent-org-navigation" style={!p.phone ? [styles.navigation, p.fill && styles.navigationFill] : undefined}>
               {p.fill ? <>
-                <DepartmentTree fill data={data} placed={placed} focus={focus} onFocus={setFocus} collapsed={collapsed} onToggle={toggleCollapsed}
+                <DepartmentTree fill title={p.title} data={data} placed={placed} focus={view === 'members' ? undefined : focus} onFocus={focusDept} collapsed={collapsed} onToggle={toggleCollapsed}
+                  members={p.renderMembers ? { selected: view === 'members', onPress: () => setView('members') } : undefined}
                   onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, false); }}
                   summary={t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}
                   onCreateRoot={canCreateRoot ? () => runMenu('createRoot', null) : undefined} />
@@ -223,11 +239,16 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
               </> : <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />}
             </View>
           ) : null}
-          {showDetail ? (
+          {p.fill && view === 'members' && p.renderMembers ? (
+            <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-members">
+              <View style={styles.detailHeadFill}><Text style={styles.title}>{t('agentOrg.membersTitle')}</Text></View>
+              <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ padding: spacing.md }}>{p.renderMembers()}</ScrollView>
+            </View>
+          ) : showDetail ? (
             <View style={!p.phone ? { flex: 1, minWidth: 0, minHeight: 0 } : undefined} testID="agent-org-detail">
               <DepartmentDetail key={focus ?? 'unassigned'} data={data} placed={placed} focus={focus ?? null} phone={p.phone} onFocus={setFocus} onBack={() => setFocus(undefined)}
                 fill={p.fill}
-                note={p.fill ? adjustNote : ''}
+                note=""
                 onMove={p.fill && data.agentDepartmentSupported ? moveOne : undefined}
                 moveBusy={saving}
                 onOpenAgent={p.fill ? p.onOpenAgent : undefined}
@@ -286,6 +307,12 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
           }}
         />
       ) : null}
+      {toast ? <View pointerEvents="none" style={styles.toastLayer}>
+        <View accessibilityLiveRegion="polite" testID="agent-org-toast" style={[styles.toast, !toastOk && { backgroundColor: colors.failed }]}>
+          <Ionicons name={toastOk ? 'checkmark-circle' : 'alert-circle'} size={16} color="#ffffff" />
+          <Text style={styles.toastText}>{toast}</Text>
+        </View>
+      </View> : null}
       {data && deptMenu ? <DeptContextMenu target={deptMenu} actions={deptMenuActions(deptMenu.dept, p.canManageStructure, treeApi)} onClose={() => setDeptMenu(null)} onPick={a => runMenu(a, deptMenu.dept)} /> : null}
       {data && deleting ? <DeleteDepartmentDialog cfg={p.cfg} networkId={p.networkId} dept={deleting}
         blockers={deleteBlockers(deleting, data.departments, agentsDirectlyIn(placed, deleting.id).length)}
@@ -384,7 +411,8 @@ function DepartmentEditor(p: { cfg: HubConfig; networkId: string; data: AgentOrg
 
 function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void; onMenu?: (dept: Department | null, x: number, y: number) => void;
   /** 一级栏整页:列头带统计 / 新建,未归属置顶,可折叠,行更紧,树撑满列高。 */
-  fill?: boolean; collapsed?: ReadonlySet<string>; onToggle?: (id: string) => void; summary?: string; onCreateRoot?: () => void }) {
+  fill?: boolean; collapsed?: ReadonlySet<string>; onToggle?: (id: string) => void; summary?: string; onCreateRoot?: () => void;
+  title?: string; members?: { selected: boolean; onPress: () => void } }) {
   const { t } = useTranslation();
   const rows = flattenTree(orgTree(p.data), p.fill ? { collapsed: p.collapsed } : {});
   const unowned = agentCount(p.placed, p.data, null);
@@ -429,12 +457,21 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
     <View testID="agent-org-departments" style={{ flex: 1, minHeight: 0 }} {...({ dataSet: { orgDeptTree: '1' } } as object)}>
       <View style={styles.treeHead}>
         <View style={{ flex: 1, minWidth: 0 }}>
-          <Text style={styles.treeHeadTitle}>{t('agentOrg.departments')}</Text>
+          <Text style={p.title ? styles.sidebarTitle : styles.treeHeadTitle} accessibilityRole={p.title ? 'header' : undefined}>{p.title ?? t('agentOrg.departments')}</Text>
           {p.summary ? <Text testID="agent-org-summary" numberOfLines={1} style={styles.treeHeadSub}>{p.summary}</Text> : null}
         </View>
         {p.onCreateRoot ? <IconAction testID="agent-org-create-root" icon="add" label={t('agentOrg.newDepartmentAction')} onPress={() => p.onCreateRoot!()} /> : null}
       </View>
-      <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.md }}>
+      <ScrollView style={{ flex: 1, minHeight: 0 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.md }}>
+        {p.members ? <>
+          <Pressable testID="agent-org-nav-members" accessibilityRole="button" accessibilityState={{ selected: p.members.selected }} aria-selected={p.members.selected} onPress={p.members.onPress}
+            style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRowDense, { paddingLeft: 2 }, (pressed || hovered) && { backgroundColor: colors.rowHover }, p.members?.selected && { backgroundColor: colors.railActiveBg }]}>
+            <View style={styles.treeChevron} />
+            <Ionicons name="shield-checkmark-outline" size={16} color={p.members.selected ? colors.accent : colors.textMuted} />
+            <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: p.members.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: '600' }}>{t('agentOrg.membersTitle')}</Text>
+          </Pressable>
+          <Text style={styles.treeSection}>{t('agentOrg.departments')}</Text>
+        </> : null}
         {unassignedRow}
         {unassignedRow ? <View style={styles.treeDivider} /> : null}
         {deptRows}
@@ -809,10 +846,16 @@ const makeStyles = () => StyleSheet.create({
   page: { width: '100%', maxWidth: 760, alignSelf: 'stretch' },
   pageFill: { maxWidth: '100%', flex: 1, minHeight: 0 },
   fillRoot: { flex: 1, minHeight: 0 },
-  workspaceFill: { flex: 1, minHeight: 0, marginHorizontal: 0 },
+  // 整页:不再套卡片 —— 左边是贴着一级栏的整条侧栏(同「Agent」页的列表栏),右边是内容。
+  workspaceFill: { flex: 1, minHeight: 0, marginHorizontal: 0, borderWidth: 0, backgroundColor: colors.bg },
+  sidebarTitle: { color: colors.text, fontSize: 20, fontWeight: '600' },
+  treeSection: { color: colors.textMuted, fontSize: typeScale.small - 1, fontWeight: '600', paddingHorizontal: spacing.sm, paddingTop: spacing.md, paddingBottom: spacing.xs },
+  toastLayer: { position: 'absolute', left: 0, right: 0, bottom: spacing.xl, alignItems: 'center' },
+  toast: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, paddingHorizontal: spacing.md, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.running, ...elevated('floating') },
+  toastText: { color: '#ffffff', fontSize: typeScale.small, fontWeight: '500' },
   fillColumns: { flex: 1, minHeight: 0 },
-  navigationFill: { width: 264 },
-  treeHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.md, paddingBottom: spacing.sm },
+  navigationFill: { width: 272, borderRightWidth: StyleSheet.hairlineWidth },
+  treeHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.lg, paddingBottom: spacing.md },
   treeHeadTitle: { color: colors.text, fontSize: typeScale.body, fontWeight: '600' },
   treeHeadSub: { color: colors.textMuted, fontSize: typeScale.small - 1, marginTop: 1 },
   treeDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.xs, marginHorizontal: spacing.xs },
