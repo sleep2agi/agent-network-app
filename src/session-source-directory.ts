@@ -10,6 +10,7 @@
 // · attach_authorized:false 一律不提供 attach；binding 恒为 unknown（不得说“确认空闲”）；
 // · ready 之外没有 snapshot；failed 无 snapshot；404 = gate 未开放，绝不 fallback 普通 create。
 // 纯逻辑，不 import react-native。
+import { sourceReadErrorText } from './opencode-v2-model-list';
 
 export const DIRECTORY_BASE = '/api/node-session-control/source/directory';
 
@@ -158,4 +159,23 @@ export function sessionBadge(s: DirectorySession): string {
 
 export function gateClosedDirectoryMessage(): string {
   return '目录读取未开放（Hub 未开启 read-only preview）——不会退回普通创建';
+}
+
+/**
+ * #4820 ⑤（方案 A）—— 向导里「目录读不到」的最终文案，**一处组装**：
+ *   ① 原始 code 交给 `sourceReadErrorText`（源目录域的原因表）翻成可读句；
+ *   ② `unavailable` 时再补上本地的「未开放 / 不会退回普通创建」尾巴（这是本端生成的，不来自 Hub）；
+ *   ③ `denied` 已经是 `t()` 译好的句子，直接原样返回。
+ *
+ * 为什么必须在这里组装（2026-11-15 踩坑）：早前把整个 `error`（含已拼好的 gate 尾巴）过映射，
+ * 结果尾巴被兜底吞掉，drives `node-source-palette` 的
+ * 「closed directory shows the real gate reason」直接变红（它要 `未开放` + `不会退回普通创建`）。
+ * 所以只翻**第一段 code**，尾巴由本端重新拼，Hub 的细节一律不透传。
+ */
+export function directoryErrorText(kind: 'failed' | 'unavailable' | 'denied', error: string | undefined): string {
+  const raw = (error ?? '').trim();
+  if (kind === 'denied') return raw;
+  const code = raw.split(' · ')[0].trim();
+  const core = sourceReadErrorText(code);
+  return kind === 'unavailable' ? `${core} · ${gateClosedDirectoryMessage()}` : core;
 }

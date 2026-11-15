@@ -37,6 +37,7 @@ import {
   type SourceForkReceipt,
 } from './session-source-fork';
 import {
+  directoryErrorText as directoryErrorTextOf,
   gateClosedDirectoryMessage,
   sessionBadge,
   type DirectorySnapshot,
@@ -335,6 +336,16 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     return row;
   }), [directoryRowList, caps.attach.ok, caps.attach.reasonKey, caps.projectNewSession.ok, caps.projectNewSession.reasonKey]);
   const rows = useMemo(() => [...gatedForkRows, ...gatedDirectoryRows], [gatedForkRows, gatedDirectoryRows]);
+  // #4820 ⑤（方案 A）—— 目录错误在这里**统一过一遍映射**，与模型选择器共用同一套句式
+  // （表按域分开：`sourceReadErrorText` 用源目录域）。'denied' 已是 t() 译好的句子，原样返回。
+  // 注意：只翻 code 那一段，`unavailable` 的「未开放 / 不会退回普通创建」尾巴由本端重新拼上
+  //       （早前把整串过映射，尾巴被兜底吞掉，drives 的 node-source-palette 因此变红）。
+  const directoryErrorText = useMemo(
+    () => (directory.kind === 'failed' || directory.kind === 'unavailable' || directory.kind === 'denied'
+      ? directoryErrorTextOf(directory.kind, directory.error)
+      : null),
+    [directory],
+  );
   const view = useMemo(() => sourcePaletteView({
     forkRows: gatedForkRows,
     directoryRows: gatedDirectoryRows,
@@ -342,10 +353,10 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
     query,
     selectedKey,
     directoryLoading: !forkOnly && (directory.kind === 'idle' || directory.kind === 'pending'),
-    directoryError: directory.kind === 'failed' || directory.kind === 'unavailable' || directory.kind === 'denied' ? directory.error : null,
+    directoryError: directoryErrorText,
     forkLoading: fork.kind === 'loading',
     forkError: fork.kind === 'error' ? fork.error : null,
-  }), [forkRowList, directoryRowList, snapshot, query, selectedKey, directory, fork, forkOnly]);
+  }), [forkRowList, directoryRowList, snapshot, query, selectedKey, directory, directoryErrorText, fork, forkOnly]);
 
   const selectedRow = rows.find(row => row.key === selectedKey) ?? null;
   const target: PaletteTarget | null = selectedRow ? targetOfRow(selectedRow) : null;
@@ -636,7 +647,7 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
             })}
           </PaletteList>
         ) : null}
-        {directory.kind === 'unavailable' ? <PaletteError text={directory.error} testID="source-directory-unavailable" /> : null}
+        {directory.kind === 'unavailable' ? <PaletteError text={directoryErrorText ?? directory.error} testID="source-directory-unavailable" /> : null}
         {directory.kind === 'pending' ? <PaletteLoading text={t('sourcePalette.loading')} testID="source-directory-pending" /> : null}
       </View>
 

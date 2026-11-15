@@ -141,23 +141,137 @@ export function catalogStatusLine(
   return `模型清单：本机未上报（agent-node ${version ?? '版本未知'}，版本本身够但仍没报上来）——这属节点侧问题：把节点详情里的诊断行贴给该节点的运维即可。`;
 }
 
-export function catalogErrorText(error: string | undefined): string {
-  switch (error) {
-    case 'not_opencode_v2': return '这个节点不是 OpenCode V2，不能从它的服务器拉模型列表。';
-    case 'daemon_not_found':
-    case 'daemon_not_supervisor': return '找不到这个节点所属的 daemon，读不到 OpenCode 服务器。';
-    case 'node_not_found': return 'Hub 没有这条节点的 OpenCode V2 创建记录，读不到模型列表。';
-    case 'catalog_unmanaged_unreported': return '这个节点是手动启动的：没有 daemon 能代读它的模型清单，节点自己也还没上报（需要 agent-node ≥ 2.5.0-preview.160）。把它「交给守护进程管理」后即可读取；当前模型不受影响。';
-    case 'user_token_required': return '读取模型列表需要登录人类账号，节点令牌不行。';
-    case 'unavailable': return '节点上的 OpenCode 服务器没有返回模型列表。';
-    case 'unauthorized': return '节点上的 OpenCode 服务器拒绝了这次读取。';
-    // #4411 —— 这不是「节点坏了」，而是**结构性限制**：OpenCode 只从请求头读目录，
-    // 而 header 运不了非 ASCII。所以工作目录含中文的节点永远拉不到模型清单，
-    // 客户端原样显示一遍 `directory_not_ascii` 等于什么都没说。
-    case 'directory_not_ascii': return '这个节点的工作目录含中文（或其它非 ASCII 字符）：OpenCode 只从请求头读目录，而请求头运不了非 ASCII，所以拉不到模型列表。把工作目录改成纯英文路径（例如 /home/you/work）就能读到了；当前模型与档位不受影响。';
-    default: return error ? `读取 OpenCode 模型列表失败：${error}` : '读取 OpenCode 模型列表失败。';
-  }
+/**
+ * reason → {为什么 / 下一步 / 是否影响当前状态}。
+ *
+ * #4820 ⑤ 方案 A（2026-11-15 拍板）—— **两个域各自一组 key，不互相套**：
+ *   · `CATALOG_REASONS`：模型清单链（read_opencode_catalog），回答「为什么拿不到模型清单」；
+ *   · `SOURCE_DIRECTORY_REASONS`：源目录链（source/directory），回答「为什么读不到项目/会话列表」。
+ * 通信欧 11-15 拦下的正是「把 catalog 的 8 条套到 directory 串上」——文案通顺但解释的是另一个失败，
+ * 属于最难被发现的一类错。两域共用的是**渲染句式**，不是**原因表**。
+ */
+export type ReasonEntry = { why: string; next?: string; keepsState?: string; /** 完整成句（存在时优先，逐字保持既有文案） */ text?: string };
+
+/**
+ * catalog 域的 8 条**逐字保持原样**（`text` 直出）：这些句子在 0.2.53x 已经上线、且被
+ * `composer-model-empty-states` / `composer-model-palette-fallback` 断言钉住——
+ * 本次只做「分域 + 向导侧可读原因」，**不趁机改线上措辞**。
+ */
+export const CATALOG_REASONS: Record<string, ReasonEntry> = {
+  not_opencode_v2: { why: '', text: '这个节点不是 OpenCode V2，不能从它的服务器拉模型列表。' },
+  daemon_not_found: { why: '', text: '找不到这个节点所属的 daemon，读不到 OpenCode 服务器。' },
+  daemon_not_supervisor: { why: '', text: '找不到这个节点所属的 daemon，读不到 OpenCode 服务器。' },
+  node_not_found: { why: '', text: 'Hub 没有这条节点的 OpenCode V2 创建记录，读不到模型列表。' },
+  catalog_unmanaged_unreported: { why: '', text: '这个节点是手动启动的：没有 daemon 能代读它的模型清单，节点自己也还没上报（需要 agent-node ≥ 2.5.0-preview.160）。把它「交给守护进程管理」后即可读取；当前模型不受影响。' },
+  user_token_required: { why: '', text: '读取模型列表需要登录人类账号，节点令牌不行。' },
+  unavailable: { why: '', text: '节点上的 OpenCode 服务器没有返回模型列表。' },
+  unauthorized: { why: '', text: '节点上的 OpenCode 服务器拒绝了这次读取。' },
+  // #4411 —— 不是「节点坏了」，而是结构性限制：OpenCode 只从请求头读目录，header 运不了非 ASCII。
+  directory_not_ascii: { why: '', text: '这个节点的工作目录含中文（或其它非 ASCII 字符）：OpenCode 只从请求头读目录，而请求头运不了非 ASCII，所以拉不到模型列表。把工作目录改成纯英文路径（例如 /home/you/work）就能读到了；当前模型与档位不受影响。' },
+};
+
+export const SOURCE_DIRECTORY_REASONS: Record<string, ReasonEntry> = {
+  // 只登记源码里真实会出现的几种（session-source-directory.ts / NodeSourcePalette.tsx）。
+  source_directory_unavailable: { why: '这台机器上的 Hub 没有开放「列出已有项目 / 已有会话」（只读预览未开启）', next: '让 Hub 管理员开启后再点「再读一次」', keepsState: '不会退回普通创建' },
+  directory_read_failed: { why: '读源目录的请求失败了，Hub 没有返回可用的目录快照', next: '点「再读一次」重试；仍失败就看节点详情里的诊断行', keepsState: '没有生成任何节点' },
+  source_daemon_unavailable: { why: '找不到这台节点归属的 daemon，读不到它上面的项目与会话', next: '在节点详情里确认 daemon 在线，或把节点交给守护进程管理', keepsState: '节点现有配置不受影响' },
+  directory_not_ascii: { why: '这台机器的工作目录含中文（或其它非 ASCII 字符）：OpenCode 只从请求头读目录，而请求头运不了非 ASCII', next: '把工作目录改成纯英文路径（例如 /home/you/work）', keepsState: '节点现有的模型与档位不受影响' },
+};
+
+/**
+ * CLI / runtime 版本不兼容：**两个域共用同一句**（这确实是一件事），但句式仍走同一个渲染器。
+ * 为什么不自己比较版本（弃方案 B）：比较需要「第 11 处 bump 点」，判错会**直接误禁用户**（不可见故障）；
+ * 且 Hub 目前不保证上报 OpenCode CLI 版本。将来要做 B 的前提：`runtime_readiness` 稳定上报 CLI 版本
+ * 并覆盖**至少两个版本线**。
+ */
+export const VERSION_UNSUPPORTED_ENTRY: ReasonEntry = {
+  why: '这台机器上的 OpenCode CLI 版本不兼容 OpenCode V2',
+  next: '升级这台机器上的 OpenCode CLI 后再试',
+  keepsState: '当前模型与档位不受影响',
+};
+
+const VERSION_WORD = /(version|版本)/i;
+const UNSUPPORTED_WORD = /(unsupport|incompatib|too[_ -]?old|不支持|不兼容|太旧|过低)/i;
+
+/**
+ * 只在这两种词**同时**出现时才判定为版本不兼容 —— 宁可退回具名兜底，
+ * 也不要把「读不到」误说成「版本不支持」（未知 ≠ 不支持）。
+ */
+export function isVersionUnsupportedError(error: string | undefined): boolean {
+  const e = (error ?? '').trim();
+  if (!e) return false;
+  return VERSION_WORD.test(e) && UNSUPPORTED_WORD.test(e);
 }
+
+/** 统一句式：完整成句直出（保持既有文案），否则拼「为什么。下一步；是否影响当前状态。」 */
+export function renderReason(entry: ReasonEntry): string {
+  if (entry.text) return entry.text;
+  return `${entry.why}。${entry.next ?? ''}${entry.keepsState ? `；${entry.keepsState}` : ''}。`;
+}
+
+export type ReasonDomain = 'catalog' | 'sourceDirectory';
+
+const DOMAIN_TABLE: Record<ReasonDomain, Record<string, ReasonEntry>> = {
+  catalog: CATALOG_REASONS,
+  sourceDirectory: SOURCE_DIRECTORY_REASONS,
+};
+
+const DOMAIN_FALLBACK: Record<ReasonDomain, string> = {
+  catalog: '读取 OpenCode 模型清单失败',
+  sourceDirectory: '读不到这台机器上的项目与会话目录',
+};
+
+/**
+ * 兜底里允许直通的只有「像 code 的东西」。
+ * Hub 的 error 原文可能带路径 / 主机名 / token（通信欧 11-15 提醒），所以**不整串透传**：
+ * 形状不在白名单里就只说「已隐去」，绝不把任意字符串塞进 UI。
+ */
+const SAFE_CODE = /^[a-z0-9_.-]{1,64}$/i;
+
+/**
+ * 查表：先精确匹配，再允许「code 后面带细节」。
+ *
+ * 真实 Hub 常在 code 后追加上下文（例如 `source_directory_unavailable: preview off`），
+ * 精确匹配会全部落进兜底、把用户能懂的原因丢掉。这里只按 **code 前缀** 匹配已知条目，
+ * 细节仍然不透传（防路径/主机名），所以「说对原因」和「不泄原文」同时成立。
+ */
+function lookupReason(domain: ReasonDomain, key: string): ReasonEntry | null {
+  const table = DOMAIN_TABLE[domain];
+  if (table[key]) return table[key];
+  const head = key.split(/[:\s(]/)[0];
+  return head && table[head] ? table[head] : null;
+}
+
+/**
+ * 两个入口共用这一个渲染器；**表按域分开**，所以「同一 reason 同文」只在域内成立 ——
+ * 这正是要的：catalog 的 `unavailable` 与源目录的 `source_directory_unavailable` 说明的是两件事。
+ * 未登记的 reason → **具名兜底 + 白名单形状的原始 code**；形状不像 code 时只说「已隐去」。
+ */
+export function reasonText(domain: ReasonDomain, code: string | undefined): string {
+  const key = (code ?? '').trim();
+  if (isVersionUnsupportedError(key)) return renderReason(VERSION_UNSUPPORTED_ENTRY);
+  const entry = lookupReason(domain, key);
+  if (entry) return renderReason(entry);
+  const head = DOMAIN_FALLBACK[domain];
+  if (!key) return `${head}。`;
+  return SAFE_CODE.test(key)
+    ? `${head}：${key}（未登记的原因，原文照上）`
+    : `${head}（未登记的原因；原始原因含非 code 内容，已隐去以免带出路径或主机名）`;
+}
+
+export function catalogErrorText(error: string | undefined): string {
+  return reasonText('catalog', error);
+}
+
+/**
+ * 目录读取（新建节点向导「选已有项目 / 已有会话」）用**源目录域**的表，
+ * 与选择器共用渲染器、不共用原因表。
+ */
+export function sourceReadErrorText(error: string | undefined): string {
+  return reasonText('sourceDirectory', error);
+}
+
+
 
 /**
  * #2293 —— 这台节点的 agent-node 版本是否够新到**自动上报**模型清单。
