@@ -609,6 +609,10 @@
       "kind": "stub",
       "secs": 30
     },
+    "node-description/drive.mjs": {
+      "kind": "stub",
+      "secs": 35
+    },
     "rail-org-visibility/drive.mjs": {
       "kind": "stub",
       "secs": 30

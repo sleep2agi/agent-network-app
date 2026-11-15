@@ -314,6 +314,14 @@ export interface HubNode {
   tool_allowlist?: string[] | null;
   /** 收件白名单:谁能给这个节点派活 / 发消息。只有 /health 报了 INBOX_ALLOWLIST_CAPABILITY 的 Hub 才有。 */
   inbox_allowlist?: string[] | null;
+  /**
+   * 节点职责介绍(admin 2026-11-15「每个节点的职责要让其他节点也能看到;desc 里放介绍而不是 AGENTS.md」):
+   * 给别的节点 / 人看的「负责什么、能干什么、什么事找它」。AGENTS.md 是节点给自己看的,不是这个。
+   * 有这个键(哪怕是 null)= Hub 支持;没有这个键 = 旧 Hub,界面不出这块。
+   */
+  description?: string | null;
+  /** PUT /api/nodes/:id/attrs 的乐观锁(display_name / team / tags / description 共用)。 */
+  attrs_revision?: number;
   /** Hub ≥ .93(#2275):调用者能不能改这个节点的模式 —— 「权限」分区只在它为 true 时出现。 */
   viewer_can?: { permission_mode?: boolean } | null;
   config_snapshot?: {
@@ -746,6 +754,37 @@ export const putNodeAvatar = async (
       return { ok: false, error: body?.error || `HTTP ${res.status}`, reason: body?.reason, status: res.status };
     }
     return { ok: true, avatar_url: (body?.avatar_url ?? avatarUrl) as string | null };
+  } catch (e) {
+    return { ok: false, error: (e as Error)?.message || '网络错误' };
+  }
+};
+
+export type PutNodeAttrsResult =
+  | { ok: true; description: string | null; attrs_revision: number }
+  | { ok: false; error: string; reason?: string; status?: number; current_attrs_revision?: number };
+
+/** PUT /api/nodes/:ref/attrs —— 只写这里传的字段(其余展示字段保持不动);base_attrs_revision 不对 → 409 attrs_revision_conflict。
+ *  旧 Hub 不认 description:它会 200 但回包里没有 description 键 —— 这里报 unsupported,而不是假装存上了。 */
+export const putNodeAttrs = async (
+  cfg: HubConfig,
+  ref: string,
+  patch: { base_attrs_revision: number; description?: string | null },
+): Promise<PutNodeAttrsResult> => {
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(ref)}/attrs${cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : ''}`, {
+        method: 'PUT',
+        headers: headers(cfg),
+        signal,
+        body: JSON.stringify(patch),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) {
+      return { ok: false, error: body?.error || `HTTP ${res.status}`, reason: body?.reason, status: res.status, current_attrs_revision: typeof body?.current_attrs_revision === 'number' ? body.current_attrs_revision : undefined };
+    }
+    if ('description' in patch && !('description' in (body ?? {}))) return { ok: false, error: 'unsupported', status: res.status };
+    return { ok: true, description: body?.description ?? null, attrs_revision: Number(body?.attrs_revision ?? patch.base_attrs_revision + 1) };
   } catch (e) {
     return { ok: false, error: (e as Error)?.message || '网络错误' };
   }

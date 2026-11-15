@@ -237,7 +237,10 @@ export const initScript = ({ theme }) => {
           if (window.__stubDelayMs) await new Promise(r => setTimeout(r, window.__stubDelayMs));
           // window.__olderDelayMs: only a chat "older page" read (before= cursor) answers that much later.
           if (window.__olderDelayMs && /[?&]before=/.test(c.url)) await new Promise(r => setTimeout(r, window.__olderDelayMs));
-          const body = route(c.url, c.data ? new TextDecoder().decode(new Uint8Array(c.data)) : '', c.method || 'GET');
+          const routed = route(c.url, c.data ? new TextDecoder().decode(new Uint8Array(c.data)) : '', c.method || 'GET');
+          // A route may answer with a non-200 status: return { __status: 409, ...body } (the key is stripped from the body).
+          const forced = routed && typeof routed === 'object' && typeof routed.__status === 'number' ? routed.__status : null;
+          const body = forced === null ? routed : (({ __status, ...rest }) => rest)(routed);
           const text = body === null ? '{"ok":false}' : JSON.stringify(body);
           const buf = new TextEncoder().encode(text);
           const id = ++rid; bodies.set(id, { buf, sent: false });
@@ -253,7 +256,7 @@ export const initScript = ({ theme }) => {
             if (hit) { bodies.set(id, { buf: new Uint8Array(0), sent: false }); return { status: 304, statusText: 'Not Modified', url: c.url, headers: [['etag', etag]], rid: id }; }
             return { status: 200, statusText: 'OK', url: c.url, headers: [['content-type', 'application/json'], ['etag', etag]], rid: id };
           }
-          return { status: body === null ? 404 : 200, statusText: 'OK', url: c.url, headers: [['content-type', 'application/json']], rid: id };
+          return { status: forced ?? (body === null ? 404 : 200), statusText: 'OK', url: c.url, headers: [['content-type', 'application/json']], rid: id };
         }
         case 'plugin:http|fetch_read_body': {
           const b = bodies.get(args.rid);
