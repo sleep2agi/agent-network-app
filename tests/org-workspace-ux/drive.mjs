@@ -9,6 +9,7 @@
 //   ⑤ 部门行悬停出「⋯」→ 同一份部门菜单;列头「+」→ 新建根部门
 //   ⑥ Agent 行悬停出「移动到…」→ 选部门 → PUT 写 Hub,行离开「未归属」
 //   ⑦ 点 Agent 行 → 组织页里打开它的节点页,落在「权限」;「← 组织」回来,部门选择还在
+//   ⑧ 侧栏「架构图」:品牌横幅 + 四个大数字 + 每个根部门一栏;点部门卡回到列表并选中它
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
 
@@ -30,7 +31,9 @@ const fixture = () => {
   const now = new Date().toISOString();
   const names = ['安全扫描-fork-1', '测试员3号', '神明', '神明2号', '神明3号', '实习开源运营牛', '天马设计师', '天启营里欧', '通信欧', '通信客户端欧', '通信飞书欧', '数据分析马', '文档助手', '日志巡检', '发布机器人', '代码审阅员', '值班助理', '翻译官', '知识整理', '客服一号', '客服二号', '运维小助手', '监控哨兵', '需求分析师', '产品经理牛', '前端工程师', '后端工程师', '测试工程师', '运营助手', '市场营销马', '财务助理', '法务助理', '招聘助理', '行政助理'];
   const agent = (n, i, dept) => ({ node_id: `n_${i}`, alias: n, updated_at: now, lifecycle_state: i % 3 === 0 ? 'stopped' : 'active', department_id: dept });
-  const mine = names.map((n, i) => agent(n, i, null)).filter((_, i) => i !== 2 && i !== 5);
+  // 前 12 个留在未归属;后面的轮流分到各部门(架构图要有像样的分布)。
+  const spread = ['d_k0', 'd_k0', 'd_k1', 'd_k2', 'd_k4', 'd_k5', 'd_k6', 'd_k8', 'd_anet', 'd_anet', 'd_a'];
+  const mine = names.map((n, i) => agent(n, i, i >= 12 ? spread[i % spread.length] : null)).filter((_, i) => i !== 2 && i !== 5);
   const assigned = [agent('基建甲', 100, 'd_k5'), agent('基建乙', 101, 'd_k5'), agent('门户甲', 102, 'd_k3')];
   window.__puts = [];
   window.__routeOverride = (u, body, method) => {
@@ -88,11 +91,11 @@ const open = async (theme, ctx0) => {
     return { cardBottom: card.bottom, vh: innerHeight, listScrolls: list.scrollHeight > list.clientHeight, scrollers: scrollers.map(e => e.getAttribute('data-testid') || e.tagName) };
   });
   record('② 内容撑到窗口底', geo.cardBottom >= geo.vh - 1 && geo.cardBottom <= geo.vh, geo);
-  record('② 只有 Agent 列表在滚(没有整页滚动)', geo.listScrolls && geo.scrollers.every(s => s === 'agent-org-member-list' || s === 'DIV'), geo);
+  record('② 没有整页滚动(能滚的只有 Agent 列表 / 部门树)', geo.scrollers.every(s => s === 'agent-org-member-list' || s === 'DIV'), geo);
   record('③ 底部「调整结构」没了', await page.locator('[data-testid="agent-org-demo"]').count() === 0, null);
   record('③ 说明收在部门列底部', await page.locator('[data-testid="agent-org-navigation"] [data-testid="agent-org-info-toggle"]').count() === 1, null);
   const order = await page.$$eval('[data-testid="agent-org-departments"] [role="button"][aria-selected]', els => els.map(e => e.getAttribute('data-testid')));
-  record('④ 部门里未归属在第一行(上面只有「成员与权限」)', order.filter(x => x !== 'agent-org-nav-members')[0] === 'agent-org-dept-unassigned', order.slice(0, 3));
+  record('④ 部门里未归属在第一行(上面只有「架构图」「成员与权限」)', order.filter(x => !x.startsWith('agent-org-nav-'))[0] === 'agent-org-dept-unassigned', order.slice(0, 3));
 
   await page.locator('[data-testid="agent-org-dept-d_tmai-toggle"]').click();
   await page.waitForTimeout(200);
@@ -155,6 +158,20 @@ const open = async (theme, ctx0) => {
   await page.locator('[data-testid="org-agent-detail-back"]').click();
   await page.waitForTimeout(300);
   record('⑦「← 组织」回来,还停在 TM基建', await page.locator('[data-testid="agent-org-dept-d_k5"]').getAttribute('aria-selected') === 'true' && await page.locator('[data-testid="org-agent-detail"]').count() === 0, null);
+  await page.locator('[data-testid="agent-org-nav-chart"]').click();
+  await page.locator('[data-testid="org-showcase-hero"]').waitFor();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/org-chart-light.png` });
+  await page.screenshot({ path: `${OUT}/org-chart-light-full.png`, fullPage: true });
+  const statAgents = await page.locator('[data-testid="org-showcase-stat-agents"]').innerText();
+  const cols = await page.locator('[data-testid^="org-showcase-col-"]').count();
+  record('⑧ 架构图:横幅 + Agent 总数', /\d/.test(statAgents) && statAgents.includes('Agent'), statAgents);
+  record('⑧ 架构图:每个根部门一栏(TMAI / A 站 / ANet)', cols === 3, cols);
+  record('⑧ 架构图:子部门挂在根部门下', await page.locator('[data-testid="org-showcase-col-d_tmai"] [data-testid="org-showcase-dept-d_k5"]').count() === 1, null);
+  record('⑧ 架构图:未归属是最后一张虚线卡', await page.locator('[data-testid="org-showcase-unassigned"]').count() === 1, null);
+  await page.locator('[data-testid="org-showcase-dept-d_k5"]').click();
+  await page.waitForTimeout(300);
+  record('⑧ 点部门卡回到列表并选中', await page.locator('[data-testid="agent-org-dept-d_k5"]').getAttribute('aria-selected') === 'true' && await page.locator('[data-testid="org-showcase"]').count() === 0, null);
   record('无页面报错', errors.length === 0, errors);
   await ctx.close();
 }
@@ -163,6 +180,10 @@ const open = async (theme, ctx0) => {
   await page.locator('[data-testid="agent-org-dept-d_k5"]').click();
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/org-dark.png` });
+  await page.locator('[data-testid="agent-org-nav-chart"]').click();
+  await page.locator('[data-testid="org-showcase-hero"]').waitFor();
+  await page.waitForTimeout(500);
+  await page.screenshot({ path: `${OUT}/org-chart-dark.png` });
   record('暗色无页面报错', errors.length === 0, errors);
   await ctx.close();
 }

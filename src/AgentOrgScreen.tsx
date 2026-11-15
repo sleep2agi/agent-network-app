@@ -21,6 +21,7 @@ import { SettingsButton, SettingsChoiceRow, SettingsGroup, SettingsRow } from '.
 import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
+import OrgShowcase from './OrgShowcase';
 
 /** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
 type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStructure?: boolean;
@@ -92,7 +93,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
   });
   const bulkPending = useRef(false);
   // 整页:右侧是部门详情还是「成员与权限」(管理员 2026-11-15「做的更好一下」:左边做成一整条侧栏,页签收进侧栏)。
-  const [view, setView] = useState<'dept' | 'members'>('dept');
+  const [view, setView] = useState<'dept' | 'members' | 'chart'>('dept');
   const focusDept = (id: string | null) => { setView('dept'); setFocus(id); };
   // 整页:「已保存到 Hub」这类结果用底部小条提示几秒就消失,不再占一行常驻(以前上下各一条)。
   const toast = p.fill ? (deptNote || adjustNote) : '';
@@ -223,8 +224,12 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
           {showTree ? (
             <View testID="agent-org-navigation" style={!p.phone ? [styles.navigation, p.fill && styles.navigationFill] : undefined}>
               {p.fill ? <>
-                <DepartmentTree fill title={p.title} data={data} placed={placed} focus={view === 'members' ? undefined : focus} onFocus={focusDept} collapsed={collapsed} onToggle={toggleCollapsed}
-                  members={p.renderMembers ? { selected: view === 'members', onPress: () => setView('members') } : undefined}
+                <DepartmentTree fill title={p.title} data={data} placed={placed} focus={view !== 'dept' ? undefined : focus} onFocus={focusDept} collapsed={collapsed} onToggle={toggleCollapsed}
+                  nav={[
+                    // 管理员 2026-11-15「组织架构图做好看一点，还需要有那种宣传效果」:侧栏第一项「架构图」。
+                    { key: 'chart', label: t('agentOrg.showcase.nav'), icon: 'git-network-outline', selected: view === 'chart', onPress: () => setView('chart') },
+                    ...(p.renderMembers ? [{ key: 'members', label: t('agentOrg.membersTitle'), icon: 'shield-checkmark-outline' as const, selected: view === 'members', onPress: () => setView('members') }] : []),
+                  ]}
                   onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, false); }}
                   summary={t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}
                   onCreateRoot={canCreateRoot ? () => runMenu('createRoot', null) : undefined} />
@@ -239,7 +244,11 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
               </> : <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />}
             </View>
           ) : null}
-          {p.fill && view === 'members' && p.renderMembers ? (
+          {p.fill && view === 'chart' ? (
+            <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-chart">
+              <OrgShowcase data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} />
+            </View>
+          ) : p.fill && view === 'members' && p.renderMembers ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-members">
               <View style={styles.detailHeadFill}><Text style={styles.title}>{t('agentOrg.membersTitle')}</Text></View>
               <ScrollView style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ padding: spacing.md }}>{p.renderMembers()}</ScrollView>
@@ -412,7 +421,7 @@ function DepartmentEditor(p: { cfg: HubConfig; networkId: string; data: AgentOrg
 function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null | undefined; onFocus: (id: string | null) => void; onMenu?: (dept: Department | null, x: number, y: number) => void;
   /** 一级栏整页:列头带统计 / 新建,未归属置顶,可折叠,行更紧,树撑满列高。 */
   fill?: boolean; collapsed?: ReadonlySet<string>; onToggle?: (id: string) => void; summary?: string; onCreateRoot?: () => void;
-  title?: string; members?: { selected: boolean; onPress: () => void } }) {
+  title?: string; nav?: { key: string; label: string; icon: 'git-network-outline' | 'shield-checkmark-outline'; selected: boolean; onPress: () => void }[] }) {
   const { t } = useTranslation();
   const rows = flattenTree(orgTree(p.data), p.fill ? { collapsed: p.collapsed } : {});
   const unowned = agentCount(p.placed, p.data, null);
@@ -463,13 +472,15 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
         {p.onCreateRoot ? <IconAction testID="agent-org-create-root" icon="add" label={t('agentOrg.newDepartmentAction')} onPress={() => p.onCreateRoot!()} /> : null}
       </View>
       <ScrollView style={{ flex: 1, minHeight: 0 }} showsVerticalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.md }}>
-        {p.members ? <>
-          <Pressable testID="agent-org-nav-members" accessibilityRole="button" accessibilityState={{ selected: p.members.selected }} aria-selected={p.members.selected} onPress={p.members.onPress}
-            style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRowDense, { paddingLeft: 2 }, (pressed || hovered) && { backgroundColor: colors.rowHover }, p.members?.selected && { backgroundColor: colors.railActiveBg }]}>
-            <View style={styles.treeChevron} />
-            <Ionicons name="shield-checkmark-outline" size={16} color={p.members.selected ? colors.accent : colors.textMuted} />
-            <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: p.members.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: '600' }}>{t('agentOrg.membersTitle')}</Text>
-          </Pressable>
+        {p.nav?.length ? <>
+          {p.nav.map(item => (
+            <Pressable key={item.key} testID={`agent-org-nav-${item.key}`} accessibilityRole="button" accessibilityState={{ selected: item.selected }} aria-selected={item.selected} onPress={item.onPress}
+              style={({ pressed, hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.departmentRowDense, { paddingLeft: 2 }, (pressed || hovered) && { backgroundColor: colors.rowHover }, item.selected && { backgroundColor: colors.railActiveBg }]}>
+              <View style={styles.treeChevron} />
+              <Ionicons name={item.icon} size={16} color={item.selected ? colors.accent : colors.textMuted} />
+              <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: item.selected ? colors.accent : colors.text, fontSize: typeScale.small, fontWeight: '600' }}>{item.label}</Text>
+            </Pressable>
+          ))}
           <Text style={styles.treeSection}>{t('agentOrg.departments')}</Text>
         </> : null}
         {unassignedRow}
