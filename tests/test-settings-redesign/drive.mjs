@@ -42,6 +42,9 @@ const extraStub = () => {
       { profileId: 'p-sweep', serverUrl: 'http://mock-hub.invalid', username: 'tester', displayName: 'tester', networkId: 'net-sweep', createdAt: 0, updatedAt: 0 },
       { profileId: 'local-workspace', serverUrl: 'http://127.0.0.1:19299', username: 'local', displayName: '本地工作区', createdAt: 0, updatedAt: 0 },
       { profileId: 'p-demo-b', serverUrl: 'http://hub-b.invalid:9300', username: 'demo-b', displayName: '示例账号乙', networkId: 'net-demo-b', createdAt: 0, updatedAt: 0 },
+      // 2026-11-15 账号页按 Hub 分组:同一 Hub 再放一个账号、另一个 Hub 放一个,截图里能看到分组。
+      { profileId: 'p-demo-c', serverUrl: 'http://hub-b.invalid:9300', username: 'admin', networkId: 'net_399bdf86f528', createdAt: 0, updatedAt: 0 },
+      { profileId: 'p-demo-d', serverUrl: 'http://hub-c.invalid', username: 'admin', networkId: 'net_61a4ab1e32cb', createdAt: 0, updatedAt: 0 },
     ],
   };
   const hub = { state: 'running', endpoint: 'http://127.0.0.1:19299', port: 19299, hubVersion: '0.0.0-fixture', logsPath: '/data/logs', requiresMigration: false, expectedHubVersion: '0.0.0-fixture' };
@@ -83,8 +86,10 @@ const measureAccount = (root) => {
     cards: cards.length,
     cardL: cards.map(c => r(c).left), cardR: cards.map(c => r(c).right),
     rows,
-    currentFirst: !!firstCard && !!firstCard.querySelector('[data-testid^="settings-profile-"][data-testid$="-current"]'),
-    currentCount: scope.querySelectorAll('[data-testid^="settings-profile-"][data-testid$="-current"]').length,
+    // 桌面 2026-11-15 起当前账号是主色身份卡(「当前」是 -label-pill);手机账号子页仍是 -current 小标。
+    // 排第一 = 第一个账号行(按 DOM 顺序)就带着「当前」。
+    currentFirst: !!profileRows[0] && !!profileRows[0].querySelector('[data-testid^="settings-profile-"][data-testid$="-current"], [data-testid^="settings-profile-"][data-testid$="-label-pill"]'),
+    currentCount: scope.querySelectorAll('[data-testid^="settings-profile-"][data-testid$="-current"], [data-testid^="settings-profile-"][data-testid$="-label-pill"]').length,
     leads: profileRows.map(el => { const lead = el.querySelector('[data-testid$="-lead"]'); return lead ? r(lead).width : 0; }),
     more: scope.querySelectorAll('[data-testid^="settings-profile-"][data-testid$="-more"]').length,
     oldButtons,
@@ -124,6 +129,7 @@ const checkKitRows = (where, rows, min) => {
   ck(`${where} v2: 行高 ≥ 52`, rows.length > 0 && minH >= 51.5, r1(minH));
 };
 
+const PROFILE_COUNT = 5;
 const checkAccount = async (page, where, root, { danger = true } = {}) => {
   const m = await page.evaluate(measureAccount, root);
   if (!m) { ck(`${where}: 账号区存在`, false); return null; }
@@ -135,8 +141,10 @@ const checkAccount = async (page, where, root, { danger = true } = {}) => {
   const minH = m.rows.length ? Math.min(...m.rows.map(x => x.h)) : 0;
   table.push({ where, cards: m.cards, rows: m.rows.length, cardL: rng(m.cardL), cardR: rng(m.cardR), leadPad: rng(leadPad), labelL: rng(labels), accR: rng(accs.map(x => x.accR)), accPad: rng(accPad), minRowH: r1(minH) });
   ck(`${where}: 当前账号单独一张卡、排第一、有「当前」`, m.currentFirst && m.currentCount === 1);
-  ck(`${where}: 每个账号有头像(行首 ≥ 36 宽)`, m.leads.length === 3 && m.leads.every(w => w >= 36), JSON.stringify(m.leads.map(r1)));
-  ck(`${where}: 每个账号一个 ⋯`, m.more === 3, String(m.more));
+  // 5 个账号(当前 + 本机 + 同一 Hub 两个 + 另一 Hub 一个);桌面当前账号是身份卡(头像在卡里,没有 -lead),其余行都有行首头像。
+  const leads = m.leads.filter(w => w > 0);
+  ck(`${where}: 每个账号有头像(行首 ≥ 36 宽)`, m.leads.length === PROFILE_COUNT && leads.length >= PROFILE_COUNT - 1 && leads.every(w => w >= 36), JSON.stringify(m.leads.map(r1)));
+  ck(`${where}: 每个账号一个 ⋯`, m.more === PROFILE_COUNT, String(m.more));
   ck(`${where}: 行里没有「复制 / 编辑 / 新窗口 / 移除」文字按钮`, m.oldButtons.length === 0, m.oldButtons.slice(0, 6).join(','));
   if (danger) ck(`${where}: 危险操作单独在最下面`, m.dangerLast);
   ck(`${where}: 卡片左右边缘相等 ±1`, m.cards >= 3 && span(m.cardL) <= 1 && span(m.cardR) <= 1, `${rng(m.cardL)} / ${rng(m.cardR)}`);

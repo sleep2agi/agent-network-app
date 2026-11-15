@@ -390,15 +390,23 @@ export function SettingsTextField({ label, testID, ...input }: TextInputProps & 
  * 底色用「我发出的气泡」那一档(bubbleMine,深浅两档都是实底蓝),字和图形用 onBubbleMine(两档都是白)——
  * 不用 accent:深色下 accent 是亮蓝、onAccent 是黑字,整张卡会发灰。
  */
-export function SettingsProfileCard({ name, subtitle, pill, onPress, testID, accessibilityLabel }: {
+export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
   name: string;
   subtitle?: string;
   pill?: string;
+  /** 第二个小标(桌面账号页:「当前」之外再标角色)。 */
+  extraPill?: string;
+  /** 例如「登录已失效」。 */
+  warning?: string;
   onPress?: () => void;
+  /** 桌面账号页的当前账号:右侧 ⋯(复制 / 编辑 / 移除),没有 › 。 */
+  onMore?: (anchor: any) => void;
+  moreLabel?: string;
   testID?: string;
   accessibilityLabel?: string;
 }) {
   const id = testID ?? 'settings-profile-card';
+  const moreRef = useRef<any>(null);
   return (
     <Pressable
       testID={id}
@@ -414,10 +422,24 @@ export function SettingsProfileCard({ name, subtitle, pill, onPress, testID, acc
         <View style={styles.accountNameLine}>
           <Text style={styles.profileName} numberOfLines={1} testID={`${id}-label`}>{name}</Text>
           {pill ? <Text style={[styles.pill, styles.profilePill]} numberOfLines={1} testID={`${id}-label-pill`}>{pill}</Text> : null}
+          {extraPill ? <Text style={[styles.pill, styles.profilePill]} numberOfLines={1} testID={`${id}-label-pill2`}>{extraPill}</Text> : null}
         </View>
         {subtitle ? <Text style={styles.profileSub} numberOfLines={1} testID={`${id}-value`}>{subtitle}</Text> : null}
+        {warning ? <Text style={[styles.profileSub, styles.profileWarning]} numberOfLines={1} testID={`${id}-warning`}>{warning}</Text> : null}
       </View>
-      {onPress ? (
+      {onMore ? (
+        <Pressable
+          ref={moreRef}
+          testID={`${id}-more`}
+          accessibilityRole="button"
+          accessibilityLabel={moreLabel}
+          hitSlop={10}
+          onPress={(e: any) => { e?.stopPropagation?.(); onMore(moreRef.current); }}
+          style={({ pressed, hovered }: any) => [styles.profileChevron, styles.profileMore, (pressed || hovered) && styles.profileMoreHover]}
+        >
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.onBubbleMine} />
+        </Pressable>
+      ) : onPress ? (
         <View style={styles.profileChevron} testID={`${id}-accessory`}>
           <Ionicons name="chevron-forward" size={18} color={colors.onBubbleMine} />
         </View>
@@ -508,6 +530,9 @@ const makeStyles = () => StyleSheet.create({
   profilePill: { color: colors.onBubbleMine, backgroundColor: 'rgba(255,255,255,0.22)' },
   profileChevron: { width: ACCESSORY, height: ACCESSORY, marginLeft: 'auto', alignItems: 'center', justifyContent: 'center' },
   profileSub: { color: colors.onBubbleMine, opacity: 0.88, fontSize: 13, lineHeight: 18 },
+  profileWarning: { opacity: 1, fontWeight: '600' },
+  profileMore: { borderRadius: radius.pill },
+  profileMoreHover: { backgroundColor: 'rgba(255,255,255,0.18)' },
   label: { fontSize: 16 },
   subtitle: { fontSize: 13, lineHeight: 18 },
   value: { flex: 1, minWidth: 0, fontSize: 15, textAlign: 'right' },
