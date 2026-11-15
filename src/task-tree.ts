@@ -277,3 +277,32 @@ export function includeTagAncestors(
   }
   return out;
 }
+
+// ── 任务详情「标签」按路径显示(管理员 2026-11-15「这个地方是不是显示标签树比较好,TMWork/xxx/xxx 类似这样」)──
+
+export type TagPathRow = {
+  /** 这一行代表的标签(× 删掉的就是它)。 */
+  tag: string;
+  /** 从根到它自己的整条路径。 */
+  path: string[];
+  /** 路径上同时也挂在这张卡上的祖先(画实色;没挂的画淡色)。 */
+  onItem: string[];
+};
+
+/**
+ * 卡上的标签 → 一行一条路径。某个标签若是卡上另一个标签的祖先,就不单独占一行(已经在那条路径里了);
+ * 行按路径排序,同一棵树的挨在一起。没有父子关系(旧 Hub)时每个标签一行、路径就是自己 —— 和原来一样。
+ */
+export function tagPathRows(tags: readonly string[], parents: TagParents | null | undefined): TagPathRow[] {
+  const set = new Set(tags);
+  const ancestorsOf = new Map(tags.map(tag => [tag, tagAncestors(tag, parents)]));
+  const covered = new Set<string>();
+  for (const tag of tags) for (const a of ancestorsOf.get(tag) ?? []) if (set.has(a)) covered.add(a);
+  return tags
+    .filter(tag => !covered.has(tag))
+    .map(tag => {
+      const up = ancestorsOf.get(tag) ?? [];
+      return { tag, path: [...up].reverse().concat(tag), onItem: up.filter(a => set.has(a)) };
+    })
+    .sort((a, b) => a.path.join('\u0000').localeCompare(b.path.join('\u0000'), 'zh'));
+}
