@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.542:",
+  "- 「架构图」可以下钻：点部门卡片就以它为根重画，面包屑「组织 › TMAI › …」随时回上层；最底层的部门显示 Agent 卡片墙，点卡片打开该节点。",
+  "- 「架构图」换了配色：顶部不再是蓝色渐变，改成和页面一致的中性卡片；各部门用低饱和的大地色。",
+  "- 下级部门太多、一行放不下时自动换成网格，不再横向滚动。",
+  "",
   "What's new in 0.2.541:",
   "- 任务详情的「标签」按路径显示，例如「TMWork / TMWork客户端 / 飞书」：一行一条，卡上也挂着的上级标签并进那一行，不再一块一块散着；窄栏里路径折行，不会把最后一级截掉。",
   "",
