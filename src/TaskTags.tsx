@@ -15,6 +15,8 @@ import { appFetch } from './app-fetch';
 import { noteTagsUsed, setCreatingTag, setManagingTags, setSideMenu, setTaskFilter, useTaskBoard } from './task-board-store';
 import { pointerUi } from './pointer-ui';
 import { railIconsOnly } from './nav-chrome';
+import { tagPathRows } from './task-tree';
+import { Ionicons } from './icons';
 import { canManageTags, catalogFromHub, localTagCounts, tagFilterEntries, tagSuggestions } from './task-tag-catalog';
 
 export function TaskTagFilter() {
@@ -147,7 +149,7 @@ export function useTagChoices(): { choices: string[]; counts: Record<string, num
 
 export default function TaskTags({ cfg, item, onSave }: { cfg: HubConfig; item: Requirement; onSave: (patch: EditPatch) => Promise<string | null> }) {
   useTranslation();
-  const [fetched, setFetched] = useState<{ tags: string[]; counts: Record<string, number> } | null>(null);
+  const [fetched, setFetched] = useState<{ tags: string[]; counts: Record<string, number>; parents?: Record<string, string | null> } | null>(null);
   const [error, setError] = useState(''), [loadFailed, setLoadFailed] = useState(false), [saving, setSaving] = useState(false);
   const busy = useRef(false), live = useRef(true);
   const board = useTaskBoard(s => s.tagCatalog);
@@ -159,7 +161,7 @@ export default function TaskTags({ cfg, item, onSave }: { cfg: HubConfig; item: 
     const ctrl = new AbortController();
     const timer = setTimeout(() => ctrl.abort(), 15000);
     void appFetch(`${cfg.serverUrl}/api/requirements/tags${cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : ''}`, { headers: { Authorization: `Bearer ${cfg.token}`, ...ACCEPT_COLUMNS_HEADERS }, signal: ctrl.signal })
-      .then(async res => { if (!res.ok) throw new Error(); const cat = catalogFromHub(await res.json()); if (live.current) setFetched(cat ? { tags: cat.tags, counts: cat.counts } : { tags: [], counts: {} }); })
+      .then(async res => { if (!res.ok) throw new Error(); const cat = catalogFromHub(await res.json()); if (live.current) setFetched(cat ? { tags: cat.tags, counts: cat.counts, parents: cat.parents } : { tags: [], counts: {} }); })
       .catch(() => { if (live.current) setLoadFailed(true); }).finally(() => clearTimeout(timer));
     return () => { live.current = false; ctrl.abort(); clearTimeout(timer); };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, item.id, !!board]);
@@ -181,7 +183,25 @@ export default function TaskTags({ cfg, item, onSave }: { cfg: HubConfig; item: 
   };
   return <View testID="req-tags" style={{ gap: 8 }}>
     <Text style={{ color: colors.textMuted, fontSize: 12 }}>{t('tags.title')}</Text>
-    <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>{tags.map(tag => <Pressable key={tag} disabled={saving} accessibilityRole="button" accessibilityLabel={t('tags.remove', { tag })} onPress={() => void save(tags.filter(x => x !== tag))} style={{ minHeight: 44, justifyContent: 'center', paddingHorizontal: 10, borderRadius: radius.control, backgroundColor: colors.subtleFill, maxWidth: '100%' }}><Text numberOfLines={1} style={{ color: colors.text }}>{tag} ×</Text></Pressable>)}</View>
+    {/* 管理员 2026-11-15「这个地方是不是显示标签树比较好,TMWork/xxx/xxx 类似这样」:一行一条路径(根 → 叶),
+        卡上也挂着的祖先并进它的子孙那一行、画实色;没挂的祖先画淡色。× 删的是这一行的叶子。 */}
+    <View testID="req-tag-paths" style={{ gap: 6 }}>{tagPathRows(tags, board?.parents ?? fetched?.parents).map(row => {
+      const leafColor = board?.colors?.[row.tag];
+      return <View key={row.tag} testID={`req-tag-path-${row.tag}`} style={{ flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', minHeight: 36, paddingLeft: 10, paddingVertical: 2, borderRadius: radius.control, backgroundColor: colors.subtleFill }}>
+        {leafColor ? <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: leafColor, marginRight: 6 }} /> : <Ionicons name="pricetag-outline" size={13} color={colors.textMuted} style={{ marginRight: 6 }} />}
+        <Text style={{ flex: 1, minWidth: 0, fontSize: 13, lineHeight: 18, paddingVertical: 6 }}>
+          {row.path.map((seg, i) => {
+            const leaf = i === row.path.length - 1;
+            const strong = leaf || row.onItem.includes(seg);
+            return <Text key={seg}>{i ? <Text style={{ color: colors.textMuted }}>{' / '}</Text> : null}<Text style={{ color: strong ? colors.text : colors.textMuted, fontWeight: leaf ? '600' : '400' }}>{seg}</Text></Text>;
+          })}
+        </Text>
+        <Pressable testID={`req-tag-remove-${row.tag}`} disabled={saving} accessibilityRole="button" accessibilityLabel={t('tags.remove', { tag: row.tag })} hitSlop={6} onPress={() => void save(tags.filter(x => x !== row.tag))}
+          style={({ pressed, hovered }: { pressed: boolean; hovered?: boolean }) => ({ minHeight: 36, minWidth: 32, alignItems: 'center', justifyContent: 'center', borderRadius: radius.control, backgroundColor: pressed || hovered ? colors.rowActive : 'transparent' })}>
+          <Ionicons name="close" size={14} color={colors.textMuted} />
+        </Pressable>
+      </View>;
+    })}</View>
     {item.tags === undefined ? <Text style={{ color: colors.textMuted }}>{t('tags.unsupported')}</Text> : (
       <TagInputField tags={tags} choices={choices} counts={counts} disabled={saving} onAdd={tag => void save([...tags, tag])} testPrefix="req" />
     )}

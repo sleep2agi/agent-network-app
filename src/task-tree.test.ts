@@ -1,6 +1,6 @@
 // #2098 / #2102:项目树与标签层级的纯判定。
 // 关键约束:**没有 parent 数据时必须与旧的平铺完全一致**(顺序、深度、计数都不变)。
-import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, includeTagAncestors, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagRows, tagWithDescendants } from './task-tree';
+import { aggregateCounts, descendantIds, hasHierarchy, hubExposesProjectParent, includeTagAncestors, parentProjectOptions, projectRows, tagAncestors, tagDepth, tagParentsFromEntities, tagPathRows, tagRows, tagWithDescendants } from './task-tree';
 import { applyFilter, commitOnNameBlur, nameBlurOutcome, parentPatchForPick, projectRenamePatch, tagFilterAfterPick } from './task-board-model';
 import { tagFilterEntries } from './task-tag-catalog';
 
@@ -351,6 +351,18 @@ ck('#2139 接线:blur 写回 ref + chip 在 pointerdown/out 置位复位',
   /pickingParent\.current = d\.picking/.test(managerNow) && /pickingParent\.current = true/.test(managerNow) && /pickingParent\.current = false/.test(managerNow)
   && /onChipPressOut/.test(managerNow));
 
+
+// 任务详情标签按路径(管理员 2026-11-15「TMWork/xxx/xxx 类似这样」)。
+{
+  const parents = { 'TMWork客户端': 'TMWork', '飞书': 'TMWork客户端', '安全': null, '部署': null } as Record<string, string | null>;
+  const rows = tagPathRows(['TMWork客户端', 'TMWork', '安全', '飞书', '部署'], parents);
+  ck('tag paths: an ancestor that is also on the card folds into its descendant row', !rows.some(r => r.tag === 'TMWork') && !rows.some(r => r.tag === 'TMWork客户端'));
+  ck('tag paths: deepest tag shows the whole path root → leaf', JSON.stringify(rows.find(r => r.tag === '飞书')?.path) === JSON.stringify(['TMWork', 'TMWork客户端', '飞书']));
+  ck('tag paths: ancestors on the card are marked', JSON.stringify(rows.find(r => r.tag === '飞书')?.onItem.sort()) === JSON.stringify(['TMWork', 'TMWork客户端'].sort()));
+  ck('tag paths: rows sorted by path, roots stay single', rows.map(r => r.path.join('/')).join(',') === ['TMWork/TMWork客户端/飞书', '安全', '部署'].sort((a, b) => a.localeCompare(b, 'zh')).join(','));
+  ck('tag paths: ancestor not on the card is still in the path but not marked', JSON.stringify(tagPathRows(['飞书'], parents)[0]) === JSON.stringify({ tag: '飞书', path: ['TMWork', 'TMWork客户端', '飞书'], onItem: [] }));
+  ck('tag paths: old Hub (no parents) = one row per tag, path = itself', JSON.stringify(tagPathRows(['b', 'a'], null).map(r => r.path)) === JSON.stringify([['a'], ['b']]));
+}
 
 console.log(`\n${p}/${t} passed`);
 if (p !== t) process.exit(1);
