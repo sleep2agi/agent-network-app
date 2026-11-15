@@ -76,6 +76,9 @@ import { firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAut
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
+import NodeDepartmentPicker from './NodeDepartmentPicker';
+import { canEditDepartments, departmentDisplayLabel, type OrgLike } from './node-department-edit';
+import { fetchOrg } from './org-api';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
 import { chatComposerKind, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
@@ -549,6 +552,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const { height: plusWindowHeight } = useWindowDimensions();
   // 聊天信息(chat-info-model.ts):页头右侧只剩「⋯」,搜索 / 置顶 / 免打扰 / 窗口置顶 / 节点设置都在里面。
   const [infoOpen, setInfoOpen] = useState(false);
+  // #4863 —— 聊天信息里的「所属部门」：值 + 节点/组织上下文（点开直接改，未归属也显示）。
+  const [deptInfo, setDeptInfo] = useState<{ label: string; nodeId: string | null; departmentId: string | null; org: OrgLike; editable: boolean } | null>(null);
+  const [deptPickerOpen, setDeptPickerOpen] = useState(false);
   const [forkOpenScope, setForkOpenScope] = useState<object | null>(null);
   const [paneWidth, setPaneWidth] = useState(0);
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -2340,6 +2346,33 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     return () => { live = false; };
   }, [cfg, alias, infoOpen]);
 
+  // #4863 —— 打开「聊天信息」时取这台节点的部门归属 + 组织树（用于「所属部门」那一行）。
+  // 取不到（旧 Hub / 无部门表）也照样给一行「未归属」——**这一行不能消失**。
+  useEffect(() => {
+    if (!infoOpen) return;
+    let live = true;
+    void (async () => {
+      const [nodesRes, org] = await Promise.all([
+        fetchHubNodes(cfg).catch(() => ({ nodes: [] as any[] })),
+        fetchOrg(cfg, cfg.networkId ?? '').catch(() => null),
+      ]);
+      if (!live) return;
+      // 优先按 node_id 精确匹配（controlSession.node_id 是权威绑定）；
+      // 只有拿不到 node_id 时才退回 alias —— 别用 alias 猜归属，猜错会把「已归属」显示成「未归属」。
+      const wantedId = controlSession?.node_id ?? null;
+      const node = (nodesRes.nodes ?? []).find((n: any) => (wantedId ? n.node_id === wantedId : n.alias === alias)) ?? null;
+      const departmentId = node?.department_id ?? null;
+      setDeptInfo({
+        label: departmentDisplayLabel(org, departmentId),
+        nodeId: node?.node_id ?? null,
+        departmentId,
+        org,
+        editable: canEditDepartments(org, false) && !!node?.node_id,
+      });
+    })();
+    return () => { live = false; };
+  }, [cfg, alias, infoOpen, controlSession?.node_id]);
+
   // "正在处理…" only while a real (non-echo) task is still in a pre-result
   // state AND was created within the last 10 min. The 10-min cutoff is a
   // staleness guard: a task that never produced a result (agent crashed,
@@ -2412,6 +2445,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     hasRulesTarget: sessionCaps.rules,
     skillsCapable: sessionCaps.skills,
     secretsCapable: sessionCaps.secrets,
+    department: deptInfo ? { label: deptInfo.label, editable: deptInfo.editable } : null,
   });
   const onInfoRow = (row: ChatInfoRow) => {
     switch (row.key) {
@@ -2421,6 +2455,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       case 'search': setInfoOpen(false); openSearch(); return;
       case 'btw': setInfoOpen(false); runPlusItem('btw'); return;
       case 'fork': setInfoOpen(false); setForkOpenScope(composerModelScope); return;
+      case 'department':
+        // #4863：不可编辑时**不弹选择器**（里面只有「未归属」，点了只会 403）；行上已标「（只读）」。
+        setInfoOpen(false);
+        if (deptInfo?.editable) setDeptPickerOpen(true);
+        return;
       default:
         // 头像行(概览)和各分区行:打开节点信息页的那个分区。
         setInfoOpen(false);
@@ -3437,6 +3476,28 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         onClose={() => setInfoOpen(false)}
         onRow={onInfoRow}
       />
+      {deptPickerOpen && deptInfo ? (
+        <NodeDepartmentPicker
+          cfg={cfg}
+          networkId={cfg.networkId ?? ''}
+          nodeId={deptInfo.nodeId}
+          org={deptInfo.org}
+          departmentId={deptInfo.departmentId}
+          onClose={() => setDeptPickerOpen(false)}
+          onResult={(key, detail) => {
+            setDeptPickerOpen(false);
+            if (!key) {
+              // 重新取一次归属，侧栏分组也会随之变化（不靠本地猜测）。
+              void fetchHubNodes(cfg).then(r => {
+                const n = (r.nodes ?? []).find((x: any) => x.node_id === deptInfo.nodeId);
+                setDeptInfo(prev => prev ? { ...prev, departmentId: n?.department_id ?? null, label: departmentDisplayLabel(prev.org, n?.department_id ?? null) } : prev);
+              }).catch(() => {});
+              return;
+            }
+            setDeptInfo(prev => prev ? { ...prev, label: detail ? `${t(key)}（Hub：${detail}）` : t(key) } : prev);
+          }}
+        />
+      ) : null}
       {forkOpenScope === composerModelScope ? <ChatForkPalette cfg={cfg} alias={alias} onClose={() => setForkOpenScope(null)} /> : null}
     </KeyboardAvoidingView>
   );

@@ -195,12 +195,17 @@ function Row({ row, alias, subtitle, styles, onRow }: {
       {...({ dataSet: { rowKind: 'link' } } as any)}
     >
       <Text style={styles.label} numberOfLines={1} testID={`${testID}-label`}>{label}</Text>
+      {row.detail ? (
+        // #4863 —— 右侧附注：「所属部门」显示路径 / 「未归属」。
+        <Text style={styles.detail} numberOfLines={1} testID={`${testID}-detail`}>{row.detail}</Text>
+      ) : null}
       <Ionicons name="chevron-forward" size={18} color={colors.textMuted} testID={`${testID}-chevron`} />
     </Pressable>
   );
 }
 
 const makeStyles = () => StyleSheet.create({
+  detail: { color: colors.textMuted, fontSize: ds(12), flexShrink: 1, marginLeft: spacing.sm },
   drawerRoot: { position: 'absolute', top: 0, right: 0, bottom: 0, left: 0, zIndex: 50, flexDirection: 'row' },
   backdrop: { flex: 1, backgroundColor: 'rgba(0,0,0,0.28)' },
   drawer: {

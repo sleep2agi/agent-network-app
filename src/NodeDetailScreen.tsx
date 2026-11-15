@@ -109,7 +109,9 @@ import type { ScheduleOpenRequest } from './node-schedules';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
 import { useScreenKeyboardInset } from './screen-keyboard-inset';
 import { filesTreeMode, nodePageColumnMaxWidth } from './node-files-tree';
-import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, departmentPathLabel, factText, headerChips, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
+import NodeDepartmentPicker from './NodeDepartmentPicker';
+import { DEPARTMENT_ROW_TESTID, canEditDepartments, departmentDisplayLabel, type OrgLike } from './node-department-edit';
+import { NODE_PAGE_COMPACT_WIDTH, NODE_SECTIONS, factText, headerChips, leaveNeedsConfirm, modelSectionFacts, nodePageChrome, nodePageContentWidth, nodePageScrolls, overviewFactColumns, resolveActiveSection, splitOverviewFacts, visibleNodeSections, type NodeSectionKey } from './node-page-model';
 import { useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { PANE_BACK_TEST_ID, paneShowsBack } from './pane-header';
@@ -243,8 +245,11 @@ export default function NodeDetailScreen({
 }) {
   const [state, setState] = useState<LoadState>({ kind: 'loading' });
   const [node, setNode] = useState<HubNode | null>(null);
-  /** 这个节点所在部门的完整路径「A / B / C」(空 = 没归属 / 旧 Hub 没有部门表)。 */
+  /** #4863 这个节点所在部门的完整路径「A / B / C」；未归属/读不到 = 「未归属」（这一行不再隐藏）。 */
   const [department, setDepartment] = useState<string | null>(null);
+  const [orgTree, setOrgTree] = useState<OrgLike>(null);
+  const [deptPickerOpen, setDeptPickerOpen] = useState(false);
+  const [deptNote, setDeptNote] = useState<string | null>(null);
   const [nodeListState, setNodeListState] = useState<'loading' | 'loaded' | 'failed'>('loading');
   const [pendingAction, setPendingAction] = useState<NodeLifecycleAction | null>(null);
   const [confirmAlias, setConfirmAlias] = useState('');
@@ -317,7 +322,7 @@ export default function NodeDetailScreen({
   // render — a manual bump is how the sibling screens do it too.
   const [, setThemeTick] = useState(0);
   // board #694 —— 节点操作卡片 / 指路那一行走 i18n:切语言时这一页也要重画。
-  useTranslation();
+  const { t } = useTranslation();
   useEffect(() => onThemeChange(() => setThemeTick(t => t + 1)), []);
 
   const load = useCallback(async () => {
@@ -393,6 +398,8 @@ export default function NodeDetailScreen({
   // 只认节点显式归属 nodes.department_id(/api/nodes 已带)。不再按负责人推断:admin 名下的节点
   // 会被一律标成 admin 所在部门,反而误导。没归属 ⇒「未分配」;旧 Hub / 没有部门表 ⇒ 这一行不出现。
   const explicitDepartmentId = node?.department_id ?? null;
+  // #4863：能不能改 —— 与「Agent 组织架构」页同一聚合判据（Hub viewer_can 优先）。
+  const deptEditable = canEditDepartments(orgTree, false);
   const [hasDepartments, setHasDepartments] = useState(false);
   useEffect(() => {
     let live = true;
@@ -401,8 +408,9 @@ export default function NodeDetailScreen({
       const org = await fetchOrg(cfg, cfg.networkId ?? '').catch(() => null);
       if (!live) return;
       setHasDepartments(!!org && org.departments.length > 0);
-      const path = departmentPathLabel(org, explicitDepartmentId);
-      if (path) setDepartment(path);
+      setOrgTree(org);
+      // #4863：未归属也要有这一行（admin 2026-11-15：在节点里找不到调整归属的入口，就是因为这行没出现）。
+      setDepartment(departmentDisplayLabel(org, explicitDepartmentId));
     })();
     return () => { live = false; };
   }, [cfg, explicitDepartmentId]);
@@ -611,10 +619,29 @@ export default function NodeDetailScreen({
           </View>
           {/* 所属部门:有部门表且这个节点有归属时才出现(admin 2026-10-26 按部门分区之后,
               从军团点进来就能对上「它归谁」,不用再翻组织架构页)。 */}
+          {/* #4863 —— 「所属部门」这一行**始终出现**（未归属也显示），可点开直接改；
+              与「Agent 组织架构」页同一个选择器、同一条写路径（moveAgentDepartment）。 */}
           {department ? (
-            <View testID="node-detail-department" style={[localStyles.chip, { backgroundColor: colors.subtleFill }]}>
+            <Pressable
+              testID={DEPARTMENT_ROW_TESTID}
+              accessibilityRole={deptEditable ? 'button' : 'text'}
+              onPress={() => {
+                if (!deptEditable) {
+                  // 原因要准确：没有部门表 / 没有部门，比「没权限」更常见，也别让人以为是权限问题。
+                  const none = (orgTree?.departments?.length ?? 0) === 0;
+                  setDeptNote(t(none ? 'nodeDepartment.noDepartments' : 'nodeDepartment.readonlyHint'));
+                  return;
+                }
+                setDeptNote(null); setDeptPickerOpen(true);
+              }}
+              style={[localStyles.chip, { backgroundColor: colors.subtleFill, flexDirection: 'row', alignItems: 'center', gap: 4 }]}
+            >
               <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, maxWidth: 180 }} numberOfLines={1} ellipsizeMode="tail">{department.split(' / ').pop()}</Text>
-            </View>
+              {deptEditable ? <Ionicons name="chevron-down" size={12} color={colors.textMuted} /> : null}
+            </Pressable>
+          ) : null}
+          {deptNote ? (
+            <Text testID="node-department-note" style={{ color: colors.textMuted, fontSize: typeScale.small }}>{deptNote}</Text>
           ) : null}
           {/* #460 降级:原因 + 修法在提示条里(悬停 / 点按)。 */}
           <DegradedBadge info={nodeDegraded(s)} testID="node-degraded" size="header" />
@@ -1079,6 +1106,25 @@ export default function NodeDetailScreen({
           networkId={cfg.networkId ?? null}
           sessionId={s.session_id}
           onClose={() => setSourceForkOpen(false)}
+        />
+      ) : null}
+      {deptPickerOpen ? (
+        <NodeDepartmentPicker
+          cfg={cfg}
+          networkId={cfg.networkId ?? ''}
+          nodeId={node?.node_id ?? null}
+          org={orgTree}
+          departmentId={explicitDepartmentId}
+          onClose={() => setDeptPickerOpen(false)}
+          onResult={(key, detail) => {
+            setDeptPickerOpen(false);
+            if (!key) {
+              setDeptNote(t('nodeDepartment.saved'));
+              return;
+            }
+            // 403 时把 Hub 原文附在后面（不吞成「失败」）。
+            setDeptNote(detail ? `${t(key)}（Hub：${detail}）` : t(key));
+          }}
         />
       ) : null}
       {cloneOpen && cloneSource ? (

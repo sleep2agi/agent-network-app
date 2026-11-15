@@ -11,6 +11,7 @@ import { comboFromEvent, FIXED_SHORTCUTS, type KeyEventLike } from './shortcuts-
 
 export type ChatInfoRowKey =
   | 'node'
+  | 'department'
   | 'search'
   | 'btw'
   | 'fork'
@@ -28,6 +29,8 @@ export interface ChatInfoRow {
   value?: boolean;
   /** link 到节点页的某个分区(头像行 = 概览)。 */
   section?: NodeSectionKey;
+  /** 右侧附注(例如「所属部门」的路径 / 未归属)。#4863 */
+  detail?: string;
 }
 
 export interface ChatInfoInput {
@@ -50,6 +53,8 @@ export interface ChatInfoInput {
    *  legacy node-server 的 claude-code 会话)没有该能力,给了只会点进一个
    *  “不支持”的空页(owner 2026-11-09 截图)。 */
   secretsCapable: boolean;
+  /** #4863 —— 「所属部门」行。**未归属时必须给 `{ label: '未归属' }`**（这一行不能消失）。 */
+  department?: { label: string; editable?: boolean } | null;
 }
 
 /**
@@ -58,7 +63,13 @@ export interface ChatInfoInput {
  */
 export function chatInfoGroups(input: ChatInfoInput): ChatInfoRow[][] {
   const groups: ChatInfoRow[][] = [];
-  if (input.canOpenNode) groups.push([{ key: 'node', kind: 'profile', label: input.alias, section: 'overview' }]);
+  if (input.canOpenNode) {
+    const head: ChatInfoRow[] = [{ key: 'node', kind: 'profile', label: input.alias, section: 'overview' }];
+    // #4863 —— 「所属部门」紧跟头像行：**未归属也显示**（label 已是「未归属」）。
+    // admin 2026-11-15：节点在「未归属」组时在节点里找不到改归属的入口，就是因为这一行不存在。
+    if (input.department) head.push({ key: 'department', kind: 'link', label: '所属部门', detail: input.department.editable === false ? `${input.department.label}（只读）` : input.department.label });
+    groups.push(head);
+  }
 
   const tools: ChatInfoRow[] = [{ key: 'search', kind: 'link', label: '查找聊天内容' }];
   if (input.btw) tools.push({ key: 'btw', kind: 'link', label: 'BTW 旁路提问' });
