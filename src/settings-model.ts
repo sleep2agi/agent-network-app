@@ -90,6 +90,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       // 字体大小 / 界面密度(src/ui-scale.ts)。「图标大小」是 Vincent 的原话,归在界面密度里。
       { key: 'fontSize', label: '字体大小', keywords: ['字号', '文字大小', '字体', '大字', 'font', 'font size', 'text size'] },
       { key: 'density', label: '界面密度', keywords: ['图标大小', '图标', '紧凑', '更紧凑', '宽松', '间距', '行高', '头像大小', 'density', 'icon', 'compact', 'spacing'] },
+      // 2026-11-15 管理员「设置里面可以设置一级是否显示」:桌面左侧一级栏每项一个开关(rail-prefs.ts)。
+      { key: 'rail', label: '左侧栏', keywords: ['一级', '导航', '侧栏', '左侧', '隐藏', '显示', '组织', '任务', '定时', '消息', 'sidebar', 'rail', 'navigation'] },
     ],
   },
   {

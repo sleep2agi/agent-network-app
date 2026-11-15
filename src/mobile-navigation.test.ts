@@ -31,7 +31,8 @@ check(app.includes("{ key: 'tasks', label: 'nav.tasks', icon: 'list-outline', ic
 check(app.includes('tabs={MOBILE_RAIL_TABS}'), 'the left rail renders the rail destinations');
 check(app.includes('{MOBILE_TABS.map(tab => ('), 'the phone tab bar renders the compact navigation');
 check(!app.includes('tabs={MOBILE_TABS}'), 'the left rail does not drop back to the four phone tabs');
-check(app.includes('DESKTOP_MAIN_TABS.map(tab => ('), 'desktop keeps its existing navigation model');
+// 2026-11-15:桌面一级栏可以按设置隐藏若干项(rail-prefs.ts),仍是同一份 DESKTOP_MAIN_TABS。
+check(app.includes('visibleRailTabs(DESKTOP_MAIN_TABS, railHidden).map(tab => ('), 'desktop keeps its existing navigation model');
 
 if (failures.length) {
   for (const failure of failures) console.error(`FAIL: ${failure}`);

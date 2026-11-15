@@ -306,6 +306,10 @@ const copy = [
   ['组织与权限', 'Organization & access'],
   ['部门与 Agent', 'Departments & agents'],
   ['成员与权限', 'Members & access'],
+  // 末尾追加(编号按位置):2026-11-15 桌面左侧一级栏显示开关。
+  ['左侧栏', 'Sidebar'],
+  ['关掉的入口不在主窗口左侧显示；Agent 和设置一直在。', 'Hidden entries disappear from the main window’s left bar. Agents and Settings always stay.'],
+  ['切换到 组织', 'Go to Org'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

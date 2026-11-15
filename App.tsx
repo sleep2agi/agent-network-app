@@ -1,4 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
+import OrgWorkspace from './src/OrgWorkspace';
+import { useRailHidden, visibleRailTabs } from './src/rail-prefs';
 import { useTranslation } from './src/i18n-react';
 import { clearConditionalReads } from './src/conditional-get';
 import { installLanguageRuntime } from './src/i18n-runtime';
@@ -126,6 +128,7 @@ const PHONE_BANNER_SCREENS: ReadonlySet<string> = new Set(['agents', 'tasks', 'm
 
 type Screen =
   | { name: 'login' }
+  | { name: 'org' }
   | { name: 'agents'; filter?: AgentListFilter }  // filter: 服务器页的状态卡片 / 分组行带过来的
   | { name: 'tasks' }
   | { name: 'scheduled'; open?: ScheduleOpenRequest; back?: Screen }  // open/back: 从节点页「定时任务」分区来 —— 落点 + 返回回节点页
@@ -167,6 +170,8 @@ const DESKTOP_TABS = [
   { key: 'scheduled', label: 'nav.scheduled', icon: 'time-outline', iconActive: 'time' },
   { key: 'messages', label: 'nav.messages', icon: 'chatbubble-ellipses-outline', iconActive: 'chatbubble-ellipses' },
   { key: 'server', label: 'nav.server', icon: 'server-outline', iconActive: 'server' },
+  // 2026-11-15 管理员「移到一级啊」:组织与权限进一级栏,在 Hub 下面。设置 → 外观 →「左侧栏」可以关掉(rail-prefs.ts)。
+  { key: 'org', label: 'nav.org', icon: 'git-network-outline', iconActive: 'git-network' },
   { key: 'settings', label: 'nav.settings', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
 
@@ -1334,6 +1339,9 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const toggleMute = (alias: string) => { saveNotifySettings(toggleAgentMuted(loadNotifySettings(), notifyKey, alias)); };
   const serverWorkspace = ['server', 'serverPending', 'serverDaemon', 'serverNodes', 'serverNodeDetail', 'logs', 'picker', 'wizard', 'hubSkills', 'hubTokens', 'hubEnv', 'hubProviders'].includes(screen.name);
   const taskWorkspace = screen.name === 'tasks' || screen.name === 'taskDetail';
+  // 一级栏「组织」:整页占满右侧,不要会话侧栏。
+  const orgWorkspace = screen.name === 'org';
+  const railHidden = useRailHidden();
   useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
   // Daemon management has its own navigation; unrelated conversations should
   // not take a second sidebar. Keep the rail so returning to Agents is one click.
@@ -1440,6 +1448,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'hubEnv' ? <HubSecretsPane cfg={cfg} onOpenTokens={() => setScreen({ name: 'hubTokens' })} />
   : screen.name === 'hubProviders' ? <HubProviderManagementScreen cfg={cfg} />
   : screen.name === 'hubTokens' ? <HubTokenManagementScreen cfg={cfg} />
+  : screen.name === 'org' ? <OrgWorkspace cfg={cfg} />
   : hubSectionForScreen(screen.name) ? <HubScopeScreen key={screen.name} section={hubSectionForScreen(screen.name)!} />
   : (
     <View style={desktopStyles.empty}>
@@ -1461,7 +1470,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
           <BrandMark size={22} style={desktopStyles.railBrandMark} />
         </View>
         <View style={desktopStyles.railTabs}>
-          {DESKTOP_MAIN_TABS.map(tab => (
+          {visibleRailTabs(DESKTOP_MAIN_TABS, railHidden).map(tab => (
             <RailButton
               key={tab.key}
               tab={tab}
@@ -1487,7 +1496,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
         {/* 连接状态(App战线①):不再是顶部全宽横幅,是版本号左边一个小圆点,悬停/点按看全文(ConnectivityIndicator)。 */}
         <ConnectivityIndicator placement="rail" label={`v${APP_VERSION}`} labelStyle={desktopStyles.railVersionText} style={desktopStyles.railVersion} />
       </View>
-      {!daemonWorkspace ? <View testID="desktop-workspace-sidebar" style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
+      {!daemonWorkspace && !orgWorkspace ? <View testID="desktop-workspace-sidebar" style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
         {taskWorkspace ? (
           // 任务页的左栏是筛选(全部 / 我负责的 / 按节点 / 派发记录),不是会话列表。
           <TaskFilterSidebar onNavigate={() => { if (screen.name !== 'tasks') setScreen({ name: 'tasks' }); }} />

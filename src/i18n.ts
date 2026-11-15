@@ -11,6 +11,8 @@ const tables: TranslationTable = {
   'language.system': ['跟随系统', 'Follow system'],
   'nav.agents': ['Agent', 'Agents'],
   'nav.messages': ['消息', 'Messages'],
+  // 2026-11-15 管理员「移到一级啊」:组织与权限进桌面左侧一级栏。
+  'nav.org': ['组织', 'Org'],
   'nav.unread': ['{label}，{count} 条未读', '{label}, {count} unread'],
   'nav.tasks': ['任务', 'Tasks'],
   'nav.tasksUpdated': ['{count} 个任务有新动态', '{count} tasks updated'],

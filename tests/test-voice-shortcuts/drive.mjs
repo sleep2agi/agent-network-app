@@ -142,7 +142,7 @@ const pd = (p) => p ? `painted ${Math.round(p.w)}×${Math.round(p.h)}${p.painted
     page = await settingsWindow('page: 点「设置」');
     await shot('shortcuts-1200x800-top');
     const labels = await page.locator('[data-testid^="shortcut-label-nav.tab."]').allInnerTexts();
-    ck('page: 导航标签使用一致产品名称', JSON.stringify(labels) === JSON.stringify(['切换到 会话', '切换到 任务', '切换到 定时任务', '切换到 消息', '切换到 Hub']), labels.join(','));
+    ck('page: 导航标签使用一致产品名称', JSON.stringify(labels) === JSON.stringify(['切换到 会话', '切换到 任务', '切换到 定时任务', '切换到 消息', '切换到 Hub', '切换到 组织']), labels.join(',')); // 2026-11-15 +⌘6 组织
     const allLabels = await page.locator('[data-testid^="shortcut-label-"]').allInnerTexts();
     const english = allLabels.filter(l => /[A-Za-z]{2,}/.test(l.replace(/\bHub\b/g, '')));
     ck('page: 页面上除产品名 Hub 外没有英文单词', english.length === 0, english.join(' | '));
