@@ -9,7 +9,8 @@
 //   ⑤ 部门行悬停出「⋯」→ 同一份部门菜单;列头「+」→ 新建根部门
 //   ⑥ Agent 行悬停出「移动到…」→ 选部门 → PUT 写 Hub,行离开「未归属」
 //   ⑦ 点 Agent 行 → 组织页里打开它的节点页,落在「权限」;「← 组织」回来,部门选择还在
-//   ⑧ 侧栏「架构图」:品牌横幅 + 四个大数字 + 每个根部门一栏;点部门卡回到列表并选中它
+//   ⑧ 侧栏「架构图」:概览 + 四个大数字 + 每个根部门一栏
+//   ⑨ 下钻:点部门 → 以它为根重画(面包屑可回);叶子部门是 Agent 卡片墙;「在列表中查看」回列表
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
 
@@ -169,9 +170,31 @@ const open = async (theme, ctx0) => {
   record('⑧ 架构图:每个根部门一栏(TMAI / A 站 / ANet)', cols === 3, cols);
   record('⑧ 架构图:子部门挂在根部门下', await page.locator('[data-testid="org-showcase-col-d_tmai"] [data-testid="org-showcase-dept-d_k5"]').count() === 1, null);
   record('⑧ 架构图:未归属是最后一张虚线卡', await page.locator('[data-testid="org-showcase-unassigned"]').count() === 1, null);
+  // ⑨ 下钻(管理员「点击这里能下钻吗」)
+  await page.locator('[data-testid="org-showcase-dept-d_tmai"]').click();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}/org-chart-drill.png` });
+  record('⑨ 点根部门卡 → 以它为根:面包屑「组织 › TMAI」,下级部门成栏', await page.locator('[data-testid="org-showcase-crumb-d_tmai"]').count() === 1 && await page.locator('[data-testid="org-showcase-col-d_k5"]').count() === 1 && await page.locator('[data-testid="org-showcase-col-d_tmai"]').count() === 0, null);
+  const fitView = await page.evaluate(() => {
+    const root = document.querySelector('[data-testid="org-showcase-root"]').getBoundingClientRect();
+    const card = document.querySelector('[data-testid="org-showcase-chart"]').getBoundingClientRect();
+    const cols = [...document.querySelectorAll('[data-testid^="org-showcase-col-"]')].map(e => e.getBoundingClientRect());
+    return { rootIn: root.left >= card.left && root.right <= card.right, colsIn: cols.every(c => c.right <= card.right + 1), grid: !!document.querySelector('[data-testid="org-showcase-grid"]') };
+  });
+  record('⑨ 9 个下级部门放不下一行 → 换网格,根节点和每张卡都在视野里', fitView.rootIn && fitView.colsIn && fitView.grid, fitView);
+  record('⑨ 下钻后概览跟着换(标题 TMAI)', (await page.locator('[data-testid="org-showcase-hero"]').innerText()).includes('TMAI'), null);
   await page.locator('[data-testid="org-showcase-dept-d_k5"]').click();
   await page.waitForTimeout(300);
-  record('⑧ 点部门卡回到列表并选中', await page.locator('[data-testid="agent-org-dept-d_k5"]').getAttribute('aria-selected') === 'true' && await page.locator('[data-testid="org-showcase"]').count() === 0, null);
+  await page.screenshot({ path: `${OUT}/org-chart-leaf.png` });
+  record('⑨ 没有下级的部门 → Agent 卡片墙', await page.locator('[data-testid="org-showcase-agents"]').count() === 1 && await page.locator('[data-testid="org-showcase-agent-n_100"]').count() === 1, null);
+  await page.locator('[data-testid="org-showcase-crumb-root"]').click();
+  await page.waitForTimeout(300);
+  record('⑨ 面包屑「组织」回到最上层', await page.locator('[data-testid="org-showcase-col-d_tmai"]').count() === 1, null);
+  await page.locator('[data-testid="org-showcase-dept-d_anet"]').click();
+  await page.waitForTimeout(200);
+  await page.locator('[data-testid="org-showcase-open-list"]').click();
+  await page.waitForTimeout(300);
+  record('⑨「在列表中查看」→ 列表视图选中该部门', await page.locator('[data-testid="agent-org-dept-d_anet"]').getAttribute('aria-selected') === 'true' && await page.locator('[data-testid="org-showcase"]').count() === 0, null);
   record('无页面报错', errors.length === 0, errors);
   await ctx.close();
 }
