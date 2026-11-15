@@ -42,7 +42,8 @@ export type PhoneMemberNav = {
   setHeader?: PhoneHeaderHost['setHeader']; scrollTop?: () => void;
 };
 
-export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg: HubConfig; me: AuthMe | null; networkId: string | undefined; phone?: PhoneMemberNav }) {
+/** hideOrg:一级栏「组织」里用 —— 部门树已经在左侧栏,人在部门里的管理在部门详情的「成员」页签;这里不再嵌一棵树(管理员 2026-11-15)。 */
+export default function UserManagementPanel({ cfg, me, networkId, phone, hideOrg }: { cfg: HubConfig; me: AuthMe | null; networkId: string | undefined; phone?: PhoneMemberNav; hideOrg?: boolean }) {
   useTranslation();
   const [members, setMembers] = useState<NetworkMember[] | null>(null);
   const [loadError, setLoadError] = useState('');
@@ -195,7 +196,7 @@ export default function UserManagementPanel({ cfg, me, networkId, phone }: { cfg
           <SettingsButton label={tr('users.newGroup')} variant="plain" onPress={() => openGroup('new')} testID="agent-group-new" />
         </>
       ) : null}
-      {org && members ? (
+      {org && members && !hideOrg ? (
         phone ? (
           <SettingsGroup title={tr('users.org')} footer={tr('users.orgFooter')} testID="org-group">
             <SettingsRow label={tr('users.orgMembersDepts')} value={tr('users.orgCount', { count: org.departments.length })} onPress={() => setOrgOpen(true)} testID="org-open" />

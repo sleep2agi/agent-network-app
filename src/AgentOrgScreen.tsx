@@ -32,7 +32,9 @@ type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStru
   /** 一级栏整页:侧栏顶上的标题(「组织」)。 */
   title?: string;
   /** 一级栏整页:有权管成员时,侧栏多一项「成员与权限」,右侧画这个(代替原来的两个页签)。 */
-  renderMembers?: () => ReactNode };
+  renderMembers?: () => ReactNode;
+  /** 一级栏整页:部门详情的「成员」页签画什么(人在这个部门里的管理;管理员 2026-11-15「这个 UI/UX 体验非常不好」)。 */
+  renderPeople?: (deptId: string | null, onSelect: (id: string | null) => void) => ReactNode };
 
 export default function AgentOrgScreen(p: Props) {
   const [, refreshTheme] = useState(0);
@@ -40,7 +42,7 @@ export default function AgentOrgScreen(p: Props) {
   return (
     <View testID="agent-org-page" style={[styles.page, p.fullWidth && styles.pageFill]}>
       {p.networkId
-        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} fill={!!p.fullWidth && !p.phone} onOpenAgent={p.onOpenAgent} title={p.title} renderMembers={p.renderMembers} />
+        ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} fill={!!p.fullWidth && !p.phone} onOpenAgent={p.onOpenAgent} title={p.title} renderMembers={p.renderMembers} renderPeople={p.renderPeople} />
         : <NoNetwork />}
     </View>
   );
@@ -68,7 +70,7 @@ function writeCollapsed(ids: ReadonlySet<string>) {
   try { (globalThis as { localStorage?: Storage }).localStorage?.setItem(TREE_COLLAPSED_KEY, JSON.stringify([...ids])); } catch { /* 存不了就只在本次有效 */ }
 }
 
-function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean; onOpenAgent?: (alias: string) => void; title?: string; renderMembers?: () => ReactNode }) {
+function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean; onOpenAgent?: (alias: string) => void; title?: string; renderMembers?: () => ReactNode; renderPeople?: (deptId: string | null, onSelect: (id: string | null) => void) => ReactNode }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<{ kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; data: AgentOrgData | null }>({ kind: 'loading' });
@@ -94,6 +96,8 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
   const bulkPending = useRef(false);
   // 整页:右侧是部门详情还是「成员与权限」(管理员 2026-11-15「做的更好一下」:左边做成一整条侧栏,页签收进侧栏)。
   const [view, setView] = useState<'dept' | 'members' | 'chart'>('dept');
+  // 部门详情页签:Agent / 成员(人)。换部门时保持在同一个页签。
+  const [deptTab, setDeptTab] = useState<'agents' | 'people'>('agents');
   const focusDept = (id: string | null) => { setView('dept'); setFocus(id); };
   // 整页:「已保存到 Hub」这类结果用底部小条提示几秒就消失,不再占一行常驻(以前上下各一条)。
   const toast = p.fill ? (deptNote || adjustNote) : '';
@@ -261,6 +265,9 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                 onMove={p.fill && data.agentDepartmentSupported ? moveOne : undefined}
                 moveBusy={saving}
                 onOpenAgent={p.fill ? p.onOpenAgent : undefined}
+                tab={p.fill && p.renderPeople ? deptTab : 'agents'}
+                onTab={p.fill && p.renderPeople ? setDeptTab : undefined}
+                people={p.fill && p.renderPeople && deptTab === 'people' ? p.renderPeople(focus ?? null, id => focusDept(id)) : null}
                 actions={null}
                 bulkBusy={saving}
                 onBulkAssign={async (departmentId, nodeIds) => {
@@ -540,7 +547,8 @@ function DepartmentRow(p: { testID: string; label: string; depth?: number; selec
 }
 
 function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: string | null; phone: boolean; onFocus: (id: string) => void; onBack: () => void; actions: ReactNode; onBulkAssign?: (departmentId: string, nodeIds: string[]) => void; bulkBusy?: boolean;
-  fill?: boolean; note?: string; onMove?: (nodeId: string, departmentId: string | null) => void; moveBusy?: boolean; onOpenAgent?: (alias: string) => void }) {
+  fill?: boolean; note?: string; onMove?: (nodeId: string, departmentId: string | null) => void; moveBusy?: boolean; onOpenAgent?: (alias: string) => void;
+  tab?: 'agents' | 'people'; onTab?: (tab: 'agents' | 'people') => void; people?: ReactNode }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   const [moving, setMoving] = useState<PlacedAgent | null>(null);
@@ -571,13 +579,24 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
             <Text numberOfLines={1} style={[styles.title, { flexShrink: 1 }]}>{title}</Text>
             <Text testID="agent-org-member-count" style={styles.countDense}>{t('agentOrg.agentsCount', { count: agents.length })}</Text>
           </View>
-          <Text numberOfLines={1} style={styles.treeHeadSub}>{deptPath && deptPath !== title ? `${deptPath} · ` : ''}{t('agentOrg.directMembers')}</Text>
+          <Text numberOfLines={1} style={styles.treeHeadSub}>{deptPath && deptPath !== title ? `${deptPath} · ` : ''}{p.tab === 'people' ? t('agentOrg.people.sub') : t('agentOrg.directMembers')}</Text>
         </View>
-        <View style={[styles.search, styles.searchFill]}>
+        {p.onTab ? (
+          <View style={styles.segTabs} accessibilityRole="tablist" testID="agent-org-dept-tabs">
+            {(['agents', 'people'] as const).map(k => (
+              <Pressable key={k} accessibilityRole="tab" accessibilityState={{ selected: p.tab === k }} aria-selected={p.tab === k} onPress={() => p.onTab!(k)} testID={`agent-org-dept-tab-${k}`}
+                style={[styles.segTab, p.tab === k && styles.segTabOn]}>
+                <Ionicons name={k === 'agents' ? 'sparkles-outline' : 'people-outline'} size={14} color={p.tab === k ? colors.text : colors.textMuted} />
+                <Text style={[styles.segTabText, p.tab === k && styles.segTabTextOn]}>{k === 'agents' ? t('agentOrg.tab.agents') : t('agentOrg.tab.people')}</Text>
+              </Pressable>
+            ))}
+          </View>
+        ) : null}
+        {p.tab !== 'people' ? <View style={[styles.search, styles.searchFill]}>
           <Ionicons name="search-outline" size={15} color={colors.textMuted} />
           <TextInput testID="agent-org-member-search" value={query} onChangeText={setQuery} placeholder={t('agentOrg.searchAgents')} accessibilityLabel={t('agentOrg.searchAgents')} placeholderTextColor={colors.textMuted} style={[styles.searchInput, { minHeight: 34, paddingVertical: 0 }]} />
-        </View>
-        {p.focus === null && filtered.length > 0 && p.onBulkAssign && p.data.departments.length > 0 ? (
+        </View> : null}
+        {p.tab !== 'people' && p.focus === null && filtered.length > 0 && p.onBulkAssign && p.data.departments.length > 0 ? (
           <View style={styles.bulkAction}>
             {needle ? <Text testID="agent-org-bulk-count" style={styles.note}>{t('agentOrg.bulkScope', { count: filtered.length })}</Text> : null}
             <OrgAction label={t('agentOrg.bulkAssign', { count: filtered.length })} disabled={!!p.bulkBusy} testID="agent-org-bulk-assign" onPress={() => setBulkOpen(true)} compact />
@@ -602,7 +621,8 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
         options={[{ id: null, label: t('agentOrg.unowned'), testID: 'agent-org-move-dept-unassigned' }, ...flattenTree(orgTree(p.data)).map(row => ({ id: row.dept.id, label: deptPathLabel(orgTree(p.data), row.dept.id), testID: `agent-org-move-dept-${row.dept.id}` }))]}
         selected={moving.departmentId}
         onPick={id => { const agent = moving; setMoving(null); if (id !== agent.departmentId) p.onMove!(agent.nodeId, id); }} /> : null}
-      <ScrollView ref={memberScroll} testID="agent-org-member-list" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.md }} keyboardShouldPersistTaps="handled">
+      {p.tab === 'people' ? <View style={{ flex: 1, minHeight: 0 }} testID="agent-org-dept-people">{p.people}</View> : null}
+      {p.tab !== 'people' ? <ScrollView ref={memberScroll} testID="agent-org-member-list" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.md }} keyboardShouldPersistTaps="handled">
         {children.map(child => (
           <Pressable key={child.id} testID={`agent-org-child-${child.id}`} accessibilityRole="button" onPress={() => p.onFocus(child.id)}
             style={({ hovered, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [styles.agentRowFill, (hovered || pressed) && { backgroundColor: colors.rowHover }]}>
@@ -618,7 +638,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
           <Text style={styles.note}>{t(agents.length ? 'agentOrg.noResults' : 'agentOrg.noAgents')}</Text>
         </View>)}
         {hidden > 0 ? <Text testID="agent-org-more" style={[styles.note, { padding: spacing.md }]}>{t('agentOrg.moreAgents', { count: hidden })}</Text> : null}
-      </ScrollView>
+      </ScrollView> : null}
     </View>
   );
   return (
@@ -876,6 +896,11 @@ const makeStyles = () => StyleSheet.create({
   iconAction: { width: 28, height: 28, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   departmentRowDense: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingRight: spacing.xs, marginBottom: 1, borderRadius: radius.item },
   countSlot: { width: 32, height: 28, justifyContent: 'center' },
+  segTabs: { flexDirection: 'row', backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: 3, gap: 2 },
+  segTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.item },
+  segTabOn: { backgroundColor: colors.card },
+  segTabText: { color: colors.textMuted, fontSize: typeScale.small },
+  segTabTextOn: { color: colors.text, fontWeight: '600' },
   countSlotMore: { position: 'absolute', right: 0, top: 0 },
   countDense: { color: colors.textMuted, fontSize: typeScale.small - 1, fontVariant: ['tabular-nums'], minWidth: 28, textAlign: 'right', paddingRight: spacing.xs },
   detailFill: { flex: 1, minHeight: 0, minWidth: 0 },

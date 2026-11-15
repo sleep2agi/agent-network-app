@@ -10,6 +10,8 @@
 //   ⑥ Agent 行悬停出「移动到…」→ 选部门 → PUT 写 Hub,行离开「未归属」
 //   ⑦ 点 Agent 行 → 组织页里打开它的节点页,落在「权限」;「← 组织」回来,部门选择还在
 //   ⑧ 侧栏「架构图」:概览 + 四个大数字 + 每个根部门一栏
+//   ⑩ 部门详情「Agent / 成员」页签:成员页是这个部门的人(负责人 + 直属成员 + 调动),不再有第二棵树;
+//      「成员与权限」里也不再嵌部门树
 //   ⑨ 下钻:点部门 → 以它为根重画(面包屑可回);叶子部门是 Agent 卡片墙;「在列表中查看」回列表
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
@@ -43,7 +45,8 @@ const fixture = () => {
     if (p === '/api/dm/threads') return { ok: true, threads: [] };
     if (p === '/api/status') return { ok: true, sessions: [{ alias: '基建甲', status: 'idle', agent: 'claude-code', runtime: 'agent-node', node_id: 'n_100', updated_at: now }] };
     if (p === '/api/nodes') return { ok: true, nodes: [{ node_id: 'n_100', alias: '基建甲', owner_user_id: 'u_me', permission_mode: 'default', department_id: 'd_k5', lifecycle_state: 'active', viewer_can: { permission_mode: true } }] };
-    if (p === `/api/networks/${NET}/departments`) return { ok: true, departments: departments.map(d => ({ ...d, leader_user_id: null, viewer_can: { manage: true, create_child: true }, member_count: 0 })), members: [] };
+    if (p === `/api/networks/${NET}/departments`) return { ok: true, departments: departments.map(d => ({ ...d, leader_user_id: d.id === 'd_k5' ? 'u_li' : null, viewer_can: { manage: true, create_child: true }, member_count: 0 })), members: [{ user_id: 'u_li', department_id: 'd_k5' }, { user_id: 'u_wang', department_id: 'd_k5' }] };
+    if (p === `/api/networks/${NET}/members`) return { ok: true, members: [{ user_id: 'u_me', username: 'admin', role: 'owner' }, { user_id: 'u_li', username: 'lisi', display_name: '李四', role: 'member' }, { user_id: 'u_wang', username: 'wangwu', display_name: '王五', role: 'member' }] };
     if (p === `/api/networks/${NET}/humans`) return { ok: true, humans: [{ user_id: 'u_me', username: 'admin' }] };
     if (/\/nodes\/[^/]+\/department$/.test(p) && method === 'PUT') { window.__puts.push({ p, body }); return { ok: true }; }
     if (p === '/api/requirements/people/directory') return { ok: true, people: [{ user_id: 'u_me', username: 'admin', agents: [...mine, ...assigned] }], agents_without_owner: [agent('神明', 2, null), agent('实习开源运营牛', 5, null)], has_more: false, next_offset: null, agent_department_supported: true };
@@ -170,6 +173,26 @@ const open = async (theme, ctx0) => {
   record('⑧ 架构图:每个根部门一栏(TMAI / A 站 / ANet)', cols === 3, cols);
   record('⑧ 架构图:子部门挂在根部门下', await page.locator('[data-testid="org-showcase-col-d_tmai"] [data-testid="org-showcase-dept-d_k5"]').count() === 1, null);
   record('⑧ 架构图:未归属是最后一张虚线卡', await page.locator('[data-testid="org-showcase-unassigned"]').count() === 1, null);
+  // ⑩ 部门详情的「成员」页签
+  await page.locator('[data-testid="agent-org-dept-d_k5"]').click();
+  await page.waitForTimeout(300);
+  await page.locator('[data-testid="agent-org-dept-tab-people"]').click();
+  await page.locator('[data-testid="org-detail-members"]').waitFor();
+  await page.waitForTimeout(300);
+  await page.screenshot({ path: `${OUT}/org-dept-people.png` });
+  const people = await page.locator('[data-testid="agent-org-dept-people"]').innerText();
+  record('⑩「成员」页签:这个部门的人 + 负责人', people.includes('李四') && people.includes('王五') && people.includes('负责人'), people.slice(0, 120));
+  record('⑩ 成员页里没有第二棵部门树', await page.locator('[data-testid="org-tree"]').count() === 0 && await page.locator('[data-testid="org-desk-move-wangwu"]').count() === 1, null);
+  await page.locator('[data-testid="agent-org-dept-d_k4"]').click();
+  await page.waitForTimeout(300);
+  record('⑩ 换部门仍停在「成员」页签', await page.locator('[data-testid="agent-org-dept-tab-people"]').getAttribute('aria-selected') === 'true', null);
+  await page.locator('[data-testid="agent-org-dept-tab-agents"]').click();
+  await page.waitForTimeout(200);
+  await page.locator('[data-testid="agent-org-nav-members"]').click();
+  await page.waitForTimeout(500);
+  record('⑩「成员与权限」里不再嵌部门树', await page.locator('[data-testid="org-group"]').count() === 0 && await page.locator('[data-testid="user-management"]').count() === 1, null);
+  await page.locator('[data-testid="agent-org-nav-chart"]').click();
+  await page.waitForTimeout(300);
   // ⑨ 下钻(管理员「点击这里能下钻吗」)
   await page.locator('[data-testid="org-showcase-dept-d_tmai"]').click();
   await page.waitForTimeout(300);

@@ -13,6 +13,7 @@ import { t } from './i18n';
 import type { HubConfig } from './api';
 import AgentOrgScreen from './AgentOrgScreen';
 import UserManagementPanel from './UserManagementPanel';
+import OrgDeptPeople from './OrgDeptPeople';
 import { fetchAuthMe } from './user-admin-api';
 import { canManageUsers, type AuthMe } from './user-admin';
 
@@ -35,13 +36,15 @@ export default function OrgWorkspace({ cfg, onOpenScheduled }: { cfg: HubConfig;
   }, [cfg]);
   const canManage = canManageUsers(authMe, networkId);
   const scope = `${cfg.serverUrl}|${authMe?.user?.user_id ?? ''}|${networkId ?? ''}`;
+  const networkName = (authMe as any)?.networks?.find((n: any) => n.network_id === networkId)?.network_name || networkId || '';
   return (
     <View style={styles.shell} testID="org-workspace">
       {/* 管理员 2026-11-15「做的更好一下」:左边整条侧栏(标题「组织」+「成员与权限」+ 部门树),右边内容;不再套标题行和页签。 */}
       <View style={[styles.root, openAlias ? styles.hidden : null]}>
         <AgentOrgScreen cfg={cfg} networkId={networkId} phone={false} canManageStructure={canManage} fullWidth onOpenAgent={setOpenAlias}
           title={t('nav.org')}
-          renderMembers={canManage ? () => <UserManagementPanel key={scope} cfg={cfg} me={authMe} networkId={networkId} /> : undefined} />
+          renderMembers={canManage ? () => <UserManagementPanel key={scope} cfg={cfg} me={authMe} networkId={networkId} hideOrg /> : undefined}
+          renderPeople={canManage && networkId ? (deptId, onSelect) => <OrgDeptPeople key={scope} cfg={cfg} networkId={networkId} networkName={networkName} deptId={deptId} onSelect={onSelect} /> : undefined} />
       </View>
       {openAlias ? (
         <View style={styles.detail} testID="org-agent-detail">
