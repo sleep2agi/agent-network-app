@@ -437,11 +437,19 @@ type DeskDialog =
   | { kind: 'addMembers'; dept: DeptKey }
   | { kind: 'moveMember'; userId: string };
 
-export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onChanged, head }: Common) {
+/**
+ * embed(管理员 2026-11-15「这个 UI/UX 体验非常不好」—— 「成员与权限」里又嵌了一棵部门树,和左边侧栏的树并排两棵):
+ * 一级栏「组织」里,部门由左侧栏选;这里只画选中部门的「人」那一半(负责人 / 部门群 / 直属成员 + 调动 / 设为负责人 / 移出),
+ * 不画自己的树、标题行和子部门卡(侧栏都有)。
+ */
+export type OrgPanelEmbed = { selected: DeptKey; onSelect: (id: DeptKey) => void };
+export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onChanged, head, embed }: Common & { embed?: OrgPanelEmbed }) {
   const perms = useMemo(() => orgPerms(org, head?.managed ?? null), [org, head?.managed]);
   const groupsOn = useGroupSupport(cfg, networkId);
   // 负责人:默认选中自己负责的第一个部门;树上本部门以外的(含网络根)灰掉、点不了。
-  const [sel, setSel] = useState<DeptKey>(() => (head ? managedRoots(org, head.managed)[0]?.id ?? null : null));
+  const [selState, setSelState] = useState<DeptKey>(() => (head ? managedRoots(org, head.managed)[0]?.id ?? null : null));
+  const sel = embed ? embed.selected : selState;
+  const setSel = embed ? embed.onSelect : setSelState;
   const [tab, setTab] = useState<'members' | 'tasks' | 'agents'>('members');
   const [collapsed, setCollapsed] = useState<Set<string>>(new Set());
   const [q, setQ] = useState('');
@@ -567,8 +575,8 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
   return (
     // 外框是设置卡片(SettingsGroup)画的,这里只管左右两栏。
     // 负责人模式在「管理本部门」弹窗里,铺满弹窗的高度;管理员在设置卡片里,照旧最少 440。
-    <View style={[{ flexDirection: 'row', minHeight: 440 }, head ? { flex: 1 } : null]} testID="org-desktop">
-      <View style={{ width: 240, borderRightWidth: 1, borderRightColor: colors.border }} testID="org-tree">
+    <View style={[{ flexDirection: 'row', minHeight: embed ? 0 : 440 }, head || embed ? { flex: 1 } : null]} testID="org-desktop">
+      {!embed ? <View style={{ width: 240, borderRightWidth: 1, borderRightColor: colors.border }} testID="org-tree">
         <View style={{ padding: spacing.sm }}>
           <TextInput value={q} onChangeText={setQ} placeholder="搜索部门或成员" placeholderTextColor={colors.textMuted} accessibilityLabel="搜索部门或成员" testID="org-search"
             style={{ height: 32, paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.inputBg, color: colors.text, fontSize: typeScale.small, ...(Platform.OS === 'web' ? { outlineStyle: 'none' } : null) } as object} />
@@ -595,9 +603,9 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
           {perms.canCreateUnder(sel) ? btn('+ 新建部门', () => openForm('create'), 'org-new-dept', 'accent') : null}
           <Text style={{ color: colors.textMuted, fontSize: 11 }}>{org.departments.length} 个部门</Text>
         </View>
-      </View>
+      </View> : null}
       <View style={{ flex: 1, minWidth: 0 }} testID="org-detail">
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+        {!embed ? <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.lg, borderBottomWidth: 1, borderBottomColor: colors.border }}>
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text style={{ color: colors.textMuted, fontSize: 11 }} numberOfLines={1} testID="org-detail-crumb">{[networkName, ...pathTo(org, sel).slice(0, -1).map(d => d.name)].join(' › ')}</Text>
             <Text style={{ color: colors.text, fontSize: typeScale.title, fontWeight: weight.strong }} numberOfLines={1} testID="org-detail-name">{sel ? dept?.name : `${networkName}(未分配部门的成员)`}</Text>
@@ -609,7 +617,7 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
               {btn('删除', () => void run(() => deleteDepartment(cfg, networkId, dept.id)), 'org-detail-delete', 'danger', !!blocker || busy)}
             </>
           ) : null}
-        </View>
+        </View> : null}
         {head && sel ? (
           // 负责人:成员 / 任务 / Agent 三个页签(任务按 department_id 筛;Agent 只读状态与健康)。
           <View style={{ flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingTop: spacing.sm, borderBottomWidth: 1, borderBottomColor: colors.border }} accessibilityRole="tablist" testID="org-head-tabs">
@@ -626,7 +634,7 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
         ) : (
         <ScrollView style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.lg, gap: spacing.lg }}>
           {error && !dialog ? <Text style={{ color: colors.failed }} accessibilityRole="alert" testID="org-error">{error}</Text> : null}
-          {dept && blocker && perms.canManage(dept.id) ? <Text style={{ color: colors.textMuted, fontSize: 11 }} testID="org-detail-delete-reason">部门里还有{blocker.children ? ` ${blocker.children} 个子部门` : ''}{blocker.children && blocker.members ? '、' : ''}{blocker.members ? ` ${blocker.members} 个成员` : ''},先移走才能删除</Text> : null}
+          {!embed && dept && blocker && perms.canManage(dept.id) ? <Text style={{ color: colors.textMuted, fontSize: 11 }} testID="org-detail-delete-reason">部门里还有{blocker.children ? ` ${blocker.children} 个子部门` : ''}{blocker.children && blocker.members ? '、' : ''}{blocker.members ? ` ${blocker.members} 个成员` : ''},先移走才能删除</Text> : null}
           {dept ? (
             <View style={{ gap: spacing.sm }}>
               <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium }}>负责人</Text>
@@ -640,7 +648,7 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
           {dept && groupsOn && canManageDeptGroup(head?.managed ?? null, dept.id) ? (
             <DeptGroupSection key={dept.id} cfg={cfg} networkId={networkId} deptId={dept.id} deptName={dept.name} managed={head?.managed ?? null} people={people} desktop />
           ) : null}
-          <View style={{ gap: spacing.sm }}>
+          {!embed ? <View style={{ gap: spacing.sm }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={{ flex: 1, color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium }}>子部门 {kids.length}</Text>
               {perms.canCreateUnder(sel) ? btn('+ 新建子部门', () => openForm('create'), 'org-detail-add-dept', 'accent') : null}
@@ -654,7 +662,7 @@ export function OrgDesktopPanel({ cfg, networkId, networkName, org, people, onCh
                 </Pressable>
               ))}
             </View>
-          </View>
+          </View> : null}
           <View style={{ gap: spacing.sm }}>
             <View style={{ flexDirection: 'row', alignItems: 'center' }}>
               <Text style={{ flex: 1, color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium }}>{sel ? '直属成员' : '未分配部门的成员'} {mine.length}</Text>

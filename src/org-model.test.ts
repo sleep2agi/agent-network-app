@@ -75,7 +75,7 @@ ck('错误文案:同级重名', orgErrorText('department_name_taken') === '同�
 
 console.log('# 接线');
 const um = src('UserManagementPanel.tsx'), agents = src('AgentsScreen.tsx'), chart = src('OrgChart.tsx');
-ck('用户管理:有部门接口才出现;手机是一行「成员与部门」,桌面是左树右详情', /\{org && members \? \(\s*phone \?/.test(um) && um.includes('testID="org-open"') && um.includes('<OrgDesktopPanel'));
+ck('用户管理:有部门接口才出现;手机是一行「成员与部门」,桌面是左树右详情', /\{org && members && !hideOrg \? \(\s*phone \?/.test(um) && um.includes('testID="org-open"') && um.includes('<OrgDesktopPanel'));
 ck('手机全屏页:底部「添加成员 | 添加子部门 | 更多」', ["'添加成员'", "'添加子部门'", "'更多'"].every(k => chart.includes(k)) && chart.includes('testID="org-bottom-bar"'));
 ck('添加子部门表单:部门名称* / 上级部门 / 部门 ID / 部门负责人', ['部门名称', '上级部门', '部门 ID', '部门负责人', '请输入否则自动生成'].every(k => chart.includes(k)));
 // 部门群(RFC-042,#457 第 4 步)起做了:但两处入口都要过功能门(旧 Hub 没有群接口 → 不出现)和权限。
