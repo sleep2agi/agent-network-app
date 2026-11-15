@@ -1,117 +1,154 @@
 // 「组织 → 架构图」(管理员 2026-11-15「组织架构图做好看一点，还需要有那种宣传效果」)。
 //
 // 能直接截图拿去宣传的一页:
-//   ① 品牌色横幅:一句标语 + 四个大数字(Agent / 部门 / 运行中 / 负责人)+ 头像墙;
-//   ② 架构树:顶上「组织」根节点,一条总线连到每个根部门一栏;根部门是一张带主题色的卡(头像叠、人数、运行数),
-//      子部门(任意层)挂在下面,竖线 + 短横线连着;「未归属」是最后一栏的虚线卡。
-//   ③ 点任何部门卡 → 回到列表视图、选中那个部门(onOpenDept)。
-// 数据只用组织页已有的那份(org-showcase-model.ts),不多读接口。颜色:横幅和每栏主题色是品牌色,浅深色都用同一组。
-import { useState } from 'react';
-import { Platform, Pressable, ScrollView, StyleSheet, View, type ViewStyle } from 'react-native';
+//   ① 顶部概览:一句标语 + 四个大数字(Agent / 部门 / 运行中 / 负责人)+ 头像墙;
+//   ② 架构树:顶上根节点,一条总线连到每个子部门一栏;每栏是一张带主题色的卡(头像叠、人数、运行数),
+//      下级部门(任意层)挂在下面;整个组织那一层「未归属」是最后一栏的虚线卡。
+//   ③ 下钻(管理员「点击这里能下钻吗」):点部门卡 / 下级部门 → 以它为根重画(面包屑「组织 › TMAI › …」能回去);
+//      到了没有下级部门的部门,画它的 Agent 卡片墙(点卡片打开该节点页)。「在列表中查看」回到列表视图。
+// 颜色(管理员「这个蓝色 AI 感太重了」):概览不再是蓝青渐变,改成跟页面同一套的卡片面 + 正文色;
+//   每栏主题色是低饱和的大地色系(org-showcase-model.ts DEPT_HUES)。
+// 数据只用组织页已有的那份,不多读接口。
+import { useEffect, useState } from 'react';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, radius, spacing, type as typeScale } from './theme';
 import { useTranslation } from './i18n-react';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
-import { pickAvatars, showcaseColumns, showcaseStats, type ShowcaseColumn } from './org-showcase-model';
+import { deptTrail, isRunning, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats, type ShowcaseColumn } from './org-showcase-model';
 
 /** 栏宽跟着可用宽度走(放得下就不横向滚),夹在 MIN..MAX 之间;实在放不下才横向滚。 */
 const COL_MIN = 188;
 const COL_MAX = 260;
 const COL_GAP = 20;
-const HERO_GRADIENT = 'linear-gradient(135deg, #0b2f73 0%, #1b65db 48%, #0891b2 100%)';
-const HERO_BASE = '#1b65db';
-const ON_HERO = '#ffffff';
-
-function gradient(css: string, base: string): ViewStyle {
-  return Platform.OS === 'web'
-    ? ({ backgroundColor: base, backgroundImage: css } as ViewStyle)
-    : ({ backgroundColor: base, experimental_backgroundImage: css } as ViewStyle);
-}
+/** 叶子部门的 Agent 卡片墙:一页最多画这么多,余下的给「还有 N 个」。 */
+const AGENT_CAP = 60;
 
 /** hex + 透明度(两位十六进制)。 */
 const alpha = (hex: string, a: number) => `${hex}${Math.round(a * 255).toString(16).padStart(2, '0')}`;
 
-export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent[]; title: string; onOpenDept: (id: string | null) => void }) {
+type StatIcon = 'people-outline' | 'git-network-outline' | 'pulse-outline' | 'person-outline';
+
+export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent[]; title: string; onOpenDept: (id: string | null) => void; onOpenAgent?: (alias: string) => void }) {
   const { t } = useTranslation();
-  const stats = showcaseStats(p.data, p.placed);
-  const columns = showcaseColumns(p.data, p.placed);
-  const cloud = pickAvatars(p.placed, 9);
-  const n = columns.length + (stats.unassigned > 0 ? 1 : 0);
+  const [rootId, setRootId] = useState<string | null>(null);
+  // 部门被删 / 换网络后,停在一个不存在的部门上 → 回到整个组织。
+  useEffect(() => { if (rootId && !p.data.departments.some(d => d.id === rootId)) setRootId(null); }, [rootId, p.data]);
+  const trail = deptTrail(p.data, rootId);
+  const here = trail[trail.length - 1] ?? null;
+  const stats = showcaseStats(p.data, p.placed, rootId);
+  const columns = showcaseColumns(p.data, p.placed, { rootId });
+  const scoped = scopedPlaced(p.data, p.placed, rootId);
+  const cloud = pickAvatars(scoped, 9);
+  const showUnassigned = rootId === null && stats.unassigned > 0;
+  const n = columns.length + (showUnassigned ? 1 : 0);
   const [avail, setAvail] = useState(0);
-  const COL_W = Math.round(Math.max(COL_MIN, Math.min(COL_MAX, avail && n ? (avail - Math.max(0, n - 1) * COL_GAP) / n : COL_MAX)));
-  const rowW = n * COL_W + Math.max(0, n - 1) * COL_GAP;
+  // 一行放得下 → 树形(总线 + 竖线);放不下(比如 TMAI 下面 9 个部门)→ 换成网格,一行 fit 个,不横向滚(横向滚会把根节点滚出视野)。
+  const fit = avail ? Math.max(1, Math.floor((avail + COL_GAP) / (COL_MIN + COL_GAP))) : n;
+  const grid = n > fit;
+  const perRow = grid ? fit : n;
+  const COL_W = Math.floor(Math.max(grid ? 0 : COL_MIN, Math.min(COL_MAX, avail && perRow ? (avail - Math.max(0, perRow - 1) * COL_GAP) / perRow : COL_MAX)));
+  const rowW = grid ? avail : n * COL_W + Math.max(0, n - 1) * COL_GAP;
+  const drill = (id: string) => setRootId(id);
   return (
     <ScrollView testID="org-showcase" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={styles.page}>
-      <View testID="org-showcase-hero" style={[styles.hero, gradient(HERO_GRADIENT, HERO_BASE)]}>
+      <View testID="org-showcase-hero" style={styles.hero}>
         <View style={styles.heroTop}>
           <View style={{ flex: 1, minWidth: 240, gap: spacing.sm }}>
-            <Text style={styles.kicker}>{t('agentOrg.showcase.kicker')}</Text>
-            <Text style={styles.heroTitle}>{t('agentOrg.showcase.headline')}</Text>
-            <Text style={styles.heroSub}>{t('agentOrg.showcase.sub', { agents: stats.agents, departments: stats.departments, running: stats.running })}</Text>
+            <Text style={styles.kicker}>{here ? t('agentOrg.showcase.kickerDept') : t('agentOrg.showcase.kicker')}</Text>
+            <Text style={styles.heroTitle}>{here ? here.name : t('agentOrg.showcase.headline')}</Text>
+            <Text style={styles.heroSub}>{here
+              ? t('agentOrg.showcase.subDept', { agents: stats.agents, departments: stats.departments, running: stats.running })
+              : t('agentOrg.showcase.sub', { agents: stats.agents, departments: stats.departments, running: stats.running })}</Text>
           </View>
           {cloud.aliases.length ? <View style={styles.cloud} testID="org-showcase-cloud">
             {cloud.aliases.map((alias, i) => (
-              <View key={alias} style={[styles.cloudAvatar, i > 0 && { marginLeft: -14 }]}><AliasAvatar alias={alias} size={44} /></View>
+              <View key={alias} style={[styles.cloudAvatar, i > 0 && { marginLeft: -12 }]}><AliasAvatar alias={alias} size={40} /></View>
             ))}
-            {cloud.more ? <View style={[styles.cloudAvatar, styles.cloudMore, { marginLeft: -14 }]}><Text style={styles.cloudMoreText}>+{cloud.more}</Text></View> : null}
+            {cloud.more ? <View style={[styles.cloudAvatar, styles.cloudMore, { marginLeft: -12 }]}><Text style={styles.cloudMoreText}>+{cloud.more}</Text></View> : null}
           </View> : null}
         </View>
         <View style={styles.stats}>
-          <Stat value={stats.agents} label={t('agentOrg.showcase.agents')} icon="sparkles-outline" testID="org-showcase-stat-agents" />
+          <Stat value={stats.agents} label={t('agentOrg.showcase.agents')} icon="people-outline" testID="org-showcase-stat-agents" />
           <Stat value={stats.departments} label={t('agentOrg.showcase.departments')} icon="git-network-outline" testID="org-showcase-stat-departments" />
-          <Stat value={stats.running} label={t('agentOrg.showcase.running')} icon="pulse-outline" testID="org-showcase-stat-running" />
-          <Stat value={stats.owners} label={t('agentOrg.showcase.owners')} icon="people-outline" testID="org-showcase-stat-owners" />
+          <Stat value={stats.running} label={t('agentOrg.showcase.running')} icon="pulse-outline" testID="org-showcase-stat-running" live />
+          <Stat value={stats.owners} label={t('agentOrg.showcase.owners')} icon="person-outline" testID="org-showcase-stat-owners" />
         </View>
       </View>
 
       <View style={styles.chartCard} testID="org-showcase-chart" onLayout={e => setAvail(Math.max(0, e.nativeEvent.layout.width - 2 * spacing.lg - 2))}>
         <View style={styles.chartHead}>
-          <Text style={styles.chartTitle}>{t('agentOrg.showcase.chartTitle')}</Text>
-          <Text style={styles.chartHint}>{t('agentOrg.showcase.chartHint')}</Text>
-        </View>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, minWidth: '100%', justifyContent: 'center' }}>
-          <View style={{ width: Math.max(rowW, COL_W) }}>
-            <View style={styles.rootWrap}>
-              <View style={[styles.root, gradient(HERO_GRADIENT, HERO_BASE)]} testID="org-showcase-root">
-                <Ionicons name="git-network-outline" size={18} color={ON_HERO} />
-                <Text style={styles.rootText}>{p.title}</Text>
-                <Text style={styles.rootCount}>{stats.agents}</Text>
-              </View>
-              {n > 0 ? <View style={styles.rootStem} /> : null}
-            </View>
-            {n > 1 ? <View style={[styles.bus, { left: COL_W / 2, width: rowW - COL_W }]} /> : null}
-            <View style={{ flexDirection: 'row', gap: COL_GAP, alignItems: 'flex-start' }}>
-              {columns.map(col => <Column key={col.dept.id} col={col} width={COL_W} onOpen={p.onOpenDept} />)}
-              {stats.unassigned > 0 ? (
-                <View style={{ width: COL_W }}>
-                  <View style={[styles.stem, { backgroundColor: colors.border }]} />
-                  <Pressable testID="org-showcase-unassigned" accessibilityRole="button" onPress={() => p.onOpenDept(null)}
-                    style={({ hovered }: { pressed: boolean; hovered?: boolean }) => [styles.unassigned, hovered && { borderColor: colors.blocked }]}>
-                    <Ionicons name="file-tray-outline" size={18} color={colors.blocked} />
-                    <View style={{ flex: 1, minWidth: 0 }}>
-                      <Text style={styles.deptName}>{t('agentOrg.unowned')}</Text>
-                      <Text style={styles.deptMeta}>{t('agentOrg.agentsCount', { count: stats.unassigned })}</Text>
-                    </View>
-                    <Text style={{ color: colors.blocked, fontSize: typeScale.small, fontWeight: '600' }}>{t('agentOrg.showcase.assign')}</Text>
-                  </Pressable>
-                </View>
-              ) : null}
-            </View>
+          <View style={styles.crumbs} testID="org-showcase-crumbs">
+            <Crumb label={p.title} active={!here} onPress={() => setRootId(null)} testID="org-showcase-crumb-root" />
+            {trail.map((d, i) => <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
+              <Ionicons name="chevron-forward" size={13} color={colors.textMuted} />
+              <Crumb label={d.name} active={i === trail.length - 1} onPress={() => setRootId(d.id)} testID={`org-showcase-crumb-${d.id}`} />
+            </View>)}
           </View>
-        </ScrollView>
+          <View style={{ flex: 1 }} />
+          {here ? <Pressable testID="org-showcase-open-list" accessibilityRole="button" onPress={() => p.onOpenDept(here.id)}
+            style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.linkBtn, (hovered || pressed) && { backgroundColor: colors.rowHover }]}>
+            <Ionicons name="list-outline" size={14} color={colors.textSecondary} />
+            <Text style={styles.linkText}>{t('agentOrg.showcase.openList')}</Text>
+          </Pressable> : <Text style={styles.chartHint}>{t('agentOrg.showcase.chartHint')}</Text>}
+        </View>
+        {n === 0 && here ? (
+          // 叶子部门:Agent 卡片墙。
+          <AgentWall agents={scoped} onOpenAgent={p.onOpenAgent} />
+        ) : (
+          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, minWidth: '100%', justifyContent: 'center' }}>
+            <View style={{ width: Math.max(rowW, COL_W) }}>
+              <View style={styles.rootWrap}>
+                <View style={styles.root} testID="org-showcase-root">
+                  <Ionicons name={here ? 'business-outline' : 'git-network-outline'} size={16} color={colors.bg} />
+                  <Text style={styles.rootText}>{here ? here.name : p.title}</Text>
+                  <Text style={styles.rootCount}>{stats.agents}</Text>
+                </View>
+                {n > 0 ? <View style={styles.rootStem} /> : null}
+              </View>
+              {n > 1 && !grid ? <View style={[styles.bus, { left: COL_W / 2, width: rowW - COL_W }]} /> : null}
+              <View testID={grid ? 'org-showcase-grid' : 'org-showcase-row'} style={{ flexDirection: 'row', flexWrap: grid ? 'wrap' : 'nowrap', gap: COL_GAP, rowGap: grid ? spacing.md : COL_GAP, alignItems: 'flex-start' }}>
+                {columns.map(col => <Column key={col.dept.id} col={col} width={COL_W} onOpen={drill} stem={!grid} />)}
+                {showUnassigned ? (
+                  <View style={{ width: COL_W }}>
+                    <View style={[styles.stem, { backgroundColor: colors.border }]} />
+                    <Pressable testID="org-showcase-unassigned" accessibilityRole="button" onPress={() => p.onOpenDept(null)}
+                      style={({ hovered }: { pressed: boolean; hovered?: boolean }) => [styles.unassigned, hovered && { borderColor: colors.blocked }]}>
+                      <Ionicons name="file-tray-outline" size={18} color={colors.blocked} />
+                      <View style={{ flex: 1, minWidth: 0 }}>
+                        <Text style={styles.deptName}>{t('agentOrg.unowned')}</Text>
+                        <Text style={styles.deptMeta}>{t('agentOrg.agentsCount', { count: stats.unassigned })}</Text>
+                      </View>
+                      <Text style={{ color: colors.blocked, fontSize: typeScale.small, fontWeight: '600' }}>{t('agentOrg.showcase.assign')}</Text>
+                    </Pressable>
+                  </View>
+                ) : null}
+              </View>
+            </View>
+          </ScrollView>
+        )}
       </View>
       <Text style={styles.footer}>{t('agentOrg.showcase.footer')}</Text>
     </ScrollView>
   );
 }
 
-function Stat(p: { value: number; label: string; icon: 'sparkles-outline' | 'git-network-outline' | 'pulse-outline' | 'people-outline'; testID: string }) {
+function Crumb(p: { label: string; active: boolean; onPress: () => void; testID: string }) {
+  return <Pressable testID={p.testID} accessibilityRole="button" disabled={p.active} onPress={p.onPress}
+    style={({ hovered }: { hovered?: boolean; pressed: boolean }) => [styles.crumb, hovered && !p.active && { backgroundColor: colors.rowHover }]}>
+    <Text numberOfLines={1} style={p.active ? styles.crumbActive : styles.crumbText}>{p.label}</Text>
+  </Pressable>;
+}
+
+function Stat(p: { value: number; label: string; icon: StatIcon; testID: string; live?: boolean }) {
   return <View style={styles.stat} testID={p.testID}>
-    <View style={styles.statIcon}><Ionicons name={p.icon} size={16} color={ON_HERO} /></View>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
+      {p.live ? <View style={styles.liveDot} /> : <Ionicons name={p.icon} size={14} color={colors.textMuted} />}
+      <Text style={styles.statLabel}>{p.label}</Text>
+    </View>
     <Text style={styles.statValue}>{p.value.toLocaleString()}</Text>
-    <Text style={styles.statLabel}>{p.label}</Text>
   </View>;
 }
 
@@ -127,30 +164,34 @@ function AvatarStack(p: { aliases: string[]; more: number; size: number; ring: s
   </View>;
 }
 
-function Column(p: { col: ShowcaseColumn; width: number; onOpen: (id: string) => void }) {
+function Column(p: { col: ShowcaseColumn; width: number; onOpen: (id: string) => void; stem: boolean }) {
   const { t } = useTranslation();
   const { col } = p;
   return <View style={{ width: p.width }} testID={`org-showcase-col-${col.dept.id}`}>
-    <View style={[styles.stem, { backgroundColor: col.hue }]} />
+    {p.stem ? <View style={[styles.stem, { backgroundColor: alpha(col.hue, 0.5) }]} /> : null}
     <Pressable testID={`org-showcase-dept-${col.dept.id}`} accessibilityRole="button" accessibilityLabel={`${col.dept.name}, ${t('agentOrg.agentsCount', { count: col.total })}`} onPress={() => p.onOpen(col.dept.id)}
-      style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.deptCard, { borderTopColor: col.hue }, (hovered || pressed) && { borderColor: alpha(col.hue, 0.6), borderTopColor: col.hue }]}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <View style={[styles.deptIcon, { backgroundColor: alpha(col.hue, 0.14) }]}><Ionicons name="business-outline" size={16} color={col.hue} /></View>
-        <Text numberOfLines={1} style={[styles.deptName, { flex: 1, minWidth: 0, fontSize: typeScale.title }]}>{col.dept.name}</Text>
-      </View>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
-        <Text style={styles.deptBig}>{col.total}</Text>
-        <Text numberOfLines={1} style={[styles.deptMeta, { flexShrink: 0 }]}>{t('agentOrg.showcase.agentsShort')}</Text>
-        {col.running ? <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>{t('agentOrg.showcase.runningShort', { count: col.running })}</Text></View> : null}
-      </View>
-      <AvatarStack aliases={col.avatars} more={col.more} size={26} ring={colors.card} />
+      style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.deptCard, { borderTopColor: col.hue }, (hovered || pressed) && { borderColor: alpha(col.hue, 0.55), borderTopColor: col.hue }]}>
+      {({ hovered }: { hovered?: boolean; pressed: boolean }) => <>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <View style={[styles.deptIcon, { backgroundColor: alpha(col.hue, 0.13) }]}><Ionicons name="business-outline" size={16} color={col.hue} /></View>
+          <Text numberOfLines={1} style={[styles.deptName, { flex: 1, minWidth: 0, fontSize: typeScale.title }]}>{col.dept.name}</Text>
+          {/* 能下钻:悬停时右上角出「›」 */}
+          <Ionicons name="chevron-forward" size={15} color={hovered ? col.hue : colors.border} />
+        </View>
+        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+          <Text style={styles.deptBig}>{col.total}</Text>
+          <Text numberOfLines={1} style={[styles.deptMeta, { flexShrink: 0 }]}>{t('agentOrg.showcase.agentsShort')}</Text>
+          {col.running ? <View style={styles.livePill}><View style={styles.liveDot} /><Text style={styles.liveText}>{t('agentOrg.showcase.runningShort', { count: col.running })}</Text></View> : null}
+        </View>
+        <AvatarStack aliases={col.avatars} more={col.more} size={26} ring={colors.card} />
+      </>}
     </Pressable>
-    {col.children.length ? <View style={[styles.children, { borderLeftColor: alpha(col.hue, 0.35) }]}>
+    {col.children.length ? <View style={[styles.children, { borderLeftColor: alpha(col.hue, 0.3) }]}>
       {col.children.map(ch => (
         <View key={ch.dept.id} style={{ flexDirection: 'row', alignItems: 'center', marginLeft: (ch.depth - 1) * 14 }}>
-          <View style={[styles.branch, { backgroundColor: alpha(col.hue, 0.35) }]} />
+          <View style={[styles.branch, { backgroundColor: alpha(col.hue, 0.3) }]} />
           <Pressable testID={`org-showcase-dept-${ch.dept.id}`} accessibilityRole="button" accessibilityLabel={`${ch.dept.name}, ${t('agentOrg.agentsCount', { count: ch.total })}`} onPress={() => p.onOpen(ch.dept.id)}
-            style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.childChip, (hovered || pressed) && { borderColor: alpha(col.hue, 0.6) }]}>
+            style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.childChip, (hovered || pressed) && { borderColor: alpha(col.hue, 0.55), backgroundColor: colors.rowHover }]}>
             <View style={[styles.childDot, { backgroundColor: col.hue }]} />
             <Text numberOfLines={1} style={styles.childName}>{ch.dept.name}</Text>
             <AvatarStack aliases={ch.avatars} more={0} size={16} ring={colors.card} />
@@ -162,40 +203,70 @@ function Column(p: { col: ShowcaseColumn; width: number; onOpen: (id: string) =>
   </View>;
 }
 
+function AgentWall(p: { agents: PlacedAgent[]; onOpenAgent?: (alias: string) => void }) {
+  const { t } = useTranslation();
+  const sorted = [...p.agents].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || a.alias.localeCompare(b.alias, 'zh'));
+  const shown = sorted.slice(0, AGENT_CAP);
+  if (!shown.length) return <View testID="org-showcase-agents-empty" style={styles.wallEmpty}>
+    <Ionicons name="people-outline" size={28} color={colors.textMuted} />
+    <Text style={styles.chartHint}>{t('agentOrg.noAgents')}</Text>
+  </View>;
+  return <View testID="org-showcase-agents" style={styles.wall}>
+    {shown.map(agent => (
+      <Pressable key={agent.nodeId} testID={`org-showcase-agent-${agent.nodeId}`} accessibilityRole="button" disabled={!p.onOpenAgent} onPress={() => p.onOpenAgent?.(agent.alias)}
+        style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.agentCard, (hovered || pressed) && p.onOpenAgent && { borderColor: colors.textMuted }]}>
+        <View>
+          <AliasAvatar alias={agent.alias} size={44} />
+          {agent.lifecycleState != null ? <View style={[styles.agentDot, { backgroundColor: isRunning(agent) ? colors.running : colors.rest }]} /> : null}
+        </View>
+        <Text numberOfLines={1} style={styles.agentName}>{agent.alias}</Text>
+        <Text numberOfLines={1} style={styles.deptMeta}>{agent.ownerName ?? t('agentOrg.noOwner')}</Text>
+      </Pressable>
+    ))}
+    {sorted.length > shown.length ? <Text style={[styles.chartHint, { alignSelf: 'center' }]}>{t('agentOrg.moreAgents', { count: sorted.length - shown.length })}</Text> : null}
+  </View>;
+}
+
 const makeStyles = () => StyleSheet.create({
   page: { padding: spacing.xl, gap: spacing.xl },
-  hero: { borderRadius: radius.surface, padding: spacing.xl, gap: spacing.xl, overflow: 'hidden' },
+  // 概览:和页面同一套的卡片面(不再是蓝青渐变)。
+  hero: { borderRadius: radius.surface, padding: spacing.xl, gap: spacing.xl, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   heroTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xl },
-  kicker: { color: ON_HERO, opacity: 0.75, fontSize: typeScale.small, fontWeight: '600', letterSpacing: 1.5 },
-  heroTitle: { color: ON_HERO, fontSize: 30, lineHeight: 38, fontWeight: '600' },
-  heroSub: { color: ON_HERO, opacity: 0.85, fontSize: typeScale.title, lineHeight: 24 },
+  kicker: { color: colors.textMuted, fontSize: typeScale.small, fontWeight: '600', letterSpacing: 1.2 },
+  heroTitle: { color: colors.text, fontSize: 28, lineHeight: 36, fontWeight: '600' },
+  heroSub: { color: colors.textSecondary, fontSize: typeScale.title, lineHeight: 24 },
   cloud: { flexDirection: 'row', alignItems: 'center' },
-  cloudAvatar: { borderRadius: radius.pill, borderWidth: 2, borderColor: 'rgba(255,255,255,0.85)' },
-  cloudMore: { width: 48, height: 48, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.2)' },
-  cloudMoreText: { color: ON_HERO, fontSize: typeScale.small, fontWeight: '600' },
+  cloudAvatar: { borderRadius: radius.pill, borderWidth: 2, borderColor: colors.card },
+  cloudMore: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.subtleFill },
+  cloudMoreText: { color: colors.textSecondary, fontSize: typeScale.small, fontWeight: '600' },
   stats: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md },
-  stat: { flexGrow: 1, flexBasis: 140, padding: spacing.md, gap: 2, borderRadius: radius.control, backgroundColor: 'rgba(255,255,255,0.13)', borderWidth: 1, borderColor: 'rgba(255,255,255,0.18)' },
-  statIcon: { width: 28, height: 28, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: 'rgba(255,255,255,0.18)', marginBottom: spacing.xs },
-  statValue: { color: ON_HERO, fontSize: 32, lineHeight: 38, fontWeight: '600', fontVariant: ['tabular-nums'] },
-  statLabel: { color: ON_HERO, opacity: 0.8, fontSize: typeScale.small },
+  stat: { flexGrow: 1, flexBasis: 140, paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: spacing.xs, borderRadius: radius.control, backgroundColor: colors.subtleFill },
+  statValue: { color: colors.text, fontSize: 30, lineHeight: 36, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  statLabel: { color: colors.textMuted, fontSize: typeScale.small },
   chartCard: { borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
-  chartHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'baseline', gap: spacing.sm, padding: spacing.lg },
-  chartTitle: { color: colors.text, fontSize: typeScale.heading, fontWeight: '600' },
+  chartHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md },
+  crumbs: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2, flexShrink: 1 },
+  crumb: { paddingHorizontal: 6, paddingVertical: 3, borderRadius: radius.item },
+  crumbText: { color: colors.textSecondary, fontSize: typeScale.title },
+  crumbActive: { color: colors.text, fontSize: typeScale.heading, fontWeight: '600' },
   chartHint: { color: colors.textMuted, fontSize: typeScale.small },
+  linkBtn: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.sm, height: 30, borderRadius: radius.item },
+  linkText: { color: colors.textSecondary, fontSize: typeScale.small },
   rootWrap: { alignItems: 'center' },
-  root: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill },
-  rootText: { color: ON_HERO, fontSize: typeScale.title, fontWeight: '600' },
-  rootCount: { color: ON_HERO, fontSize: typeScale.small, fontWeight: '600', backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill, overflow: 'hidden' },
+  // 根节点:反色(正文色底 + 页面底色字),不带品牌渐变。
+  root: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.text },
+  rootText: { color: colors.bg, fontSize: typeScale.title, fontWeight: '600' },
+  rootCount: { color: colors.bg, opacity: 0.75, fontSize: typeScale.small, fontWeight: '600', fontVariant: ['tabular-nums'] },
   rootStem: { width: 2, height: 22, backgroundColor: colors.border },
   bus: { height: 2, backgroundColor: colors.border },
   stem: { width: 2, height: 22, alignSelf: 'center' },
-  deptCard: { backgroundColor: colors.card, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, borderTopWidth: 4, padding: spacing.md, gap: spacing.sm },
+  deptCard: { backgroundColor: colors.card, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, borderTopWidth: 3, padding: spacing.md, gap: spacing.sm },
   deptIcon: { width: 30, height: 30, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   deptName: { color: colors.text, fontSize: typeScale.body, fontWeight: '600' },
   deptBig: { color: colors.text, fontSize: 26, lineHeight: 30, fontWeight: '600', fontVariant: ['tabular-nums'] },
   deptMeta: { color: colors.textMuted, fontSize: typeScale.small },
   livePill: { flexDirection: 'row', alignItems: 'center', gap: 4, marginLeft: 'auto', paddingHorizontal: spacing.sm, paddingVertical: 2, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
-  liveDot: { width: 6, height: 6, borderRadius: radius.pill, backgroundColor: colors.running },
+  liveDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: colors.running },
   liveText: { color: colors.textSecondary, fontSize: typeScale.caption },
   children: { marginLeft: 18, marginTop: spacing.xs, borderLeftWidth: 2, paddingVertical: spacing.xs, gap: spacing.xs },
   branch: { width: 12, height: 2 },
@@ -204,6 +275,11 @@ const makeStyles = () => StyleSheet.create({
   childName: { flex: 1, minWidth: 0, color: colors.text, fontSize: typeScale.small },
   childCount: { color: colors.textMuted, fontSize: typeScale.caption, fontVariant: ['tabular-nums'], minWidth: 18, textAlign: 'right' },
   unassigned: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderRadius: radius.control, borderWidth: 1.5, borderStyle: 'dashed', borderColor: colors.border, backgroundColor: colors.card },
+  wall: { flexDirection: 'row', flexWrap: 'wrap', gap: spacing.md, paddingHorizontal: spacing.lg, paddingBottom: spacing.lg },
+  wallEmpty: { alignItems: 'center', justifyContent: 'center', gap: spacing.sm, paddingVertical: spacing.xl * 2 },
+  agentCard: { width: 148, alignItems: 'center', gap: 4, paddingVertical: spacing.md, paddingHorizontal: spacing.sm, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card },
+  agentDot: { position: 'absolute', right: 0, bottom: 0, width: 12, height: 12, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.card },
+  agentName: { color: colors.text, fontSize: typeScale.body, fontWeight: '600', marginTop: spacing.xs, maxWidth: '100%' },
   footer: { color: colors.textMuted, fontSize: typeScale.small, textAlign: 'center' },
 });
 let styles = makeStyles();

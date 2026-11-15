@@ -5,14 +5,42 @@
 import { childrenOf, subtreeIds, type Department } from './org-model';
 import { agentCount, orgTree, type AgentOrgData, type PlacedAgent } from './agent-org-model';
 
-/** 每个根部门一种颜色(按顺序轮换),卡片顶边和子部门竖线用它。浅深色都能看清的中等饱和度。 */
-export const DEPT_HUES = ['#1b65db', '#0891b2', '#7c3aed', '#059669', '#d97706', '#db2777', '#4f46e5', '#0d9488'] as const;
+/**
+ * 每栏一种颜色(按顺序轮换),卡片顶边和子部门竖线用它。
+ * 管理员 2026-11-15「这个蓝色 AI 感太重了」:不用高饱和的蓝紫青,换成低饱和的大地色系(石板蓝 / 鼠尾草绿 / 陶土 / 赭黄 / 梅紫 / 灰青 / 胡桃 / 橄榄)。
+ */
+export const DEPT_HUES = ['#56708c', '#5f8a6f', '#b06c4c', '#a3843a', '#80628f', '#4f8585', '#8a6b52', '#6f7f4a'] as const;
 
 export const isRunning = (a: Pick<PlacedAgent, 'lifecycleState'>): boolean => a.lifecycleState === 'active';
 
 export type ShowcaseStats = { agents: number; departments: number; running: number; owners: number; unassigned: number };
 
-export function showcaseStats(data: AgentOrgData, placed: readonly PlacedAgent[]): ShowcaseStats {
+/** 下钻(管理员 2026-11-15「点击这里能下钻吗」):rootId = null 是整个组织,否则是这个部门的子树。 */
+export function scopedPlaced(data: AgentOrgData, placed: readonly PlacedAgent[], rootId: string | null): PlacedAgent[] {
+  if (rootId === null) return [...placed];
+  const ids = subtreeIds(orgTree(data), rootId);
+  return placed.filter(a => a.departmentId !== null && ids.has(a.departmentId));
+}
+
+/** 从根到 rootId 的部门链(面包屑用);null → []。 */
+export function deptTrail(data: AgentOrgData, rootId: string | null): Department[] {
+  const byId = new Map(data.departments.map(d => [d.id, d]));
+  const out: Department[] = [];
+  for (let id = rootId, guard = 0; id && guard < 32; guard++) {
+    const d = byId.get(id);
+    if (!d) break;
+    out.unshift(d);
+    id = d.parent_id ?? null;
+  }
+  return out;
+}
+
+export function showcaseStats(data: AgentOrgData, placed: readonly PlacedAgent[], rootId: string | null = null): ShowcaseStats {
+  if (rootId !== null) {
+    const scoped = scopedPlaced(data, placed, rootId);
+    const owners = new Set(scoped.map(a => a.ownerUserId).filter((x): x is string => !!x));
+    return { agents: scoped.length, departments: subtreeIds(orgTree(data), rootId).size - 1, running: scoped.filter(isRunning).length, owners: owners.size, unassigned: 0 };
+  }
   const owners = new Set(placed.map(a => a.ownerUserId).filter((x): x is string => !!x));
   return {
     agents: placed.length,
@@ -33,13 +61,13 @@ export type ShowcaseChild = { dept: Department; depth: number; total: number; ru
 export type ShowcaseColumn = { dept: Department; hue: string; total: number; running: number; avatars: string[]; more: number; children: ShowcaseChild[] };
 
 /** 一个根部门一栏;子部门(任意层)按树序摊平挂在下面,depth 从 1 起。计数含下级。 */
-export function showcaseColumns(data: AgentOrgData, placed: readonly PlacedAgent[], opts: { rootAvatars?: number; childAvatars?: number } = {}): ShowcaseColumn[] {
+export function showcaseColumns(data: AgentOrgData, placed: readonly PlacedAgent[], opts: { rootAvatars?: number; childAvatars?: number; rootId?: string | null } = {}): ShowcaseColumn[] {
   const tree = orgTree(data);
   const inSubtree = (id: string) => {
     const ids = subtreeIds(tree, id);
     return placed.filter(a => a.departmentId !== null && ids.has(a.departmentId));
   };
-  return childrenOf(tree, null).map((root, i) => {
+  return childrenOf(tree, opts.rootId ?? null).map((root, i) => {
     const agents = inSubtree(root.id);
     const children: ShowcaseChild[] = [];
     const walk = (parent: string, depth: number, seen: Set<string>) => {

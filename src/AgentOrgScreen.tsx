@@ -246,7 +246,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
           ) : null}
           {p.fill && view === 'chart' ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-chart">
-              <OrgShowcase data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} />
+              <OrgShowcase data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />
             </View>
           ) : p.fill && view === 'members' && p.renderMembers ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-members">

@@ -1,4 +1,4 @@
-import { DEPT_HUES, pickAvatars, showcaseColumns, showcaseStats } from './org-showcase-model';
+import { DEPT_HUES, deptTrail, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats } from './org-showcase-model';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
 
 let p = 0, t = 0;
@@ -28,6 +28,15 @@ const many = Array.from({ length: 9 }, (_, i) => agent(`m${i}`, `m${i}`, 'a', nu
 const pick = pickAvatars(many, 4);
 ck('avatars: running first, then +N for the rest', pick.aliases.length === 4 && pick.aliases.every(a => Number(a.slice(1)) % 2 === 0) && pick.more === 5);
 ck('avatars: fewer than n → no +N', pickAvatars(many.slice(0, 2), 4).more === 0);
+
+// 下钻
+const sub = showcaseColumns(data, placed, { rootId: 'a' });
+ck('drill: columns are the children of the drilled department', sub.map(c => c.dept.id).join() === 'a1' && sub[0].children.map(c => c.dept.id).join() === 'a11');
+ck('drill: leaf department has no columns', showcaseColumns(data, placed, { rootId: 'a11' }).length === 0);
+const ss = showcaseStats(data, placed, 'a');
+ck('drill: stats scoped to the subtree (no unassigned)', ss.agents === 3 && ss.departments === 2 && ss.running === 2 && ss.owners === 2 && ss.unassigned === 0);
+ck('drill: scopedPlaced = agents in the subtree', scopedPlaced(data, placed, 'a1').map(a => a.alias).sort().join() === ['乙', '丙'].sort().join() && scopedPlaced(data, placed, null).length === 5);
+ck('drill: trail root → department', deptTrail(data, 'a11').map(d => d.id).join() === 'a,a1,a11' && deptTrail(data, null).length === 0);
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
