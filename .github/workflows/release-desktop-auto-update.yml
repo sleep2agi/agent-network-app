@@ -614,6 +614,14 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.537:
+            - 侧栏「分组 · 部门」：子部门里的 agent 跟着缩进，子部门标题和组里的行用一条细竖线连起来，一眼看出归属。
+            - 桌面左侧一级栏新增「组织」（在 Hub 下面）：整页的组织与权限，⌘6 直达；设置 → 外观 →「左侧栏」可以单独开关任务、定时任务、消息、Hub 设置、组织。
+            - 账号页重排：当前账号是一张主色身份卡；其他账号按 Hub 分组，行里只写用户名和网络短码，不再每行重复 Hub 地址和整串网络 id。
+            - 任务左栏的父标签可以折叠，收起状态会记住；搜索标签时不受影响。
+            - 通知页：桌面不再显示手机端的通知诊断（那些「未运行」红字在桌面上是误报）；手机上诊断默认收起成一行结论。
+            - 手机「组织与权限」的页签条撑满一行、两段等宽，和下面的卡片对齐。
+
             What's new in 0.2.536:
             - 聊天框下方「模型 / 思考深度」：现在可以**同时换模型和换档位**，一次生效（以前同时改会失败）。深度读不到时如实显示「未知」，不再拿默认值冒充。
             - 换档位只发必要的那个字段，老版本节点上也能改（以前在旧节点上会被判成「同时改两项」而拒绝）。
