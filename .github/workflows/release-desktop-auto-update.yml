@@ -614,6 +614,12 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.538:
+            - 一级栏「组织」整页重排：标题和页签一行，不再套第二层「组织管理」；整页不滚，部门树和 Agent 列表各自滚到窗口底。
+            - 部门可以折叠（会记住）；「未归属」置顶；部门列头有「+」新建部门，悬停部门出「⋯」菜单，不用先知道右键。
+            - Agent 行更紧凑：负责人放在右侧一列，头像角标显示是否在运行；悬停出「移动到…」，直接换部门。
+            - 底部「调整结构」「说明」两块收掉了，说明放到部门列底部。
+
             What's new in 0.2.537:
             - 侧栏「分组 · 部门」：子部门里的 agent 跟着缩进，子部门标题和组里的行用一条细竖线连起来，一眼看出归属。
             - 桌面左侧一级栏新增「组织」（在 Hub 下面）：整页的组织与权限，⌘6 直达；设置 → 外观 →「左侧栏」可以单独开关任务、定时任务、消息、Hub 设置、组织。
