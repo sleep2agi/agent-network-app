@@ -219,15 +219,9 @@ for (const theme of ['light', 'dark']) {
         const MIN = { '本地 Hub': 7, '外观': 4, '通知': 4, '语音输入': 3, '关于': 3 }; // #695：连接复用移进隐藏的诊断组，关于页可见行 4→3
         if (MIN[label]) checkKitRows(`${where} ${label}`, (await win.evaluate(measureKitRows, '[data-testid="settings-scroll"]')) ?? [], MIN[label]);
         if (label === '通知') {
-          // 「把下面的信息复制给维护者」要在诊断卡片上面(caption),不能在卡片下面指空。
-          const g = await win.evaluate(() => {
-            const grp = document.querySelector('[data-testid="notify-diagnostics-group"]');
-            const cap = grp?.querySelector('[data-testid="settings-kit-caption"]'), card = grp?.querySelector('[data-testid="settings-kit-card"]');
-            const foot = grp?.querySelector('[data-testid="settings-kit-footer"]');
-            return { cap: cap ? [cap.textContent, cap.getBoundingClientRect().bottom] : null, cardTop: card ? card.getBoundingClientRect().top : null, foot: foot?.textContent ?? null };
-          });
-          table.push({ where: `${where} 通知诊断说明`, caption: g.cap ? `${g.cap[0].slice(0, 14)}… bottom ${r1(g.cap[1])}` : 'none', cardTop: g.cardTop === null ? 'none' : r1(g.cardTop), footer: g.foot ?? '-' });
-          ck(`${where} 通知: 「把下面的信息…」在诊断卡片上方`, !!g.cap && /下面/.test(g.cap[0]) && g.cardTop !== null && g.cap[1] <= g.cardTop + 0.5 && !/下面/.test(g.foot ?? ''), JSON.stringify(g));
+          // 2026-11-15:通知诊断只描述手机端通知运行时;桌面上全是误报红字 ⇒ 桌面不显示这一组。
+          const has = await win.evaluate(() => !!document.querySelector('[data-testid="notify-diagnostics-group"]'));
+          ck(`${where} 通知: 桌面不显示手机端的通知诊断`, !has);
         }
         if (label === '快捷键') {
           const pads = await win.evaluate(() => [...document.querySelectorAll('[data-testid^="shortcut-group-"]')].map(t => { const c = t.closest('[data-testid="settings-kit-card"]'); return c ? t.getBoundingClientRect().left + parseFloat(getComputedStyle(t).paddingLeft) - c.getBoundingClientRect().left : null; }));
