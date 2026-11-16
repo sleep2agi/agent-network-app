@@ -1345,6 +1345,8 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   const taskWorkspace = screen.name === 'tasks' || screen.name === 'taskDetail';
   // 一级栏「组织」:整页占满右侧,不要会话侧栏。
   const orgWorkspace = screen.name === 'org';
+  // 定时任务页也不要会话侧栏(admin 2026-11-16「定时任务也丑」):左边一整列 agent 和这页无关,占掉四分之一宽度。
+  const scheduledWorkspace = screen.name === 'scheduled';
   const railHidden = useRailHidden();
   useSyncExternalStore(subscribeNodeRoles, nodeRolesVersion, nodeRolesVersion);
   // Daemon management has its own navigation; unrelated conversations should
@@ -1500,7 +1502,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
         {/* 连接状态(App战线①):不再是顶部全宽横幅,是版本号左边一个小圆点,悬停/点按看全文(ConnectivityIndicator)。 */}
         <ConnectivityIndicator placement="rail" label={`v${APP_VERSION}`} labelStyle={desktopStyles.railVersionText} style={desktopStyles.railVersion} />
       </View>
-      {!daemonWorkspace && !orgWorkspace ? <View testID="desktop-workspace-sidebar" style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
+      {!daemonWorkspace && !orgWorkspace && !scheduledWorkspace ? <View testID="desktop-workspace-sidebar" style={[desktopStyles.conversations, taskWorkspace && desktopStyles.taskSidebar]}>
         {taskWorkspace ? (
           // 任务页的左栏是筛选(全部 / 我负责的 / 按节点 / 派发记录),不是会话列表。
           <TaskFilterSidebar onNavigate={() => { if (screen.name !== 'tasks') setScreen({ name: 'tasks' }); }} />
