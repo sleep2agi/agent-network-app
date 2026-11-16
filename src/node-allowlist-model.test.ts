@@ -1,3 +1,4 @@
+import { allowlistSummary } from './node-allowlist-model';
 import { setLanguagePreference } from './i18n';
 import {
   ALWAYS_TOOLS, ANY_PERSON_ENTRY, PERMISSION_REASON_CODES, STRICT_ENTRY, allowlistErrorText, allowlistText, deptChoices, deptEntry, entryLabel, isAlwaysTool, isStrict,
@@ -64,5 +65,7 @@ ck('en: people and reasons', entryLabel(ANY_PERSON_ENTRY, choices) === 'Any pers
 ck('en: denial with hint', allowlistErrorText({ error: 'node_permission_denied', reason: 'peer_not_allowed', hint: 'h' }).includes('Hub hint: h'));
 setLanguagePreference('zh');
 
+ck('概要只报条数,不铺名单', allowlistSummary(['dept:d1', 'dept:d2', 'user:alice', 'user:bob', 'alpha', 'n_x']) === '2 个部门 · 2 位成员 · 2 个 Agent');
+ck('概要:所有成员 / 不限制', allowlistSummary(['user:*', 'alpha']) === '所有成员 · 1 个 Agent' && allowlistSummary(null) === allowlistText(null));
 console.log(`node allowlist model: ${p}/${t}`);
 if (p !== t) process.exit(1);

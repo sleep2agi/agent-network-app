@@ -3,6 +3,10 @@ import { registerTranslations } from './i18n';
 /** 节点页「权限」分区(RFC-041 + 收件白名单)。发 = 这个节点能做什么、能找谁;收 = 谁能给它派活 / 发消息。 */
 export const nodePermissionTranslations = {
   'nodePerm.intro': ['这个节点能做什么、能找谁、谁能找它。它不会超出你自己的权限；改了马上生效。', 'What this node may do, whom it may contact, and who may contact it. It never exceeds your own access. Changes apply immediately.'],
+  'nodePerm.summary.depts': ['{count} 个部门', '{count} departments'],
+  'nodePerm.summary.people': ['{count} 位成员', '{count} people'],
+  'nodePerm.summary.anyPerson': ['所有成员', 'all people'],
+  'nodePerm.summary.agents': ['{count} 个 Agent', '{count} agents'],
   'nodePerm.overview': ['{mode} · 发给：{peers} · 收自：{inbox} · 可用工具：{tools}', '{mode} · Sends to: {peers} · Accepts from: {inbox} · Tools: {tools}'],
   'nodePerm.overviewNoInbox': ['{mode} · 发给：{peers} · 可用工具：{tools}', '{mode} · Sends to: {peers} · Tools: {tools}'],
 

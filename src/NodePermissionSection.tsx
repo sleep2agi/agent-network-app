@@ -25,7 +25,7 @@ import NodeGrantsCard from './NodeGrantsCard';
 import { NODE_GRANTS_CAPABILITY } from './api';
 import type { Human } from './human-dm';
 import {
-  ALWAYS_TOOLS, ANY_PERSON_ENTRY, INBOX_DEPT_CAPABILITY, deptChoices, deptEntry, type DeptChoice, PERMISSION_REASON_CODES, allowlistErrorText, allowlistText, entryLabel, isAlwaysTool, isStrict,
+  ALWAYS_TOOLS, ANY_PERSON_ENTRY, INBOX_DEPT_CAPABILITY, deptChoices, deptEntry, type DeptChoice, PERMISSION_REASON_CODES, allowlistErrorText, allowlistSummary, allowlistText, entryLabel, isAlwaysTool, isStrict,
   listHasNode, mergeDraft, nodeChoices, normalizeInbox, parseAllowlistInput, permissionReasonText, personEntry, senderEntries,
   setStrict, toggleEntry, toggleNode, withoutAlwaysTools, withoutItem, type NodeChoice,
 } from './node-allowlist-model';
@@ -168,7 +168,7 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
       {/* 一行摘要:模式 + 名单,不用展开就知道当前限制到什么程度。 */}
       <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-perm-overview">
         {showInbox
-          ? t('nodePerm.overview', { mode: selected.label, peers: allowlistText(peers, label), inbox: allowlistText(inbox, label), tools: allowlistText(tools) })
+          ? t('nodePerm.overview', { mode: selected.label, peers: allowlistText(peers, label), inbox: allowlistSummary(inbox), tools: allowlistText(tools) })
           : t('nodePerm.overviewNoInbox', { mode: selected.label, peers: allowlistText(peers, label), tools: allowlistText(tools) })}
       </Text>
 
