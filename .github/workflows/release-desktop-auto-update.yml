@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.545:
+            - 手机上也能看组织架构：底栏新增「组织」；组织页里部门树与架构图各占一屏，架构图顶部可返回「全部部门」。
+
             What's new in 0.2.544:
             - 从 agent 列表打开的「节点信息」页也能编辑「职责介绍」了（之前只在「节点详情」页能改）。没有权限时会提示。
 
