@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.550:",
+  "- 节点「权限」改成两个问题：「它能做什么」（只读 / 成员 / 部门管理 / 全网管理）和「谁能找它」（所有人 / 本部门 / 只有主人 / 指定）。点一下就生效，收窄前先说后果；原来的细项收进「高级」。",
+  "- 「组织」页先显示上次读到的组织架构，再在后台刷新：切回来瞬开，冷启动也不用干等。",
+  "- 「组织」读取失败会自动再试一次（超时放宽到 20 秒）；真读不到时居中显示原因和「重试」按钮。",
+  "",
   "What's new in 0.2.549:",
   "- 节点「权限 → 管理权限」新增「规则文件（AGENTS.md）」：可以授权某个节点编辑别的节点（某个节点 / 某个部门 / 全网）的 AGENTS.md。需要 Hub .285 及以上。",
   "- 权限页顶部概要只报条数（如「收自：2 个部门 · 9 位成员 · 13 个 Agent」），不再把整份名单再铺一遍。",
