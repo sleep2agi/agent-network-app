@@ -614,6 +614,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.553:
+            - 「组织」和「架构图」里，超过 7 天没上线的 Agent 也显示出来（头像变灰、标「N 天未上线」、排在后面），部门不再显示成空的；部门人数把它们也算上，「运行中」只算最近真正在跑的。
+            - 删除部门时，对话框列出里面的 Agent；只剩 Agent 挡着时可以一键「移到未归属并删除」。
+
             What's new in 0.2.552:
             - 对话里的视频：「点击下载并播放」和「下载 / 保存视频」同时点不再互相打断（以前两条下载写同一个临时文件，会失败）；下载时卡片显示进度（百分比 · 已下 MB · 剩余时间）。
             - 手机「组织 → 架构图」改成紧凑版：小标题、四个数字一行、小头像，架构树在首屏露头；去掉外框和重复的「N 个部门 · N 个未归属」。
