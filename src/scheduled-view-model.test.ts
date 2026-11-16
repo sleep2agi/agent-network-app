@@ -206,7 +206,7 @@ has('chips come from counts', 'filterChips(counts, filter)');
 has('counts follow the search and node scope', 'countByStatus(hubScoped)');
 has('rows use the row model', 'scheduleRowModel(row, now, DEVICE_TIMEZONE)');
 has('row time only when present', '{vm.when ? <Text');
-has('status pill uses the Chinese label', '<StatusPill label={vm.status.label} tone={vm.status.tone} />');
+has('status pill uses the Chinese label (only when the row has no switch)', '{vm.toggle === null ? <StatusPill label={vm.status.label} tone={vm.status.tone} /> : null}');
 has('inline toggle only when the model allows it', '{vm.toggle !== null ? (');
 has('toggle calls the pause/resume action', "onToggle={() => void act(row, 'toggle')}");
 has('toggle action flips active⇄paused via the API', "setScheduledTaskStatus(cfg, row, row.status === 'active' ? 'paused' : 'active')");

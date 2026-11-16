@@ -619,14 +619,15 @@ function ScheduleRow({ row, now, busy, selected, onOpen, onToggle }: {
         <View style={s.rowText}>
           <View style={s.rowLine}>
             <Text style={s.rowName} numberOfLines={1}>{vm.name}</Text>
-            <StatusPill label={vm.status.label} tone={vm.status.tone} />
+            {/* admin 2026-11-16「定时任务也丑」:右边的开关已经说明「进行中 / 已暂停」,徽章只在没有开关(已取消等)时出现。 */}
+            {vm.toggle === null ? <StatusPill label={vm.status.label} tone={vm.status.tone} /> : null}
           </View>
           <View style={s.rowLine}>
             <AliasAvatar alias={vm.target} size={20} />
             <Text style={s.rowTarget} numberOfLines={1}>{vm.target}</Text>
           </View>
-          <Text style={s.scheduleChip} numberOfLines={2}>{vm.scheduleText}</Text>
-          {vm.when ? <Text style={s.rowWhen} numberOfLines={1}>{vm.when.text}</Text> : null}
+          {/* 频率和下次执行并成一行,卡片矮一截。 */}
+          <Text style={s.scheduleChip} numberOfLines={2}>{vm.scheduleText}{vm.when ? <Text style={s.rowWhen}>{`  ·  ${vm.when.text}`}</Text> : null}</Text>
         </View>
       </Pressable>
       {vm.toggle !== null ? (
@@ -714,7 +715,7 @@ function ScheduleDetail({ row, now, busy, runs, cfg, expandedRun, runTasks, onTo
           {availableActions.includes('toggle') && <Pressable accessibilityRole="button" disabled={busy} style={[s.action, s.detailAction, busy && s.actionDisabled]} onPress={() => onAction(row, 'toggle')}><Text style={s.actionText}>{row.status === 'active' ? '暂停' : '恢复'}</Text></Pressable>}
           {availableActions.includes('edit') && <Pressable accessibilityRole="button" disabled={busy} style={[s.action, s.detailAction, busy && s.actionDisabled]} onPress={() => onEdit(row)}><Text style={s.actionText}>编辑</Text></Pressable>}
           {/* 手机上「复制」留在顶栏,主操作区保持四个按钮并允许大字体时换行。 */}
-          {availableActions.includes('copy') && !onBack && <Pressable accessibilityRole="button" testID="schedule-copy" disabled={busy} style={[s.action, s.detailAction, s.quietAction, busy && s.actionDisabled]} onPress={() => onCopy(row)}><Text style={s.actionText}>{t('schedules.copy.action')}</Text></Pressable>}
+          {availableActions.includes('copy') && !onBack && <Pressable accessibilityRole="button" testID="schedule-copy" disabled={busy} style={[s.action, s.detailAction, busy && s.actionDisabled]} onPress={() => onCopy(row)}><Text style={s.actionText}>{t('schedules.copy.action')}</Text></Pressable>}
           {availableActions.includes('cancel') && <Pressable accessibilityRole="button" disabled={busy} style={[s.action, s.detailAction, s.cancelAction, busy && s.actionDisabled]} onPress={() => onCancel(row)}><Text style={s.dangerText}>取消计划</Text></Pressable>}
         </View> : null}
 
