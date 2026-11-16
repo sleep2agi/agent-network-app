@@ -33,5 +33,6 @@ ck('老 Hub 没给清单 ⇒ 未知放行', capabilityOffered(undefined, 'board'
 ck('一期 Hub 只报 schedules ⇒ board 不可选', capabilityOffered(['schedules'], 'board') === false && capabilityOffered(['schedules'], 'schedules') === true);
 ck('rules 可选,标签是规则文件', GRANT_CAPABILITIES.find(c => c.key === 'rules')?.available === true && grantLine({ ...nod, capability: 'rules' } as any, depts, nodes).startsWith('规则文件（AGENTS.md） · '));
 ck('Hub 清单没有 rules(.284 及以前) ⇒ 不可选', capabilityOffered(['schedules', 'board'], 'rules') === false && capabilityOffered(['schedules', 'board', 'rules'], 'rules'));
+ck('permissions 标签是「权限（只能收紧）」;老 Hub 清单里没有就不可选', grantLine({ ...net, capability: 'permissions' } as any, depts, nodes).startsWith('权限（只能收紧） · ') && capabilityOffered(['schedules', 'board', 'rules'], 'permissions') === false);
 ck('新 Hub 报两个 ⇒ 都可选', capabilityOffered(['schedules', 'board'], 'board') && capabilityOffered(['schedules', 'board'], 'schedules'));
 console.log(`node grants model: ${n}/${n}`);
