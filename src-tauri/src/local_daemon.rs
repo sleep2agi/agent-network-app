@@ -111,9 +111,61 @@ fn daemon_profile_path(name: &str) -> Result<PathBuf, String> {
     Ok(daemon_root()?.join(".anet").join("nodes").join(name).join("config.json"))
 }
 
+// ── 平台差异(admin 2026-11-16 在 Windows 上点不了「一键安装」:原来整段只认 POSIX shell)──
+// Windows:命令经 `cmd /d /s /c` 跑;私有 Node 是 zip,node.exe / npm.cmd 在解压目录根上;
+// `npm -g --prefix X` 把 shim 放在 X\anet.cmd、包放在 X\node_modules;PATH 分隔符是 `;`。
+#[cfg(windows)]
+pub const PATH_SEP: &str = ";";
+#[cfg(not(windows))]
+pub const PATH_SEP: &str = ":";
+
+/// 私有 / 系统 Node 目录里放 node 和 npm 的那一层。
+fn node_bin_dir_in(node_dir: &Path) -> PathBuf {
+    if cfg!(windows) { node_dir.to_path_buf() } else { node_dir.join("bin") }
+}
+fn node_exe_in(bin_dir: &Path) -> PathBuf {
+    bin_dir.join(if cfg!(windows) { "node.exe" } else { "node" })
+}
+fn npm_in(bin_dir: &Path) -> PathBuf {
+    bin_dir.join(if cfg!(windows) { "npm.cmd" } else { "npm" })
+}
+/// `npm install -g --prefix <prefix>` 之后可执行 shim 所在的目录。
+fn prefix_bin_dir(prefix: &Path) -> PathBuf {
+    if cfg!(windows) { prefix.to_path_buf() } else { prefix.join("bin") }
+}
+/// Windows 不走 npm 生成的 anet.cmd:直接 `node <包内 anet.cjs>`(和 agent-network 侧约定,不经 .cmd 包装)。
+fn anet_in(prefix: &Path) -> PathBuf {
+    if cfg!(windows) {
+        prefix_modules(prefix).join("@sleep2agi").join("agent-network").join("dist").join("bin").join("anet.cjs")
+    } else {
+        prefix_bin_dir(prefix).join("anet")
+    }
+}
+
+/// 拼进命令行的 anet:Windows 上是 `node "<anet.cjs>"`(node 由前面的 PATH 前缀提供),其它平台就是路径本身。
+fn anet_cmd(path: &str) -> String {
+    if cfg!(windows) && path.ends_with(".cjs") { format!("node {}", shell_quote(path)) } else { shell_quote(path) }
+}
+/// `npm install -g --prefix <prefix>` 之后包所在的 node_modules。
+fn prefix_modules(prefix: &Path) -> PathBuf {
+    if cfg!(windows) { prefix.join("node_modules") } else { prefix.join("lib").join("node_modules") }
+}
+
+/// 在命令前把这些目录加进 PATH。
+pub fn with_path_prefix(path_prefix: &str, command: &str) -> String {
+    if cfg!(windows) {
+        format!("set \"PATH={path_prefix};%PATH%\" && {command}")
+    } else {
+        format!("export PATH={}:\"$PATH\"; {command}", shell_quote(path_prefix))
+    }
+}
+
 /// GUI 进程拿不到用户 shell 的 PATH(nvm / homebrew / npm prefix 都在 rc 文件里),
 /// 所以一律经登录 shell 跑命令。
 fn login_shell() -> String {
+    if cfg!(windows) {
+        return std::env::var("ComSpec").ok().filter(|s| !s.trim().is_empty()).unwrap_or_else(|| "cmd.exe".into());
+    }
     std::env::var("SHELL")
         .ok()
         .filter(|shell| !shell.trim().is_empty() && Path::new(shell).is_file())
@@ -141,14 +193,27 @@ fn run_shell(
 ) -> Result<CommandOutcome, String> {
     let shell = login_shell();
     let mut cmd = Command::new(&shell);
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        // /s:去掉最外层一对引号,其余原样交给 cmd;CREATE_NO_WINDOW:不闪黑框。
+        cmd.raw_arg(format!("/d /s /c \"{command} 2>&1\""))
+            .creation_flags(0x0800_0000)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+    }
+    #[cfg(not(windows))]
     // -l -i:登录 + 交互。nvm / homebrew 的 PATH 多半写在 .zshrc / .bashrc(交互 rc)里,只 -l 读不到
     // (Vincent 2026-09-06:终端里 node v20.12 在,app 扫描四行全 ✗)。TERM=dumb + stdin 关掉,
     // rc 里的提示符/补全不会挂住;输出里可能夹着 "Now using node …" 之类噪音,parse_tool_probe 会跳过。
-    cmd.args(["-l", "-i", "-c", &format!("{command} 2>&1")])
-        .env("TERM", "dumb")
-        .stdin(Stdio::null())
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+    {
+        cmd.args(["-l", "-i", "-c", &format!("{command} 2>&1")])
+            .env("TERM", "dumb")
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::null());
+    }
     if let Some(dir) = cwd {
         cmd.current_dir(dir);
     }
@@ -226,12 +291,19 @@ pub fn strip_ansi(text: &str) -> String {
     out
 }
 
+/// 一行是不是一个绝对路径(POSIX `/…`,或 Windows `C:\…`;Windows 路径允许空格,如 Program Files)。
+pub fn is_abs_path_line(line: &str) -> bool {
+    if line.starts_with('/') { return !line.contains(char::is_whitespace); }
+    let b = line.as_bytes();
+    b.len() > 3 && b[0].is_ascii_alphabetic() && b[1] == b':' && (b[2] == b'\\' || b[2] == b'/')
+}
+
 /// `command -v X` + `X --version` 的输出:路径行以 `/` 开头;版本取路径之后第一行像版本号的
 /// (`v22.1.0` / `10.5.0` / `2.3.0-preview.76`)。其它行(nvm 的 "Now using node …" 等)一律跳过。
 pub fn parse_tool_probe(output: &str) -> Option<ToolInfo> {
     let clean = strip_ansi(output);
     let mut lines = clean.lines().map(str::trim).filter(|line| !line.is_empty());
-    let path = lines.find(|line| line.starts_with('/') && !line.contains(char::is_whitespace))?;
+    let path = lines.find(|line| is_abs_path_line(line))?;
     let version = lines
         .map(|line| line.trim_start_matches('v'))
         .find(|line| line.len() < 40 && line.chars().next().is_some_and(|c| c.is_ascii_digit()) && line.contains('.'))
@@ -240,7 +312,12 @@ pub fn parse_tool_probe(output: &str) -> Option<ToolInfo> {
 }
 
 fn probe_tool(tool: &str, version_flag: &str) -> Option<ToolInfo> {
-    let command = format!("command -v {tool} && {tool} {version_flag} 2>/dev/null | head -1");
+    let command = if cfg!(windows) {
+        // `where` 可能列出多条;parse_tool_probe 取第一条路径、再取其后第一行版本号。
+        format!("where {tool} && {tool} {version_flag}")
+    } else {
+        format!("command -v {tool} && {tool} {version_flag} 2>/dev/null | head -1")
+    };
     let outcome = run_shell(&command, None, &[], Duration::from_secs(20)).ok()?;
     if outcome.code != Some(0) {
         return None;
@@ -319,7 +396,7 @@ fn private_anet_prefix() -> Result<PathBuf, String> {
 }
 
 fn private_agent_node_package() -> Result<PathBuf, String> {
-    Ok(private_anet_prefix()?.join("lib").join("node_modules").join("@sleep2agi").join("agent-node"))
+    Ok(prefix_modules(&private_anet_prefix()?).join("@sleep2agi").join("agent-node"))
 }
 
 fn probe_private_agent_node() -> Option<ToolInfo> {
@@ -333,9 +410,9 @@ fn probe_private_agent_node() -> Option<ToolInfo> {
 
 fn probe_private_anet() -> Option<ToolInfo> {
     let prefix = private_anet_prefix().ok()?;
-    let bin = prefix.join("bin").join("anet");
+    let bin = anet_in(&prefix);
     if !bin.is_file() { return None; }
-    let raw = fs::read_to_string(prefix.join("lib/node_modules/@sleep2agi/agent-network/package.json")).ok()?;
+    let raw = fs::read_to_string(prefix_modules(&prefix).join("@sleep2agi").join("agent-network").join("package.json")).ok()?;
     let json: serde_json::Value = serde_json::from_str(&raw).ok()?;
     Some(ToolInfo { path: bin.display().to_string(), version: Some(json.get("version")?.as_str()?.to_string()) })
 }
@@ -381,8 +458,24 @@ fn pid_alive(pid: i32) -> Result<bool, String> {
         if error.raw_os_error() == Some(libc::ESRCH) { return Ok(false); }
         return Err(format!("cannot verify daemon PID {pid}: {error}"));
     }
-    #[cfg(not(unix))]
-    Err("local daemon requires POSIX process checks".into())
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let out = Command::new("tasklist")
+            .args(["/FI", &format!("PID eq {pid}"), "/NH", "/FO", "CSV"])
+            .creation_flags(0x0800_0000)
+            .output()
+            .map_err(|error| format!("cannot verify daemon PID {pid}: {error}"))?;
+        return Ok(tasklist_has_pid(&String::from_utf8_lossy(&out.stdout), pid));
+    }
+    #[cfg(not(any(unix, windows)))]
+    Err("local daemon requires process checks on this platform".into())
+}
+
+/// `tasklist /FO CSV /NH` 的输出里有没有这个 PID(第二列)。没匹配时 tasklist 打的是一句提示,不是 CSV。
+pub fn tasklist_has_pid(output: &str, pid: i32) -> bool {
+    let want = format!("\"{pid}\"");
+    output.lines().any(|line| line.split(',').nth(1).map(str::trim) == Some(want.as_str()))
 }
 
 fn stop_existing_daemon(anet: &Path, daemon_dir: &Path, path_prefix: &str) -> Result<String, String> {
@@ -391,7 +484,7 @@ fn stop_existing_daemon(anet: &Path, daemon_dir: &Path, path_prefix: &str) -> Re
     if !anet.is_file() || !daemon_profile_path(LOCAL_DAEMON_NAME)?.is_file() {
         return Err("existing daemon is running but its launcher/configuration is missing".into());
     }
-    let command = format!("export PATH={}:\"$PATH\"; {} node stop {}", shell_quote(path_prefix), shell_quote(&anet.display().to_string()), LOCAL_DAEMON_NAME);
+    let command = with_path_prefix(path_prefix, &format!("{} node stop {}", anet_cmd(&anet.display().to_string()), LOCAL_DAEMON_NAME));
     let stop = run_shell(&command, Some(daemon_dir), &[], Duration::from_secs(30))?;
     if stop.code != Some(0) || stop.timed_out {
         return Err(format!("cannot stop previous daemon; configuration retained: {}", tail(&stop.output, 400)));
@@ -419,7 +512,7 @@ fn require_compatible_hub(session: &LocalHubSession) -> Result<(), String> {
 }
 
 fn probe_private_node() -> Option<ToolInfo> {
-    let node = private_node_dir().ok()?.join("bin").join("node");
+    let node = node_exe_in(&node_bin_dir_in(&private_node_dir().ok()?));
     if !node.is_file() { return None; }
     let output = Command::new(&node).arg("-v").output().ok()?;
     if !output.status.success() { return None; }
@@ -429,7 +522,8 @@ fn probe_private_node() -> Option<ToolInfo> {
 
 /// nodejs.org 的 SHASUMS256.txt 里挑出本平台的 tar.gz:返回 (文件名, sha256)。
 pub fn pick_node_tarball(shasums: &str, os: &str, arch: &str) -> Option<(String, String)> {
-    let suffix = format!("-{os}-{arch}.tar.gz");
+    // Windows 只发 zip(还有 .7z / .msi);其它平台用 tar.gz。
+    let suffix = if os == "win" { format!("-{os}-{arch}.zip") } else { format!("-{os}-{arch}.tar.gz") };
     shasums.lines().find_map(|line| {
         let mut parts = line.split_whitespace();
         let sha = parts.next()?;
@@ -439,7 +533,7 @@ pub fn pick_node_tarball(shasums: &str, os: &str, arch: &str) -> Option<(String,
 }
 
 pub fn node_platform() -> Option<(&'static str, &'static str)> {
-    let os = match std::env::consts::OS { "macos" => "darwin", "linux" => "linux", _ => return None };
+    let os = match std::env::consts::OS { "macos" => "darwin", "linux" => "linux", "windows" => "win", _ => return None };
     let arch = match std::env::consts::ARCH { "aarch64" => "arm64", "x86_64" => "x64", _ => return None };
     Some((os, arch))
 }
@@ -477,7 +571,7 @@ fn install_private_node(log: &mut String) -> Result<ToolInfo, String> {
         let attempt = (|| -> Result<ToolInfo, String> {
             let shasums = fetch_text(&format!("{base}/SHASUMS256.txt"))?;
             let (name, expected) = pick_node_tarball(&shasums, os, arch)
-                .ok_or_else(|| format!("SHASUMS256.txt 里没有 {os}-{arch} 的 tar.gz"))?;
+                .ok_or_else(|| format!("SHASUMS256.txt 里没有 {os}-{arch} 的安装包"))?;
             log.push_str(&format!("下载 {base}/{name}\n"));
             let bytes = fetch_bytes(&format!("{base}/{name}"))?;
             let actual = format!("{:x}", Sha256::digest(&bytes));
@@ -487,11 +581,19 @@ fn install_private_node(log: &mut String) -> Result<ToolInfo, String> {
             log.push_str(&format!("SHA256 校验通过({} 字节)\n", bytes.len()));
             let root = daemon_root()?;
             ensure_private_dir(&root)?;
-            let tmp = root.join("node-download.tar.gz");
+            let zip = name.ends_with(".zip");
+            let tmp = root.join(if zip { "node-download.zip" } else { "node-download.tar.gz" });
             fs::write(&tmp, &bytes).map_err(|error| error.to_string())?;
-            let extracted = root.join(name.trim_end_matches(".tar.gz"));
+            let extracted = root.join(name.trim_end_matches(".tar.gz").trim_end_matches(".zip"));
             let _ = fs::remove_dir_all(&extracted);
-            let status = Command::new("tar").args(["-xzf"]).arg(&tmp).arg("-C").arg(&root).status().map_err(|error| error.to_string())?;
+            // Windows 10 1803+ 自带 bsdtar(tar.exe),能直接解 zip。
+            let mut tar = Command::new("tar");
+            #[cfg(windows)]
+            {
+                use std::os::windows::process::CommandExt;
+                tar.creation_flags(0x0800_0000);
+            }
+            let status = tar.args([if zip { "-xf" } else { "-xzf" }]).arg(&tmp).arg("-C").arg(&root).status().map_err(|error| error.to_string())?;
             let _ = fs::remove_file(&tmp);
             if !status.success() {
                 return Err(format!("tar 解压失败:{status}"));
@@ -511,11 +613,11 @@ fn install_private_node(log: &mut String) -> Result<ToolInfo, String> {
 
 pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
     let daemon_dir = daemon_root()?;
-    let supported = cfg!(unix);
+    let supported = cfg!(any(unix, windows));
     let reason = if supported {
         None
     } else {
-        Some("anet 的 host_supervisor daemon 目前只支持 macOS / Linux(Windows 请用 WSL)".to_string())
+        Some("本机 daemon 不支持这个操作系统".to_string())
     };
     let (node, npm, anet) = if supported {
         (
@@ -534,9 +636,9 @@ pub fn scan(session: Option<&LocalHubSession>) -> Result<DaemonScan, String> {
     let agent_node_compatible = package_compatible(agent_node.as_ref(), AGENT_NODE_PACKAGE);
     let anet = private_anet.or(anet);
     let agent_node_on_path = if supported {
-        run_shell("command -v agent-node", None, &[], Duration::from_secs(20)).ok()
+        run_shell(if cfg!(windows) { "where agent-node" } else { "command -v agent-node" }, None, &[], Duration::from_secs(20)).ok()
             .filter(|o| o.code == Some(0))
-            .and_then(|o| strip_ansi(&o.output).lines().map(str::trim).find(|l| l.starts_with('/')).map(str::to_string))
+            .and_then(|o| strip_ansi(&o.output).lines().map(str::trim).find(|l| is_abs_path_line(l)).map(str::to_string))
     } else { None };
     Ok(DaemonScan {
         supported,
@@ -614,8 +716,8 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
         Ok(guard) => guard,
         Err(_) => return fail(steps, "本机 daemon 正在安装,请等待本次安装完成。".into()),
     };
-    if !cfg!(unix) {
-        return fail(steps, "anet 的 host_supervisor daemon 只支持 macOS / Linux".into());
+    if !cfg!(any(unix, windows)) {
+        return fail(steps, "本机 daemon 不支持这个操作系统".into());
     }
     if let Err(error) = require_compatible_hub(session) {
         return fail(steps, error);
@@ -660,7 +762,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
             }
         }
     };
-    let npm_bin = node_bin_dir.join("npm");
+    let npm_bin = npm_in(&node_bin_dir);
     if !npm_bin.is_file() {
         return fail(steps, format!("{} 里没有 npm", node_bin_dir.display()));
     }
@@ -668,9 +770,9 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
     // 2. anet CLI:装进私有 prefix(不需要 sudo,不碰系统的全局 node_modules)
     let anet_prefix = private_anet_prefix()?;
     ensure_private_dir(&anet_prefix)?;
-    let anet_bin = anet_prefix.join("bin").join("anet");
-    let path_prefix = format!("{}:{}", node_bin_dir.display(), anet_prefix.join("bin").display());
-    let with_path = |cmd: &str| format!("export PATH={}:\"$PATH\"; {cmd}", shell_quote(&path_prefix));
+    let anet_bin = anet_in(&anet_prefix);
+    let path_prefix = format!("{}{PATH_SEP}{}", node_bin_dir.display(), prefix_bin_dir(&anet_prefix).display());
+    let with_path = |cmd: &str| with_path_prefix(&path_prefix, cmd);
     // Stop before replacing packages or forcing init: the old process must
     // still have its original configuration and launcher available to stop.
     match stop_existing_daemon(&anet_bin, &daemon_dir, &path_prefix) {
@@ -729,7 +831,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
         Some(info) => info,
         None => return fail(steps, format!("私有 anet CLI 版本不兼容,需要 {ANET_PACKAGE}")),
     };
-    let probe = run_shell(&with_path(&format!("{} --version", shell_quote(&anet.path))), None, &[], Duration::from_secs(30))?;
+    let probe = run_shell(&with_path(&format!("{} --version", anet_cmd(&anet.path))), None, &[], Duration::from_secs(30))?;
     if probe.code != Some(0) {
         return fail(steps, format!("私有 anet CLI 无法执行: {}", tail(&probe.output, 400)));
     }
@@ -784,9 +886,12 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
     steps.push(StepReport { name: "写入本地 Hub 凭据(私有 HOME)".into(), ok: true, output: format!("{}  hub={}", anet_dir.join("config.json").display(), session.endpoint) });
 
     // 3. anet daemon init(HOME=私有)
-    let init_env = [("HOME", home.display().to_string())];
+    // Windows 上 Node 的 os.homedir() 读的是 USERPROFILE,不是 HOME —— 两个都设,私有 HOME 才真隔离。
+    let home_s = home.display().to_string();
+    let (home_drive, home_path) = split_home_drive(&home_s);
+    let init_env = [("HOME", home_s.clone()), ("USERPROFILE", home_s.clone()), ("HOMEDRIVE", home_drive), ("HOMEPATH", home_path)];
     let init = run_shell(
-        &with_path(&format!("{} daemon init {} --force", shell_quote(&anet.path), LOCAL_DAEMON_NAME)),
+        &with_path(&format!("{} daemon init {} --force", anet_cmd(&anet.path), LOCAL_DAEMON_NAME)),
         Some(&daemon_dir),
         &init_env,
         Duration::from_secs(90),
@@ -802,7 +907,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
     };
 
     // Preserve the login shell's tool locations for minimalEnv child launches.
-    let path_probe = run_shell(&with_path("printf 'ANET_DAEMON_PATH=%s\\n' \"$PATH\""), None, &[], Duration::from_secs(20))?;
+    let path_probe = run_shell(&with_path(if cfg!(windows) { "echo ANET_DAEMON_PATH=%PATH%" } else { "printf 'ANET_DAEMON_PATH=%s\\n' \"$PATH\"" }), None, &[], Duration::from_secs(20))?;
     if path_probe.code != Some(0) { return fail(steps, "无法读取 daemon 的工具搜索路径。".into()); }
     let extra_path = path_probe.output.lines().rev().find_map(|line| line.strip_prefix("ANET_DAEMON_PATH="))
         .ok_or_else(|| "daemon PATH probe returned no path".to_string())?;
@@ -811,17 +916,21 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
     if !cfg.is_object() || cfg["node_id"].as_str() != Some(&node_id) {
         return fail(steps, "daemon 配置与初始化返回的 node_id 不一致,未启动。".into());
     }
-    cfg["daemonExtraPath"] = serde_json::json!(extra_path.split(':').filter(|path| Path::new(path).is_absolute() && Path::new(path).is_dir()).collect::<Vec<_>>());
+    cfg["daemonExtraPath"] = serde_json::json!(extra_path.trim().split(PATH_SEP).filter(|path| Path::new(path).is_absolute() && Path::new(path).is_dir()).collect::<Vec<_>>());
     write_private_atomic(&cfg_path, &serde_json::to_vec_pretty(&cfg).map_err(|e| e.to_string())?)?;
 
     // 4. anet daemon start —— 🔴 它是**前台**命令,不会自己返回(DEV 对 0.9.0-preview.45 实测:60s 后被
     //    timeout 打死,daemon 随之 shutting down)。0.2.52 之前这里等满 60s 才开始问 Hub,而且靠 kill shell
     //    让 daemon 侥幸活下来。现在:setsid + nohup 放到后台,输出进 start.log,立刻返回去轮询 Hub。
     let start_log = daemon_dir.join("start.log");
+    let agent_node_bin = Path::new(&agent_node.path).join("dist").join("cli.js").display().to_string();
+    #[cfg(windows)]
+    let start = start_detached_windows(&node_exe_in(&node_bin_dir), &anet.path, LOCAL_DAEMON_NAME, &start_log, &daemon_dir, &path_prefix, &agent_node_bin)?;
+    #[cfg(not(windows))]
     let start = run_shell(
         &with_path(&detached_start_command(&anet.path, LOCAL_DAEMON_NAME, &start_log)),
         Some(&daemon_dir),
-        &[("ANET_AGENT_NODE_BIN", Path::new(&agent_node.path).join("dist/cli.js").display().to_string())],
+        &[("ANET_AGENT_NODE_BIN", agent_node_bin)],
         Duration::from_secs(20),
     )?;
     steps.push(StepReport {
@@ -880,9 +989,10 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
 /// 只给打包 smoke 用:停掉刚起的 daemon(`anet node stop <name>`),失败不算错。
 pub fn stop_for_smoke() -> Result<(), String> {
     let daemon_dir = daemon_root()?;
-    let anet = private_anet_prefix()?.join("bin").join("anet");
-    let node_bin = private_node_dir()?.join("bin");
-    let cmd = format!("export PATH={}:{}:\"$PATH\"; {} node stop {LOCAL_DAEMON_NAME}", shell_quote(&node_bin.display().to_string()), shell_quote(&anet.parent().unwrap().display().to_string()), if anet.is_file() { shell_quote(&anet.display().to_string()) } else { "anet".into() });
+    let anet = anet_in(&private_anet_prefix()?);
+    let node_bin = node_bin_dir_in(&private_node_dir()?);
+    let prefix = format!("{}{PATH_SEP}{}", node_bin.display(), anet.parent().unwrap().display());
+    let cmd = with_path_prefix(&prefix, &format!("{} node stop {LOCAL_DAEMON_NAME}", if anet.is_file() { anet_cmd(&anet.display().to_string()) } else { "anet".into() }));
     let _ = run_shell(&cmd, Some(&daemon_dir), &[], Duration::from_secs(30))?;
     Ok(())
 }
@@ -936,7 +1046,43 @@ pub fn node_version_ok(version: Option<&str>) -> bool {
 }
 
 fn shell_quote(value: &str) -> String {
-    format!("'{}'", value.replace('\'', "'\\''"))
+    if cfg!(windows) {
+        // cmd 没有转义引号的办法;Windows 路径里本来也不会有 `"`。
+        format!("\"{}\"", value.replace('"', ""))
+    } else {
+        format!("'{}'", value.replace('\'', "'\\''"))
+    }
+}
+
+/// `C:\\Users\\x\\app\\home` → ("C:", "\\Users\\x\\app\\home")。没有盘符时 HOMEDRIVE 为空、HOMEPATH 为整串。
+/// Windows 上有的库读 HOMEDRIVE+HOMEPATH 拼家目录 —— 也指向私有 HOME,才算真隔离。
+pub fn split_home_drive(home: &str) -> (String, String) {
+    let b = home.as_bytes();
+    if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' { (home[..2].to_string(), home[2..].to_string()) } else { (String::new(), home.to_string()) }
+}
+
+/// Windows:没有 setsid/nohup。直接起一个脱离控制台的 `cmd /c "<anet> daemon start <name> > log 2>&1"`,
+/// DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP:App 退出、关窗都不会带走它;立刻返回。
+#[cfg(windows)]
+fn start_detached_windows(node_exe: &Path, anet_path: &str, name: &str, log: &Path, cwd: &Path, path_prefix: &str, agent_node_bin: &str) -> Result<CommandOutcome, String> {
+    use std::os::windows::process::CommandExt;
+    let path = format!("{path_prefix};{}", std::env::var("PATH").unwrap_or_default());
+    let out = fs::File::create(log).map_err(|error| format!("cannot open {}: {error}", log.display()))?;
+    let err = out.try_clone().map_err(|error| error.to_string())?;
+    Command::new(node_exe)
+        .arg(anet_path)
+        .args(["daemon", "start", name])
+        .current_dir(cwd)
+        .env("PATH", path)
+        .env("ANET_AGENT_NODE_BIN", agent_node_bin)
+        .stdin(Stdio::null())
+        .stdout(Stdio::from(out))
+        .stderr(Stdio::from(err))
+        .creation_flags(0x0000_0008 | 0x0000_0200)
+        .spawn()
+        .map_err(|error| format!("cannot start daemon: {error}"))?;
+    thread::sleep(Duration::from_secs(1));
+    Ok(CommandOutcome { code: Some(0), output: "started".into(), timed_out: false })
 }
 
 #[cfg(test)]
@@ -979,6 +1125,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn probe_skips_nvm_noise_and_ansi() {
         let noisy = "\u{1b}[32mNow using node v20.12.2 (npm v10.5.0)\u{1b}[0m\r\n/Users/v/.nvm/versions/node/v20.12.2/bin/node\r\nv20.12.2\r\n";
         let info = parse_tool_probe(noisy).unwrap();
@@ -1033,6 +1180,7 @@ mod tests {
     /// 复现 0.2.50 首轮发版闸的挂死:shell 退出了,但它后台派生的进程还握着 stdout 管道。
     #[cfg(unix)]
     #[test]
+    #[cfg(unix)]
     fn run_shell_returns_when_a_detached_grandchild_keeps_the_pipe_open() {
         let started = Instant::now();
         let outcome = run_shell("echo before; (sleep 20 &) ; echo after; exit 0", None, &[], Duration::from_secs(30)).unwrap();
@@ -1044,6 +1192,7 @@ mod tests {
 
     #[cfg(unix)]
     #[test]
+    #[cfg(unix)]
     fn run_shell_times_out_and_reports_partial_output() {
         let outcome = run_shell("echo partial; sleep 30", None, &[], Duration::from_secs(1)).unwrap();
         assert!(outcome.timed_out && outcome.code.is_none());
@@ -1051,6 +1200,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(unix)]
     fn detached_start_command_backgrounds_and_logs() {
         let cmd = detached_start_command("/p/anet", "local-daemon", Path::new("/d/start.log"));
         assert!(cmd.starts_with("if command -v setsid >/dev/null 2>&1; then setsid nohup '/p/anet' daemon start local-daemon >'/d/start.log' 2>&1 </dev/null & else nohup '/p/anet' daemon start local-daemon >'/d/start.log' 2>&1 </dev/null & fi"), "{cmd}");
@@ -1061,6 +1211,7 @@ mod tests {
     /// 用一个只含假 anet 的 PATH 模拟)。0.2.53 首轮的 bug 在第二种下:daemon 从没被执行,日志为空。
     #[cfg(unix)]
     #[test]
+    #[cfg(unix)]
     fn detached_start_command_actually_starts_the_daemon_with_and_without_setsid() {
         use std::os::unix::fs::PermissionsExt;
         let dir = tempfile::tempdir().unwrap();
@@ -1091,6 +1242,41 @@ mod tests {
     }
 
     #[test]
+    fn windows_path_lines_count_as_absolute() {
+        assert!(is_abs_path_line("C:\\Program Files\\nodejs\\node.exe"));
+        assert!(is_abs_path_line("/usr/local/bin/node"));
+        assert!(!is_abs_path_line("Now using node v22"));
+        assert!(!is_abs_path_line("/usr/local/bin/node extra"));
+        let probe = parse_tool_probe("C:\\Program Files\\nodejs\\node.exe\r\nv22.13.1\r\n").unwrap();
+        assert_eq!(probe.path, "C:\\Program Files\\nodejs\\node.exe");
+        assert_eq!(probe.version.as_deref(), Some("22.13.1"));
+    }
+
+    #[test]
+    fn picks_windows_zip_from_shasums() {
+        let sums = "aaa  node-v22.13.1-win-x64.7z\n".to_string() + &"b".repeat(64) + "  node-v22.13.1-win-x64.zip\n" + &"c".repeat(64) + "  node-v22.13.1-darwin-arm64.tar.gz\n";
+        let (name, sha) = pick_node_tarball(&sums, "win", "x64").unwrap();
+        assert_eq!(name, "node-v22.13.1-win-x64.zip");
+        assert_eq!(sha, "b".repeat(64));
+        assert_eq!(pick_node_tarball(&sums, "darwin", "arm64").unwrap().0, "node-v22.13.1-darwin-arm64.tar.gz");
+    }
+
+    #[test]
+    fn tasklist_csv_matches_pid_column_only() {
+        let out = "\"node.exe\",\"4242\",\"Console\",\"1\",\"50,000 K\"\r\n";
+        assert!(tasklist_has_pid(out, 4242));
+        assert!(!tasklist_has_pid(out, 424));
+        assert!(!tasklist_has_pid("INFO: No tasks are running which match the specified criteria.", 4242));
+    }
+
+    #[test]
+    fn home_drive_split_for_private_home() {
+        assert_eq!(split_home_drive("C:\\Users\\x\\home"), ("C:".to_string(), "\\Users\\x\\home".to_string()));
+        assert_eq!(split_home_drive("/home/x"), (String::new(), "/home/x".to_string()));
+    }
+
+    #[test]
+    #[cfg(unix)]
     fn shell_quote_escapes_single_quotes() {
         assert_eq!(shell_quote("/a/b c"), "'/a/b c'");
         assert_eq!(shell_quote("it's"), "'it'\\''s'");
