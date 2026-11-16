@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.551:
+            - 节点「权限 → 高级 → 管理权限」新增「权限（只能收紧）」：可以授权某个节点在范围内收紧别的节点的权限（缩小收件名单、降成只读），不能放宽。需要 Hub .286 及以上。
+
             What's new in 0.2.550:
             - 节点「权限」改成两个问题：「它能做什么」（只读 / 成员 / 部门管理 / 全网管理）和「谁能找它」（所有人 / 本部门 / 只有主人 / 指定）。点一下就生效，收窄前先说后果；原来的细项收进「高级」。
             - 「组织」页先显示上次读到的组织架构，再在后台刷新：切回来瞬开，冷启动也不用干等。
