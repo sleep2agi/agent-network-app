@@ -204,8 +204,9 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
       {deptNote && !p.fill ? <Text accessibilityLiveRegion="polite" testID="agent-org-department-result" style={[styles.note, { padding: spacing.md }]}>{deptNote}</Text> : null}
       {phase.kind === 'loading' ? (
         // 管理员 2026-11-15「改成动画吧,那种转圈的」:整页是居中转圈;设置里是带转圈的那一行。
-        p.fill
-          ? <View testID="agent-org-loading" style={styles.loadingFill}><ActivityIndicator size="large" color={colors.accent} /><Text style={styles.note}>{t('agentOrg.loading')}</Text></View>
+        // 手机「组织」页同样居中转圈(admin 2026-11-16「这也特别丑」:原来是设置风格的一张卡片 + 小转圈)。
+        p.fill || p.phone
+          ? <View testID="agent-org-loading" style={p.fill ? styles.loadingFill : styles.loadingPhone}><ActivityIndicator size="large" color={colors.accent} /><Text style={styles.note}>{t('agentOrg.loading')}</Text></View>
           : <SettingsGroup testID="agent-org-loading"><SettingsRow label={t('agentOrg.loading')} busy /></SettingsGroup>
       ) : null}
       {phase.kind === 'error' ? (
@@ -940,6 +941,7 @@ const makeStyles = () => StyleSheet.create({
   departmentRowDense: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 34, paddingRight: spacing.xs, marginBottom: 1, borderRadius: radius.item },
   countSlot: { width: 32, height: 28, justifyContent: 'center' },
   loadingFill: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.md },
+  loadingPhone: { alignItems: 'center', justifyContent: 'center', gap: spacing.md, paddingTop: 160, paddingBottom: 96 },
   segTabs: { flexDirection: 'row', backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: 3, gap: 2 },
   segTab: { flexDirection: 'row', alignItems: 'center', gap: 5, paddingHorizontal: spacing.md, height: 30, borderRadius: radius.item },
   segTabOn: { backgroundColor: colors.card },

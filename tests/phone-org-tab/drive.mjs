@@ -8,6 +8,7 @@
 //   ⑤ 「架构图」→ 架构图页,有返回;页面不横向溢出
 //   ⑥ 登录档案缺 networkId 时,Agent 列表「分组 · 部门」仍按部门分
 //   ⑦ 部门读不到时,分组标签如实写「名称前缀」
+//   ⑧ 读取中是居中的转圈,不是设置风格的卡片
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
 
@@ -127,6 +128,28 @@ for (const theme of ['light', 'dark']) {
   await page.waitForTimeout(1500);
   const label = await page.locator('[data-testid="agents-group-by-toggle"]').innerText();
   record('⑦ 部门读不到时标签写「分组 · 名称前缀」', label.includes('名称前缀'), label);
+  await ctx.close();
+}
+// ⑧ 读取中:居中转圈,不是设置风格的卡片(admin 2026-11-16「这也特别丑」)。
+{
+  const ctx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 390, height: 844 }, colorScheme: 'light', isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(15000);
+  await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(fixture);
+  await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+  await page.locator('[data-testid="mobile-tab-bar"]').waitFor();
+  await page.evaluate(() => { window.__stubDelayMs = 4000; });
+  await page.locator('[data-testid="mobile-tab-org"]').click();
+  await page.locator('[data-testid="agent-org-loading"]').waitFor({ timeout: 5000 });
+  const geo = await page.evaluate(() => {
+    const el = document.querySelector('[data-testid="agent-org-loading"]');
+    const sp = el?.querySelector('[role="progressbar"]');
+    const b = sp?.getBoundingClientRect();
+    return { spinner: !!sp, cx: b ? b.x + b.width / 2 : -1, bg: el ? getComputedStyle(el).backgroundColor : '' };
+  });
+  await page.screenshot({ path: `${OUT}/loading.png` });
+  record('⑧ 读取中是居中的转圈(无卡片)', geo.spinner && Math.abs(geo.cx - 195) < 12 && (geo.bg === 'rgba(0, 0, 0, 0)' || geo.bg === 'transparent'), geo);
   await ctx.close();
 }
 await browser.close();
