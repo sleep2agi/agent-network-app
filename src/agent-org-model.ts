@@ -196,6 +196,24 @@ export function agentsDirectlyIn(placed: readonly PlacedAgent[], dept: string | 
   return placed.filter(a => a.departmentId === dept);
 }
 
+/** admin 2026-11-16「里面明明没有」：部门树只显示近 7 天动过的 Agent，但 Hub 删部门时
+ *  数的是**所有**显式归属在该部门的节点（nodes.department_id）。于是树上是 0、删除却说
+ *  「还有 6 个 Agent」。这里把**直接**挂在该部门、却因为太久没上线而没显示的那些找出来
+ *  （按 node_id，同名旧行也算 —— Hub 是按行数的）。 */
+export function hiddenAgentsDirectlyIn(data: AgentOrgData, placed: readonly PlacedAgent[], dept: string): { nodeId: string; alias: string }[] {
+  const shown = new Set(placed.map(a => a.nodeId));
+  const seen = new Set<string>();
+  const out: { nodeId: string; alias: string }[] = [];
+  const all = [...data.owners.flatMap(o => o.agents), ...data.unowned];
+  for (const a of all) {
+    const id = a.nodeId.trim();
+    if (!id || seen.has(id) || a.departmentId !== dept || shown.has(id)) continue;
+    seen.add(id);
+    out.push({ nodeId: id, alias: a.alias.trim() || id });
+  }
+  return out.sort((x, y) => x.alias.localeCompare(y.alias, 'zh') || x.nodeId.localeCompare(y.nodeId));
+}
+
 /** 树上的数字:该部门含下级。未归属(null)只算直接挂在外面的。 */
 export function agentCount(placed: readonly PlacedAgent[], data: AgentOrgData, dept: string | null): number {
   if (dept === null) return placed.filter(a => a.departmentId === null).length;

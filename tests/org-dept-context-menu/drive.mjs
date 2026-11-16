@@ -24,6 +24,13 @@ const fixture = (admin) => {
     { id: 'd_a', name: '研发', parent_id: null, leader_user_id: null, sort: 0 },
     { id: 'd_b', name: '产品', parent_id: null, leader_user_id: null, sort: 1 },
     { id: 'd_c', name: '运营', parent_id: null, leader_user_id: null, sort: 2 },
+    { id: 'd_d', name: '旧站', parent_id: null, leader_user_id: null, sort: 3 },
+  ];
+  // admin 2026-11-16「里面明明没有」:两个很久没上线的 Agent 还挂在「旧站」,列表默认不显示。
+  let agents = [
+    { node_id: 'n_1', alias: '示例甲' },
+    { node_id: 'n_old1', alias: '旧站狗', department_id: 'd_d', updated_at: '2026-01-01T00:00:00Z', lifecycle_state: 'active' },
+    { node_id: 'n_old2', alias: '旧站牛', department_id: 'd_d', updated_at: '2026-02-01T00:00:00Z', lifecycle_state: 'active' },
   ];
   const members = [{ user_id: 'u_me', department_id: null }, { user_id: 'u_y', department_id: 'd_b' }];
   window.__deptCalls = [];
@@ -54,11 +61,23 @@ const fixture = (admin) => {
         const d = departments.find(x => x.id === id);
         return { ok: true, department: { ...d, member_count: 0 } };
       }
-      if (m === 'DELETE') { departments = departments.filter(d => d.id !== id); return { ok: true, deleted: id }; }
+      if (m === 'DELETE') {
+        const left = agents.filter(a => a.department_id === id).length;
+        if (left) return { ok: false, error: 'department_not_empty', children: 0, members: 0, agents: left };
+        departments = departments.filter(d => d.id !== id); return { ok: true, deleted: id };
+      }
+    }
+    const mv = p.match(new RegExp(`^/api/networks/${NET}/nodes/([^/]+)/department$`));
+    if (mv && m === 'PUT') {
+      const id = decodeURIComponent(mv[1]);
+      const b = JSON.parse(body || '{}');
+      window.__deptCalls.push({ method: m, path: p, body: b });
+      agents = agents.map(a => (a.node_id === id ? { ...a, department_id: b.department_id ?? undefined } : a));
+      return { ok: true };
     }
     if (p === `/api/networks/${NET}/humans`) return { ok: true, humans: [{ user_id: 'u_me', username: 'me' }, { user_id: 'u_y', username: 'y' }] };
     if (p === '/api/requirements/people/directory') {
-      return { ok: true, people: [], agents_without_owner: [{ node_id: 'n_1', alias: '示例甲' }], has_more: false, next_offset: null, agent_department_supported: true };
+      return { ok: true, people: [], agents_without_owner: agents.map(a => { const r = { ...a }; if (!r.department_id) delete r.department_id; return r; }), has_more: false, next_offset: null, agent_department_supported: true };
     }
     if (p === '/api/requirements/people') return { ok: true, people: members };
     return undefined;
@@ -147,6 +166,26 @@ try {
     assert.deepEqual(calls.at(-1), { method: 'DELETE', path: '/api/networks/net-org/departments/d_c', body: null });
     assert.equal(await page.locator('[data-testid="agent-org-dept-d_c"]').count(), 0, '删掉的部门不在树里');
     assert.match(await page.locator('[data-testid="agent-org-department-result"]').innerText(), /已删除「运营」/);
+
+    // ④c 树上 0 个、Hub 里还有 2 个久未上线的 Agent:说清楚是谁,并能一键移到未归属再删
+    assert.equal(await page.locator('[data-testid="agent-org-dept-d_d-value"]').innerText().catch(() => '0'), '0', '树上数字只算看得见的');
+    await rightClick(page, '[data-testid="agent-org-dept-d_d"]');
+    await page.locator('[data-testid="agent-org-dept-menu-delete"]').click();
+    await page.locator('[data-testid="agent-org-delete-blocked"]').waitFor();
+    assert.match(await page.locator('[data-testid="agent-org-delete-blocked"]').innerText(), /2 个 Agent/);
+    assert.match(await page.locator('[data-testid="agent-org-delete-hidden"]').innerText(), /2 个超过 7 天没上线.*旧站狗、旧站牛/);
+    assert.equal(await page.locator('[data-testid="agent-org-delete-confirm"]').innerText(), '移到未归属并删除');
+    assert.notEqual(await page.locator('[data-testid="agent-org-delete-confirm"]').getAttribute('aria-disabled'), 'true');
+    await page.screenshot({ path: `${OUT}/2b-delete-hidden.png` });
+    await page.locator('[data-testid="agent-org-delete-confirm"]').click();
+    await page.locator('[data-testid="agent-org-delete-dialog"]').waitFor({ state: 'detached' });
+    calls = await page.evaluate(() => window.__deptCalls);
+    assert.deepEqual(calls.slice(-3).map(c => `${c.method} ${c.path} ${JSON.stringify(c.body)}`), [
+      'PUT /api/networks/net-org/nodes/n_old1/department {"department_id":null}',
+      'PUT /api/networks/net-org/nodes/n_old2/department {"department_id":null}',
+      'DELETE /api/networks/net-org/departments/d_d null',
+    ]);
+    assert.equal(await page.locator('[data-testid="agent-org-dept-d_d"]').count(), 0, '「旧站」删掉了');
 
     // ⑤ 右键未归属 → 只有新建根部门
     await rightClick(page, '[data-testid="agent-org-dept-unassigned"]');
