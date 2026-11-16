@@ -3,7 +3,7 @@
 // 一张能直接截图拿去宣传的图:顶上一条品牌色横幅(几个大数字 + 头像墙),下面按根部门分栏的架构树
 // (根部门一张卡、子部门挂在下面)。数据就是组织页已经读到的那份(AgentOrgData + placeAgents),不多读接口。
 import { childrenOf, subtreeIds, type Department } from './org-model';
-import { agentCount, orgTree, type AgentOrgData, type PlacedAgent } from './agent-org-model';
+import { agentCount, orgTree, staleDays, type AgentOrgData, type PlacedAgent } from './agent-org-model';
 
 /**
  * 每栏一种颜色(按顺序轮换),卡片顶边和子部门竖线用它。
@@ -11,7 +11,9 @@ import { agentCount, orgTree, type AgentOrgData, type PlacedAgent } from './agen
  */
 export const DEPT_HUES = ['#56708c', '#5f8a6f', '#b06c4c', '#a3843a', '#80628f', '#4f8585', '#8a6b52', '#6f7f4a'] as const;
 
-export const isRunning = (a: Pick<PlacedAgent, 'lifecycleState'>): boolean => a.lifecycleState === 'active';
+/** 运行中 = active 且最近 7 天有动静。久未上线的也显示在图上了(admin 2026-11-16),不能让它们把「运行中」撑虚。 */
+export const isRunning = (a: Pick<PlacedAgent, 'lifecycleState'> & { updatedAt?: string | null }): boolean =>
+  a.lifecycleState === 'active' && staleDays(a) === null;
 
 export type ShowcaseStats = { agents: number; departments: number; running: number; owners: number; unassigned: number };
 

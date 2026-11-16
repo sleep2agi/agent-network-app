@@ -77,6 +77,17 @@ export type PlaceOptions = {
 };
 
 const DAY_MS = 86_400_000;
+/** 超过这么多天没动的 Agent 算「久未上线」:组织页照常显示,但变灰、排在后面、不算运行中。 */
+export const STALE_DAYS = 7;
+
+/** admin 2026-11-16「没有在线的那些 agent 也在架构里显示一下,要不然空着挺难看」:
+ *  久未上线 → 返回多少天没上线;否则(含不知道多久)null。 */
+export function staleDays(agent: Pick<OrgAgent, 'updatedAt'>, now: number = Date.now()): number | null {
+  const ms = agentUpdatedMs(agent);
+  if (ms === null) return null;
+  const days = Math.floor((now - ms) / DAY_MS);
+  return days > STALE_DAYS ? days : null;
+}
 
 /** `updated_at` 可能是 "2026-10-26 14:01:21"（SQLite）或 ISO；解析不了返回 null。 */
 export function agentUpdatedMs(agent: Pick<OrgAgent, 'updatedAt'>): number | null {

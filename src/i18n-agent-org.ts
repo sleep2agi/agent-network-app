@@ -115,6 +115,8 @@ export const agentOrgTranslations = {
   'agentOrg.blockChildren': ['{count} 个子部门', '{count} child departments'],
   'agentOrg.blockMembers': ['{count} 个成员', '{count} members'],
   'agentOrg.blockAgents': ['{count} 个 Agent', '{count} agents'],
+  'agentOrg.staleDays': ['{days} 天未上线', 'Offline {days} days'],
+  'agentOrg.deleteAgentsList': ['里面的 Agent：{names}', 'Agents inside: {names}'],
   'agentOrg.deleteHidden': ['其中 {count} 个超过 7 天没上线，列表里默认不显示：{names}', '{count} of them have been offline for more than 7 days and are hidden from the list: {names}'],
   'agentOrg.deleteMoveHidden': ['移到未归属并删除', 'Move to Unassigned and delete'],
   'agentOrg.deleteMovingHidden': ['正在移出 {done}/{count}…', 'Moving out {done}/{count}…'],
