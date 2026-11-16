@@ -181,6 +181,9 @@ export default function AgentsScreen({
   // 多用户 Agent 权限:当前网络里我是不是受限成员(只看管理员分配的 Agent)。决定空列表说什么。
   const [restricted, setRestricted] = useState(false);
   const [selfUserId, setSelfUserId] = useState<string | undefined>(undefined);
+  // 部门分组用的网络:登录档案里没有 networkId(手机上的旧登录)时,用 /api/auth/me 的当前网络补上。
+  // admin 2026-11-16「手机端的组织架构没出来」:手机列表的「分组 · 部门」退回了前缀分组。
+  const [orgNetworkId, setOrgNetworkId] = useState<string | undefined>(cfg.networkId);
   // 部门负责人(RFC-040,Hub ≥ .91):/api/auth/me 的 managed_department_ids 非空 → 桌面侧栏「人员」上方多一项「管理本部门」。
   // 旧 Hub 没有这个字段 → 空,入口不出现。
   const [managedDepts, setManagedDepts] = useState<{ ids: string[]; networkName: string }>({ ids: [], networkName: '' });
@@ -192,6 +195,7 @@ export default function AgentsScreen({
       if (!live) return;
       setRestricted(isRestrictedIn(me, cfg.networkId));
       setSelfUserId(me?.user?.user_id ?? undefined);
+      setOrgNetworkId(cfg.networkId || (me as any)?.current_network || me?.networks?.[0]?.network_id || undefined);
       const net = (me?.networks ?? []).find(n => n.network_id === cfg.networkId);
       setManagedDepts({ ids: managedDepartmentIds(me, cfg.networkId), networkName: net?.network_name ?? '' });
     }).catch(() => {});
@@ -217,10 +221,15 @@ export default function AgentsScreen({
       const conv = await fetchConversationThreads(cfg, cfg.networkId).catch(() => ({ threads: [], groupThreads: null }));
       setPeople(peopleRows(humans, conv.threads, selfUserId));
       setGroups(onOpenGroup && conv.groupThreads ? groupRows(conv.groupThreads) : null);
-      void fetchOrg(cfg, cfg.networkId).then(setOrg).catch(() => { /* 读不到部门就不分组 */ });
     } catch { setPeople([]); setGroups(null); }
   }, [cfg.serverUrl, cfg.token, cfg.networkId, !!onOpenPerson, !!onOpenGroup, preview, selfUserId]);
   usePoll(loadPeople, 15000, [loadPeople]);
+  // 部门树单独读(以前夹在 loadPeople 里:人员接口失败、或档案缺 networkId 时整棵树都不读 ⇒ 列表退回前缀分组)。
+  const loadOrg = useCallback(async () => {
+    if (preview || !orgNetworkId) return;
+    await fetchOrg(cfg, orgNetworkId).then(setOrg).catch(() => { /* 读不到部门就不分组 */ });
+  }, [cfg.serverUrl, cfg.token, orgNetworkId, preview]);
+  usePoll(loadOrg, 60000, [loadOrg]);
   useEffect(() => subscribeHumanDm(() => { void loadPeople(); }), [loadPeople]);
   // 群消息 / 已读的实时变化:Hub 在事件里带了我的未读数,就地改那一行;列表里没有这个群(新入群)→ 整表重拉。
   useEffect(() => subscribeGroupChat(ev => {
@@ -584,7 +593,7 @@ export default function AgentsScreen({
       if (explicit) { if (alive) setDeptByAlias(explicit); return; }
       // 每个部门一次 nodes 查询(部门通常 <20 个,并发即可;任一失败就少一组,不阻塞列表)。
       const groups = await Promise.all(org.departments.map(async d => {
-        const nodes = await fetchDepartmentNodes(cfg, cfg.networkId ?? '', d.id).catch(() => []);
+        const nodes = await fetchDepartmentNodes(cfg, orgNetworkId ?? '', d.id).catch(() => []);
         return { name: d.name, nodes };
       }));
       if (!alive) return;
@@ -593,7 +602,7 @@ export default function AgentsScreen({
       setDeptByAlias(map);
     })().catch(() => { if (alive) setDeptByAlias(new Map()); });
     return () => { alive = false; };
-  }, [org, cfg]);
+  }, [org, cfg, orgNetworkId]);
 
   const peopleGroups = useMemo(() => groupPeopleByDepartment(org, peopleShown.rows), [org, peopleShown.rows]);
   const peopleGroupHeadHRef = useRef<number | null>(null);
@@ -998,7 +1007,7 @@ export default function AgentsScreen({
             {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} 个 agent${headerViewSuffix(viewGroupBy)}`}
           </Text>
           {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-          <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} />
+          <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} prefixFallback={viewGroupBy === 'department' && !deptTreeView} />
           <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
             <Ionicons name="add" size={24} color={colors.accent} />
           </Pressable>
@@ -1034,7 +1043,7 @@ export default function AgentsScreen({
               <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} 个 agent${headerViewSuffix(viewGroupBy)}`}</Text>
             )}
             {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-            <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} />
+            <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} prefixFallback={viewGroupBy === 'department' && !deptTreeView} />
             <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
               <Ionicons name="add" size={24} color={colors.accent} />
             </Pressable>
@@ -1408,11 +1417,13 @@ export default function AgentsScreen({
 const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFactor);
 /** 分组视图切换(0.477 起;0.479 改成「点开三档直接选」)。实现见 agent-list-grouping。
  *  单独抽出来是因为紧凑布局与宽布局各有一份列表头,两处必须完全一致(测试按 testID 找)。 */
-function ToggleGroupBy({ groupBy, onPress }: { groupBy: GroupBy; onPress: (by: GroupBy) => void }) {
+function ToggleGroupBy({ groupBy, onPress, prefixFallback = false }: { groupBy: GroupBy; onPress: (by: GroupBy) => void; prefixFallback?: boolean }) {
   // 0.479:三档循环点起来容易「点过头」(想回部门要再绕两下),所以点开就给出三档让用户直接选。
   // 仍然是这一个按钮 + 一行选项:侧栏头部很窄,放三个常驻 chip 会挤掉标题。
   const [open, setOpen] = useState(false);
-  const label = groupByLabel(groupBy);
+  // admin 2026-11-16「手机端的组织架构没出来」:部门数据没读到时列表其实是按名字前缀分的,
+  // 以前标签照样写「部门」,看起来像组织架构坏了。读到之前如实写「名称前缀」。
+  const label = prefixFallback ? '分组 · 名称前缀' : groupByLabel(groupBy);
   return (
     <View style={{ marginRight: 6 }}>
       <Pressable
