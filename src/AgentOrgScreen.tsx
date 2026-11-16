@@ -220,7 +220,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
         <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : styles.workspace}>
           {!p.fill ? <View style={styles.toolbar} testID="agent-org-department-actions">
             <View style={styles.toolbarContext}>
-              <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>
+              {p.phone && p.title ? null : <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>}
               <Text testID="agent-org-summary" style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
             </View>
             {/* admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:部门结构不在这里改。
