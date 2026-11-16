@@ -9,6 +9,8 @@
 //   ⑥ 登录档案缺 networkId 时,Agent 列表「分组 · 部门」仍按部门分
 //   ⑦ 部门读不到时,分组标签如实写「名称前缀」
 //   ⑧ 读取中是居中的转圈,不是设置风格的卡片
+//   ⑨ 第二次进入「组织」先画缓存,瞬开
+//   ⑩ 读不到时居中说明 + 原因 + 重试按钮
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
 
@@ -150,6 +152,49 @@ for (const theme of ['light', 'dark']) {
   });
   await page.screenshot({ path: `${OUT}/loading.png` });
   record('⑧ 读取中是居中的转圈(无卡片)', geo.spinner && Math.abs(geo.cx - 195) < 12 && (geo.bg === 'rgba(0, 0, 0, 0)' || geo.bg === 'transparent'), geo);
+  await ctx.close();
+}
+// ⑨ 第二次进「组织」瞬开:先画上次读到的,不再转圈等(admin 2026-11-16「这个UI 加载UI太差了」)。
+{
+  const ctx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 390, height: 844 }, colorScheme: 'light', isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(15000);
+  await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(fixture);
+  await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+  await page.locator('[data-testid="mobile-tab-bar"]').waitFor();
+  await page.locator('[data-testid="mobile-tab-org"]').click();
+  await page.getByText('TMWork', { exact: true }).first().waitFor();
+  await page.locator('[data-testid="mobile-tab-agents"]').click();
+  await page.waitForTimeout(400);
+  await page.evaluate(() => { window.__stubDelayMs = 4000; });
+  await page.locator('[data-testid="mobile-tab-org"]').click();
+  await page.waitForTimeout(300);
+  const instant = await page.getByText('TMWork', { exact: true }).first().isVisible().catch(() => false);
+  const spinner = await page.locator('[data-testid="agent-org-loading"]').isVisible().catch(() => false);
+  await page.screenshot({ path: `${OUT}/revisit.png` });
+  record('⑨ 再次进入瞬开(先画缓存,没有转圈)', instant && !spinner, { instant, spinner });
+  await ctx.close();
+}
+// ⑩ 读不到:居中说明 + 原因 + 「重试」按钮,不是设置风格的一行(admin 2026-11-16「这个感觉也有点太臭了」)。
+{
+  const ctx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 390, height: 844 }, colorScheme: 'light', isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(20000);
+  await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(fixture);
+  await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+  await page.locator('[data-testid="mobile-tab-bar"]').waitFor();
+  await page.evaluate(() => { window.__stubFail = true; });
+  await page.locator('[data-testid="mobile-tab-org"]').click();
+  await page.locator('[data-testid="agent-org-error"]').waitFor();
+  const reason = await page.locator('[data-testid="agent-org-error-reason"]').innerText();
+  const btn = await page.locator('[data-testid="agent-org-retry"]').boundingBox();
+  await page.screenshot({ path: `${OUT}/error.png` });
+  await page.evaluate(() => { window.__stubFail = false; });
+  await page.locator('[data-testid="agent-org-retry"]').click();
+  const recovered = await page.getByText('TMWork', { exact: true }).first().waitFor({ timeout: 10000 }).then(() => true).catch(() => false);
+  record('⑩ 读不到:居中说明 + 原因 + 重试按钮;点重试恢复', reason.includes('原因') && !!btn && Math.abs(btn.x + btn.width / 2 - 195) < 12 && recovered, { reason, btn, recovered });
   await ctx.close();
 }
 await browser.close();
