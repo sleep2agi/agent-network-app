@@ -7,7 +7,7 @@ import { Ionicons } from './icons';
 import NodeDetailScreen from './NodeDetailScreen';
 import type { ScheduleOpenRequest } from './node-schedules';
 import { Text } from './ui-text';
-import { colors, onThemeChange, radius, spacing } from './theme';
+import { colors, onThemeChange, radius, spacing, type as fontSize, weight } from './theme';
 import { useTranslation } from './i18n-react';
 import { t } from './i18n';
 import type { HubConfig } from './api';
@@ -43,7 +43,9 @@ export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled }: { 
       <View style={[styles.root, openAlias ? styles.hidden : null]}>
         {phone ? (
           // 手机底栏「组织」(管理员 2026-11-16):单列,整页滚;成员与权限仍在「设置 → 组织与权限」。
-          <ScrollView testID="org-workspace-phone" style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: spacing.md }} keyboardShouldPersistTaps="handled">
+          <ScrollView testID="org-workspace-phone" style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.md }} keyboardShouldPersistTaps="handled">
+            {/* 和「任务」「定时任务」一样:左上一个大标题,卡片里不再重复「组织管理」。 */}
+            <Text testID="org-workspace-phone-title" style={styles.phoneTitle} accessibilityRole="header">{t('nav.org')}</Text>
             <AgentOrgScreen cfg={cfg} networkId={networkId} phone canManageStructure={canManage} onOpenAgent={setOpenAlias} title={t('nav.org')} />
           </ScrollView>
         ) : (
@@ -83,6 +85,7 @@ const makeStyles = () => StyleSheet.create({
   crumbSep: { color: colors.textMuted, fontSize: 14 },
   crumbHere: { color: colors.text, fontSize: 14, fontWeight: '600', flexShrink: 1 },
   root: { flex: 1, minHeight: 0, backgroundColor: colors.bg },
+  phoneTitle: { color: colors.text, fontSize: fontSize.heading, fontWeight: weight.strong, paddingHorizontal: spacing.lg, paddingTop: spacing.md, paddingBottom: spacing.md },
 });
 let styles = makeStyles();
 onThemeChange(() => { styles = makeStyles(); });

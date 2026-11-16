@@ -66,6 +66,7 @@ for (const theme of ['light', 'dark']) {
   await page.screenshot({ path: `${OUT}/${theme}-1-tree.png` });
   record(`${theme} ② 组织页:「架构图」入口 + 部门树`, await page.locator('[data-testid="agent-org-chart-open"]').isVisible() && await page.getByText('TMWork', { exact: true }).first().isVisible(), null);
   record(`${theme} ② 不横向溢出(树)`, await noOverflow(page), null);
+  record(`${theme} ② 左上大标题「组织」,卡片里不再重复「组织管理」`, (await page.locator('[data-testid="org-workspace-phone-title"]').innerText()) === '组织' && !(await page.getByText('组织管理', { exact: true }).isVisible().catch(() => false)), null);
   await page.getByText('TMWork', { exact: true }).first().click();
   await page.locator('[data-testid="agent-org-detail-card"]').waitFor();
   await page.waitForTimeout(300);
