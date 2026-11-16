@@ -192,6 +192,8 @@ async function run(vp, viewport, ua, theme, phone) {
 
   await page.locator(`${tid('node-section-nav')} [role="tab"]`, { hasText: '权限' }).first().click({ timeout: 3000 }).catch(() => {});
   await page.locator(tid('node-perm-section')).waitFor({ timeout: 5000 }).catch(() => {});
+  // 2026-11-16 细项卡片收进「高级」(默认收起);本 drive 测的是细项,先展开。
+  await page.locator(tid('node-perm-advanced-toggle')).click({ timeout: 3000 }).catch(() => {});
   await sleep(600);
 
   // 2 layout
@@ -207,8 +209,10 @@ async function run(vp, viewport, ua, theme, phone) {
   });
   const r = (o) => o && { l: r1(o.l), r: r1(o.r), h: r1(o.h), cy: r1(o.cy), checked: o.checked };
   const optsOk = geo.opts.every(Boolean);
+  // 「两个问题」卡片在上面,手机上模式卡片被推到首屏下面:先滚到它再量是否画出来。
+  if (phone) await page.locator(tid('node-perm-option-normal')).scrollIntoViewIfNeeded().catch(() => {});
   const descs = phone
-    ? await Promise.all(['normal', 'readonly', 'restricted'].map(m => paintedText(page, tid(`node-perm-option-${m}-summary`)).catch(() => null)))
+    ? await (async () => { const out = []; for (const m of ['normal', 'readonly', 'restricted']) { await page.locator(tid(`node-perm-option-${m}-summary`)).scrollIntoViewIfNeeded().catch(() => {}); out.push(await paintedText(page, tid(`node-perm-option-${m}-summary`)).catch(() => null)); } return out; })()
     : [await paintedText(page, tid('node-perm-summary')).catch(() => null)];
   const expectDesc = phone ? ['和你一样', '只看不动', '只管派给它的任务'] : ['和你一样'];
   const layoutChecks = phone ? {
@@ -346,6 +350,7 @@ async function run(vp, viewport, ua, theme, phone) {
   await page.evaluate(() => sessionStorage.setItem('grantCaps', JSON.stringify(['schedules'])));
   await openNode(page, '示例-主人');
   await page.locator(`${tid('node-section-nav')} [role="tab"]`, { hasText: '权限' }).first().click({ timeout: 3000 }).catch(() => {});
+  await page.locator(tid('node-perm-advanced-toggle')).click({ timeout: 3000 }).catch(() => {});
   await page.locator(tid('node-grants-card')).waitFor({ timeout: 5000 }).catch(() => {});
   await page.evaluate(() => { window.__grantPuts = []; });
   await page.locator(tid('node-grants-add')).click({ timeout: 3000 }).catch(() => {});

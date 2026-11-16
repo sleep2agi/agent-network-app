@@ -22,6 +22,7 @@ import {
 import { fetchHumans } from './human-dm-api';
 import { fetchOrg } from './org-api';
 import NodeGrantsCard from './NodeGrantsCard';
+import NodePermissionSimple from './NodePermissionSimple';
 import { NODE_GRANTS_CAPABILITY } from './api';
 import type { Human } from './human-dm';
 import {
@@ -83,6 +84,10 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
   /** 管理权限(Hub 报 node_grants 才画)。 */
   const [grantsSupported, setGrantsSupported] = useState(false);
   const [depts, setDepts] = useState<DeptChoice[]>([]);
+  // 「两个问题」改了管理授权后,让「高级」里的授权卡重读一次(remount)。
+  const [grantsVersion, setGrantsVersion] = useState(0);
+  // admin 2026-11-16「简单易用明了」:细项默认收起;名单本来就是自定义(对不上任何一档)时不强行收起也无妨,仍默认收起。
+  const [advancedOpen, setAdvancedOpen] = useState(false);
 
   useEffect(() => { setMode(normalizeMode(node.permission_mode)); }, [node.node_id, node.permission_mode]);
   useEffect(() => {
@@ -166,12 +171,27 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
       <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t('nodePerm.intro')}</Text>
 
       {/* 一行摘要:模式 + 名单,不用展开就知道当前限制到什么程度。 */}
-      <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-perm-overview">
+      {/* 有「两个问题」时它已经说清了现状,概要行只在旧 Hub(没有收件名单)上出现。 */}
+      {showInbox ? null : <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }} testID="node-perm-overview">
         {showInbox
           ? t('nodePerm.overview', { mode: selected.label, peers: allowlistText(peers, label), inbox: allowlistSummary(inbox), tools: allowlistText(tools) })
           : t('nodePerm.overviewNoInbox', { mode: selected.label, peers: allowlistText(peers, label), tools: allowlistText(tools) })}
-      </Text>
+      </Text>}
 
+      {showInbox ? (
+        <NodePermissionSimple cfg={cfg} node={node} mode={mode} inbox={inbox} humans={humans} depts={depts} grantsSupported={grantsSupported}
+          onModeSaved={m => { setMode(m); onChanged?.(m); }}
+          onInboxSaved={list => setInbox(list)}
+          onGrantsSaved={() => setGrantsVersion(v => v + 1)} />
+      ) : null}
+      {showInbox ? (
+        <Pressable accessibilityRole="button" accessibilityState={{ expanded: advancedOpen }} testID="node-perm-advanced-toggle" onPress={() => setAdvancedOpen(v => !v)}
+          style={{ flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: spacing.xs, alignSelf: 'flex-start' }}>
+          <Ionicons name={advancedOpen ? 'chevron-down' : 'chevron-forward'} size={14} color={colors.textMuted} />
+          <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{t('nodePerm.simple.advanced')}</Text>
+        </Pressable>
+      ) : null}
+      {!showInbox || advancedOpen ? <>
       {/* ── 发 ── */}
       <View style={card} testID="node-perm-send">
         <CardHeader icon="arrow-up-circle-outline" title={t('nodePerm.send.title')} hint={t('nodePerm.send.hint')} />
@@ -321,7 +341,8 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
       ) : null}
 
       {/* 管理权限:这个节点能管谁的定时任务(以后还有看板)。旧 Hub 不画。 */}
-      {grantsSupported ? <NodeGrantsCard cfg={cfg} nodeId={node.node_id} depts={depts} nodes={choices} compact={compact} /> : null}
+      {grantsSupported ? <NodeGrantsCard key={grantsVersion} cfg={cfg} nodeId={node.node_id} depts={depts} nodes={choices} compact={compact} /> : null}
+      </> : null}
 
       {busy ? <ActivityIndicator size="small" color={colors.accent} /> : null}
 
