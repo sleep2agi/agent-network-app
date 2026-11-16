@@ -681,7 +681,7 @@ export default function NodeDetailScreen({
         {/* admin 2026-11-15:职责介绍放在概览最上面 —— 别的节点、同事打开这个节点最先想知道的就是「它负责什么」。
             Hub 不支持(node 上没有 description 键)就不画。只读页(聊天里的「节点信息」)只看不改。 */}
         {node && 'description' in node ? (
-          <NodeDescriptionCard key={node.node_id} cfg={cfg} node={node} canEdit={!readOnly}
+          <NodeDescriptionCard key={node.node_id} cfg={cfg} node={node} canEdit
             onSaved={(description, attrsRevision) => setNode(prev => prev ? { ...prev, description, attrs_revision: attrsRevision } : prev)}
             onConflict={() => { void load(); }} />
         ) : null}
