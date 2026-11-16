@@ -34,7 +34,7 @@ ck('候选去掉自己、同别名只留一项、按名字排序', same(choices.
 const alpha = choices[0];
 ck('按别名或 node_id 写的都算在名单里', listHasNode(['alpha'], alpha) && listHasNode(['n_a'], alpha) && !listHasNode(['beta'], alpha) && !listHasNode(null, alpha));
 ck('勾选写别名;取消两种写法都去掉,去空 ⇒ null', same(toggleNode(null, alpha), ['alpha']) && toggleNode(['n_a'], alpha) === null && same(toggleNode(['n_a', 'beta'], alpha), ['beta']));
-ck('node_id 显示成别名;不在网络里的注明', entryLabel('n_a', choices) === 'alpha' && entryLabel('ghost', choices).includes('不在这个网络'));
+ck('node_id 显示成别名;不在网络里的注明', entryLabel('n_a', choices) === 'alpha' && entryLabel('ghost', choices).includes('不在本网络'));
 
 // ── 收件白名单语法:user:<名>、user:*、!strict ──
 const humans = [{ user_id: 'u_1', username: 'bob', display_name: 'Bob Li' }];

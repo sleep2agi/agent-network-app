@@ -267,9 +267,13 @@ export default function NodePermissionSection({ cfg, node, compact, onChanged }:
           <CardHeader icon="arrow-down-circle-outline" title={t('nodePerm.receive.title')} hint={t('nodePerm.receive.hint')} />
           <AllowlistEditor kind="inbox" title={t('nodePerm.inbox.title')} hint={t('nodePerm.inbox.hint')} placeholder={t('nodePerm.inbox.placeholder')}
             list={inbox} label={label} busy={busy} status={status.inbox} onSave={next => saveList('inbox', next)}
+            // 只有在下面勾选行里**看得见**的条目才算「已分组」;认不出的部门 / 人(已删、改名)留在 Agent 行里,可删,不会消失。
+            isGroupedEntry={e => e === ANY_PERSON_ENTRY
+              || humans.some(h => e === personEntry(h.username) || e === `user:${h.user_id}`)
+              || (deptSupported && depts.some(d => e === deptEntry(d.id)))}
+            agentPicks={choices.length ? <NodePicks testPrefix="node-inbox-allowlist-pick" choices={choices} list={inbox} busy={busy} onToggle={c => void saveList('inbox', toggleNode(inbox, c))} /> : null}
             picks={(
               <View style={{ gap: spacing.sm }}>
-                {choices.length ? <NodePicks testPrefix="node-inbox-allowlist-pick" choices={choices} list={inbox} busy={busy} onToggle={c => void saveList('inbox', toggleNode(inbox, c))} /> : null}
                 {deptSupported && depts.length ? (
                   <View style={{ gap: 6 }}>
                     <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('nodePerm.inbox.depts')}</Text>
@@ -432,7 +436,7 @@ function NodePicks({ testPrefix, choices, list, busy, onToggle }: { testPrefix: 
 }
 
 /** 一张名单:当前值 + 可删的 chip + 候选 + 手填补充 + 清空。null = 不限制。 */
-function AllowlistEditor({ kind, title, hint, placeholder, list, label, busy, status, onSave, picks, footer, blockDraft }: {
+function AllowlistEditor({ kind, title, hint, placeholder, list, label, busy, status, onSave, picks, footer, blockDraft, agentPicks, isGroupedEntry }: {
   kind: ListKind;
   title?: string;
   hint: string;
@@ -445,6 +449,10 @@ function AllowlistEditor({ kind, title, hint, placeholder, list, label, busy, st
   picks?: ReactNode;
   footer?: ReactNode;
   blockDraft?: (draft: string) => string;
+  /** 分组模式(收件名单,admin 2026-11-16「感觉乱乱的」):部门 / 成员各自只在自己的勾选行出现一次,
+   *  不再有「当前：」整句和混在一起的 chip 云;剩下的(Agent 和不认识的条目)单独一行「Agent」。 */
+  agentPicks?: ReactNode;
+  isGroupedEntry?: (entry: string) => boolean;
 }) {
   const { t } = useTranslation();
   const [draft, setDraft] = useState('');
@@ -457,11 +465,13 @@ function AllowlistEditor({ kind, title, hint, placeholder, list, label, busy, st
       <View style={{ gap: 2 }}>
         {title ? <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>{title}</Text> : null}
         <Text style={{ color: colors.textSecondary, fontSize: typeScale.small, lineHeight: 18 }}>{hint}</Text>
+        {isGroupedEntry ? null : (
         <Text style={{ color: colors.text, fontSize: typeScale.small, lineHeight: 18 }} testID={`${id}-value`}>
           {t('nodePerm.list.current', { value: allowlistText(list, label) })}
         </Text>
+        )}
         {/* 已设置的条目做成可删的 chip:手打错一个不用整串重输。 */}
-        {entries.length ? (
+        {!isGroupedEntry && entries.length ? (
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6, marginTop: 4 }}>
             {entries.map(e => (
               <Pressable key={e} accessibilityRole="button" accessibilityLabel={t('nodePerm.list.remove', { item: label(e) })} disabled={busy}
@@ -475,6 +485,23 @@ function AllowlistEditor({ kind, title, hint, placeholder, list, label, busy, st
         ) : null}
       </View>
       {picks}
+      {isGroupedEntry ? (
+        <View style={{ gap: 6 }}>
+          <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('nodePerm.inbox.agents')}</Text>
+          <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }} testID={`${id}-value`}>
+            {entries.filter(e => !isGroupedEntry(e)).map(e => (
+              <Pressable key={e} accessibilityRole="button" accessibilityLabel={t('nodePerm.list.remove', { item: label(e) })} disabled={busy}
+                testID={`${id}-remove-${e}`} onPress={() => void onSave(withoutItem(list ?? [], e))}
+                style={{ flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.accent }}>
+                <Text style={{ color: colors.text, fontSize: typeScale.small }}>{label(e)}</Text>
+                <Ionicons name="close" size={12} color={colors.textMuted} />
+              </Pressable>
+            ))}
+            {entries.some(e => !isGroupedEntry(e)) ? null : <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{t('nodePerm.inbox.agentsEmpty')}</Text>}
+          </View>
+          {agentPicks}
+        </View>
+      ) : null}
       <TextInput value={draft} onChangeText={setDraft} placeholder={placeholder}
         placeholderTextColor={colors.textMuted} autoCapitalize="none" testID={`${id}-input`} onSubmitEditing={() => { if (!blocked && parseAllowlistInput(draft)) void add(); }}
         style={{ color: colors.text, fontSize: typeScale.small, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.sm, paddingVertical: 6 }} />
