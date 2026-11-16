@@ -84,7 +84,7 @@ const measurePanel = () => {
   const panel = document.querySelector('[data-testid="chat-info-panel"]');
   if (!panel) return null;
   const b = (el) => { const r = el.getBoundingClientRect(); return { x: r.x, y: r.y, w: r.width, h: r.height, r: r.right }; };
-  const rows = [...panel.querySelectorAll('[data-testid^="chat-info-row-"]')].filter(el => /^chat-info-row-[A-Za-z-]+$/.test(el.getAttribute('data-testid')) && !/-(label|chevron|switch)$/.test(el.getAttribute('data-testid')));
+  const rows = [...panel.querySelectorAll('[data-testid^="chat-info-row-"]')].filter(el => /^chat-info-row-[A-Za-z-]+$/.test(el.getAttribute('data-testid')) && !/-(label|chevron|switch|detail)$/.test(el.getAttribute('data-testid')));
   return {
     panel: b(panel),
     rows: rows.map(el => {
@@ -158,7 +158,7 @@ for (const L of LAYOUTS) {
       check(tag, 'drawer title bar ends on the chat header line (±1px)', Math.abs(bottoms[0] - bottoms[1]) <= 1, bottoms.map(r1).join(' / '));
     }
     const ids = pm.rows.map(r => r.id);
-    const expected = ['chat-info-row-node', 'chat-info-row-search', 'chat-info-row-fork', 'chat-info-row-pin', 'chat-info-row-mute', ...(L.name === 'desktop' ? ['chat-info-row-windowPin'] : []),
+    const expected = ['chat-info-row-node', 'chat-info-row-department', 'chat-info-row-search', 'chat-info-row-fork', 'chat-info-row-pin', 'chat-info-row-mute', ...(L.name === 'desktop' ? ['chat-info-row-windowPin'] : []),
       'chat-info-row-section-model', 'chat-info-row-section-rules', 'chat-info-row-section-skills', 'chat-info-row-section-files', 'chat-info-row-section-tasks', 'chat-info-row-section-schedules',
       'chat-info-row-section-logs'];  // 运行日志 (#493)
     check(tag, 'rows in order', JSON.stringify(ids) === JSON.stringify(expected), ids.join(','));
