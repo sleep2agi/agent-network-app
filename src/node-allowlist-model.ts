@@ -117,6 +117,26 @@ export function allowlistText(list: readonly string[] | null | undefined, label:
   return senders.map(label).join(t('nodePerm.list.sep'));
 }
 
+/**
+ * 名单的一句话概要(权限页顶部用):不再把整份名单铺开,只报各类条数。
+ * admin 2026-11-16「UI/UX 权限再做好一点」:顶部那行「收自:部门 TMAI、神明、…」铺了三行,和下面的名单重复。
+ */
+export function allowlistSummary(list: readonly string[] | null | undefined): string {
+  if (list === null || list === undefined || list.length === 0) return t('nodePerm.list.unrestricted');
+  const senders = senderEntries(list);
+  if (!senders.length) return t('nodePerm.inbox.onlySelf');
+  const depts = senders.filter(e => e.startsWith(DEPT_ENTRY_PREFIX)).length;
+  const anyPerson = senders.includes(ANY_PERSON_ENTRY);
+  const people = senders.filter(e => e.startsWith('user:') && e !== ANY_PERSON_ENTRY).length;
+  const agents = senders.length - depts - people - (anyPerson ? 1 : 0);
+  const parts: string[] = [];
+  if (depts) parts.push(t('nodePerm.summary.depts', { count: depts }));
+  if (anyPerson) parts.push(t('nodePerm.summary.anyPerson'));
+  else if (people) parts.push(t('nodePerm.summary.people', { count: people }));
+  if (agents) parts.push(t('nodePerm.summary.agents', { count: agents }));
+  return parts.join(' · ');
+}
+
 /** 输入框 → 白名单:空白 = 清空限制(null);否则按逗号/空格/顿号拆开去重。 */
 export function parseAllowlistInput(text: string): string[] | null {
   const items = text

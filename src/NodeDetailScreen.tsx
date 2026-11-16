@@ -1016,7 +1016,9 @@ export default function NodeDetailScreen({
   const column = (
     // 运行日志:列的高度按可用空间定(flexBasis 0 + minHeight 0),不按内容撑开 —— 否则 2000 行日志把列撑到几万像素,
     // 日志区自己的 ScrollView 永远不滚、打开时也停不到最新一行。
-    <View style={{ flexGrow: 1, width: '100%', maxWidth: nodePageColumnMaxWidth(section, filesTree), alignSelf: 'center', ...(section === 'logs' ? { flexBasis: 0, minHeight: 0 } : null) }} testID="node-page-content">
+    <View style={{ flexGrow: 1, width: '100%', maxWidth: nodePageColumnMaxWidth(section, filesTree),
+      // 宽窗口里贴着左边的分区菜单,不再居中留一大条空(admin 2026-11-16 截图:权限页内容漂在右边)。
+      alignSelf: 'flex-start', ...(section === 'logs' ? { flexBasis: 0, minHeight: 0 } : null) }} testID="node-page-content">
       {content}
     </View>
   );
