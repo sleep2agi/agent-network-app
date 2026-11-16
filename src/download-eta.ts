@@ -29,3 +29,15 @@ export function formatSpeed(bps: number | null): string | null {
   if (bps >= 1024) return `${Math.round(bps / 1024)} KB/s`;
   return `${Math.round(bps)} B/s`;
 }
+
+/** 「正在下载 37% · 4.1/11 MB · 剩余约 20 秒」—— 没有总量时只报已下多少。 */
+export function videoProgressLabel(received: number, total: number | undefined, elapsedMs: number): string {
+  const mb = (n: number) => (n / 1024 / 1024).toFixed(n >= 10 * 1024 * 1024 ? 0 : 1);
+  const eta = downloadEta(received, total, elapsedMs);
+  const left = formatEta(eta.etaSeconds);
+  const parts = ['正在下载'];
+  if (eta.percent !== null) parts[0] += ` ${eta.percent}%`;
+  parts.push(total ? `${mb(received)}/${mb(total)} MB` : `${mb(received)} MB`);
+  if (left) parts.push(`剩余约 ${left}`);
+  return parts.join(' · ');
+}

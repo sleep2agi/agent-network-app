@@ -295,6 +295,31 @@ const run = async () => {
       a === attachmentCacheScope('https://hub-a.example/#ignored', 'atok_profile_a'));
   }
 
+  // ── 9) admin 2026-11-16「点击没反应吧」：播放 + 保存同时点 → 只下一份 ──
+  {
+    const { fs, calls } = makeFs({ status: 200, body: GOOD_BODY, contentLength: String(Buffer.byteLength(GOOD_BODY)) });
+    const seenA: number[] = []; const seenB: number[] = [];
+    const [a, b] = await Promise.all([
+      downloadAttachmentWith(fs, CACHE, 'http://h', 'tok', 'vid1', 'v.mp4', 'video/mp4', r => seenA.push(r)),
+      downloadAttachmentWith(fs, CACHE, 'http://h', 'tok', 'vid1', 'v.mp4', 'video/mp4', r => seenB.push(r)),
+    ]);
+    ck('并发同一文件 → 只发起一次下载', calls.download === 1);
+    ck('并发同一文件 → 两个调用拿到同一路径', a === b && a.length > 0);
+    ck('并发同一文件 → 后挂上的调用方也收到进度', seenA.length > 0 && seenB.length > 0);
+    await downloadAttachmentWith(fs, CACHE, 'http://h', 'tok', 'vid1', 'v.mp4', 'video/mp4');
+    ck('下完之后再调 → 走缓存, 不再下载', calls.download === 1);
+  }
+  {
+    const { fs, calls } = makeFs({ status: 404, body: NOT_FOUND_BODY });
+    const r = await Promise.allSettled([
+      downloadAttachmentWith(fs, CACHE, 'http://h', 'tok', 'vid2', 'v.mp4', 'video/mp4'),
+      downloadAttachmentWith(fs, CACHE, 'http://h', 'tok', 'vid2', 'v.mp4', 'video/mp4'),
+    ]);
+    ck('并发失败 → 两个调用都拿到失败', r.every(x => x.status === 'rejected'));
+    await downloadAttachmentWith(fs, CACHE, 'http://h', 'tok', 'vid2', 'v.mp4', 'video/mp4').catch(() => {});
+    ck('失败后重试 → 不会挂在已结束的那一份上, 真的重下', calls.download === 2);
+  }
+
   console.log(`\n${pass}/${total} passed`);
   if (pass !== total) process.exit(1);
 };
