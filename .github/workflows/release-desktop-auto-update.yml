@@ -614,6 +614,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.546:
+            - 手机「组织」不再退回按名称前缀分组：部门树改为自己单独加载（60 秒轮询），接口失败时也能看到真实部门；缺名称前缀时明确提示「名称前缀」，不再静默猜测。
+            - 手机「组织」页标题与「任务」「定时任务」统一为大标题，卡片里不再重复「组织管理」。
+
             What's new in 0.2.545:
             - 手机上也能看组织架构：底栏新增「组织」；组织页里部门树与架构图各占一屏，架构图顶部可返回「全部部门」。
 
