@@ -14,6 +14,7 @@ export const nodeGrantsTranslations = {
   'nodeGrants.level': ['级别', 'Level'],
   'nodeGrants.cap.schedules': ['定时任务', 'Schedules'],
   'nodeGrants.cap.board': ['任务看板', 'Task board'],
+  'nodeGrants.cap.rules': ['规则文件（AGENTS.md）', 'Rules file (AGENTS.md)'],
   'nodeGrants.comingSoon': ['即将支持', 'Coming soon'],
   'nodeGrants.scope.network': ['整个网络', 'Whole network'],
   'nodeGrants.scope.department': ['部门 {name}', 'Department {name}'],

@@ -31,5 +31,7 @@ ck('board 只读行', grantLine({ ...dep, capability: 'board' }, depts, nodes) =
 // 一期 Hub 只报 ["schedules"] ⇒ board 必须显示「即将支持」，不能让用户点下去才吃 400。
 ck('老 Hub 没给清单 ⇒ 未知放行', capabilityOffered(undefined, 'board') && capabilityOffered(undefined, 'schedules'));
 ck('一期 Hub 只报 schedules ⇒ board 不可选', capabilityOffered(['schedules'], 'board') === false && capabilityOffered(['schedules'], 'schedules') === true);
+ck('rules 可选,标签是规则文件', GRANT_CAPABILITIES.find(c => c.key === 'rules')?.available === true && grantLine({ ...nod, capability: 'rules' } as any, depts, nodes).startsWith('规则文件（AGENTS.md） · '));
+ck('Hub 清单没有 rules(.284 及以前) ⇒ 不可选', capabilityOffered(['schedules', 'board'], 'rules') === false && capabilityOffered(['schedules', 'board', 'rules'], 'rules'));
 ck('新 Hub 报两个 ⇒ 都可选', capabilityOffered(['schedules', 'board'], 'board') && capabilityOffered(['schedules', 'board'], 'schedules'));
 console.log(`node grants model: ${n}/${n}`);

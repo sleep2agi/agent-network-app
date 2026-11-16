@@ -9,6 +9,9 @@ import type { DeptChoice, NodeChoice } from './node-allowlist-model';
 export const GRANT_CAPABILITIES = [
   { key: 'schedules', available: true },
   { key: 'board', available: true },
+  // admin 2026-11-16「节点新增权限可以编辑其他人的 AGENTS.md」:Hub .285 起 GET grants 的 capabilities 里有 rules;
+  // 老 Hub 的清单里没有 ⇒ capabilityOffered 判为不可选(显示「即将支持」),不会让人点下去才吃 400。
+  { key: 'rules', available: true },
 ] as const;
 
 export type GrantDraft = Pick<NodeGrant, 'capability' | 'scope_kind' | 'scope_id' | 'level'>;
@@ -17,7 +20,7 @@ export type GrantDraft = Pick<NodeGrant, 'capability' | 'scope_kind' | 'scope_id
 export const capabilityOffered = (serverCaps: readonly string[] | undefined, key: string): boolean =>
   !serverCaps || serverCaps.includes(key);
 
-export const capabilityLabel = (c: string) => (c === 'schedules' || c === 'board' ? t(`nodeGrants.cap.${c}`) : c);
+export const capabilityLabel = (c: string) => (c === 'schedules' || c === 'board' || c === 'rules' ? t(`nodeGrants.cap.${c}`) : c);
 
 export function scopeLabel(g: Pick<NodeGrant, 'scope_kind' | 'scope_id'>, depts: readonly DeptChoice[], nodes: readonly NodeChoice[]): string {
   if (g.scope_kind === 'network') return t('nodeGrants.scope.network');
