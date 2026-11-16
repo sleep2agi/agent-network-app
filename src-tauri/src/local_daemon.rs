@@ -143,6 +143,7 @@ fn anet_in(prefix: &Path) -> PathBuf {
 }
 
 /// 拼进命令行的 anet:Windows 上是 `node "<anet.cjs>"`(node 由前面的 PATH 前缀提供),其它平台就是路径本身。
+#[cfg_attr(windows, allow(dead_code))]
 fn anet_cmd(path: &str) -> String {
     if cfg!(windows) && path.ends_with(".cjs") { format!("node {}", shell_quote(path)) } else { shell_quote(path) }
 }
@@ -269,6 +270,63 @@ fn run_shell(
         output,
         timed_out: code.is_none(),
     })
+}
+
+/// 跑一次 anet 子命令并收集输出。
+/// - Windows:不经 shell,直接 `<私有 node.exe> <anet.cjs> args…`(通信欧2号 2026-11-16:私有路径含空格 / `&` 时
+///   避免 cmd 二次解析;干净的 Windows 也不该依赖 shell)。stdout/stderr 都收,带超时。
+/// - 其它平台:照旧经登录 shell(要读 rc 里的 PATH)。
+fn run_anet(anet_path: &str, args: &[&str], cwd: Option<&Path>, env: &[(&str, String)], path_prefix: &str, timeout: Duration) -> Result<CommandOutcome, String> {
+    #[cfg(windows)]
+    {
+        use std::os::windows::process::CommandExt;
+        let node_dir = path_prefix.split(PATH_SEP).next().unwrap_or_default();
+        let mut cmd = Command::new(node_exe_in(Path::new(node_dir)));
+        cmd.arg(anet_path).args(args)
+            .env("PATH", format!("{path_prefix};{}", std::env::var("PATH").unwrap_or_default()))
+            .creation_flags(0x0800_0000)
+            .stdin(Stdio::null())
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped());
+        if let Some(dir) = cwd { cmd.current_dir(dir); }
+        for (key, value) in env { cmd.env(key, value); }
+        let mut child = cmd.spawn().map_err(|error| format!("cannot start node: {error}"))?;
+        let buffer: Arc<Mutex<Vec<u8>>> = Arc::new(Mutex::new(Vec::new()));
+        let mut readers = Vec::new();
+        let pipes: Vec<Box<dyn Read + Send>> = vec![
+            Box::new(child.stdout.take().ok_or("no stdout pipe")?),
+            Box::new(child.stderr.take().ok_or("no stderr pipe")?),
+        ];
+        for mut pipe in pipes {
+            let buffer = Arc::clone(&buffer);
+            readers.push(thread::spawn(move || {
+                let mut chunk = [0u8; 4096];
+                while let Ok(n) = pipe.read(&mut chunk) {
+                    if n == 0 { break; }
+                    if let Ok(mut guard) = buffer.lock() { guard.extend_from_slice(&chunk[..n]); }
+                }
+            }));
+        }
+        let started = Instant::now();
+        let code = loop {
+            match child.try_wait().map_err(|error| error.to_string())? {
+                Some(status) => break Some(status.code().unwrap_or(-1)),
+                None if started.elapsed() > timeout => { let _ = child.kill(); let _ = child.wait(); break None; }
+                None => thread::sleep(Duration::from_millis(100)),
+            }
+        };
+        let settle = Instant::now();
+        while readers.iter().any(|r| !r.is_finished()) && settle.elapsed() < Duration::from_secs(2) {
+            thread::sleep(Duration::from_millis(50));
+        }
+        let output = buffer.lock().map(|g| String::from_utf8_lossy(&g).into_owned()).unwrap_or_default();
+        return Ok(CommandOutcome { code, output, timed_out: code.is_none() });
+    }
+    #[cfg(not(windows))]
+    {
+        let line = format!("{} {}", anet_cmd(anet_path), args.join(" "));
+        run_shell(&with_path_prefix(path_prefix, &line), cwd, env, timeout)
+    }
 }
 
 /// 去掉终端控制序列(交互 shell 的 rc 可能往 stdout 吐颜色/光标码)。
@@ -484,8 +542,7 @@ fn stop_existing_daemon(anet: &Path, daemon_dir: &Path, path_prefix: &str) -> Re
     if !anet.is_file() || !daemon_profile_path(LOCAL_DAEMON_NAME)?.is_file() {
         return Err("existing daemon is running but its launcher/configuration is missing".into());
     }
-    let command = with_path_prefix(path_prefix, &format!("{} node stop {}", anet_cmd(&anet.display().to_string()), LOCAL_DAEMON_NAME));
-    let stop = run_shell(&command, Some(daemon_dir), &[], Duration::from_secs(30))?;
+    let stop = run_anet(&anet.display().to_string(), &["node", "stop", LOCAL_DAEMON_NAME], Some(daemon_dir), &[], path_prefix, Duration::from_secs(30))?;
     if stop.code != Some(0) || stop.timed_out {
         return Err(format!("cannot stop previous daemon; configuration retained: {}", tail(&stop.output, 400)));
     }
@@ -831,7 +888,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
         Some(info) => info,
         None => return fail(steps, format!("私有 anet CLI 版本不兼容,需要 {ANET_PACKAGE}")),
     };
-    let probe = run_shell(&with_path(&format!("{} --version", anet_cmd(&anet.path))), None, &[], Duration::from_secs(30))?;
+    let probe = run_anet(&anet.path, &["--version"], None, &[], &path_prefix, Duration::from_secs(30))?;
     if probe.code != Some(0) {
         return fail(steps, format!("私有 anet CLI 无法执行: {}", tail(&probe.output, 400)));
     }
@@ -890,12 +947,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
     let home_s = home.display().to_string();
     let (home_drive, home_path) = split_home_drive(&home_s);
     let init_env = [("HOME", home_s.clone()), ("USERPROFILE", home_s.clone()), ("HOMEDRIVE", home_drive), ("HOMEPATH", home_path)];
-    let init = run_shell(
-        &with_path(&format!("{} daemon init {} --force", anet_cmd(&anet.path), LOCAL_DAEMON_NAME)),
-        Some(&daemon_dir),
-        &init_env,
-        Duration::from_secs(90),
-    )?;
+    let init = run_anet(&anet.path, &["daemon", "init", LOCAL_DAEMON_NAME, "--force"], Some(&daemon_dir), &init_env, &path_prefix, Duration::from_secs(90))?;
     let init_ok = init.code == Some(0);
     steps.push(StepReport { name: format!("anet daemon init {LOCAL_DAEMON_NAME}"), ok: init_ok, output: tail(&init.output, 1500) });
     if !init_ok {
@@ -992,8 +1044,8 @@ pub fn stop_for_smoke() -> Result<(), String> {
     let anet = anet_in(&private_anet_prefix()?);
     let node_bin = node_bin_dir_in(&private_node_dir()?);
     let prefix = format!("{}{PATH_SEP}{}", node_bin.display(), anet.parent().unwrap().display());
-    let cmd = with_path_prefix(&prefix, &format!("{} node stop {LOCAL_DAEMON_NAME}", if anet.is_file() { anet_cmd(&anet.display().to_string()) } else { "anet".into() }));
-    let _ = run_shell(&cmd, Some(&daemon_dir), &[], Duration::from_secs(30))?;
+    let anet_s = if anet.is_file() { anet.display().to_string() } else { "anet".into() };
+    let _ = run_anet(&anet_s, &["node", "stop", LOCAL_DAEMON_NAME], Some(&daemon_dir), &[], &prefix, Duration::from_secs(30))?;
     Ok(())
 }
 
