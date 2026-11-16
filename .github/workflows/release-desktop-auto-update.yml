@@ -614,6 +614,12 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.549:
+            - 节点「权限 → 管理权限」新增「规则文件（AGENTS.md）」：可以授权某个节点编辑别的节点（某个节点 / 某个部门 / 全网）的 AGENTS.md。需要 Hub .285 及以上。
+            - 权限页顶部概要只报条数（如「收自：2 个部门 · 9 位成员 · 13 个 Agent」），不再把整份名单再铺一遍。
+            - 宽窗口里节点页内容贴着左边的分区菜单，不再居中留一大条空。
+            - 手机「组织」页读取时是居中的转圈，不再是一张卡片。
+
             What's new in 0.2.548:
             - 聊天里点模型按钮，选择浮层直接贴在模型按钮那一行上方，不再和按钮之间隔一大片空输入框。
             - 节点「权限 → 收」名单每一项只出现一次：部门、成员、Agent 分三行；不认识的节点显示「· 不在本网络」。
