@@ -153,4 +153,4 @@ ck('改一个字 key 就变', contentKey('规则 A') !== contentKey('规则 B'))
 ck('同长度不同内容也不同', contentKey('ab') !== contentKey('ba'));
 
 console.log(`\n${pass}/${total} passed`);
-if (pass !== total) (globalThis as any).process?.exit(1);
+process.exit(pass === total ? 0 : 1);
