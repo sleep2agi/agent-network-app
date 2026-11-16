@@ -97,6 +97,15 @@ for (const theme of ['light', 'dark']) {
   record(`${theme} ⑤ 架构图页 + 左上小返回链接`, !!chartBack && chartBack.width < 200 && chartBack.height < 50, chartBack);
   record(`${theme} ⑤ 架构图页不显示编辑说明`, !(await page.locator('[data-testid="agent-org-departments-edit-hint"]').isVisible().catch(() => false)), null);
   record(`${theme} ⑤ 不横向溢出(架构图)`, await noOverflow(page), null);
+  // admin 2026-11-16「手机客户端看组织架构图的效果不好」:概览不能占满一屏,架构树要在首屏露头。
+  const hero = await page.locator('[data-testid="org-showcase-hero"]').boundingBox();
+  const chartCard = await page.locator('[data-testid="org-showcase-chart"]').boundingBox();
+  const vh = page.viewportSize()?.height ?? 844;
+  record(`${theme} ⑥ 手机概览紧凑(高 ≤ 300)`, !!hero && hero.height <= 300, hero);
+  record(`${theme} ⑥ 架构树在首屏露头`, !!chartCard && chartCard.y < vh - 120, { y: chartCard?.y, vh });
+  record(`${theme} ⑥ 不再套「N 个部门 · N 个未归属」工具条`, !(await page.locator('[data-testid="agent-org-department-actions"]').isVisible().catch(() => false)), null);
+  const statsY = await Promise.all(['agents', 'departments', 'running', 'owners'].map(k => page.locator(`[data-testid="org-showcase-stat-${k}"]`).boundingBox()));
+  record(`${theme} ⑥ 四个数字一行`, statsY.every(b => b && Math.abs(b.y - statsY[0].y) < 2), statsY.map(b => b && Math.round(b.y)));
   await page.locator('[data-testid="agent-org-chart-back"]').click();
   record(`${theme} ⑤ 返回回到树`, await page.locator('[data-testid="agent-org-chart-open"]').isVisible(), null);
   record(`${theme} 无页面错误`, errors.length === 0, errors);

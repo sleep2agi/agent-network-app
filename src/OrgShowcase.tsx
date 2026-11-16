@@ -32,7 +32,11 @@ const alpha = (hex: string, a: number) => `${hex}${Math.round(a * 255).toString(
 
 type StatIcon = 'people-outline' | 'git-network-outline' | 'pulse-outline' | 'person-outline';
 
-export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent[]; title: string; onOpenDept: (id: string | null) => void; onOpenAgent?: (alias: string) => void }) {
+export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent[]; title: string; onOpenDept: (id: string | null) => void; onOpenAgent?: (alias: string) => void;
+  /** 手机(admin 2026-11-16「手机客户端看组织架构图的效果不好」):桌面那套海报式概览在 390pt 宽里
+   *  标题折三行、头像墙出框、四个大数字占满一屏,架构树被挤到折叠线以下。compact = 小标题、一行四个数、小头像。 */
+  compact?: boolean }) {
+  const c = !!p.compact;
   const { t } = useTranslation();
   const [rootId, setRootId] = useState<string | null>(null);
   // 部门被删 / 换网络后,停在一个不存在的部门上 → 回到整个组织。
@@ -42,7 +46,7 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
   const stats = showcaseStats(p.data, p.placed, rootId);
   const columns = showcaseColumns(p.data, p.placed, { rootId });
   const scoped = scopedPlaced(p.data, p.placed, rootId);
-  const cloud = pickAvatars(scoped, 9);
+  const cloud = pickAvatars(scoped, c ? 6 : 9);
   const showUnassigned = rootId === null && stats.unassigned > 0;
   const n = columns.length + (showUnassigned ? 1 : 0);
   const [avail, setAvail] = useState(0);
@@ -54,34 +58,34 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
   const rowW = grid ? avail : n * COL_W + Math.max(0, n - 1) * COL_GAP;
   const drill = (id: string) => setRootId(id);
   return (
-    <ScrollView testID="org-showcase" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={styles.page}>
-      <View testID="org-showcase-hero" style={styles.hero}>
-        <View style={styles.heroTop}>
-          <View style={{ flex: 1, minWidth: 240, gap: spacing.sm }}>
+    <ScrollView testID="org-showcase" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={[styles.page, c && styles.pageCompact]}>
+      <View testID="org-showcase-hero" style={[styles.hero, c && styles.heroCompact]}>
+        <View style={[styles.heroTop, c && { gap: spacing.md }]}>
+          <View style={{ flex: 1, minWidth: c ? 0 : 240, gap: c ? spacing.xs : spacing.sm }}>
             {/* 管理员 2026-11-15「不放点 ANet 的 LOGO 吗？」:概览左上角品牌行(截图拿去宣传时一眼认得出是 ANet)。 */}
             <View style={styles.brandRow} testID="org-showcase-brand">
-              <BrandMark size={28} />
-              <Text style={styles.brandName}>ANet</Text>
+              <BrandMark size={c ? 20 : 28} />
+              <Text style={[styles.brandName, c && { fontSize: typeScale.body }]}>ANet</Text>
               <View style={styles.brandDot} />
-              <Text style={styles.kicker}>{here ? t('agentOrg.showcase.kickerDept') : t('agentOrg.showcase.kicker')}</Text>
+              <Text numberOfLines={1} style={[styles.kicker, c && { fontSize: typeScale.caption, letterSpacing: 0.6, flexShrink: 1 }]}>{here ? t('agentOrg.showcase.kickerDept') : t('agentOrg.showcase.kicker')}</Text>
             </View>
-            <Text style={styles.heroTitle}>{here ? here.name : t('agentOrg.showcase.headline')}</Text>
-            <Text style={styles.heroSub}>{here
+            <Text style={[styles.heroTitle, c && styles.heroTitleCompact]}>{here ? here.name : t('agentOrg.showcase.headline')}</Text>
+            <Text style={[styles.heroSub, c && styles.heroSubCompact]}>{here
               ? t('agentOrg.showcase.subDept', { agents: stats.agents, departments: stats.departments, running: stats.running })
               : t('agentOrg.showcase.sub', { agents: stats.agents, departments: stats.departments, running: stats.running })}</Text>
           </View>
           {cloud.aliases.length ? <View style={styles.cloud} testID="org-showcase-cloud">
             {cloud.aliases.map((alias, i) => (
-              <View key={alias} style={[styles.cloudAvatar, i > 0 && { marginLeft: -12 }]}><AliasAvatar alias={alias} size={40} /></View>
+              <View key={alias} style={[styles.cloudAvatar, i > 0 && { marginLeft: c ? -8 : -12 }]}><AliasAvatar alias={alias} size={c ? 28 : 40} /></View>
             ))}
-            {cloud.more ? <View style={[styles.cloudAvatar, styles.cloudMore, { marginLeft: -12 }]}><Text style={styles.cloudMoreText}>+{cloud.more}</Text></View> : null}
+            {cloud.more ? <View style={[styles.cloudAvatar, styles.cloudMore, { marginLeft: c ? -8 : -12 }, c && { width: 32, height: 32 }]}><Text style={styles.cloudMoreText}>+{cloud.more}</Text></View> : null}
           </View> : null}
         </View>
-        <View style={styles.stats}>
-          <Stat value={stats.agents} label={t('agentOrg.showcase.agents')} icon="people-outline" testID="org-showcase-stat-agents" />
-          <Stat value={stats.departments} label={t('agentOrg.showcase.departments')} icon="git-network-outline" testID="org-showcase-stat-departments" />
-          <Stat value={stats.running} label={t('agentOrg.showcase.running')} icon="pulse-outline" testID="org-showcase-stat-running" live />
-          <Stat value={stats.owners} label={t('agentOrg.showcase.owners')} icon="person-outline" testID="org-showcase-stat-owners" />
+        <View style={[styles.stats, c && { flexWrap: 'nowrap', gap: spacing.xs }]}>
+          <Stat compact={c} value={stats.agents} label={t('agentOrg.showcase.agents')} icon="people-outline" testID="org-showcase-stat-agents" />
+          <Stat compact={c} value={stats.departments} label={t('agentOrg.showcase.departments')} icon="git-network-outline" testID="org-showcase-stat-departments" />
+          <Stat compact={c} value={stats.running} label={t('agentOrg.showcase.running')} icon="pulse-outline" testID="org-showcase-stat-running" live />
+          <Stat compact={c} value={stats.owners} label={t('agentOrg.showcase.owners')} icon="person-outline" testID="org-showcase-stat-owners" />
         </View>
       </View>
 
@@ -152,13 +156,13 @@ function Crumb(p: { label: string; active: boolean; onPress: () => void; testID:
   </Pressable>;
 }
 
-function Stat(p: { value: number; label: string; icon: StatIcon; testID: string; live?: boolean }) {
-  return <View style={styles.stat} testID={p.testID}>
-    <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-      {p.live ? <View style={styles.liveDot} /> : <Ionicons name={p.icon} size={14} color={colors.textMuted} />}
-      <Text style={styles.statLabel}>{p.label}</Text>
+function Stat(p: { value: number; label: string; icon: StatIcon; testID: string; live?: boolean; compact?: boolean }) {
+  return <View style={[styles.stat, p.compact && styles.statCompact]} testID={p.testID}>
+    <View style={{ flexDirection: 'row', alignItems: 'center', gap: p.compact ? 3 : spacing.xs }}>
+      {p.live ? <View style={styles.liveDot} /> : p.compact ? null : <Ionicons name={p.icon} size={14} color={colors.textMuted} />}
+      <Text numberOfLines={1} style={[styles.statLabel, p.compact && { fontSize: typeScale.caption, flexShrink: 1 }]}>{p.label}</Text>
     </View>
-    <Text style={styles.statValue}>{p.value.toLocaleString()}</Text>
+    <Text style={[styles.statValue, p.compact && styles.statValueCompact]}>{p.value.toLocaleString()}</Text>
   </View>;
 }
 
@@ -239,6 +243,12 @@ function AgentWall(p: { agents: PlacedAgent[]; onOpenAgent?: (alias: string) => 
 
 const makeStyles = () => StyleSheet.create({
   page: { padding: spacing.xl, gap: spacing.xl },
+  pageCompact: { padding: spacing.md, gap: spacing.md },
+  heroCompact: { padding: spacing.md, gap: spacing.md },
+  heroTitleCompact: { fontSize: 20, lineHeight: 26 },
+  heroSubCompact: { fontSize: typeScale.small, lineHeight: 18 },
+  statCompact: { flexBasis: 0, minWidth: 0, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: 2 },
+  statValueCompact: { fontSize: 20, lineHeight: 24 },
   // 概览:和页面同一套的卡片面(不再是蓝青渐变)。
   hero: { borderRadius: radius.surface, padding: spacing.xl, gap: spacing.xl, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   heroTop: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.xl },

@@ -244,8 +244,9 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
         <SettingsGroup testID="agent-org-empty-hub"><SettingsRow label={t('agentOrg.oldHub')} /></SettingsGroup>
       ) : null}
       {data && (showTree || showDetail || (p.phone && view === 'chart')) ? (
-        <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : styles.workspace}>
-          {!p.fill ? <View style={styles.toolbar} testID="agent-org-department-actions">
+        <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : p.phone && view === 'chart' ? { flex: 1, minHeight: 0 } : styles.workspace}>
+          {/* 手机看架构图:不再套一层外框 + 「16 个部门 · 27 个未归属」工具条(架构图自己就有这些数)。 */}
+          {!p.fill && !(p.phone && view === 'chart') ? <View style={styles.toolbar} testID="agent-org-department-actions">
             <View style={styles.toolbarContext}>
               {p.phone && p.title ? null : <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>}
               <Text testID="agent-org-summary" style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
@@ -290,7 +291,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                   <Text style={styles.phoneBackText}>{t('agentOrg.back')}</Text>
                 </Pressable>
               ) : null}
-              <OrgShowcase data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />
+              <OrgShowcase compact={!!p.phone} data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />
             </View>
           ) : p.fill && view === 'members' && p.renderMembers ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-members">
