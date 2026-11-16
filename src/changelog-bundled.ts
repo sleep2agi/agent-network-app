@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.552:",
+  "- 对话里的视频：「点击下载并播放」和「下载 / 保存视频」同时点不再互相打断（以前两条下载写同一个临时文件，会失败）；下载时卡片显示进度（百分比 · 已下 MB · 剩余时间）。",
+  "- 手机「组织 → 架构图」改成紧凑版：小标题、四个数字一行、小头像，架构树在首屏露头；去掉外框和重复的「N 个部门 · N 个未归属」。",
+  "- 删除部门时，如果挡着的是列表里看不见的久未上线 Agent（超过 7 天没上线默认隐藏），对话框会列出名字，并给「移到未归属并删除」一键处理（以前树上显示 0 却删不掉）。",
+  "",
   "What's new in 0.2.551:",
   "- 节点「权限 → 高级 → 管理权限」新增「权限（只能收紧）」：可以授权某个节点在范围内收紧别的节点的权限（缩小收件名单、降成只读），不能放宽。需要 Hub .286 及以上。",
   "",
