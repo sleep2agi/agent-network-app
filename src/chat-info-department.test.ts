@@ -67,3 +67,4 @@ const base = {
 }
 
 console.log(`${p}/${t} checks passed`);
+process.exit(p === t ? 0 : 1);

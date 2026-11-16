@@ -63,7 +63,6 @@ export function departmentOptions(org: OrgLike): DepartmentOption[] {
       return {
         id: d.id,
         label,
-        subtitle: d.id,
         testID: departmentOptionTestId(d.id),
         ...(manage === false ? { disabled: true, disabledReason: DEPARTMENT_READONLY_REASON_KEY } : {}),
       };

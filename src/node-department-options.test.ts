@@ -55,4 +55,11 @@ const dept = (id: string, name: string, parent_id: string | null = null, viewer_
   ck('disabled 项仍然渲染（不隐藏）', /SettingsChoiceRow[\s\S]{0,220}disabled=\{item\.disabled\}/.test(org));
 }
 
+{
+  const picker = readFileSync(new URL('./NodeDepartmentPicker.tsx', import.meta.url), 'utf8');
+  ck('选择器把 disabled 和翻译后的原因传给 StructureSelector(灰掉真的生效)', /disabled: o\.disabled/.test(picker) && /disabledReason: o\.disabledReason \? t\(o\.disabledReason\)/.test(picker));
+  ck('部门选项不再拿内部 id 当副标题', departmentOptions({ departments: [{ id: 'dept_x', name: 'A', parent_id: null } as any] })[1].subtitle === undefined);
+}
+
 console.log(`${p}/${t} checks passed`);
+process.exit(p === t ? 0 : 1);

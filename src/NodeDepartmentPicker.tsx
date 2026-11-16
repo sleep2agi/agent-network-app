@@ -47,7 +47,8 @@ export default function NodeDepartmentPicker({
   return (
     <StructureSelector
       title={busy ? t('agentOrg.saving') : t('nodeDepartment.title')}
-      options={options.map(o => ({ id: o.id, label: o.label, subtitle: o.subtitle, testID: o.testID }))}
+      // 灰掉的部门要带着 disabled 和翻译后的原因传下去(之前这里只拷了四个字段,灰掉从未生效)。
+      options={options.map(o => ({ id: o.id, label: o.label, subtitle: o.subtitle, testID: o.testID, disabled: o.disabled, disabledReason: o.disabledReason ? t(o.disabledReason) : undefined }))}
       selected={departmentId ?? null}
       onPick={id => void pick(id)}
       onClose={onClose}
