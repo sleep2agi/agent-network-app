@@ -7,7 +7,7 @@ import AliasAvatar from './AliasAvatar';
 import DialogFrame from './DialogFrame';
 import { listenEscapeClose } from './escape-close';
 import type { HubConfig } from './api';
-import { loadAgentOrg, moveAgentDepartment } from './agent-org-api';
+import { loadAgentOrg, moveAgentDepartment, orgLoadErrorReason } from './agent-org-api';
 import { agentCount, agentsDirectlyIn, orgTree, placeAgents, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
 import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
 import { createDepartment, deleteDepartment, updateDepartment, OrgRequestError } from './org-api';
@@ -74,7 +74,7 @@ function writeCollapsed(ids: ReadonlySet<string>) {
 function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean; onOpenAgent?: (alias: string) => void; title?: string; renderMembers?: () => ReactNode; renderPeople?: (deptId: string | null, onSelect: (id: string | null) => void) => ReactNode }) {
   const { t } = useTranslation();
   const [attempt, setAttempt] = useState(0);
-  const [phase, setPhase] = useState<{ kind: 'loading' } | { kind: 'error' } | { kind: 'ready'; data: AgentOrgData | null }>({ kind: 'loading' });
+  const [phase, setPhase] = useState<{ kind: 'loading' } | { kind: 'error'; reason: string } | { kind: 'ready'; data: AgentOrgData | null }>({ kind: 'loading' });
   const [focus, setFocus] = useState<string | null | undefined>(undefined);
   const [moves, setMoves] = useState<DemoMove[]>([]);
   const [pickAgent, setPickAgent] = useState<string | null>(null);
@@ -137,7 +137,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
       if (!live) return;
       show(data);
       if (data) rememberOrg(profile, p.networkId, data);
-    }, () => { if (live && !painted) setPhase({ kind: 'error' }); });
+    }, (e: unknown) => { if (live && !painted) setPhase({ kind: 'error', reason: orgLoadErrorReason(e) }); });
     return () => { live = false; };
   }, [p.cfg.serverUrl, p.cfg.token, p.networkId, p.phone, attempt]);
 
@@ -223,9 +223,22 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
           : <SettingsGroup testID="agent-org-loading"><SettingsRow label={t('agentOrg.loading')} busy /></SettingsGroup>
       ) : null}
       {phase.kind === 'error' ? (
+        // 手机「组织」页 / 整页:居中的说明 + 原因 + 「重试」按钮(admin 2026-11-16「这个感觉也有点太臭了」);设置里仍是一行。
+        p.fill || p.phone ? (
+          <View testID="agent-org-error" style={p.fill ? styles.loadingFill : styles.loadingPhone}>
+            <Ionicons name="cloud-offline-outline" size={36} color={colors.textMuted} />
+            <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: '600' }}>{t('agentOrg.loadFailedTitle')}</Text>
+            <Text testID="agent-org-error-reason" style={[styles.note, { textAlign: 'center', paddingHorizontal: spacing.xl }]}>{t('agentOrg.loadFailedReason', { reason: phase.reason === 'timeout' ? t('agentOrg.reason.timeout') : phase.reason === 'network' ? t('agentOrg.reason.network') : phase.reason })}</Text>
+            <Pressable testID="agent-org-retry" accessibilityRole="button" onPress={() => setAttempt(n => n + 1)}
+              style={({ pressed }) => [{ marginTop: spacing.sm, minHeight: 40, paddingHorizontal: spacing.xl, borderRadius: radius.control, backgroundColor: colors.accent, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.8 }]}>
+              <Text style={{ color: colors.onAccent, fontSize: typeScale.body, fontWeight: '600' }}>{t('agentOrg.retry')}</Text>
+            </Pressable>
+          </View>
+        ) : (
         <SettingsGroup testID="agent-org-error">
           <SettingsRow label={t('agentOrg.loadFailed')} value={t('agentOrg.retry')} onPress={() => setAttempt(n => n + 1)} testID="agent-org-retry" />
         </SettingsGroup>
+        )
       ) : null}
       {phase.kind === 'ready' && data === null ? (
         <SettingsGroup testID="agent-org-empty-hub"><SettingsRow label={t('agentOrg.oldHub')} /></SettingsGroup>

@@ -6,7 +6,8 @@ import type { AgentOrgData, OrgAgent, OrgOwner } from './agent-org-model';
 import { fetchOrg } from './org-api';
 import type { Department } from './org-model';
 
-const TIMEOUT_MS = 12_000;
+// 手机经中转从国内读,通讯录一页可能要十几秒;12 s 太紧(admin 2026-11-16 手机上「组织架构没有读到」)。
+const TIMEOUT_MS = 20_000;
 export const DIRECTORY_PAGE_LIMIT = 200;
 export const DIRECTORY_MAX_PAGES = 20;
 
@@ -208,8 +209,28 @@ export async function moveAgentDepartment(
   }
 }
 
-/** null = 部门接口和通讯录都没有(旧 Hub)。其它 HTTP 错误抛出去,让页面重试。 */
+/** 读失败时给人看的原因:超时 / HTTP 码 / 其它。页面上小字显示,方便下次截图就能看出是哪一步坏了。 */
+export function orgLoadErrorReason(e: unknown): string {
+  const msg = e instanceof Error ? e.message : String(e ?? '');
+  if ((e as { name?: string } | null)?.name === 'AbortError' || /abort/i.test(msg)) return 'timeout';
+  const http = /HTTP (\d{3})/.exec(msg);
+  if (http) return `HTTP ${http[1]}`;
+  if (/network request failed|failed to fetch|load failed|unreachable|ECONN|ENOTFOUND/i.test(msg)) return 'network';
+  return msg.slice(0, 80) || 'unknown';
+}
+
+/** 读一次失败就自动再试一次(手机网络抖一下很常见),两次都失败才交给页面显示错误。 */
 export async function loadAgentOrg(cfg: HubConfig, networkId: string): Promise<AgentOrgData | null> {
+  try {
+    return await loadAgentOrgOnce(cfg, networkId);
+  } catch {
+    await new Promise(r => setTimeout(r, 800));
+    return loadAgentOrgOnce(cfg, networkId);
+  }
+}
+
+/** null = 部门接口和通讯录都没有(旧 Hub)。其它 HTTP 错误抛出去,让页面重试。 */
+async function loadAgentOrgOnce(cfg: HubConfig, networkId: string): Promise<AgentOrgData | null> {
   const [org, directory] = await Promise.all([
     fetchOrg(cfg, networkId).then(data => (data ? { missing: false as const, data } : { missing: true as const })),
     readDirectory(cfg, networkId),
