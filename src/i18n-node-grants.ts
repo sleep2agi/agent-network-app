@@ -15,6 +15,7 @@ export const nodeGrantsTranslations = {
   'nodeGrants.cap.schedules': ['定时任务', 'Schedules'],
   'nodeGrants.cap.board': ['任务看板', 'Task board'],
   'nodeGrants.cap.rules': ['规则文件（AGENTS.md）', 'Rules file (AGENTS.md)'],
+  'nodeGrants.cap.permissions': ['权限（只能收紧）', 'Permissions (tighten only)'],
   'nodeGrants.comingSoon': ['即将支持', 'Coming soon'],
   'nodeGrants.scope.network': ['整个网络', 'Whole network'],
   'nodeGrants.scope.department': ['部门 {name}', 'Department {name}'],

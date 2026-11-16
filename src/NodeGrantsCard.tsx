@@ -100,7 +100,7 @@ export default function NodeGrantsCard({ cfg, nodeId, depts, nodes, compact }: {
           {label(t('nodeGrants.capability'))}
           {row(GRANT_CAPABILITIES.map(c => (
             <Chip key={c.key} testID={`node-grants-cap-${c.key}`} text={t(`nodeGrants.cap.${c.key}`)} on={draft.capability === c.key} disabled={!c.available || !capAvailable(c.key) || busy}
-              note={c.available && capAvailable(c.key) ? undefined : t('nodeGrants.comingSoon')} onPress={() => setDraft(d => ({ ...d, capability: c.key }))} />
+              note={c.available && capAvailable(c.key) ? undefined : t('nodeGrants.comingSoon')} onPress={() => setDraft(d => ({ ...d, capability: c.key, level: c.key === 'permissions' ? 'edit' : d.level }))} />
           )), 'node-grants-caps')}
           {label(t('nodeGrants.scope'))}
           {row((['network', 'department', 'node'] as const).map(k => (
@@ -115,7 +115,8 @@ export default function NodeGrantsCard({ cfg, nodeId, depts, nodes, compact }: {
             <Chip key={n.node_id} testID={`node-grants-node-${n.node_id}`} text={n.alias || n.node_id} on={draft.scope_id === n.node_id} disabled={busy} onPress={() => setDraft(x => ({ ...x, scope_id: n.node_id }))} />
           )), 'node-grants-nodes') : null}
           {label(t('nodeGrants.level'))}
-          {row((['read', 'edit'] as const).map(l => (
+          {/* 「权限（只能收紧）」只有可编辑一档(Hub 只收 edit),不给只读这个选项。 */}
+          {row(((draft.capability === 'permissions' ? ['edit'] : ['read', 'edit']) as ('read' | 'edit')[]).map(l => (
             <Chip key={l} testID={`node-grants-level-${l}`} text={t(l === 'read' ? 'nodeGrants.level.read' : 'nodeGrants.level.edit')} on={draft.level === l} disabled={busy} onPress={() => setDraft(d => ({ ...d, level: l }))} />
           )), 'node-grants-levels')}
           <View style={{ flexDirection: 'row', justifyContent: 'flex-end', gap: spacing.sm }}>

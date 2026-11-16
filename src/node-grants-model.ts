@@ -12,6 +12,9 @@ export const GRANT_CAPABILITIES = [
   // admin 2026-11-16「节点新增权限可以编辑其他人的 AGENTS.md」:Hub .285 起 GET grants 的 capabilities 里有 rules;
   // 老 Hub 的清单里没有 ⇒ capabilityOffered 判为不可选(显示「即将支持」),不会让人点下去才吃 400。
   { key: 'rules', available: true },
+  // #4616 三期(Hub .286):被授权的节点只能把别的节点的权限**收紧**(收件名单缩小、模式降级)。
+  // 只在「高级」里单项授,不进「两个问题」的四档。只接受「可编辑」。
+  { key: 'permissions', available: true },
 ] as const;
 
 export type GrantDraft = Pick<NodeGrant, 'capability' | 'scope_kind' | 'scope_id' | 'level'>;
@@ -20,7 +23,7 @@ export type GrantDraft = Pick<NodeGrant, 'capability' | 'scope_kind' | 'scope_id
 export const capabilityOffered = (serverCaps: readonly string[] | undefined, key: string): boolean =>
   !serverCaps || serverCaps.includes(key);
 
-export const capabilityLabel = (c: string) => (c === 'schedules' || c === 'board' || c === 'rules' ? t(`nodeGrants.cap.${c}`) : c);
+export const capabilityLabel = (c: string) => (c === 'schedules' || c === 'board' || c === 'rules' || c === 'permissions' ? t(`nodeGrants.cap.${c}`) : c);
 
 export function scopeLabel(g: Pick<NodeGrant, 'scope_kind' | 'scope_id'>, depts: readonly DeptChoice[], nodes: readonly NodeChoice[]): string {
   if (g.scope_kind === 'network') return t('nodeGrants.scope.network');
