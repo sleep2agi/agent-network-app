@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.548:",
+  "- 聊天里点模型按钮，选择浮层直接贴在模型按钮那一行上方，不再和按钮之间隔一大片空输入框。",
+  "- 节点「权限 → 收」名单每一项只出现一次：部门、成员、Agent 分三行；不认识的节点显示「· 不在本网络」。",
+  "- 桌面「定时任务」页占满宽度（不再显示会话侧栏）；卡片有开关时不再重复显示状态徽章，频率和下次执行并成一行；「复制」和「暂停」「编辑」同样式。",
+  "",
   "What's new in 0.2.547:",
   "- 节点页和聊天信息里新增「所属部门」一行（未归属也显示），点开可以直接把节点调到别的部门；没有权限的部门会灰掉并说明原因。",
   "- 桌面端冷启动第一帧就按已保存的浅色 / 深色显示，不再先闪一下深色。",
