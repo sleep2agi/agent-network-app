@@ -1,6 +1,6 @@
 // Agent 组织架构:点设置入口必须打开页面;部门树和负责人是 Hub 数据;调整结构写 Hub(PUT),失败回滚。
 import { existsSync, readFileSync } from 'node:fs';
-import { agentCount, agentsDirectlyIn, placeAgents, type AgentOrgData, type OrgOwner } from './agent-org-model';
+import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, placeAgents, type AgentOrgData, type OrgOwner } from './agent-org-model';
 import { DIRECTORY_MAX_PAGES, loadAgentOrg, moveAgentDepartment, parseDirectoryPage } from './agent-org-api';
 import { agentOrgTranslations } from './i18n-agent-org';
 import type { Department } from './org-model';
@@ -327,6 +327,26 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
     owners: [owner('u1', 'eng', [{ nodeId: 'n-stale', alias: '老节点', updatedAt: iso(400 * day) }], '爱丽丝')],
     unowned: [],
   }), [], { now: NOW, recentDays: 0 }).some(a => a.alias === '老节点'));
+
+  // admin 2026-11-16「里面明明没有」：树上 0、删除却说「还有 6 个 Agent」。
+  const aData = data({
+    departments: [dept('a', 'A 站')],
+    owners: [],
+    unowned: [
+      { nodeId: 'n-a1', alias: 'A站狗', departmentId: 'a', updatedAt: iso(90 * day) },
+      { nodeId: 'n-a2', alias: 'A站Grok', departmentId: 'a', updatedAt: iso(20 * day) },
+      { nodeId: 'n-a3', alias: 'A站新人', departmentId: 'a', updatedAt: iso(1 * day) },
+      { nodeId: 'n-b1', alias: '别处', departmentId: null, updatedAt: iso(90 * day) },
+    ],
+  });
+  const aPlaced = placeAgents(aData, [], { now: NOW });
+  const aHidden = hiddenAgentsDirectlyIn(aData, aPlaced, 'a');
+  ck('🔴 久未上线、默认隐藏的 Agent 能被找出来', JSON.stringify(aHidden.map(a => a.nodeId).sort()) === JSON.stringify(['n-a1', 'n-a2']));
+  ck('看得见的不算进隐藏名单', !aHidden.some(a => a.nodeId === 'n-a3'));
+  ck('别的部门 / 未归属的不算', !aHidden.some(a => a.nodeId === 'n-b1'));
+  const screen = code(read('./AgentOrgScreen.tsx'));
+  ck('删除部门的计数 = 看得见的 + 隐藏的（和 Hub 口径一致）', /agentsDirectlyIn\(placed, deleting\.id\)\.length \+ hiddenAgentsDirectlyIn\(data, placed, deleting\.id\)\.length/.test(screen));
+  ck('只剩隐藏 Agent 时给「移到未归属并删除」', screen.includes("'agentOrg.deleteMoveHidden'") && /moveAgentDepartment\(p\.cfg, p\.networkId, a\.nodeId, null\)/.test(screen));
 
   // 向后兼容：老 Hub 没有 updated_at ⇒ 既不过滤也不过早去重
   const legacy = placeAgents(data({

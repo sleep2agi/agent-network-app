@@ -8,7 +8,7 @@ import DialogFrame from './DialogFrame';
 import { listenEscapeClose } from './escape-close';
 import type { HubConfig } from './api';
 import { loadAgentOrg, moveAgentDepartment, orgLoadErrorReason } from './agent-org-api';
-import { agentCount, agentsDirectlyIn, orgTree, placeAgents, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
+import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, orgTree, placeAgents, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
 import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
 import { createDepartment, deleteDepartment, updateDepartment, OrgRequestError } from './org-api';
 import { blockersFromDetail, canEditAnyDepartment, DEPT_MENU_LABEL_KEY, deleteBlockers, deptMenuActions, isDeleteBlocked, type DeleteBlockers, type DeptMenuAction } from './agent-org-dept-menu';
@@ -372,7 +372,8 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
       </View> : null}
       {data && deptMenu ? <DeptContextMenu target={deptMenu} actions={deptMenuActions(deptMenu.dept, p.canManageStructure, treeApi)} onClose={() => setDeptMenu(null)} onPick={a => runMenu(a, deptMenu.dept)} /> : null}
       {data && deleting ? <DeleteDepartmentDialog cfg={p.cfg} networkId={p.networkId} dept={deleting}
-        blockers={deleteBlockers(deleting, data.departments, agentsDirectlyIn(placed, deleting.id).length)}
+        hidden={hiddenAgentsDirectlyIn(data, placed, deleting.id)}
+        blockers={deleteBlockers(deleting, data.departments, agentsDirectlyIn(placed, deleting.id).length + hiddenAgentsDirectlyIn(data, placed, deleting.id).length)}
         onClose={() => setDeleting(null)}
         onDeleted={async () => {
           const gone = deleting;
@@ -828,9 +829,10 @@ function blockerText(t: (k: string, o?: Record<string, string | number>) => stri
     .filter(Boolean).join('、');
 }
 
-function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: Department; blockers: DeleteBlockers; onClose: () => void; onDeleted: () => Promise<void> }) {
+function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: Department; blockers: DeleteBlockers; hidden: { nodeId: string; alias: string }[]; onClose: () => void; onDeleted: () => Promise<void> }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
+  const [moving, setMoving] = useState<number | null>(null);
   const [error, setError] = useState('');
   const [hubBlockers, setHubBlockers] = useState<DeleteBlockers | null>(null);
   const [done, setDone] = useState(false);
@@ -839,11 +841,23 @@ function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: De
   useEffect(() => listenEscapeClose(close), [p.onClose]);
   const blockers = hubBlockers ?? p.blockers;
   const blocked = isDeleteBlocked(blockers);
-  const run = async () => {
-    if (pending.current || blocked) return;
+  // 只剩「列表里看不见的久未上线 Agent」挡着 → 给一键「移到未归属并删除」。
+  // 有子部门 / 人类成员 / 看得见的 Agent 时不给：那些用户看得见，自己处理。
+  const onlyHidden = blocked && !blockers.children && !blockers.members && p.hidden.length > 0 && blockers.agents <= p.hidden.length;
+  const run = async (moveHidden = false) => {
+    if (pending.current || (blocked && !(moveHidden && onlyHidden))) return;
     pending.current = true;
     setBusy(true); setError('');
     try {
+      if (moveHidden && !done) {
+        for (let i = 0; i < p.hidden.length; i++) {
+          setMoving(i);
+          const a = p.hidden[i];
+          const r = await moveAgentDepartment(p.cfg, p.networkId, a.nodeId, null);
+          if (!r.ok) { setError(t('agentOrg.deleteMoveFailed', { alias: a.alias, reason: r.detail ?? r.reason })); return; }
+        }
+        setMoving(null);
+      }
       if (!done) { await deleteDepartment(p.cfg, p.networkId, p.dept.id); setDone(true); }
       await p.onDeleted();
     } catch (e) {
@@ -853,13 +867,18 @@ function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: De
         : e instanceof OrgRequestError && e.code === 'department_not_found' ? 'agentOrg.saveNoDepartment'
         : e instanceof OrgRequestError && (e.status === 405 || e.status === 501 || e.status === 404) ? 'agentOrg.departmentUnsupported'
         : 'agentOrg.saveFailed'));
-    } finally { pending.current = false; setBusy(false); }
+    } finally { pending.current = false; setBusy(false); setMoving(null); }
   };
+  const label = moving !== null ? t('agentOrg.deleteMovingHidden', { done: moving + 1, count: p.hidden.length })
+    : t(busy ? 'agentOrg.deleting' : done ? 'agentOrg.retryRefresh' : onlyHidden ? 'agentOrg.deleteMoveHidden' : 'agentOrg.deleteAction');
   return <DialogFrame title={t('agentOrg.deleteTitle')} closeLabel={t('agentOrg.close')} onClose={close} testID="agent-org-delete-dialog"
-    footer={<SettingsButton variant={done ? 'primary' : 'destructive'} label={t(busy ? 'agentOrg.deleting' : done ? 'agentOrg.retryRefresh' : 'agentOrg.deleteAction')} disabled={busy || blocked} onPress={() => void run()} testID="agent-org-delete-confirm" />}>
+    footer={<SettingsButton variant={done ? 'primary' : 'destructive'} label={label} disabled={busy || (blocked && !onlyHidden)} onPress={() => void run(onlyHidden)} testID="agent-org-delete-confirm" />}>
     {blocked
       ? <Text testID="agent-org-delete-blocked" style={styles.note}>{t('agentOrg.deleteBlocked', { name: p.dept.name, what: blockerText(t, blockers) })}</Text>
       : <Text testID="agent-org-delete-text" style={styles.note}>{t('agentOrg.deleteConfirm', { name: p.dept.name })}</Text>}
+    {blocked && p.hidden.length > 0
+      ? <Text testID="agent-org-delete-hidden" style={styles.note}>{t('agentOrg.deleteHidden', { count: p.hidden.length, names: p.hidden.slice(0, 8).map(a => a.alias).join('、') + (p.hidden.length > 8 ? '…' : '') })}</Text>
+      : null}
     {error ? <Text accessibilityRole="alert" testID="agent-org-delete-error" style={[styles.note, { color: colors.failed }]}>{error}</Text> : null}
   </DialogFrame>;
 }
