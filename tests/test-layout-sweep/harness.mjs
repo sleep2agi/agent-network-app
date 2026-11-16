@@ -223,7 +223,8 @@ export const initScript = ({ theme }) => {
     convertFileSrc: (p) => p,
     invoke: async (cmd, args) => {
       switch (cmd) {
-        case 'load_active_desktop_profile': return JSON.stringify(profile);
+        // window.__profileNoNetwork: an older login profile without networkId (tests/phone-org-tab).
+        case 'load_active_desktop_profile': return JSON.stringify(window.__profileNoNetwork ? { ...profile, networkId: undefined } : profile);
         case 'save_desktop_profile': return args.sessionJson;
         case 'read_desktop_profile_file': return null;
         case 'get_theme_preference': return theme;

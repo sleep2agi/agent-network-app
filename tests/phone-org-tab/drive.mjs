@@ -6,6 +6,8 @@
 //   ③ 部门页:左上小链接「全部部门」(不是整行),下级部门是文件夹行,Agent 行可点;不显示「长按部门…」说明
 //   ④ 点 Agent → 节点页;返回回到部门页
 //   ⑤ 「架构图」→ 架构图页,有返回;页面不横向溢出
+//   ⑥ 登录档案缺 networkId 时,Agent 列表「分组 · 部门」仍按部门分
+//   ⑦ 部门读不到时,分组标签如实写「名称前缀」
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
 
@@ -29,6 +31,7 @@ const fixture = () => {
     if (p === '/api/dm/threads') return { ok: true, threads: [] };
     if (p === '/api/status') return { ok: true, sessions: nodes.map(n => ({ alias: n.alias, status: 'idle', agent: 'claude-code', runtime: 'agent-node', node_id: n.node_id, updated_at: now })) };
     if (p === '/api/nodes') return { ok: true, nodes };
+    if (p === `/api/networks/${NET}/departments` && window.__noDepts) return { __status: 500, ok: false, error: 'boom' };
     if (p === `/api/networks/${NET}/departments`) return { ok: true, departments: [
       { id: 'd_a', name: 'TMWork', parent_id: null, leader_user_id: null, sort: 0, viewer_can: { manage: true, create_child: true }, member_count: 0 },
       { id: 'd_b', name: 'VSCODE插件', parent_id: 'd_a', leader_user_id: null, sort: 0, viewer_can: { manage: true, create_child: true }, member_count: 0 },
@@ -93,6 +96,36 @@ for (const theme of ['light', 'dark']) {
   await page.locator('[data-testid="agent-org-chart-back"]').click();
   record(`${theme} ⑤ 返回回到树`, await page.locator('[data-testid="agent-org-chart-open"]').isVisible(), null);
   record(`${theme} 无页面错误`, errors.length === 0, errors);
+  await ctx.close();
+}
+// ⑥ 登录档案里没有 networkId(手机旧登录):Agent 列表「分组 · 部门」仍按部门分,不退回前缀(admin 2026-11-16)。
+{
+  const ctx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 390, height: 844 }, colorScheme: 'light', isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(15000);
+  await page.addInitScript(() => { window.__profileNoNetwork = true; });
+  await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(fixture);
+  await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+  await page.locator('[data-testid="mobile-tab-bar"]').waitFor();
+  const ok = await page.getByText('TMWork', { exact: true }).first().waitFor({ timeout: 20000 }).then(() => true).catch(() => false);
+  await page.screenshot({ path: `${OUT}/agents-dept-no-network.png` });
+  record('⑥ 档案缺 networkId:Agent 列表仍按部门分组(出现「TMWork」部门标题)', ok, null);
+  await ctx.close();
+}
+// ⑦ 部门读不到:列表按名字前缀分,标签如实写「名称前缀」,不冒充「部门」。
+{
+  const ctx = await browser.newContext({ locale: 'zh-CN', viewport: { width: 390, height: 844 }, colorScheme: 'light', isMobile: true, hasTouch: true });
+  const page = await ctx.newPage();
+  page.setDefaultTimeout(15000);
+  await page.addInitScript(() => { window.__noDepts = true; });
+  await page.addInitScript(initScript, { theme: 'light' });
+  await page.addInitScript(fixture);
+  await page.goto(`${web.url}?safeAreaSim=0,0,0,0`);
+  await page.locator('[data-testid="agents-group-by-toggle"]').waitFor();
+  await page.waitForTimeout(1500);
+  const label = await page.locator('[data-testid="agents-group-by-toggle"]').innerText();
+  record('⑦ 部门读不到时标签写「分组 · 名称前缀」', label.includes('名称前缀'), label);
   await ctx.close();
 }
 await browser.close();
