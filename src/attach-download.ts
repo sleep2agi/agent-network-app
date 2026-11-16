@@ -140,7 +140,7 @@ export class AttachmentDownloadError extends Error {
  *  as belt-and-braces (see #10 CR1). */
 const entryMarkerPath = (dest: string) => `${dest}.v`;
 
-export const downloadAttachmentWith = async (
+const downloadAttachmentOnce = async (
   fs: DownloadFs,
   cacheDir: string,
   serverUrl: string,
@@ -273,6 +273,52 @@ export const downloadAttachmentWith = async (
   // mode instead — a broken cache entry served as valid. Don't.
   await fs.writeAsStringAsync(entryMarkerPath(dest), String(ATTACHMENT_CACHE_SCHEMA));
   return dest;
+};
+
+/** 同一个文件同时只下一份（admin 2026-11-16「点击没反应吧」）。
+ *  视频卡片的「点击下载并播放」和下面的「下载 / 保存视频」都会下同一个 fileId：
+ *  两个都点了就是两条并发下载写同一个 `.part`（后一条开头还会删掉前一条的 `.part`），
+ *  慢网下 11MB 视频两条一起抢带宽、卡片又没有进度，看起来就是「点了没反应」。
+ *  这里按缓存目标路径合并：后来的调用直接挂到在途的那一份上，进度广播给所有调用方。 */
+type InFlight = {
+  promise: Promise<string>;
+  listeners: Set<(received: number, total?: number) => void>;
+  last?: [number, number | undefined];
+};
+const inFlight = new Map<string, InFlight>();
+
+export const downloadAttachmentWith = (
+  fs: DownloadFs,
+  cacheDir: string,
+  serverUrl: string,
+  token: string,
+  fileId: string,
+  name?: string,
+  mime?: string,
+  onProgress?: (received: number, total?: number) => void,
+): Promise<string> => {
+  const key = cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope(serverUrl, token));
+  const existing = inFlight.get(key);
+  if (existing) {
+    if (onProgress) {
+      existing.listeners.add(onProgress);
+      if (existing.last) onProgress(existing.last[0], existing.last[1]);
+      void existing.promise.then(() => existing.listeners.delete(onProgress), () => existing.listeners.delete(onProgress));
+    }
+    return existing.promise;
+  }
+  const entry: InFlight = { promise: Promise.resolve(''), listeners: new Set() };
+  if (onProgress) entry.listeners.add(onProgress);
+  const fanOut = (received: number, total?: number) => {
+    entry.last = [received, total];
+    for (const l of entry.listeners) {
+      try { l(received, total); } catch { /* 一个监听者出错不影响别人 */ }
+    }
+  };
+  entry.promise = downloadAttachmentOnce(fs, cacheDir, serverUrl, token, fileId, name, mime, fanOut)
+    .finally(() => { inFlight.delete(key); });
+  inFlight.set(key, entry);
+  return entry.promise;
 };
 
 /** 用户可见文案：说清是**下载**这一步失败了，而不是让人去怀疑文件本身。

@@ -1,4 +1,4 @@
-import { downloadEta, formatEta } from './download-eta';
+import { downloadEta, formatEta, videoProgressLabel } from './download-eta';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
   describeAttachmentError,
@@ -166,14 +166,25 @@ export function AuthedVideo({
   const [localUri, setLocalUri] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  /** admin 2026-11-16「点击没反应吧」：11MB 视频走慢网要下几分钟，原来卡片上只有 ⏳，看着像没点上。 */
+  const [progress, setProgress] = useState<string | undefined>(undefined);
   const tooLarge = typeof size === 'number' && size > MAX_ATTACHMENT_BYTES;
 
   const load = async () => {
     if (busy || localUri || tooLarge) return;
     setBusy(true);
     setError(null);
+    setProgress(undefined);
     try {
-      const local = await downloadAttachment(serverUrl, token, fileId, name, mime || mimeFromName(name));
+      const startedAt = Date.now();
+      let lastPaint = 0;
+      const onProgress = (received: number, total?: number) => {
+        const now = Date.now();
+        if (now - lastPaint < 400 && received !== total) return;
+        lastPaint = now;
+        setProgress(videoProgressLabel(received, total ?? size, now - startedAt));
+      };
+      const local = await downloadAttachment(serverUrl, token, fileId, name, mime || mimeFromName(name), onProgress);
       setLocalUri(local);
     } catch (e) {
       // #511 — say which LAYER failed. The generic "下载失败" sent Vincent
@@ -208,7 +219,7 @@ export function AuthedVideo({
       <Pressable style={styles.videoPlaceholder} onPress={load} hitSlop={6}>
         <Text style={styles.videoTitle}>{busy ? '⏳' : '▶'} {name}</Text>
         <Text style={[styles.videoHint, error && { color: colors.failed }]}>
-          {error ?? '点击下载并播放'}
+          {error ?? (busy ? progress ?? '正在下载…' : '点击下载并播放')}
         </Text>
       </Pressable>
       {save}

@@ -1,4 +1,4 @@
-import { downloadEta, formatEta, formatSpeed } from './download-eta';
+import { downloadEta, formatEta, formatSpeed, videoProgressLabel } from './download-eta';
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log(`PASS: ${n}`); } else console.log(`FAIL: ${n}`); };
 
@@ -10,5 +10,9 @@ ck('zero received → no speed', downloadEta(0, 1000, 5000).speedBps === null);
 ck('eta formatting: seconds / minutes / sub-second', formatEta(8) === '8 秒' && formatEta(80) === '1 分 20 秒' && formatEta(120) === '2 分' && formatEta(0.4) === '不到 1 秒');
 ck('eta formatting: null passes through', formatEta(null) === null);
 ck('speed formatting: B / KB / MB', formatSpeed(900) === '900 B/s' && formatSpeed(2048) === '2 KB/s' && formatSpeed(3 * 1024 * 1024) === '3.0 MB/s');
+const MB = 1024 * 1024;
+ck('video label: percent + MB + eta', videoProgressLabel(5.5 * MB, 11 * MB, 10_000) === '正在下载 50% · 5.5/11 MB · 剩余约 10 秒');
+ck('video label: no total → only bytes so far', videoProgressLabel(2 * MB, undefined, 4_000) === '正在下载 · 2.0 MB');
+ck('video label: just started → no eta yet', videoProgressLabel(0, 11 * MB, 0) === '正在下载 0% · 0.0/11 MB');
 console.log(`download eta: ${p}/${t}`);
 if (p !== t) process.exit(1);
