@@ -183,6 +183,8 @@ const DESKTOP_TABS = [
 const MOBILE_TABS = [
   { key: 'agents', label: 'nav.agents', icon: 'people-outline', iconActive: 'people' },
   { key: 'tasks', label: 'nav.tasks', icon: 'list-outline', iconActive: 'list' },
+  // 管理员 2026-11-16「手机上没有组织架构啊」:桌面一级栏有「组织」,手机底栏也放一个。
+  { key: 'org', label: 'nav.org', icon: 'git-network-outline', iconActive: 'git-network' },
   { key: 'scheduled', label: 'nav.scheduled', icon: 'time-outline', iconActive: 'time' },
   { key: 'settings', label: 'nav.settings', icon: 'settings-outline', iconActive: 'settings' },
 ] as const;
@@ -190,9 +192,9 @@ const MOBILE_TABS = [
 // Vincent 2026-09-29 「左侧加回去」: the unfolded left rail has 任务 (list + board). It has room
 // for 服务器 too, so the rail keeps it; only the phone bottom bar dropped it.
 const MOBILE_RAIL_TABS = [
-  ...MOBILE_TABS.slice(0, 3),
+  ...MOBILE_TABS.slice(0, 4),
   { key: 'server', label: 'nav.server', icon: 'server-outline', iconActive: 'server' },
-  MOBILE_TABS[3],
+  MOBILE_TABS[4],
 ] as const;
 
 const DESKTOP_MAIN_TABS = DESKTOP_TABS.filter(tab => tab.key !== 'settings');
@@ -1151,6 +1153,8 @@ function AppRoot() {
                     />
                   ) : screen.name === 'scheduled' ? (
                     <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
+                  ) : screen.name === 'org' ? (
+                    <OrgWorkspace cfg={cfg} phone onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
                   ) : screen.name === 'messages' ? (
                     <MessagesScreen cfg={cfg} />
                   ) : screen.name === 'server' ? (

@@ -166,9 +166,9 @@ has('section: save ⇒ close + reload the list in place', section, 'onSaved={() 
 has('editor: create prefills the executor', editor, "setTarget(initialTarget ?? '')");
 has('screen: global page uses the same editor', screen, '<ScheduleEditor');
 has('screen: hub focus switches the filter to the row\'s status', screen, 'if (row) { setFilter(row.status); setSelectedId(row.schedule_id); }');
-// 8 = 7 处节点页 + 一级栏「组织」(点 Agent 在组织页里打开节点页,2026-11-15)。
+// 9 = 7 处节点页 + 一级栏「组织」(桌面,2026-11-15)+ 手机底栏「组织」(2026-11-16)。
 ck('app: every node page that can navigate wires onOpenScheduled',
-  app.split("onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })}").length - 1 === 8);
+  app.split("onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })}").length - 1 === 9);
 has('app: back from a node-page jump returns to that node page', app, "if (screen.name === 'scheduled' && screen.back) {");
 
 console.log(`node schedules: ${passed} checks passed`);

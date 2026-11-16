@@ -2,7 +2,7 @@
 // 占满右侧(不要会话侧栏)。内容就是设置里那一页(OrgAccessPage:部门与 Agent / 成员与权限),
 // 身份(/api/auth/me)自己读一次,权限判断与设置页同一套(canManageUsers)。
 import { useEffect, useState } from 'react';
-import { Pressable, StyleSheet, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Ionicons } from './icons';
 import NodeDetailScreen from './NodeDetailScreen';
 import type { ScheduleOpenRequest } from './node-schedules';
@@ -17,7 +17,7 @@ import OrgDeptPeople from './OrgDeptPeople';
 import { fetchAuthMe } from './user-admin-api';
 import { canManageUsers, type AuthMe } from './user-admin';
 
-export default function OrgWorkspace({ cfg, onOpenScheduled }: { cfg: HubConfig; onOpenScheduled?: (request: ScheduleOpenRequest) => void }) {
+export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled }: { cfg: HubConfig; phone?: boolean; onOpenScheduled?: (request: ScheduleOpenRequest) => void }) {
   useTranslation();
   // 管理员 2026-11-15「点击 AGENT,设置不了权限什么鬼」:点 Agent 行 → 在这一页里打开它的节点页(落在「权限」),
   // 左上「← 组织」回来。组织页不卸载(只藏起来),回来时部门、搜索、滚动位置都还在。
@@ -41,14 +41,22 @@ export default function OrgWorkspace({ cfg, onOpenScheduled }: { cfg: HubConfig;
     <View style={styles.shell} testID="org-workspace">
       {/* 管理员 2026-11-15「做的更好一下」:左边整条侧栏(标题「组织」+「成员与权限」+ 部门树),右边内容;不再套标题行和页签。 */}
       <View style={[styles.root, openAlias ? styles.hidden : null]}>
+        {phone ? (
+          // 手机底栏「组织」(管理员 2026-11-16):单列,整页滚;成员与权限仍在「设置 → 组织与权限」。
+          <ScrollView testID="org-workspace-phone" style={{ flex: 1 }} contentContainerStyle={{ paddingVertical: spacing.md }} keyboardShouldPersistTaps="handled">
+            <AgentOrgScreen cfg={cfg} networkId={networkId} phone canManageStructure={canManage} onOpenAgent={setOpenAlias} title={t('nav.org')} />
+          </ScrollView>
+        ) : (
         <AgentOrgScreen cfg={cfg} networkId={networkId} phone={false} canManageStructure={canManage} fullWidth onOpenAgent={setOpenAlias}
           title={t('nav.org')}
           renderMembers={canManage ? () => <UserManagementPanel key={scope} cfg={cfg} me={authMe} networkId={networkId} hideOrg /> : undefined}
           renderPeople={canManage && networkId ? (deptId, onSelect) => <OrgDeptPeople key={scope} cfg={cfg} networkId={networkId} networkName={networkName} deptId={deptId} onSelect={onSelect} /> : undefined} />
+        )}
       </View>
       {openAlias ? (
         <View style={styles.detail} testID="org-agent-detail">
-          <View style={styles.crumbs}>
+          {/* 手机:节点页自己有返回,不再叠一行面包屑。 */}
+          {phone ? null : <View style={styles.crumbs}>
             <Pressable testID="org-agent-detail-back" accessibilityRole="button" accessibilityLabel={t('agentOrg.backToOrg')} onPress={() => setOpenAlias(null)}
               style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.crumbBack, (hovered || pressed) && { backgroundColor: colors.rowHover }]}>
               <Ionicons name="chevron-back" size={16} color={colors.accent} />
@@ -56,8 +64,8 @@ export default function OrgWorkspace({ cfg, onOpenScheduled }: { cfg: HubConfig;
             </Pressable>
             <Text style={styles.crumbSep}>/</Text>
             <Text numberOfLines={1} style={styles.crumbHere}>{openAlias}</Text>
-          </View>
-          <NodeDetailScreen key={openAlias} cfg={cfg} alias={openAlias} desktop initialSection="permissions" onBack={() => setOpenAlias(null)} onOpenScheduled={onOpenScheduled} />
+          </View>}
+          <NodeDetailScreen key={openAlias} cfg={cfg} alias={openAlias} desktop={!phone} initialSection="permissions" onBack={() => setOpenAlias(null)} onOpenScheduled={onOpenScheduled} />
         </View>
       ) : null}
     </View>

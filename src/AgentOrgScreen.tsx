@@ -130,7 +130,8 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
 
   const data = phase.kind === 'ready' ? phase.data : null;
   const placed = useMemo(() => (data ? placeAgents(data, moves) : []), [data, moves]);
-  const showTree = !p.phone || focus === undefined;
+  // 手机(管理员 2026-11-16「手机上没有组织架构啊」):树 → 部门 / 架构图,各自一屏,上面有返回。
+  const showTree = !p.phone || (focus === undefined && view !== 'chart');
   const treeApi = !!data?.departmentsApi;
   const openDeptMenu = (dept: Department | null, x: number, y: number, touch: boolean): boolean => {
     if (!deptMenuActions(dept, p.canManageStructure, treeApi).length) return false;
@@ -166,7 +167,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
     else if (action === 'rename' || action === 'reparent') setDeptEditor({ dept, parent: dept.parent_id ?? null, mode: action });
     else if (action === 'delete') setDeleting(dept);
   };
-  const showDetail = !!data && (p.phone ? focus !== undefined : true);
+  const showDetail = !!data && (p.phone ? focus !== undefined && view !== 'chart' : true);
   // 单个 Agent 换部门:「调整结构」和(整页模式)行上「移动到…」共用。乐观更新,失败回滚。
   const moveOne = (nodeId: string, target: string | null) => {
     if (saving) return;
@@ -215,7 +216,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
       {phase.kind === 'ready' && data === null ? (
         <SettingsGroup testID="agent-org-empty-hub"><SettingsRow label={t('agentOrg.oldHub')} /></SettingsGroup>
       ) : null}
-      {data && (showTree || showDetail) ? (
+      {data && (showTree || showDetail || (p.phone && view === 'chart')) ? (
         <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : styles.workspace}>
           {!p.fill ? <View style={styles.toolbar} testID="agent-org-department-actions">
             <View style={styles.toolbarContext}>
@@ -225,7 +226,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
             {/* admin 2026-10-24「agent 跟人共用一个组织架构，好像不太好」:部门结构不在这里改。
                 这棵树是 Hub 的网络级部门(人和 Agent 共用),增删改统一收在「用户管理 → 成员与部门」;
                 这一页只负责 Agent 归属。 */}
-            {editHint}
+            {p.phone && !showTree ? null : editHint}
           </View> : null}
           <View style={!p.phone ? [styles.columns, p.fill && styles.fillColumns] : undefined}>
           {showTree ? (
@@ -248,11 +249,20 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                   </Pressable>
                   {infoOpen ? <View style={{ gap: spacing.xs }}>{editHint}<Text style={styles.note}>{t('agentOrg.infoSummary')}</Text>{infoBody}</View> : null}
                 </View>
-              </> : <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />}
+              </> : <>
+                {p.phone ? <SettingsGroup testID="agent-org-phone-nav"><SettingsRow label={t('agentOrg.showcase.nav')} onPress={() => setView('chart')} testID="agent-org-chart-open" /></SettingsGroup> : null}
+                <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />
+              </>}
             </View>
           ) : null}
-          {p.fill && view === 'chart' ? (
+          {(p.fill || p.phone) && view === 'chart' ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-chart">
+              {p.phone ? (
+                <Pressable testID="agent-org-chart-back" accessibilityRole="button" accessibilityLabel={t('agentOrg.back')} onPress={() => setView('dept')} hitSlop={8} style={[styles.phoneBack, { marginHorizontal: spacing.md, marginTop: spacing.sm }]}>
+                  <Ionicons name="chevron-back" size={18} color={colors.accent} />
+                  <Text style={styles.phoneBackText}>{t('agentOrg.back')}</Text>
+                </Pressable>
+              ) : null}
               <OrgShowcase data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />
             </View>
           ) : p.fill && view === 'members' && p.renderMembers ? (
@@ -267,7 +277,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                 note=""
                 onMove={p.fill && data.agentDepartmentSupported ? moveOne : undefined}
                 moveBusy={saving}
-                onOpenAgent={p.fill ? p.onOpenAgent : undefined}
+                onOpenAgent={p.fill || p.phone ? p.onOpenAgent : undefined}
                 tab={p.fill && p.renderPeople ? deptTab : 'agents'}
                 onTab={p.fill && p.renderPeople ? setDeptTab : undefined}
                 people={p.fill && p.renderPeople && deptTab === 'people' ? p.renderPeople(focus ?? null, id => focusDept(id)) : null}
@@ -646,7 +656,13 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
   );
   return (
     <View testID="agent-org-detail-card" style={styles.detail}>
-      {p.phone ? <SettingsRow label={t('agentOrg.back')} onPress={p.onBack} testID="agent-org-back" /> : null}
+      {p.phone ? (
+        // 手机(管理员 2026-11-16「手机上的体验提升一下吧」):返回是左上一个小链接,不再是整行「全部部门 >」。
+        <Pressable testID="agent-org-back" accessibilityRole="button" accessibilityLabel={t('agentOrg.back')} onPress={p.onBack} hitSlop={8} style={styles.phoneBack}>
+          <Ionicons name="chevron-back" size={18} color={colors.accent} />
+          <Text style={styles.phoneBackText}>{t('agentOrg.back')}</Text>
+        </Pressable>
+      ) : null}
       <View style={styles.detailHeading}>
         <View style={styles.memberTitle}>
           <Text numberOfLines={2} style={[styles.title, { flexShrink: 1 }]}>{title}</Text>
@@ -660,7 +676,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
           </View>
         ) : null}
       </View>
-      <Text style={styles.note}>{t('agentOrg.directMembers')}</Text>
+      {p.phone ? (deptPath && deptPath !== title ? <Text numberOfLines={1} testID="agent-org-dept-path" style={styles.note}>{deptPath}</Text> : null) : <Text style={styles.note}>{t('agentOrg.directMembers')}</Text>}
       {bulkOpen ? <StructureSelector title={t('agentOrg.bulkPickDept')} onClose={() => setBulkOpen(false)}
             options={flattenTree(orgTree(p.data)).map(row => ({ id: row.dept.id, label: row.dept.name, testID: `agent-org-bulk-dept-${row.dept.id}` }))}
             selected={undefined}
@@ -679,7 +695,15 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
         <TextInput testID="agent-org-member-search" value={query} onChangeText={setQuery} placeholder={t('agentOrg.searchAgents')} accessibilityLabel={t('agentOrg.searchAgents')} placeholderTextColor={colors.textMuted} style={styles.searchInput} />
       </View>
       <ScrollView ref={memberScroll} testID="agent-org-member-list" style={styles.memberList} contentContainerStyle={{ paddingBottom: spacing.sm }} keyboardShouldPersistTaps="handled">
-      {children.map(child => (
+      {children.map(child => p.phone ? (
+        <Pressable key={child.id} testID={`agent-org-child-${child.id}`} accessibilityRole="button" onPress={() => p.onFocus(child.id)}
+          style={({ pressed }) => [styles.agentRow, pressed && { backgroundColor: colors.rowHover }]}>
+          <View style={styles.folderBadge}><Ionicons name="folder-outline" size={18} color={colors.textSecondary} /></View>
+          <Text numberOfLines={1} style={{ flex: 1, minWidth: 0, color: colors.text, fontSize: typeScale.body, fontWeight: '500' }}>{child.name}</Text>
+          <Text style={styles.note}>{t('agentOrg.agentsCount', { count: agentCount(p.placed, p.data, child.id) })}</Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </Pressable>
+      ) : (
         <SettingsRow
           key={child.id}
           testID={`agent-org-child-${child.id}`}
@@ -688,7 +712,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
           onPress={() => p.onFocus(child.id)}
         />
       ))}
-        {filtered.length ? shown.map(agent => <AgentLine key={agent.nodeId} agent={agent} />) : <View testID={agents.length ? 'agent-org-no-results' : 'agent-org-no-agents'} style={styles.empty}>
+        {filtered.length ? shown.map(agent => <AgentLine key={agent.nodeId} agent={agent} onOpen={p.onOpenAgent ? () => p.onOpenAgent!(agent.alias) : undefined} />) : <View testID={agents.length ? 'agent-org-no-results' : 'agent-org-no-agents'} style={styles.empty}>
           <Ionicons name={agents.length ? 'search-outline' : 'people-outline'} size={30} color={colors.textMuted} />
           <Text style={styles.note}>{t(agents.length ? 'agentOrg.noResults' : 'agentOrg.noAgents')}</Text>
         </View>}
@@ -728,13 +752,18 @@ function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void;
       </>}
     </Pressable>;
   }
-  return <View testID={`agent-org-agent-${agent.nodeId}`} style={styles.agentRow}>
+  const body = <>
     <AliasAvatar alias={agent.alias} size={36} />
     <View style={{ flex: 1, minWidth: 0, gap: spacing.xs }}>
       <Text testID={`agent-org-agent-${agent.nodeId}-label`} numberOfLines={1} style={{ color: colors.text, fontSize: typeScale.body, fontWeight: '500' }}>{agent.alias}</Text>
       <Text numberOfLines={1} style={styles.note}>{subtitle}</Text>
     </View>
-  </View>;
+    {p.onOpen ? <Ionicons name="chevron-forward" size={16} color={colors.textMuted} /> : null}
+  </>;
+  // 手机「组织」页:整行可点 → 节点页(和桌面整页一致);设置里那一页不传 onOpen,仍是静态行。
+  if (p.onOpen) return <Pressable testID={`agent-org-agent-${agent.nodeId}`} accessibilityRole="button" accessibilityLabel={t('agentOrg.openAgent', { name: agent.alias })} onPress={p.onOpen}
+    style={({ pressed }) => [styles.agentRow, pressed && { backgroundColor: colors.rowHover }]}>{body}</Pressable>;
+  return <View testID={`agent-org-agent-${agent.nodeId}`} style={styles.agentRow}>{body}</View>;
 }
 
 function DeptContextMenu(p: { target: { dept: Department | null; x: number; y: number; touch: boolean }; actions: DeptMenuAction[]; onClose: () => void; onPick: (a: DeptMenuAction) => void }) {
@@ -927,6 +956,8 @@ const makeStyles = () => StyleSheet.create({
   departmentRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 44, paddingRight: spacing.sm, marginBottom: 2, borderRadius: radius.item },
   count: { color: colors.textMuted, fontSize: typeScale.small, fontVariant: ['tabular-nums'], backgroundColor: colors.subtleFill, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, borderRadius: radius.item },
   detail: { padding: spacing.md, gap: spacing.sm, minWidth: 0 },
+  phoneBack: { flexDirection: 'row', alignItems: 'center', alignSelf: 'flex-start', gap: 2, minHeight: 32, marginLeft: -spacing.xs },
+  phoneBackText: { color: colors.accent, fontSize: typeScale.body, fontWeight: '500' },
   detailHeading: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm },
   memberTitle: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', flexGrow: 1, flexShrink: 1, gap: spacing.sm, maxWidth: '100%' },
   bulkAction: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, maxWidth: '100%' },
