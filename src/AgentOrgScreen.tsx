@@ -884,7 +884,7 @@ function DemoAdjust(p: {
   );
 }
 
-function StructureSelector(p: { title: string; options: { id: string | null; label: string; subtitle?: string; testID: string }[]; selected: string | null | undefined; onPick: (id: string | null) => void; onClose: () => void }) {
+export function StructureSelector(p: { title: string; options: { id: string | null; label: string; subtitle?: string; testID: string; disabled?: boolean; disabledReason?: string }[]; selected: string | null | undefined; onPick: (id: string | null) => void; onClose: () => void }) {
   const { t } = useTranslation();
   const [query, setQuery] = useState('');
   useEffect(() => listenEscapeClose(p.onClose), [p.onClose]);
@@ -896,7 +896,18 @@ function StructureSelector(p: { title: string; options: { id: string | null; lab
           <TextInput autoFocus value={query} onChangeText={setQuery} testID="agent-org-selector-search" placeholder={t('agentOrg.searchOptions')} accessibilityLabel={t('agentOrg.searchOptions')} placeholderTextColor={colors.textMuted} style={styles.searchInput} />
         </View>
         <FlatList data={options} keyExtractor={item => item.testID} style={{ flexGrow: 0, flexShrink: 1, maxHeight: 360 }} keyboardShouldPersistTaps="handled" initialNumToRender={12}
-          renderItem={({ item }) => <SettingsChoiceRow testID={item.testID} label={item.label} subtitle={item.subtitle} selected={p.selected === item.id} onPress={() => p.onPick(item.id)} />}
+          renderItem={({ item }) => (
+            // #4863：不可编辑的部门灰掉并显示原因（不让用户点一个必被 403 的项）；
+            // 但**不隐藏**，用户要能看见「它存在，只是我不能动」。
+            <SettingsChoiceRow
+              testID={item.testID}
+              label={item.label}
+              subtitle={item.disabled ? `${item.subtitle ? item.subtitle + ' · ' : ''}${item.disabledReason ?? ''}` : item.subtitle}
+              disabled={item.disabled}
+              selected={p.selected === item.id}
+              onPress={() => { if (!item.disabled) p.onPick(item.id); }}
+            />
+          )}
           ListEmptyComponent={<Text style={[styles.note, { padding: spacing.lg }]}>{t('agentOrg.noResults')}</Text>} />
   </DialogFrame>;
 }

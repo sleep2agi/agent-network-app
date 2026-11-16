@@ -36,7 +36,7 @@ export function membersIn<P extends OrgPerson>(data: OrgData, dept: DeptKey, peo
 export const personName = (p: OrgPerson): string => (p.display_name && p.display_name.trim()) || p.username;
 
 /** 从根到这个部门的路径(含自己);找不到 / 成环 → 能走到的那一段。 */
-export function pathTo(data: OrgData, dept: DeptKey): Department[] {
+export function pathTo(data: Pick<OrgData, 'departments'>, dept: DeptKey): Department[] {
   const out: Department[] = [];
   const seen = new Set<string>();
   let cur = dept ? data.departments.find(d => d.id === dept) : undefined;

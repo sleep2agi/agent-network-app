@@ -37,6 +37,13 @@ export const agentOrgTranslations = {
   'agentOrg.saveNoDepartment': ['目标部门不存在或不属于这个网络', 'The target department does not exist in this network'],
   'agentOrg.saveNoNode': ['这个 Agent 不在当前网络', 'This agent is not in this network'],
   'agentOrg.saveUnsupported': ['当前 Hub 版本还不支持调整部门，请先升级 Hub', 'This Hub version cannot move agents yet. Upgrade the Hub.'],
+  // #4863 —— 节点页 / 聊天信息里直接调整「所属部门」（admin 2026-11-15 截图：在节点里找不到入口）
+  'nodeDepartment.row': ['所属部门', 'Department'],
+  'nodeDepartment.title': ['调整所属部门', 'Change department'],
+  'nodeDepartment.unassigned': ['未归属', 'Unassigned'],
+  'nodeDepartment.saved': ['已更新所属部门', 'Department updated'],
+  'nodeDepartment.readonlyHint': ['只有管理员或部门负责人能调整；这里只读', 'Read-only: only an admin or department head can change this'],
+  'nodeDepartment.noDepartments': ['这个网络还没有部门，先去「组织与权限」建一个', 'This network has no departments yet — create one in Organization'],
   'agentOrg.demoNoAgents': ['通讯录里还没有可调整的 Agent', 'The directory has no agents to move'],
   'agentOrg.demoNeedPick': ['先选一个 Agent 和目标部门', 'Choose an agent and a target department first'],
   'agentOrg.departments': ['部门', 'Departments'],

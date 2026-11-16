@@ -169,7 +169,7 @@ export function headerChips(facts: readonly NodeInfoFact[]): string[] {
 
 /** 「所属部门」那一行:从根到这个部门的完整路径,如「天马 / 研发 / 客户端」(admin 2026-11-10:
  *  不要 team 了,标部门,显示树上的路径)。没部门表 / 没归属 ⇒ undefined(这一行不出现)。 */
-export function departmentPathLabel(org: OrgData | null | undefined, departmentId: string | null | undefined): string | undefined {
+export function departmentPathLabel(org: Pick<OrgData, 'departments'> | null | undefined, departmentId: string | null | undefined): string | undefined {
   if (!org || !departmentId) return undefined;
   const names = pathTo(org, departmentId).map(d => d.name.trim()).filter(Boolean);
   return names.length ? names.join(' / ') : undefined;

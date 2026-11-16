@@ -159,7 +159,8 @@ function flatDepartments(names: Map<string, string>, owners: readonly OrgOwner[]
  *  写接口:PUT /api/networks/:net/nodes/:nodeId/department,需要网络 owner/admin 或该部门负责人。 */
 export type MoveAgentResult =
   | { ok: true }
-  | { ok: false; reason: 'forbidden' | 'node' | 'department' | 'unsupported' | 'error' };
+  /** detail = Hub 原文（例如 403 的具体原因）。#4863：调用方要能原样显示，不许吞成「失败」。 */
+  | { ok: false; reason: 'forbidden' | 'node' | 'department' | 'unsupported' | 'error'; detail?: string };
 
 export async function moveAgentDepartment(
   cfg: HubConfig,
@@ -186,7 +187,11 @@ export async function moveAgentDepartment(
     const contractError = body && typeof body === 'object'
       ? ((body as { code?: unknown }).code ?? (body as { error?: unknown }).error)
       : undefined;
-    if (res.status === 403) return { ok: false, reason: 'forbidden' };
+    // #4863：403 不吞原因 —— Hub 常带「只有负责人能改」之类的原文，调用方原样显示。
+    if (res.status === 403) {
+      const detail = typeof contractError === 'string' ? contractError : text.trim().slice(0, 200);
+      return { ok: false, reason: 'forbidden', ...(detail ? { detail } : {}) };
+    }
     if (res.status === 405 || res.status === 501) return { ok: false, reason: 'unsupported' };
     if (res.status === 404) {
       // 契约里的 404 带 node_not_found;旧 Hub 的路由不存在时是 404 + HTML/空正文。
