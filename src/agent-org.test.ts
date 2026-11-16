@@ -1,6 +1,6 @@
 // Agent 组织架构:点设置入口必须打开页面;部门树和负责人是 Hub 数据;调整结构写 Hub(PUT),失败回滚。
 import { existsSync, readFileSync } from 'node:fs';
-import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, placeAgents, type AgentOrgData, type OrgOwner } from './agent-org-model';
+import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, placeAgents, staleDays, type AgentOrgData, type OrgOwner } from './agent-org-model';
 import { DIRECTORY_MAX_PAGES, loadAgentOrg, moveAgentDepartment, parseDirectoryPage } from './agent-org-api';
 import { agentOrgTranslations } from './i18n-agent-org';
 import type { Department } from './org-model';
@@ -346,6 +346,9 @@ const json = (status: number, body: unknown) => new Response(body == null ? '' :
   ck('别的部门 / 未归属的不算', !aHidden.some(a => a.nodeId === 'n-b1'));
   const screen = code(read('./AgentOrgScreen.tsx'));
   ck('删除部门的计数 = 看得见的 + 隐藏的（和 Hub 口径一致）', /agentsDirectlyIn\(placed, deleting\.id\)\.length \+ hiddenAgentsDirectlyIn\(data, placed, deleting\.id\)\.length/.test(screen));
+  // admin 2026-11-16「没有在线的那些 agent 也在架构里显示一下」
+  ck('🔴 久未上线 → 返回天数；最近有动静 / 不知道 → null', staleDays({ updatedAt: iso(20 * day) }, NOW) === 20 && staleDays({ updatedAt: iso(2 * day) }, NOW) === null && staleDays({}, NOW) === null);
+  ck('🔴 组织页不再按 7 天过滤（久未上线的也显示）', (screen.match(/placeAgents\(data, (\[\]|moves), \{ recentDays: 0 \}\)/g) ?? []).length === 2);
   ck('只剩隐藏 Agent 时给「移到未归属并删除」', screen.includes("'agentOrg.deleteMoveHidden'") && /moveAgentDepartment\(p\.cfg, p\.networkId, a\.nodeId, null\)/.test(screen));
 
   // 向后兼容：老 Hub 没有 updated_at ⇒ 既不过滤也不过早去重

@@ -168,7 +168,7 @@ try {
     assert.match(await page.locator('[data-testid="agent-org-department-result"]').innerText(), /已删除「运营」/);
 
     // ④c 树上 0 个、Hub 里还有 2 个久未上线的 Agent:说清楚是谁,并能一键移到未归属再删
-    assert.equal(await page.locator('[data-testid="agent-org-dept-d_d-value"]').innerText().catch(() => '0'), '0', '树上数字只算看得见的');
+    assert.equal(await page.locator('[data-testid="agent-org-dept-d_d-value"]').innerText(), '2', '久未上线的也算进树上的数字（admin 2026-11-16）');
     await rightClick(page, '[data-testid="agent-org-dept-d_d"]');
     await page.locator('[data-testid="agent-org-dept-menu-delete"]').click();
     await page.locator('[data-testid="agent-org-delete-blocked"]').waitFor();

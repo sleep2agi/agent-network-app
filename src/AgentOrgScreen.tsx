@@ -8,7 +8,7 @@ import DialogFrame from './DialogFrame';
 import { listenEscapeClose } from './escape-close';
 import type { HubConfig } from './api';
 import { loadAgentOrg, moveAgentDepartment, orgLoadErrorReason } from './agent-org-api';
-import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, orgTree, placeAgents, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
+import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, orgTree, placeAgents, staleDays, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
 import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
 import { createDepartment, deleteDepartment, updateDepartment, OrgRequestError } from './org-api';
 import { blockersFromDetail, canEditAnyDepartment, DEPT_MENU_LABEL_KEY, deleteBlockers, deptMenuActions, isDeleteBlocked, type DeleteBlockers, type DeptMenuAction } from './agent-org-dept-menu';
@@ -121,7 +121,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
       setPhase({ kind: 'ready', data });
       if (painted) return;
       painted = true;
-      const initialAgents = data ? placeAgents(data, []) : [];
+      const initialAgents = data ? placeAgents(data, [], { recentDays: 0 }) : [];
       // #2025：有未归属 Agent 时右栏直接落在「未归属」，不再先落在某个部门上。
       const unowned = data ? agentCount(initialAgents, data, null) : 0;
       const populated = data ? flattenTree(orgTree(data)).find(row => agentsDirectlyIn(initialAgents, row.dept.id).length > 0) : undefined;
@@ -142,7 +142,8 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
   }, [p.cfg.serverUrl, p.cfg.token, p.networkId, p.phone, attempt]);
 
   const data = phase.kind === 'ready' ? phase.data : null;
-  const placed = useMemo(() => (data ? placeAgents(data, moves) : []), [data, moves]);
+  // admin 2026-11-16「没有在线的那些 agent 也在架构里显示一下」:不再按 7 天过滤;久未上线的变灰、排后面、标「N 天未上线」。
+  const placed = useMemo(() => (data ? placeAgents(data, moves, { recentDays: 0 }) : []), [data, moves]);
   // 手机(管理员 2026-11-16「手机上没有组织架构啊」):树 → 部门 / 架构图,各自一屏,上面有返回。
   const showTree = !p.phone || (focus === undefined && view !== 'chart');
   const treeApi = !!data?.departmentsApi;
@@ -372,7 +373,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
       </View> : null}
       {data && deptMenu ? <DeptContextMenu target={deptMenu} actions={deptMenuActions(deptMenu.dept, p.canManageStructure, treeApi)} onClose={() => setDeptMenu(null)} onPick={a => runMenu(a, deptMenu.dept)} /> : null}
       {data && deleting ? <DeleteDepartmentDialog cfg={p.cfg} networkId={p.networkId} dept={deleting}
-        hidden={hiddenAgentsDirectlyIn(data, placed, deleting.id)}
+        hidden={[...agentsDirectlyIn(placed, deleting.id).map(a => ({ nodeId: a.nodeId, alias: a.alias, stale: staleDays(a) !== null })), ...hiddenAgentsDirectlyIn(data, placed, deleting.id).map(a => ({ ...a, stale: true }))]}
         blockers={deleteBlockers(deleting, data.departments, agentsDirectlyIn(placed, deleting.id).length + hiddenAgentsDirectlyIn(data, placed, deleting.id).length)}
         onClose={() => setDeleting(null)}
         onDeleted={async () => {
@@ -754,21 +755,23 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
 function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void; onOpen?: () => void }) {
   const { t } = useTranslation();
   const agent = p.agent;
-  const subtitle = agent.ownerName ? t('agentOrg.owner', { name: agent.ownerName }) : t('agentOrg.noOwner');
+  const stale = staleDays(agent);
+  const owner = agent.ownerName ? t('agentOrg.owner', { name: agent.ownerName }) : t('agentOrg.noOwner');
+  const subtitle = stale !== null ? `${owner} · ${t('agentOrg.staleDays', { days: stale })}` : owner;
   if (p.fill) {
     // 整页:一行 48 高;负责人放右侧一列(以前每行第二行都是「负责人 admin」);
     // 有 lifecycle 的 Hub 在头像角上标运行 / 未运行;悬停出「移动到…」。
-    const live = agent.lifecycleState == null ? null : agent.lifecycleState === 'active';
+    const live = agent.lifecycleState == null ? null : agent.lifecycleState === 'active' && stale === null;
     // 整行可点 → 节点页(落在「权限」)。以前行不可点,点上去只会选中文字。
     return <Pressable testID={`agent-org-agent-${agent.nodeId}`} focusable={!!p.onOpen} disabled={!p.onOpen} onPress={p.onOpen}
       accessibilityRole={p.onOpen ? 'button' : undefined} accessibilityLabel={p.onOpen ? t('agentOrg.openAgent', { name: agent.alias }) : undefined}
       style={({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => [styles.agentRowFill, p.onOpen && { cursor: 'pointer' } as object, hovered && { backgroundColor: colors.rowHover }]}>
       {({ hovered }: PressableStateCallbackType & { hovered?: boolean }) => <>
-        <View>
+        <View style={stale !== null ? { opacity: 0.45 } : undefined}>
           <AliasAvatar alias={agent.alias} size={30} />
           {live !== null ? <View accessibilityLabel={t(live ? 'agentOrg.lifecycleActive' : 'agentOrg.lifecycleIdle')} style={[styles.liveDot, { backgroundColor: live ? colors.running : colors.rest }]} /> : null}
         </View>
-        <Text testID={`agent-org-agent-${agent.nodeId}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: colors.text, fontSize: typeScale.body, fontWeight: '500' }}>{agent.alias}</Text>
+        <Text testID={`agent-org-agent-${agent.nodeId}-label`} numberOfLines={1} style={{ flex: 1, minWidth: 0, color: stale !== null ? colors.textMuted : colors.text, fontSize: typeScale.body, fontWeight: '500' }}>{agent.alias}{stale !== null ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small, fontWeight: '400' }}>{`  ${t('agentOrg.staleDays', { days: stale })}`}</Text> : null}</Text>
         <Text numberOfLines={1} style={[styles.ownerCol, !agent.ownerName && { fontStyle: 'italic' }]}>{agent.ownerName ?? t('agentOrg.noOwner')}</Text>
         <View style={[styles.rowActionSlot, { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }]}>
           {p.onMove ? <Pressable testID={`agent-org-agent-${agent.nodeId}-move`} accessibilityRole="button" accessibilityLabel={`${t('agentOrg.moveTo')} ${agent.alias}`} onPress={e => { e.stopPropagation?.(); p.onMove!(); }}
@@ -782,7 +785,7 @@ function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void;
     </Pressable>;
   }
   const body = <>
-    <AliasAvatar alias={agent.alias} size={36} />
+    <View style={stale !== null ? { opacity: 0.45 } : undefined}><AliasAvatar alias={agent.alias} size={36} /></View>
     <View style={{ flex: 1, minWidth: 0, gap: spacing.xs }}>
       <Text testID={`agent-org-agent-${agent.nodeId}-label`} numberOfLines={1} style={{ color: colors.text, fontSize: typeScale.body, fontWeight: '500' }}>{agent.alias}</Text>
       <Text numberOfLines={1} style={styles.note}>{subtitle}</Text>
@@ -829,7 +832,7 @@ function blockerText(t: (k: string, o?: Record<string, string | number>) => stri
     .filter(Boolean).join('、');
 }
 
-function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: Department; blockers: DeleteBlockers; hidden: { nodeId: string; alias: string }[]; onClose: () => void; onDeleted: () => Promise<void> }) {
+function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: Department; blockers: DeleteBlockers; hidden: { nodeId: string; alias: string; stale: boolean }[]; onClose: () => void; onDeleted: () => Promise<void> }) {
   const { t } = useTranslation();
   const [busy, setBusy] = useState(false);
   const [moving, setMoving] = useState<number | null>(null);
@@ -877,7 +880,9 @@ function DeleteDepartmentDialog(p: { cfg: HubConfig; networkId: string; dept: De
       ? <Text testID="agent-org-delete-blocked" style={styles.note}>{t('agentOrg.deleteBlocked', { name: p.dept.name, what: blockerText(t, blockers) })}</Text>
       : <Text testID="agent-org-delete-text" style={styles.note}>{t('agentOrg.deleteConfirm', { name: p.dept.name })}</Text>}
     {blocked && p.hidden.length > 0
-      ? <Text testID="agent-org-delete-hidden" style={styles.note}>{t('agentOrg.deleteHidden', { count: p.hidden.length, names: p.hidden.slice(0, 8).map(a => a.alias).join('、') + (p.hidden.length > 8 ? '…' : '') })}</Text>
+      ? <Text testID="agent-org-delete-hidden" style={styles.note}>{p.hidden.some(a => !a.stale)
+        ? t('agentOrg.deleteAgentsList', { names: p.hidden.slice(0, 8).map(a => a.alias).join('、') + (p.hidden.length > 8 ? '…' : '') })
+        : t('agentOrg.deleteHidden', { count: p.hidden.length, names: p.hidden.slice(0, 8).map(a => a.alias).join('、') + (p.hidden.length > 8 ? '…' : '') })}</Text>
       : null}
     {error ? <Text accessibilityRole="alert" testID="agent-org-delete-error" style={[styles.note, { color: colors.failed }]}>{error}</Text> : null}
   </DialogFrame>;

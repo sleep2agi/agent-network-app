@@ -18,6 +18,7 @@ import { BrandMark } from './brand-mark';
 import { colors, onThemeChange, radius, spacing, type as typeScale } from './theme';
 import { useTranslation } from './i18n-react';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
+import { staleDays } from './agent-org-model';
 import { deptTrail, isRunning, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats, type ShowcaseColumn } from './org-showcase-model';
 
 /** 栏宽跟着可用宽度走(放得下就不横向滚),夹在 MIN..MAX 之间;实在放不下才横向滚。 */
@@ -219,7 +220,7 @@ function Column(p: { col: ShowcaseColumn; width: number; onOpen: (id: string) =>
 
 function AgentWall(p: { agents: PlacedAgent[]; onOpenAgent?: (alias: string) => void }) {
   const { t } = useTranslation();
-  const sorted = [...p.agents].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || a.alias.localeCompare(b.alias, 'zh'));
+  const sorted = [...p.agents].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || Number(staleDays(a) !== null) - Number(staleDays(b) !== null) || a.alias.localeCompare(b.alias, 'zh'));
   const shown = sorted.slice(0, AGENT_CAP);
   if (!shown.length) return <View testID="org-showcase-agents-empty" style={styles.wallEmpty}>
     <Ionicons name="people-outline" size={28} color={colors.textMuted} />
@@ -229,12 +230,12 @@ function AgentWall(p: { agents: PlacedAgent[]; onOpenAgent?: (alias: string) => 
     {shown.map(agent => (
       <Pressable key={agent.nodeId} testID={`org-showcase-agent-${agent.nodeId}`} accessibilityRole="button" disabled={!p.onOpenAgent} onPress={() => p.onOpenAgent?.(agent.alias)}
         style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.agentCard, (hovered || pressed) && p.onOpenAgent && { borderColor: colors.textMuted }]}>
-        <View>
+        <View style={staleDays(agent) !== null ? { opacity: 0.45 } : undefined}>
           <AliasAvatar alias={agent.alias} size={44} />
           {agent.lifecycleState != null ? <View style={[styles.agentDot, { backgroundColor: isRunning(agent) ? colors.running : colors.rest }]} /> : null}
         </View>
         <Text numberOfLines={1} style={styles.agentName}>{agent.alias}</Text>
-        <Text numberOfLines={1} style={styles.deptMeta}>{agent.ownerName ?? t('agentOrg.noOwner')}</Text>
+        <Text numberOfLines={1} style={styles.deptMeta}>{staleDays(agent) !== null ? t('agentOrg.staleDays', { days: staleDays(agent)! }) : agent.ownerName ?? t('agentOrg.noOwner')}</Text>
       </Pressable>
     ))}
     {sorted.length > shown.length ? <Text style={[styles.chartHint, { alignSelf: 'center' }]}>{t('agentOrg.moreAgents', { count: sorted.length - shown.length })}</Text> : null}

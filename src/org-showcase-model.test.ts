@@ -1,4 +1,4 @@
-import { DEPT_HUES, deptTrail, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats } from './org-showcase-model';
+import { DEPT_HUES, deptTrail, isRunning, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats } from './org-showcase-model';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
 
 let p = 0, t = 0;
@@ -38,5 +38,13 @@ ck('drill: stats scoped to the subtree (no unassigned)', ss.agents === 3 && ss.d
 ck('drill: scopedPlaced = agents in the subtree', scopedPlaced(data, placed, 'a1').map(a => a.alias).sort().join() === ['乙', '丙'].sort().join() && scopedPlaced(data, placed, null).length === 5);
 ck('drill: trail root → department', deptTrail(data, 'a11').map(d => d.id).join() === 'a,a1,a11' && deptTrail(data, null).length === 0);
 
+// admin 2026-11-16：久未上线的也显示在图上，但不能算「运行中」
+{
+  const old = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const fresh = new Date(Date.now() - 60_000).toISOString();
+  ck('🔴 active 但 30 天没动 → 不算运行中', !isRunning({ lifecycleState: 'active', updatedAt: old }));
+  ck('active 且刚动过 → 运行中', isRunning({ lifecycleState: 'active', updatedAt: fresh }));
+  ck('active、不知道多久 → 仍算运行中（向后兼容）', isRunning({ lifecycleState: 'active' }));
+}
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
