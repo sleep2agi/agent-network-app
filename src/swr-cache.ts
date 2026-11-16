@@ -82,3 +82,35 @@ export function __resetSwrCaches(): void {
   for (const t of pendingWrites.values()) clearTimeout(t);
   pendingWrites.clear();
 }
+
+
+// ── 组织页(admin 2026-11-16「这个UI 加载UI太差了」)────────────────────────────────────────────
+// 手机上组织页要拉全量节点表 + 通讯录,冷启动等好几秒。先画上次读到的,实时结果回来再替换。
+// 内存里也留一份:同一次运行里切 tab 回来是瞬开的。按 (账号, 网络) 分开,别的网络的部门永不出现在这里。
+type OrgSnapshot = { v: 1; networkId: string; savedAt: number; data: unknown };
+const orgMemory = new Map<string, OrgSnapshot>();
+const orgKey = (profileId: string | undefined, networkId: string) => `${profileId ?? ''}|${networkId}`;
+
+export function rememberOrg(profileId: string | undefined, networkId: string, data: unknown): void {
+  const snap: OrgSnapshot = { v: 1, networkId, savedAt: Date.now(), data };
+  orgMemory.set(orgKey(profileId, networkId), snap);
+  void storage().then(st => st.saveOrgCache(snap, profileId)).catch(() => {});
+}
+
+/** 同步读内存(切 tab 回来):没有就 null。 */
+export function peekOrg(profileId: string | undefined, networkId: string): unknown | null {
+  return orgMemory.get(orgKey(profileId, networkId))?.data ?? null;
+}
+
+export async function recallOrg(profileId: string | undefined, networkId: string): Promise<unknown | null> {
+  const mem = peekOrg(profileId, networkId);
+  if (mem) return mem;
+  try {
+    const raw = await (await storage()).loadOrgCache(profileId) as OrgSnapshot | undefined;
+    if (!raw || raw.v !== 1 || raw.networkId !== networkId || !raw.data) return null;
+    orgMemory.set(orgKey(profileId, networkId), raw);
+    return raw.data;
+  } catch {
+    return null;
+  }
+}

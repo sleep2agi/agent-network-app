@@ -22,6 +22,7 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
 import OrgShowcase from './OrgShowcase';
+import { peekOrg, recallOrg, rememberOrg } from './swr-cache';
 
 /** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
 type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStructure?: boolean;
@@ -110,21 +111,33 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
 
   useEffect(() => {
     let live = true;
-    setPhase({ kind: 'loading' });
+    let painted = false;
     setMoves([]);
     setPickAgent(null);
     setPickDept(undefined);
     setAdjustNote('');
-    void loadAgentOrg(p.cfg, p.networkId).then(data => {
-      if (!live) return;
+    // 首次画出时定落点;实时结果替换缓存时不动用户已经点到的部门。
+    const show = (data: AgentOrgData | null) => {
       setPhase({ kind: 'ready', data });
+      if (painted) return;
+      painted = true;
       const initialAgents = data ? placeAgents(data, []) : [];
       // #2025：有未归属 Agent 时右栏直接落在「未归属」，不再先落在某个部门上。
       const unowned = data ? agentCount(initialAgents, data, null) : 0;
       const populated = data ? flattenTree(orgTree(data)).find(row => agentsDirectlyIn(initialAgents, row.dept.id).length > 0) : undefined;
       const fallback = data?.directory || unowned > 0 ? null : (data?.departments[0]?.id ?? null);
       setFocus(p.phone ? undefined : (unowned > 0 ? null : (populated?.dept.id ?? fallback)));
-    }, () => { if (live) setPhase({ kind: 'error' }); });
+    };
+    // admin 2026-11-16「这个UI 加载UI太差了」:先画上次读到的组织架构(内存瞬开,磁盘次之),实时结果回来再替换。
+    const profile = p.cfg.profileId;
+    const mem = peekOrg(profile, p.networkId) as AgentOrgData | null;
+    if (mem) show(mem); else setPhase({ kind: 'loading' });
+    if (!mem) void recallOrg(profile, p.networkId).then(cached => { if (live && !painted && cached) show(cached as AgentOrgData); });
+    void loadAgentOrg(p.cfg, p.networkId).then(data => {
+      if (!live) return;
+      show(data);
+      if (data) rememberOrg(profile, p.networkId, data);
+    }, () => { if (live && !painted) setPhase({ kind: 'error' }); });
     return () => { live = false; };
   }, [p.cfg.serverUrl, p.cfg.token, p.networkId, p.phone, attempt]);
 

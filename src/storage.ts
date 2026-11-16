@@ -327,6 +327,8 @@ export const loadSessionsCache = async (profileId?: string): Promise<Session[] |
 // per account, best-effort both ways, never blocks or fails the live read.
 const BOARD_CACHE = `${FileSystem.cacheDirectory}requirements_cache_v1.json`;
 const HISTORY_CACHE = `${FileSystem.cacheDirectory}chat_history_cache_v1.json`;
+// 组织页(AgentOrgScreen)最近一次读到的组织架构:先画它,再用实时结果替换(admin 2026-11-16「加载 UI 太差了」)。
+const ORG_CACHE = `${FileSystem.cacheDirectory}agent_org_cache_v1.json`;
 
 const saveCacheJson = async (base: string, desktopPath: string, profileId: string | undefined, value: unknown): Promise<void> => {
   try {
@@ -353,6 +355,8 @@ export const saveBoardCache = (value: unknown, profileId?: string) => saveCacheJ
 export const loadBoardCache = (profileId?: string) => loadCacheJson(BOARD_CACHE, 'cache/requirements.json', profileId);
 export const saveChatHistoryCache = (value: unknown, profileId?: string) => saveCacheJson(HISTORY_CACHE, 'cache/chat-history.json', profileId, value);
 export const loadChatHistoryCache = (profileId?: string) => loadCacheJson(HISTORY_CACHE, 'cache/chat-history.json', profileId);
+export const saveOrgCache = (value: unknown, profileId?: string) => saveCacheJson(ORG_CACHE, 'cache/agent-org.json', profileId, value);
+export const loadOrgCache = (profileId?: string) => loadCacheJson(ORG_CACHE, 'cache/agent-org.json', profileId);
 
 // R2 avatar: per-device local echo of user-set avatars (alias → avatar_url).
 // For session-only aliases (no hub nodes row) this is the ONLY store, so it must
