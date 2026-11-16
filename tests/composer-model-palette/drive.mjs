@@ -10,7 +10,7 @@
 //  · a wrong update_id / nonterminal ACK never moves the footer;
 //  · unknown variant stays unknown (never painted as the default variant);
 //  · double click is single-flight;
-//  · the panel sits above the composer card on desktop and phone.
+//  · desktop: the panel's bottom edge sits on the model-button row (covering the empty input); phone: above the composer footer.
 import assert from 'node:assert/strict';
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript } from '../test-layout-sweep/harness.mjs';
@@ -128,7 +128,12 @@ try {
   await page.waitForFunction(() => !!document.querySelector('[data-testid="model-palette-group-deepseek"]'));
   const panelBox = await page.getByTestId('composer-model-sheet').boundingBox();
   const cardBox = await page.getByTestId('desktop-composer-card').boundingBox();
-  ck('palette floats above the composer card', !!panelBox && !!cardBox && panelBox.y + panelBox.height <= cardBox.y + 1);
+  // admin 2026-11-16「这一大片空着了是什么情况？」:浮层不再停在整张卡片上方、和模型按钮之间隔一大片空输入区;
+  // 它的底边贴着工具栏(模型按钮那一行)的上沿,盖住空着的输入区。
+  const entryBox = await page.getByTestId('composer-model-entry').boundingBox();
+  ck('palette sits just above the model button row (no empty band)', !!panelBox && !!entryBox && !!cardBox
+    && panelBox.y + panelBox.height <= entryBox.y + 1 && entryBox.y - (panelBox.y + panelBox.height) <= 24
+    && panelBox.y + panelBox.height > cardBox.y);
   ck('palette stays inside the viewport', !!panelBox && panelBox.y >= 0 && panelBox.y + panelBox.height <= 900);
 
   // 3) Provider groups + counts come from the catalog; disabled provider is absent.
