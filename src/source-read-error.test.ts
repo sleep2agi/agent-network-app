@@ -131,3 +131,4 @@ ck('选择器仍走 catalogErrorText（两个域不互换）',
   /catalogErrorText\(/.test(composerSrc) && !/sourceReadErrorText/.test(composerSrc));
 
 console.log(`${p}/${t} checks passed`);
+process.exit(p === t ? 0 : 1);
