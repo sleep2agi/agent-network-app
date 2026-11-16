@@ -503,6 +503,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // （模型/档位控件 + 浮层锚点），子节点 onLayout.y 只相对这个块，
   // 必须加上块的 y 才是 holdOverlayLayout 需要的根坐标。
   const [composerFooterTop, setComposerFooterTop] = useState(0);
+  // 桌面输入卡片里工具栏(模型 / 思考档位那一行)的顶边,相对卡片。模型浮层贴着它往上长,
+  // 不再浮在整张卡片上方 —— admin 2026-11-16「这一大片空着了是什么情况？」:空输入框留出一大片空白。
+  const [desktopToolbarTop, setDesktopToolbarTop] = useState<number | null>(null);
   const [inputRowLocalTop, setInputRowLocalTop] = useState(0);
   const inputRowTop = composerFooterTop + inputRowLocalTop;
   const keyboardVisible = useKeyboardVisible(Keyboard, Platform.OS);
@@ -2470,8 +2473,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   // 浮层只挂一次：桌面挂在输入卡片上方，手机挂在输入行 + 模型行上方（bottom:100%），
   // 两种布局都贴着 composer，不盖住聊天记录的最新一条。
+  // 桌面:浮层底边 = 工具栏顶边(盖住输入区,紧挨着打开它的模型按钮);量到之前退回卡片上方。
+  const desktopPaletteBottom = desktop && desktopToolbarTop !== null
+    ? COMPOSER_CARD_INSET + Math.max(0, composerHeight - desktopToolbarTop) : null;
   const modelPaletteOverlay = modelSheetOpen ? (
-    <View style={styles.composerPaletteAnchor} pointerEvents="box-none">
+    <View style={[styles.composerPaletteAnchor, desktopPaletteBottom !== null && { bottom: desktopPaletteBottom }]} testID="composer-palette-anchor" pointerEvents="box-none">
       <ComposerModelPalette
         key={`${cfg.profileId ?? cfg.serverUrl}|${cfg.networkId ?? ''}|${alias}|${targetNode?.node_id ?? 'none'}`}
         cfg={cfg}
@@ -3180,7 +3186,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           {voiceSurface(desktop) === 'inlineBar' && showVoiceBar(voice.state.phase) ? (
             <DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? t(voice.state.phase === 'transcribing' ? 'voice.transcribing' : voice.state.phase === 'starting' ? 'voice.preparing' : kbdVoice.mode === 'hold' ? 'voice.releaseKeys' : 'voice.pressKeys', { keys: comboChips(kbdVoice.combo, isMacKeyboard()).join(isMacKeyboard() ? '' : '+') }) : undefined} />
           ) : (
-          <View style={styles.desktopToolbar}>
+          <View style={styles.desktopToolbar} onLayout={event => setDesktopToolbarTop(event.nativeEvent.layout.y)}>
             <Pressable accessibilityLabel={t('chat.addFile')} testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
             </Pressable>
