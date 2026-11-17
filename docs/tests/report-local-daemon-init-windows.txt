@@ -1,0 +1,80 @@
+App #1497 Windows native installer promotion gate, 2026-11-17
+Base: feat/windows-local-daemon 8253bd27b2c92fb93e4cde00e4578fc8f6b91cbd
+Branch: test/windows-local-daemon-init
+
+Changes
+- local-daemon-init workflow matrix adds windows-latest, fail-fast false.
+- Existing Unix shell/Python fixture regressions retained unchanged on Unix;
+  Windows marks those POSIX-specific adapters NOT_RUN with the reason.
+- Compile production src-tauri/src/local_daemon.rs unchanged into a Rust binary
+  driver (no Tauri windows dependency). Refuse ambient Node/npm/anet, existing
+  private Node or existing profile. Invoke the real install(), not npm fixtures.
+- Windows-only Bun harness starts real Hub from exact main
+  f8332b965cf428cf843daa6888c3e1f433f60b61; runner Bun/npm are Hub prerequisites,
+  never handed to the installer. Installer PATH contains OS tools only.
+- Empty prefix; private Node Windows ZIP downloads through product HTTPS and
+  SHASUMS verification. Loopback registry returns 404 only for CLI metadata,
+  to force real GitHub release archive download + production SHA256 check;
+  runtime/dependencies install from public npm via real private npm.
+- Assert exact CLI 2.3.0-preview.241 / agent-node 2.5.0-preview.209 package files,
+  actual private Node/anet paths, native direct launcher surviving Rust exit,
+  private init credentials and explicit HOME/USERPROFILE homedir probe.
+- Real daemon creates real Claude SDK child with per-node local fake key and
+  loopback HTTP model stub. Require provider-only reply marker and HTTP hit.
+- Download/install start -> first reply <=180000ms; stop dispatch -> accepted
+  Hub stopped/taskkill ACK <=15000ms. No weakened thresholds or offline fallback.
+- Fixed artifact path contains only sanitized JSON; no raw secret/config tree.
+  Required stages initialize NOT_RUN; failures cannot silently become PASS.
+- Cleanup delegates to pinned CLI ownership checks, never raw PID/name kills.
+
+Product/package authority
+Product installer source and its pins are UNCHANGED from 8253bd27.
+CLI release tgz SHA256 from product:
+887fb13eeaaf4f297888f6cf6bbd365ad3e7d0b11e0415f7d36df73cb7bbfd57
+Resolved Node version/executable digest and product download log recorded by CI;
+product uses latest-v22.x, not a newly pinned historical Node distribution.
+Evidence separates PR head, actually tested App checkout, exact Hub source and
+downloaded/installed package identities. No npm/Hub release or production change.
+
+Executed locally, ALL inside Docker
+1. tests/local-daemon-init/Dockerfile (Rust 1.90), normal existing entrypoint:
+   24 passed / 0 failed; includes real public CLI tarball SHA verification with
+   fixture npm and Hub, wrong digest, stop failure and old-version negatives.
+   This is Linux fixture evidence, NOT Windows native acceptance.
+   Log: /tmp/opencode/app-windows-local-daemon-init-linux-run.log
+2. Same image, rustup target add x86_64-pc-windows-gnu; cargo check --locked
+   --manifest-path tests/local-daemon-init/Cargo.toml --all-targets
+   --target x86_64-pc-windows-gnu: PASS (compile only, no Windows execution).
+   Log: /tmp/opencode/app-windows-installer-cross-check.log
+3. Bun bundle parsing and TypeScript --strict --noEmit for native harness:
+   PASS in disposable container, @types/bun 1.4.4 for static checking only;
+   workflow runtime remains Bun 1.3.14.
+   Log: /tmp/opencode/app-windows-smoke-final-static.log
+4. Invoking native harness in Linux container must exit nonzero and save
+   status/environment=NOT_RUN with native-Windows reason: PASS.
+   Log: /tmp/opencode/app-windows-native-guard.log
+5. Docker rhysd/actionlint:1.7.7, workflow syntax/expression lint: PASS.
+   Log: /tmp/opencode/app-windows-workflow-lint.log
+
+NOT_RUN / awaiting authorized CI owner
+- Native Windows ZIP/npm/install/init/start, detached process metadata,
+  actual SDK reply and <=15s accepted ACK: NOT_RUN locally (Linux host only).
+  Windows workflow must run them; no local cross-compile/fixture pass substitutes.
+- macOS regression: NOT_RUN locally (requires macOS matrix runner).
+- Signed NSIS installation, native GUI/IPC and physical clean-machine acceptance:
+  NOT_RUN (this gate compiles installer without Tauri windowing).
+- Desktop helper/credential-store/ACL integration: NOT_RUN. The existing crate
+  supplies temporary app_root/create-dir/atomic-write helpers, not Tauri's
+  credential backend; install logic/launch commands in local_daemon.rs are real.
+- Full read isolation/every process environment inspection: NOT_RUN; unchanged
+  external sentinel proves no sentinel write, not absence of all reads.
+- Runtime crash/dead-wrapper recovery and every descendant cleanup case:
+  NOT_RUN as broader lifecycle acceptance; product stop safeguards unchanged.
+
+Handoff
+Owner fetches this App worktree/branch, pushes and runs local-daemon-init matrix.
+Inspect windows-local-daemon-init-evidence artifact and exact tested checkout.
+On red, export failed-step logs and sanitized JSON; fix narrowly, retain bounds.
+Do not promote #1497 based on this local report alone. No credentials required
+from the owner and no real model key is accepted into the installer environment.
+Reproduction and restoration/rollback boundaries: tests/local-daemon-init/README.md.

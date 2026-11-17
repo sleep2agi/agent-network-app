@@ -15,7 +15,28 @@ fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[path = "../../../src-tauri/src/local_daemon.rs"]
 mod local_daemon;
 
-#[cfg(test)]
+/// Binary driver for the native gate. The production module above is compiled
+/// unchanged, not reimplemented; credentials/report stay inside the fixture.
+pub fn native_install(session_file: &Path, report_file: &Path) -> Result<(), String> {
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(session_file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let session = local_daemon::LocalHubSession {
+        endpoint: value["endpoint"].as_str().ok_or("endpoint missing")?.into(),
+        token: value["token"].as_str().ok_or("token missing")?.into(),
+        network_id: Some(value["network_id"].as_str().ok_or("network missing")?.into()),
+    };
+    let before = local_daemon::scan(Some(&session))?;
+    if before.node.is_some() || before.npm.is_some() || before.anet.is_some() || before.private_node.is_some() || before.profile_exists {
+        return Err("native gate requires empty prefix and no ambient node/npm/anet".into());
+    }
+    let report = local_daemon::install(&session)?;
+    let after = local_daemon::scan(Some(&session))?;
+    let ok = report.ok;
+    fs::write(report_file, serde_json::to_vec_pretty(&serde_json::json!({ "install": report, "scan": after })).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    if !ok { return Err("native installer failed; private diagnostic report retained".into()); }
+    Ok(())
+}
+
+#[cfg(all(test, unix))]
 mod regression {
     use super::*;
     use std::{io::{Read, Write}, net::TcpListener, os::unix::fs::PermissionsExt,
@@ -211,5 +232,13 @@ mod regression {
         let events = fs::read_to_string(f.root.path().join("events")).unwrap();
         assert!(!events.contains(".tgz") && !events.contains("init"), "{events}");
         println!("PASS: wrong digest never reaches npm archive install/init/start");
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_scope {
+    #[test]
+    fn unix_adapter_scope_is_explicit() {
+        println!("NOT_RUN: Unix shell/Python upgrade/fault adapters require /bin/sh, POSIX signals and executable mode bits; retained unchanged on Linux/macOS. Windows native installation is mandatory in windows-native-smoke.ts, not replaced by this scope marker.");
     }
 }

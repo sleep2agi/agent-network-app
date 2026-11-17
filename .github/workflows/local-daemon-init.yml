@@ -20,14 +20,52 @@ jobs:
   regression:
     strategy:
       matrix:
-        os: [ubuntu-latest, macos-15]
+        os: [ubuntu-latest, macos-15, windows-latest]
+      fail-fast: false
     runs-on: ${{ matrix.os }}
     timeout-minutes: 15
-    env:
-      SHELL: /bin/sh
     steps:
       - uses: actions/checkout@v4
+      - name: Initialize Windows NOT_RUN evidence
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          New-Item -ItemType Directory -Force tests/local-daemon-init/evidence | Out-Null
+          '{"status":"NOT_RUN","reason":"native harness not reached; inspect preceding checkout/toolchain/compile steps"}' | Set-Content -Encoding utf8 tests/local-daemon-init/evidence/windows-native.json
       - uses: dtolnay/rust-toolchain@stable
         with:
           toolchain: '1.90.0'
-      - run: cargo test --locked --manifest-path tests/local-daemon-init/Cargo.toml -- --test-threads=1
+      - if: runner.os != 'Windows'
+        env:
+          SHELL: /bin/sh
+        run: cargo test --locked --manifest-path tests/local-daemon-init/Cargo.toml -- --test-threads=1
+      - if: runner.os == 'Windows'
+        run: cargo test --locked --manifest-path tests/local-daemon-init/Cargo.toml -- --test-threads=1 --nocapture
+      - if: runner.os == 'Windows'
+        uses: actions/checkout@34e114876b0b11c390a56381ad16ebd13914f8d5
+        with:
+          repository: sleep2agi/agent-network
+          ref: f8332b965cf428cf843daa6888c3e1f433f60b61
+          path: .native-hub-source
+          persist-credentials: false
+      - if: runner.os == 'Windows'
+        uses: oven-sh/setup-bun@0c5077e51419868618aeaa5fe8019c62421857d6 # v2
+        with:
+          bun-version: 1.3.14
+      - if: runner.os == 'Windows'
+        working-directory: .native-hub-source/server
+        run: npm ci
+      - if: runner.os == 'Windows'
+        run: cargo build --locked --manifest-path tests/local-daemon-init/Cargo.toml
+      - name: Windows real private installation, SDK reply and bounded stop
+        if: runner.os == 'Windows'
+        env:
+          ANET_APP_PR_HEAD: ${{ github.event.pull_request.head.sha || github.sha }}
+        run: bun tests/local-daemon-init/windows-native-smoke.ts
+      - name: Sanitized native acceptance evidence
+        if: always() && runner.os == 'Windows'
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-local-daemon-init-evidence
+          path: tests/local-daemon-init/evidence/*.json
+          if-no-files-found: error
