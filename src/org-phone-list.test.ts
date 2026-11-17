@@ -1,6 +1,6 @@
 // admin 2026-11-17「这个里面真的是有点太丑了……要有那种很舒适的感觉」—— 手机「组织」页每行的数据与布局约束。
 import { readFileSync } from 'node:fs';
-import { phoneDeptFacts } from './org-phone-list';
+import { attentionAgents, needsAttention, phoneDeptFacts, phoneLevel, phoneRowAction, phoneSearch, PHONE_SEARCH_CAP } from './org-phone-list';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
 
 let pass = 0;
@@ -49,6 +49,26 @@ ck('phone chart: full-width department cards, no root pill or connector lines', 
 ck('phone chart: no card frame around the chart, hero is a flat row', showcase.includes('c ? styles.chartPhone : styles.chartCard') && showcase.includes("heroCompact: { padding: 0, gap: spacing.sm, backgroundColor: 'transparent', borderWidth: 0 }"));
 ck('phone chart: crumbs only after drilling in; no footer', showcase.includes('{c && !here ? null : <View style={styles.chartHead}>') && showcase.includes('{c ? null : <View style={styles.footerRow} testID="org-showcase-footer">'));
 ck('phone chart view hides the 调整结构 block', /!p\.fill && !\(p\.phone && view === 'chart'\) \? \(\r?\n\s*<DemoAdjust/.test(screen));
+
+// admin 2026-11-17「你来做吧」—— 调研方案第一步：逐层进入 + 先搜索 + 需要关注。
+{
+  const top = phoneLevel(data, null);
+  ck('first screen lists only top-level departments', top.length === 1 && top[0].dept.id === 'root' && top[0].hasChildren === true);
+  ck('a level lists that department\'s children', phoneLevel(data, 'root').map(r => r.dept.id).join() === 'child');
+  ck('row with children drills, leaf opens', phoneRowAction(true) === 'drill' && phoneRowAction(false) === 'open');
+  ck('blocked / error / failed need attention; idle / working / offline do not', ['blocked', 'error', 'failed'].every(needsAttention) && !['idle', 'working', 'offline', '', null, undefined].some(x => needsAttention(x as any)));
+  const statuses = new Map([['zeta', 'blocked'], ['alpha', 'working'], ['gamma', 'error']]);
+  ck('attention list = blocked + error agents, by name', attentionAgents(placed, statuses).map(a => a.alias).join() === 'gamma,zeta');
+  ck('empty search ⇒ no search mode', phoneSearch(data, placed, '   ') === null);
+  const byDept = phoneSearch(data, placed, '前端')!;
+  ck('search finds departments by name', byDept.departments.map(d => d.id).join() === 'child' && byDept.agents.length === 0);
+  const byAgent = phoneSearch(data, placed, 'ALP')!;
+  ck('search finds agents case-insensitively', byAgent.agents.map(a => a.alias).join() === 'alpha');
+  const many = Array.from({ length: 50 }, (_, i) => agent(`x${i}`, 'root', false));
+  ck('search results are capped', phoneSearch(data, many, 'x')!.agents.length === PHONE_SEARCH_CAP);
+  ck('phone list renders search, attention and only the top level', screen.includes('testID="agent-org-search"') && screen.includes('testID="agent-org-attention"') && screen.includes('const rows = phoneLevel(p.data, null);'));
+  ck('status for attention comes from the light status read, phone only', screen.includes('fetchScopedStatus(p.cfg)') && /if \(!p\.phone\) return;\s*let live = true;\s*fetchScopedStatus/.test(screen));
+}
 
 console.log(`org-phone-list: ${pass}/${pass + fails.length}`);
 if (fails.length) { console.error('FAILED:', fails.join(' | ')); process.exit(1); }

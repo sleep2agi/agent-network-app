@@ -5,7 +5,7 @@
 // 纯逻辑，不 import react-native。
 import { orgTree, type AgentOrgData, type PlacedAgent } from './agent-org-model';
 import { isRunning } from './org-showcase-model';
-import { subtreeIds } from './org-model';
+import { childrenOf, subtreeIds } from './org-model';
 
 export interface PhoneDeptFacts {
   count: number;
@@ -31,3 +31,39 @@ export function phoneDeptFacts(placed: readonly PlacedAgent[], data: AgentOrgDat
 
 /** Phone indent per tree level. Small on purpose: three levels must still leave room for the name. */
 export const PHONE_TREE_INDENT = 14;
+
+// ── 逐层进入 / 搜索 / 需要关注（admin 2026-11-17「你来做吧」：按调研方案做第一步）──
+// 外面的共识：手机上不要摊开整棵树（认知负担太重），一层一层点进去；先搜索、后层级；把卡住的 Agent 提到最前面。
+
+/** The departments shown at one drill level: the children of `parent` (null = top level). */
+export function phoneLevel(data: AgentOrgData, parent: string | null) {
+  const tree = orgTree(data);
+  return childrenOf(tree, parent).map(dept => ({ dept, hasChildren: childrenOf(tree, dept.id).length > 0 }));
+}
+
+/** Tapping a department row: drill in if it has sub-departments, else open its member list. */
+export function phoneRowAction(hasChildren: boolean): 'drill' | 'open' {
+  return hasChildren ? 'drill' : 'open';
+}
+
+/** Hub session statuses that mean a person should look now (same words as the list dot). */
+export function needsAttention(status?: string | null): boolean {
+  return status === 'blocked' || status === 'error' || status === 'failed';
+}
+
+export function attentionAgents(placed: readonly PlacedAgent[], statusByAlias: ReadonlyMap<string, string>): PlacedAgent[] {
+  return placed.filter(a => needsAttention(statusByAlias.get(a.alias))).sort((a, b) => a.alias.localeCompare(b.alias, 'zh'));
+}
+
+export const PHONE_SEARCH_CAP = 30;
+
+/** Case-insensitive search over department names, agent aliases and owner names. Empty query ⇒ null (no search). */
+export function phoneSearch(data: AgentOrgData, placed: readonly PlacedAgent[], query: string) {
+  const q = query.trim().toLowerCase();
+  if (!q) return null;
+  const departments = data.departments.filter(d => d.name.toLowerCase().includes(q)).slice(0, PHONE_SEARCH_CAP);
+  const agents = placed.filter(a => a.alias.toLowerCase().includes(q) || (a.ownerName ?? '').toLowerCase().includes(q))
+    .sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || a.alias.localeCompare(b.alias, 'zh'))
+    .slice(0, PHONE_SEARCH_CAP);
+  return { departments, agents };
+}

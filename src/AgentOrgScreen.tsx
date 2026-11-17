@@ -6,7 +6,7 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import DialogFrame from './DialogFrame';
 import { listenEscapeClose } from './escape-close';
-import type { HubConfig } from './api';
+import { fetchScopedStatus, type HubConfig } from './api';
 import { loadAgentOrg, moveAgentDepartment, orgLoadErrorReason } from './agent-org-api';
 import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, orgTree, placeAgents, staleDays, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
 import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
@@ -22,7 +22,7 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
 import OrgShowcase from './OrgShowcase';
-import { phoneDeptFacts, PHONE_TREE_INDENT } from './org-phone-list';
+import { attentionAgents, needsAttention, phoneDeptFacts, phoneLevel, phoneSearch } from './org-phone-list';
 import { isRunning } from './org-showcase-model';
 import { peekOrg, recallOrg, rememberOrg } from './swr-cache';
 
@@ -146,6 +146,18 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
   const data = phase.kind === 'ready' ? phase.data : null;
   // admin 2026-11-16「没有在线的那些 agent 也在架构里显示一下」:不再按 7 天过滤;久未上线的变灰、排后面、标「N 天未上线」。
   const placed = useMemo(() => (data ? placeAgents(data, moves, { recentDays: 0 }) : []), [data, moves]);
+  // 手机「需要关注」要看会话状态（阻塞 / 出错）：组织数据里没有，借 Agent 列表同一个轻量读取（/api/status?light=1），
+  // 只在手机上读；读不到就当没有，不挡组织页。
+  const [statusByAlias, setStatusByAlias] = useState<ReadonlyMap<string, string>>(new Map());
+  useEffect(() => {
+    if (!p.phone) return;
+    let live = true;
+    fetchScopedStatus(p.cfg).then(res => {
+      if (!live) return;
+      setStatusByAlias(new Map((res?.sessions ?? []).map(s => [s.alias, String(s.status ?? '')] as const)));
+    }).catch(() => undefined);
+    return () => { live = false; };
+  }, [p.cfg, p.phone, attempt]);
   // 手机(管理员 2026-11-16「手机上没有组织架构啊」):树 → 部门 / 架构图,各自一屏,上面有返回。
   const showTree = !p.phone || (focus === undefined && view !== 'chart');
   const treeApi = !!data?.departmentsApi;
@@ -283,7 +295,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
               </> : <>
                 {p.phone ? <PhoneChartCard data={data} placed={placed} onPress={() => setView('chart')} /> : null}
                 {p.phone
-                  ? <PhoneDepartmentList data={data} placed={placed} onFocus={setFocus} hint={canEditAnyDepartment(data.departments, p.canManageStructure, treeApi)} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />
+                  ? <PhoneDepartmentList data={data} placed={placed} statusByAlias={statusByAlias} onOpenAgent={p.onOpenAgent} onFocus={setFocus} hint={canEditAnyDepartment(data.departments, p.canManageStructure, treeApi)} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />
                   : <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />}
               </>}
             </View>
@@ -573,13 +585,80 @@ function AvatarStack(p: { aliases: string[]; muted?: boolean }) {
   </View>;
 }
 
-function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onFocus: (id: string | null) => void; onMenu?: (dept: Department | null, x: number, y: number) => void; hint: boolean }) {
+function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onFocus: (id: string | null) => void; onMenu?: (dept: Department | null, x: number, y: number) => void; hint: boolean;
+  statusByAlias: ReadonlyMap<string, string>; onOpenAgent?: (alias: string) => void }) {
   const { t } = useTranslation();
-  const rows = flattenTree(orgTree(p.data));
+  const [query, setQuery] = useState('');
+  const [attentionOpen, setAttentionOpen] = useState(false);
+  // 只列一级部门；点进去是部门页（子部门 + 成员），不在一屏里摊开整棵树。
+  const rows = phoneLevel(p.data, null);
   const unowned = phoneDeptFacts(p.placed, p.data, null);
+  const found = phoneSearch(p.data, p.placed, query);
+  const attention = attentionAgents(p.placed, p.statusByAlias);
   const sub = (f: { count: number; running: number }) => f.count === 0 ? t('agentOrg.phone.deptEmpty') : f.running > 0 ? t('agentOrg.phone.deptSub', f) : t('agentOrg.phone.deptSubIdle', f);
+  const openAgent = (a: PlacedAgent) => p.onOpenAgent ? p.onOpenAgent(a.alias) : p.onFocus(a.departmentId);
+  const agentRow = (a: PlacedAgent, i: number, testPrefix: string) => {
+    const status = p.statusByAlias.get(a.alias);
+    return <Pressable key={a.nodeId} testID={`${testPrefix}-${a.nodeId}`} accessibilityRole="button" onPress={() => openAgent(a)}
+      style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md }, i > 0 && styles.phoneRowDivider, pressed && { backgroundColor: colors.rowHover }]}>
+      <View style={styles.phoneAgentAvatar}><AliasAvatar alias={a.alias} size={32} fixedSize /></View>
+      <View style={{ flex: 1, minWidth: 0 }}>
+        <Text numberOfLines={1} style={styles.phoneRowTitle}>{a.alias}</Text>
+        <Text numberOfLines={1} style={[styles.phoneRowSub, needsAttention(status) && { color: status === 'blocked' ? colors.blocked : colors.failed }]}>
+          {needsAttention(status) ? t(status === 'blocked' ? 'agentOrg.phone.blocked' : 'agentOrg.phone.error') : a.departmentId ? deptPathLabel(orgTree(p.data), a.departmentId) : t('agentOrg.unowned')}
+        </Text>
+      </View>
+      <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+    </Pressable>;
+  };
   return <View testID="agent-org-departments" style={styles.phoneList} {...({ dataSet: { orgDeptTree: '1' } } as object)}>
-    <Text style={styles.phoneSection}>{t('agentOrg.departments')}</Text>
+    {/* 先搜索、后层级：多数人打开这页是来找某个 Agent 的。 */}
+    <View style={styles.phoneSearch}>
+      <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+      <TextInput testID="agent-org-search" value={query} onChangeText={setQuery} placeholder={t('agentOrg.phone.searchPlaceholder')} placeholderTextColor={colors.textMuted}
+        style={styles.phoneSearchInput} autoCorrect={false} autoCapitalize="none" clearButtonMode="while-editing" returnKeyType="search" />
+      {query ? <Pressable testID="agent-org-search-clear" accessibilityRole="button" accessibilityLabel={t('agentOrg.phone.searchClear')} hitSlop={8} onPress={() => setQuery('')}>
+        <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+      </Pressable> : null}
+    </View>
+    {found ? <View testID="agent-org-search-results" style={{ marginTop: spacing.md }}>
+      {found.departments.length ? <>
+        <Text style={styles.phoneSection}>{t('agentOrg.departments')}</Text>
+        <View style={styles.phoneGroup}>
+          {found.departments.map((d, i) => {
+            const f = phoneDeptFacts(p.placed, p.data, d.id);
+            return <Pressable key={d.id} testID={`agent-org-search-dept-${d.id}`} accessibilityRole="button" onPress={() => p.onFocus(d.id)}
+              style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md }, i > 0 && styles.phoneRowDivider, pressed && { backgroundColor: colors.rowHover }]}>
+              <AvatarStack aliases={f.avatars} />
+              <View style={{ flex: 1, minWidth: 0 }}>
+                <Text numberOfLines={1} style={styles.phoneRowTitle}>{d.name}</Text>
+                <Text numberOfLines={1} style={styles.phoneRowSub}>{deptPathLabel(orgTree(p.data), d.id)}</Text>
+              </View>
+              <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+            </Pressable>;
+          })}
+        </View>
+      </> : null}
+      {found.agents.length ? <>
+        <Text style={[styles.phoneSection, { marginTop: spacing.md }]}>Agent</Text>
+        <View style={styles.phoneGroup}>{found.agents.map((a, i) => agentRow(a, i, 'agent-org-search-agent'))}</View>
+      </> : null}
+      {!found.departments.length && !found.agents.length ? <Text testID="agent-org-search-empty" style={styles.phoneHint}>{t('agentOrg.noResults')}</Text> : null}
+    </View> : <>
+    {/* 需要关注：有阻塞 / 出错的 Agent 时才出现；点开列出来，点 Agent 直接去处理。 */}
+    {attention.length ? <View style={[styles.phoneGroup, { marginTop: spacing.md }]}>
+      <Pressable testID="agent-org-attention" accessibilityRole="button" accessibilityState={{ expanded: attentionOpen }} onPress={() => setAttentionOpen(v => !v)}
+        style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md }, pressed && { backgroundColor: colors.rowHover }]}>
+        <View style={styles.phoneAttentionIcon}><Ionicons name="alert-circle" size={20} color={colors.blocked} /></View>
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text style={styles.phoneRowTitle}>{t('agentOrg.phone.attentionTitle')}</Text>
+          <Text testID="agent-org-attention-count" numberOfLines={1} style={styles.phoneRowSub}>{t('agentOrg.phone.attentionSub', { count: attention.length })}</Text>
+        </View>
+        <Ionicons name={attentionOpen ? 'chevron-up' : 'chevron-down'} size={16} color={colors.textMuted} />
+      </Pressable>
+      {attentionOpen ? <View testID="agent-org-attention-list" style={styles.phoneRowDivider}>{attention.map((a, i) => agentRow(a, i, 'agent-org-attention-agent'))}</View> : null}
+    </View> : null}
+    <Text style={[styles.phoneSection, { marginTop: spacing.lg }]}>{t('agentOrg.departments')}</Text>
     <View style={styles.phoneGroup}>
       {rows.length ? rows.map((row, i) => {
         const f = phoneDeptFacts(p.placed, p.data, row.dept.id);
@@ -587,11 +666,11 @@ function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onF
           {...({ dataSet: { orgDept: row.dept.id } } as object)}
           onPress={() => p.onFocus(row.dept.id)}
           onLongPress={pointerUi() ? undefined : p.onMenu ? e => p.onMenu!(row.dept, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined}
-          style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md + row.depth * PHONE_TREE_INDENT }, i > 0 && styles.phoneRowDivider, pressed && { backgroundColor: colors.rowHover }]}>
+          style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md }, i > 0 && styles.phoneRowDivider, pressed && { backgroundColor: colors.rowHover }]}>
           <AvatarStack aliases={f.avatars} />
           <View style={{ flex: 1, minWidth: 0 }}>
             <Text testID={`agent-org-dept-${row.dept.id}-label`} numberOfLines={1} style={styles.phoneRowTitle}>{row.dept.name}</Text>
-            <Text testID={`agent-org-dept-${row.dept.id}-value`} numberOfLines={1} style={styles.phoneRowSub}>{sub(f)}</Text>
+            <Text testID={`agent-org-dept-${row.dept.id}-value`} numberOfLines={1} style={styles.phoneRowSub}>{row.hasChildren ? t('agentOrg.phone.deptSubWithChildren', { text: sub(f), children: childrenOf(orgTree(p.data), row.dept.id).length }) : sub(f)}</Text>
           </View>
           <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
         </Pressable>;
@@ -610,6 +689,7 @@ function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onF
       </Pressable>
     </View> : null}
     {p.hint ? <Text testID="agent-org-departments-edit-hint" style={styles.phoneHint}>{t(pointerUi() ? 'agentOrg.departmentsEditHint' : 'agentOrg.phone.hint.touch')}</Text> : null}
+    </>}
   </View>;
 }
 
@@ -1090,7 +1170,7 @@ const makeStyles = () => StyleSheet.create({
   phoneChartCard: { marginHorizontal: spacing.md, marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.surface, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
   phoneChartIcon: { width: 44, height: 44, borderRadius: radius.control, backgroundColor: colors.tonalBg, alignItems: 'center', justifyContent: 'center' },
   phoneChartTitle: { color: colors.text, fontSize: typeScale.body, fontWeight: '600' },
-  phoneList: { paddingTop: spacing.lg, paddingBottom: spacing.xl },
+  phoneList: { paddingTop: spacing.sm, paddingBottom: spacing.xl },
   phoneSection: { color: colors.textMuted, fontSize: typeScale.small, marginHorizontal: spacing.md + spacing.xs, marginBottom: spacing.xs },
   phoneGroup: { marginHorizontal: spacing.md, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' },
   phoneRow: { minHeight: 60, paddingRight: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
@@ -1100,6 +1180,10 @@ const makeStyles = () => StyleSheet.create({
   phoneStack: { width: PHONE_STACK_WIDTH, flexDirection: 'row', alignItems: 'center' },
   phoneStackItem: { borderRadius: radius.pill, borderWidth: 2, borderColor: colors.card },
   phoneStackEmpty: { width: PHONE_STACK_WIDTH, height: 30, alignItems: 'flex-start', justifyContent: 'center', paddingLeft: 6 },
+  phoneSearch: { marginHorizontal: spacing.md, marginTop: spacing.sm, minHeight: 40, paddingHorizontal: spacing.md, borderRadius: radius.control, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
+  phoneSearchInput: { flex: 1, minWidth: 0, color: colors.text, fontSize: typeScale.body, paddingVertical: spacing.sm, ...(Platform.OS === 'web' ? ({ outlineStyle: 'none' } as object) : {}) },
+  phoneAgentAvatar: { width: PHONE_STACK_WIDTH, alignItems: 'flex-start' },
+  phoneAttentionIcon: { width: PHONE_STACK_WIDTH, alignItems: 'flex-start', paddingLeft: 4 },
   phoneHint: { color: colors.textMuted, fontSize: typeScale.small, textAlign: 'center', marginTop: spacing.lg, paddingHorizontal: spacing.lg },
   columns: { flexDirection: 'row', minHeight: 440 },
   navigation: { width: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
