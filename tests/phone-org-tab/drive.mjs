@@ -32,7 +32,7 @@ const fixture = () => {
     const p = u.pathname;
     if (p === '/api/auth/me') return { ok: true, user: { user_id: 'u_me', username: 'admin', role: 'admin' }, current_network: NET, networks: [{ network_id: NET, network_name: '网络', member_role: 'owner' }] };
     if (p === '/api/dm/threads') return { ok: true, threads: [] };
-    if (p === '/api/status') return { ok: true, sessions: nodes.map(n => ({ alias: n.alias, status: 'idle', agent: 'claude-code', runtime: 'agent-node', node_id: n.node_id, updated_at: now })) };
+    if (p === '/api/status') return { ok: true, sessions: nodes.map(n => ({ alias: n.alias, status: n.alias === 'Mac打包牛' ? 'blocked' : 'idle', agent: 'claude-code', runtime: 'agent-node', node_id: n.node_id, updated_at: now })) };
     if (p === '/api/nodes') return { ok: true, nodes };
     if (p === `/api/networks/${NET}/departments` && window.__noDepts) return { __status: 500, ok: false, error: 'boom' };
     if (p === `/api/networks/${NET}/departments`) return { ok: true, departments: [
@@ -70,6 +70,19 @@ for (const theme of ['light', 'dark']) {
   record(`${theme} ② 组织页:「架构图」入口 + 部门树`, await page.locator('[data-testid="agent-org-chart-open"]').isVisible() && await page.getByText('TMWork', { exact: true }).first().isVisible(), null);
   record(`${theme} ② 不横向溢出(树)`, await noOverflow(page), null);
   record(`${theme} ② 左上大标题「组织」,卡片里不再重复「组织管理」`, (await page.locator('[data-testid="org-workspace-phone-title"]').innerText()) === '组织' && !(await page.getByText('组织管理', { exact: true }).isVisible().catch(() => false)), null);
+  // admin 2026-11-17「你来做吧」（调研方案第一步）：首屏只列一级部门；顶部搜索；「需要关注」列出阻塞 / 出错的 Agent。
+  record(`${theme} ②b 首屏只列一级部门(子部门 VSCODE插件 不在首屏)`, !(await page.locator('[data-testid="agent-org-dept-d_b"]').isVisible().catch(() => false)) && await page.locator('[data-testid="agent-org-dept-d_a-value"]').innerText().then(t => t.includes('1 个子部门')), null);
+  await page.locator('[data-testid="agent-org-attention"]').waitFor();
+  record(`${theme} ②c 需要关注:1 个 Agent 阻塞或出错`, (await page.locator('[data-testid="agent-org-attention-count"]').innerText()).includes('1 个 Agent'), null);
+  await page.locator('[data-testid="agent-org-attention"]').click();
+  record(`${theme} ②c 展开后列出阻塞的那个 Agent`, await page.locator('[data-testid="agent-org-attention-agent-n_101"]').isVisible(), null);
+  await page.screenshot({ path: `${OUT}/${theme}-1b-attention.png` });
+  await page.locator('[data-testid="agent-org-search"]').fill('插件');
+  await page.locator('[data-testid="agent-org-search-results"]').waitFor();
+  record(`${theme} ②d 搜索「插件」:找到部门 VSCODE插件 + Agent 插件研发`, await page.locator('[data-testid="agent-org-search-dept-d_b"]').isVisible() && await page.locator('[data-testid="agent-org-search-agent-n_102"]').isVisible(), null);
+  await page.screenshot({ path: `${OUT}/${theme}-1c-search.png` });
+  await page.locator('[data-testid="agent-org-search-clear"]').click();
+  record(`${theme} ②d 清除搜索回到部门列表`, await page.locator('[data-testid="agent-org-dept-d_a"]').isVisible(), null);
   await page.getByText('TMWork', { exact: true }).first().click();
   await page.locator('[data-testid="agent-org-detail-card"]').waitFor();
   await page.waitForTimeout(300);
