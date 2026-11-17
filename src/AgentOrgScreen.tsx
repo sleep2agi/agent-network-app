@@ -351,7 +351,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
         </Pressable>
         {infoOpen ? infoBody : null}
       </View> : null}
-      {phase.kind === 'ready' && !p.fill ? (
+      {phase.kind === 'ready' && !p.fill && !(p.phone && view === 'chart') ? (
         <DemoAdjust
           data={data}
           placed={placed}
