@@ -76,6 +76,7 @@ export const agentOrgTranslations = {
   'agentOrg.phone.deptEmpty': ['还没有 Agent', 'No agents yet'],
   'agentOrg.phone.unownedSub': ['{count} 个 Agent 还没分部门', '{count} agents without a department'],
   'agentOrg.phone.unownedNone': ['所有 Agent 都已分好部门', 'Every agent has a department'],
+  'agentOrg.settingsTitle': ['部门', 'Departments'],
   'agentOrg.phone.searchPlaceholder': ['搜索 Agent、部门或负责人', 'Search agents, departments or owners'],
   'agentOrg.phone.searchClear': ['清除搜索', 'Clear search'],
   'agentOrg.phone.attentionTitle': ['需要关注', 'Needs attention'],

@@ -1036,7 +1036,12 @@ export default function SettingsScreen({
                 renderOrg={() => (
                   <View testID="settings-section-agent-teams">
                     {/* 军团 3D 预览 2026-11-14 按管理员要求从这里下掉(组件仍在 src/legion3d-view.tsx)。 */}
-                    <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} canManageStructure={usersAvailable} />
+                    {/* admin 2026-11-17「这个也太 tmd 丑了」（设置 → 组织与权限）：这里原来是一套旧布局 ——
+                        外框里再套「组织管理」标题 + 一整句说明 + 文件夹树 + 大行高的 Agent 列表。改成和左侧导航「组织」同一套
+                        紧凑布局（树带折叠、48 高的 Agent 行、负责人一列、久未上线变灰），一份设计，不再两套。 */}
+                    <View testID="settings-agent-org-frame" style={{ height: 640 }}>
+                      <AgentOrgScreen cfg={cfg} networkId={me.networkId || cfg.networkId} phone={false} canManageStructure={usersAvailable} fullWidth title={tr('agentOrg.settingsTitle')} />
+                    </View>
                   </View>
                 )}
                 renderMembers={() => <UserManagementPanel cfg={cfg} me={authMe} networkId={me.networkId} />}
