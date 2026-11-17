@@ -66,8 +66,9 @@ const DARK = {
   // 手机「按住 说话」浮层(微信式布局):语音气泡 + 底部弧形面板。
   // #609(Vincent 2026-10-06「语音输入…改成那个蓝色主题,那个蓝色现在是那个微信的绿」):气泡不再是微信绿,
   // 与「我发出的气泡」同一色 —— 直接引用 ACCENT 的 bubbleMine / onBubbleMine,不另写色值(src/voice-accent-guard.test.ts 守)。
-  voiceBubble: ACCENT.dark.bubbleMine,
-  onVoiceBubble: ACCENT.dark.onBubbleMine,
+  // 2026-11-17：「我发出的」气泡改成中性灰后，语音浮层仍用实底品牌蓝 —— 它是「正在录音」的激活态，正是强调色该在的地方。
+  voiceBubble: ACCENT.dark.solidBrand,
+  onVoiceBubble: ACCENT.dark.onSolid,
   voiceArc: '#2c2c30',
   // 手指离开中间区(在 ✕ / 文 上)时面板暗一档 —— 实色,不能用透明度(会透出下面的大条)。
   voiceArcDim: '#1c1c1f',
@@ -106,8 +107,8 @@ const LIGHT: typeof DARK = {
   groupedBg: '#ededf0',
   groupedRow: '#ffffff',
   groupedRowPressed: '#e9eaee',
-  voiceBubble: ACCENT.light.bubbleMine,
-  onVoiceBubble: ACCENT.light.onBubbleMine,
+  voiceBubble: ACCENT.light.solidBrand,
+  onVoiceBubble: ACCENT.light.onSolid,
   voiceArc: '#f2f2f4',
   voiceArcDim: '#d4d4d8',
   voiceArcText: '#1d2026',
