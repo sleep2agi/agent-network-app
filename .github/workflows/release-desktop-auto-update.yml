@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.559:
+            - 手机上的「架构图」不再是缩小的桌面海报：顶部一行四个数（Agent / 部门 / 运行中 / 负责人），每个部门一张整宽卡片，子部门收在卡片里，点卡片往下钻。
+
             What's new in 0.2.558:
             - 手机「组织」页重新排版：顶部一张「架构图」卡片，顺带显示部门、Agent 和运行中的总数；每个部门一行，显示几位成员的头像和「N 个 Agent · M 个运行中」；「未归属」单独一组；说明文字收成底部一行。
 
