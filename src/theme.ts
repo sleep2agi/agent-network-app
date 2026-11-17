@@ -9,13 +9,18 @@
 //   bubbleMine       我发出的聊天气泡底(实底蓝,iMessage / Telegram 一类)
 //   onBubbleMine     我发出的气泡里的字(≥ 4.5)
 //   linkOnBubbleMine 我发出的气泡里的链接 / 行内强调(≥ 4.5)
+// 2026-11-17 admin「学学他们的美学吧」（magpie / t3code）：「我发出的」气泡从实底蓝改成安静的中性灰、正文深色，
+//   页面只剩一个强调色用在按钮 / 链接 / 选中态上，不再整屏蓝块。实底蓝留给 solidBrand（设置页头像卡等）。
 export type AccentTokens = {
   accent: string; onAccent: string; tonalBg: string; railActiveBg: string;
   bubbleMine: string; onBubbleMine: string; linkOnBubbleMine: string;
+  /** 实底品牌色块（设置页头像卡、分类图标色块的底）与其上的固定白字。原来借用 bubbleMine / onBubbleMine，
+   *  2026-11-17 气泡改成中性色后分开：色块仍是晴蓝实底，字仍是白。 */
+  solidBrand: string; onSolid: string;
 };
 export const ACCENT: { light: AccentTokens; dark: AccentTokens } = {
-  light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#1b65db', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
-  dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2563d9', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
+  light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#e8e8ed', onBubbleMine: '#1d2026', linkOnBubbleMine: '#1857c2', solidBrand: '#1b65db', onSolid: '#ffffff' },
+  dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2a2a2f', onBubbleMine: '#ededef', linkOnBubbleMine: '#7fb0ff', solidBrand: '#2563d9', onSolid: '#ffffff' },
 };
 /** 永远画在深色底上的强调(语音浮层的电平条):不随浅 / 深主题变。 */
 export const ACCENT_ON_DARK = ACCENT.dark.accent;
