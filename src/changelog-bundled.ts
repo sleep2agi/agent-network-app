@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.556:",
+  "- Windows 也能一键装本机 daemon 了：「选服务器」里的本机卡片会下载私有 Node、校验后安装配套的 CLI 2.3.0-preview.241 和运行时 2.5.0-preview.209，不改系统 PATH，不动你已有的 anet 配置。",
+  "- Windows 上的本机 daemon 用私有的家目录运行，不会把本地 Hub 地址写进你自己的 .anet/config.json（用户目录下）。",
+  "- 本机节点在 Windows 上能正常停止（几秒内确认）。",
+  "",
   "What's new in 0.2.555:",
   "- 聊天里 Agent 发给别的节点的消息改成浅色气泡、正常字色；实底蓝只留给你自己发的消息，长消息不再整屏一片蓝，也不会看着像是你说的。",
   "",
