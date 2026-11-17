@@ -614,6 +614,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.561:
+            - 聊天更安静：你发出的消息改成中性灰气泡、正常字色，蓝色只留给按钮、链接和选中态；Agent 发给别的节点的消息也用同样的卡片。
+            - 点「创建本地工作区」会接着自动装好并启动本机 daemon（显示进度，第一次约 1–3 分钟）；已经装好的直接跳过，失败也能进 App 并看到原因和重试。
+            - 设置 → 组织与权限改用和左侧「组织」同一套紧凑布局（可折叠的部门树、每个 Agent 一行、负责人一列）。
+
             What's new in 0.2.560:
             - 手机「组织」页：顶部可以搜索 Agent、部门或负责人；首屏只列一级部门，点进去再看子部门和成员；有 Agent 阻塞或出错时，顶部出现「需要关注」，点开就能直接处理。
 
