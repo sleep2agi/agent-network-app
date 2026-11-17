@@ -55,6 +55,9 @@ jobs:
       - if: runner.os == 'Windows'
         working-directory: .native-hub-source/server
         run: npm ci
+      - name: Deadline and evidence regression (including stalled child/HTTP)
+        if: runner.os == 'Windows'
+        run: bun test tests/local-daemon-init/native-gate.test.ts
       - if: runner.os == 'Windows'
         run: cargo build --locked --manifest-path tests/local-daemon-init/Cargo.toml
       - name: Windows real private installation, SDK reply and bounded stop

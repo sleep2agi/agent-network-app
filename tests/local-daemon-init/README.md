@@ -78,6 +78,32 @@ receive model traffic and supply a unique first reply. Required bounds:
   `exit_signal=taskkill`. `stop_failed`, unknown or mere offline are not success.
 
 No threshold increases, timeout swallowing or fallback to a fake reply.
+`native-gate.ts` enforces an active absolute deadline, not merely an assertion
+after a reply eventually arrives. Every phase writes `RUNNING` (with deadline)
+before entering, then `PASS` or `FAIL` immediately. Installer, probes, child
+creation, readiness, send, reply and cleanup all have finite phase budgets.
+All install-to-reply phases share the **same** 180s deadline, so the next phase
+cannot reset it; stop dispatch and ACK share one 15s phase, cleanup has a separate
+30s total cap. Timeout writes FAIL before aborting the operation, independently
+of the workflow's job timeout.
+
+The Rust driver separately journals `before_scan`, `install`, `after_scan` ENTER
+and terminal transitions to `evidence/native-driver.json`, with no upstream
+text/credentials. It writes the install report **before** doing the after-scan.
+The parent observes filesystem presence and scoped Hub session state while the
+driver runs (observations are not hash/install PASS claims). Before/after scans
+have 20s subphase caps within the shared 180s budget. A parent-enforced driver
+timeout is attributed to its last running subphase in the main evidence.
+
+Commands use direct argv, file-backed stdout/stderr, and the **process exit**
+event, not an `execFile` completion callback that can wait on inherited pipes.
+On deadline only the owned ChildProcess handle is killed; no raw PID/tree kill
+fallback is introduced. Cleanup still uses the product's ownership-checked CLI.
+The new `native-gate.test.ts` tests stalled child/HTTP/promise deadlines,
+shared-budget exhaustion, on-disk stage transitions, inherited stdout, and
+literal spaces/ampersands. The deliberate ` & ` fixture path remains unchanged;
+this is not evidence that the first failure was caused by shell escaping.
+
 The resulting sanitized `evidence/windows-native.json` is uploaded even on
 failure; preceding stages remain `NOT_RUN` with a reason, not PASS. It includes
 App/Hub source identity, installed pair, pinned CLI archive SHA256, private Node

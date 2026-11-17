@@ -78,3 +78,61 @@ On red, export failed-step logs and sanitized JSON; fix narrowly, retain bounds.
 Do not promote #1497 based on this local report alone. No credentials required
 from the owner and no real model key is accepted into the installer environment.
 Reproduction and restoration/rollback boundaries: tests/local-daemon-init/README.md.
+
+First native CI follow-up: run 44037097331
+Observed: Linux/macOS passed; native Windows cargo tests, Hub npm ci and driver
+build passed. Smoke started 07:15:40; daemon registered 07:17:49 and continued
+heartbeats, but no create-node/send_task/reply before the 15min job cancellation.
+Only the initial NOT_RUN artifact survived. This is NOT first-reply acceptance.
+Inputs: /tmp/opencode/1497-win-run44037097331.log,
+        /tmp/opencode/1497-win-evidence.json.
+
+Confirmed harness root cause (not a product root-cause claim):
+- 180s was asserted only after first reply, never actively enforced during waits.
+- Driver execFile had a 15min timeout; the HOME probe had no timeout at all.
+- Stage mutations were only in memory until the final save/finally.
+The old artifact cannot identify whether install/after-scan/parent pipe wait/
+native process metadata/home probe stalled. No claim that ampersand escaping is
+the root cause; the deliberate path containing spaces and '&' remains unchanged.
+SDK creation's source uses daemonCliLaunch -> direct spawn/argv on Windows, not
+cmd /c. That source review does not prove create_node was reached in this run.
+
+Follow-up implementation (product code/pins/thresholds unchanged):
+- NativeGate persists stage ENTER/terminal result immediately and atomically.
+- Shared absolute 180s deadline covers every install-to-reply phase; no step
+  resets it. Each await has a finite phase budget and abort signal. Stop dispatch
+  + accepted ACK remain one <=15000ms phase. Cleanup <=30000ms, separately timed.
+- Rust driver directly journals before_scan/install/after_scan transitions;
+  writes install report before after_scan. Before/after scan subphase caps20s.
+- Parent observes driver history, node/package/profile/PID/report presence and
+  network-scoped daemon session status; saves changes without labelling them
+  verified install successes. Driver exit/spawn metadata also saved immediately.
+- Direct commands use file-backed stdout/stderr and actual exit event; inherited
+  descendant pipe closure cannot indefinitely hold the parent callback open.
+  Deadline abort kills only owned ChildProcess handles, not name/PID-picked trees.
+- On failure save reason/current stage before collecting bounded diagnostics;
+  downstream steps get NOT_RUN reasons naming the failed predecessor. Cleanup
+  has its own journal/budget and cannot replace a failed acceptance with PASS.
+- Windows CI also runs deadline regression tests before native smoke.
+
+Native rerun after this follow-up: NOT_RUN locally, requires owner Windows CI.
+First-run daemon-online evidence is retained, not promoted to SDK-reply/stop green.
+
+Follow-up Docker verification (fresh current-source checks):
+- native-gate.test.ts: 7 pass / 0 fail / 19 assertions. Includes entered/completed
+  disk snapshots, a never-settling promise, shared absolute budget exhaustion,
+  aborting a stalled child, inherited descendant stdout not delaying exit,
+  stalled HTTP, and literal spaces/ampersands in cwd/argv.
+  Log: /tmp/opencode/1497-stage-deadline-tests.log
+- Rust suite: 25 pass / 0 fail. New driver-journal test observes RUNNING on disk
+  inside the operation, PASS/FAIL afterward, and absence of upstream secret text.
+- Same current-source Docker image: Windows target cargo check --all-targets
+  exits0 (compile only, no native execution).
+  Log for both: /tmp/opencode/1497-stage-final-rust.log
+- TS strict/noEmit and Bun bundle: PASS.
+  Log: /tmp/opencode/1497-stage-deadline-static.log
+- Workflow actionlint: PASS.
+  Log: /tmp/opencode/1497-stage-workflow-lint.log
+- Product src-tauri/src/local_daemon.rs and version pins unchanged. No path stripping
+  or threshold relaxation. Await Windows stage evidence to locate product vs
+  harness stall before proposing a product correction.
