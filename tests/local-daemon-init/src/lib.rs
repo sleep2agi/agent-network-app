@@ -15,7 +15,75 @@ fn write_private_atomic(path: &Path, bytes: &[u8]) -> Result<(), String> {
 #[path = "../../../src-tauri/src/local_daemon.rs"]
 mod local_daemon;
 
+/// Binary driver for the native gate. The production module above is compiled
+/// unchanged, not reimplemented; credentials/report stay inside the fixture.
+fn native_stage<T>(progress: &Path, history: &mut Vec<serde_json::Value>, name: &str,
+    operation: impl FnOnce() -> Result<T, String>) -> Result<T, String> {
+    let now = || std::time::SystemTime::now().duration_since(std::time::UNIX_EPOCH).unwrap().as_millis() as u64;
+    history.push(serde_json::json!({"stage": name, "status": "RUNNING", "at": now()}));
+    write_private_atomic(progress, &serde_json::to_vec(history).map_err(|e| e.to_string())?)?;
+    eprintln!("[native-driver] {name} ENTER");
+    let result = operation();
+    history.push(serde_json::json!({"stage": name, "status": if result.is_ok() { "PASS" } else { "FAIL" }, "at": now()}));
+    write_private_atomic(progress, &serde_json::to_vec(history).map_err(|e| e.to_string())?)?;
+    eprintln!("[native-driver] {name} {}", if result.is_ok() { "PASS" } else { "FAIL" });
+    result
+}
+
+pub fn native_install(session_file: &Path, report_file: &Path) -> Result<(), String> {
+    let value: serde_json::Value = serde_json::from_slice(&fs::read(session_file).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    let session = local_daemon::LocalHubSession {
+        endpoint: value["endpoint"].as_str().ok_or("endpoint missing")?.into(),
+        token: value["token"].as_str().ok_or("token missing")?.into(),
+        network_id: Some(value["network_id"].as_str().ok_or("network missing")?.into()),
+    };
+    let progress = std::env::var_os("ANET_SMOKE_DRIVER_PROGRESS").map(PathBuf::from)
+        .unwrap_or_else(|| report_file.with_file_name("driver-progress.json"));
+    let mut history = Vec::new();
+    native_stage(&progress, &mut history, "before_scan", || {
+        let before = local_daemon::scan(Some(&session))?;
+        if before.node.is_some() || before.npm.is_some() || before.anet.is_some() || before.private_node.is_some() || before.profile_exists {
+            return Err("native gate requires empty prefix and no ambient node/npm/anet".into());
+        }
+        Ok(())
+    })?;
+    let report = native_stage(&progress, &mut history, "install", || {
+        let report = local_daemon::install(&session)?;
+        // Retain the real report before the after-scan; that scan is a separate
+        // await boundary and may itself be the operation that stalls.
+        fs::write(report_file, serde_json::to_vec_pretty(&serde_json::json!({"install": &report})).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+        if !report.ok { return Err("native installer failed; private diagnostic report retained".into()); }
+        Ok(report)
+    })?;
+    let after = native_stage(&progress, &mut history, "after_scan", || local_daemon::scan(Some(&session)))?;
+    fs::write(report_file, serde_json::to_vec_pretty(&serde_json::json!({ "install": report, "scan": after })).map_err(|e| e.to_string())?).map_err(|e| e.to_string())?;
+    Ok(())
+}
+
 #[cfg(test)]
+mod native_progress_tests {
+    use super::*;
+    #[test]
+    fn driver_journals_enter_and_terminal_result_without_upstream_text() {
+        let root = tempfile::tempdir().unwrap();
+        let progress = root.path().join("native-driver.json");
+        let mut history = Vec::new();
+        native_stage(&progress, &mut history, "probe", || {
+            let saved: serde_json::Value = serde_json::from_slice(&fs::read(&progress).unwrap()).unwrap();
+            assert_eq!(saved[0]["status"], "RUNNING");
+            Ok(())
+        }).unwrap();
+        let saved: serde_json::Value = serde_json::from_slice(&fs::read(&progress).unwrap()).unwrap();
+        assert_eq!(saved[1]["status"], "PASS");
+        let failed: Result<(), String> = native_stage(&progress, &mut history, "failure", || Err("fake-secret-never-persist".into()));
+        assert!(failed.is_err());
+        let text = fs::read_to_string(&progress).unwrap();
+        assert!(!text.contains("fake-secret-never-persist"));
+        assert_eq!(serde_json::from_str::<serde_json::Value>(&text).unwrap()[3]["status"], "FAIL");
+    }
+}
+
+#[cfg(all(test, unix))]
 mod regression {
     use super::*;
     use std::{io::{Read, Write}, net::TcpListener, os::unix::fs::PermissionsExt,
@@ -125,7 +193,7 @@ mod regression {
         assert!(cfg["daemonExtraPath"].as_array().unwrap().iter().any(|v| v.as_str().unwrap().ends_with("/tools")));
         let events = fs::read_to_string(f.root.path().join("events")).unwrap();
         assert!(events.starts_with("stop old-daemon\n"), "{events}");
-        assert!(events.contains("agent-network@2.3.0-preview.172") && events.contains("agent-node@2.5.0-preview.138"), "{events}");
+        assert!(events.contains("agent-network@2.3.0-preview.241") && events.contains("agent-node@2.5.0-preview.209"), "{events}");
         assert!(!events.contains("@latest"));
         let start_env = fs::read_to_string(f.root.path().join("start-env")).unwrap();
         assert!(start_env.ends_with("agent-node/dist/cli.js"), "{start_env}");
@@ -190,10 +258,10 @@ mod regression {
         let report = local_daemon::install(&f.session).unwrap();
         assert!(report.ok, "{:?}", report.error);
         let events = fs::read_to_string(f.root.path().join("events")).unwrap();
-        assert!(events.contains("anet-cli-2.3.0-preview.172.tgz"), "{events}");
-        assert!(events.contains("agent-node@2.5.0-preview.138"), "{events}");
-        assert_eq!(events.matches("agent-network@2.3.0-preview.172").count(), 1);
-        assert!(!f.root.path().join("local-daemon/anet-cli-2.3.0-preview.172.tgz").exists());
+        assert!(events.contains("anet-cli-2.3.0-preview.241.tgz"), "{events}");
+        assert!(events.contains("agent-node@2.5.0-preview.209"), "{events}");
+        assert_eq!(events.matches("agent-network@2.3.0-preview.241").count(), 1);
+        assert!(!f.root.path().join("local-daemon/anet-cli-2.3.0-preview.241.tgz").exists());
         assert!(report.steps.iter().any(|s| s.output.contains("CLI SHA256 已校验")));
         println!("PASS: actual public main tarball download/hash -> npm archive path -> paired runtime -> init/start; npm/Hub are fixture adapters");
     }
@@ -211,5 +279,13 @@ mod regression {
         let events = fs::read_to_string(f.root.path().join("events")).unwrap();
         assert!(!events.contains(".tgz") && !events.contains("init"), "{events}");
         println!("PASS: wrong digest never reaches npm archive install/init/start");
+    }
+}
+
+#[cfg(all(test, windows))]
+mod windows_scope {
+    #[test]
+    fn unix_adapter_scope_is_explicit() {
+        println!("NOT_RUN: Unix shell/Python upgrade/fault adapters require /bin/sh, POSIX signals and executable mode bits; retained unchanged on Linux/macOS. Windows native installation is mandatory in windows-native-smoke.ts, not replaced by this scope marker.");
     }
 }

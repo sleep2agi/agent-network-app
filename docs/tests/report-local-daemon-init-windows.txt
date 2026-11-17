@@ -1,0 +1,217 @@
+App #1497 Windows native installer promotion gate, 2026-11-17
+Base: feat/windows-local-daemon 8253bd27b2c92fb93e4cde00e4578fc8f6b91cbd
+Branch: test/windows-local-daemon-init
+
+Changes
+- local-daemon-init workflow matrix adds windows-latest, fail-fast false.
+- Existing Unix shell/Python fixture regressions retained unchanged on Unix;
+  Windows marks those POSIX-specific adapters NOT_RUN with the reason.
+- Compile production src-tauri/src/local_daemon.rs unchanged into a Rust binary
+  driver (no Tauri windows dependency). Refuse ambient Node/npm/anet, existing
+  private Node or existing profile. Invoke the real install(), not npm fixtures.
+- Windows-only Bun harness starts real Hub from exact main
+  f8332b965cf428cf843daa6888c3e1f433f60b61; runner Bun/npm are Hub prerequisites,
+  never handed to the installer. Installer PATH contains OS tools only.
+- Empty prefix; private Node Windows ZIP downloads through product HTTPS and
+  SHASUMS verification. Loopback registry returns 404 only for CLI metadata,
+  to force real GitHub release archive download + production SHA256 check;
+  runtime/dependencies install from public npm via real private npm.
+- Assert exact CLI 2.3.0-preview.241 / agent-node 2.5.0-preview.209 package files,
+  actual private Node/anet paths, native direct launcher surviving Rust exit,
+  private init credentials and explicit HOME/USERPROFILE homedir probe.
+- Real daemon creates real Claude SDK child with per-node local fake key and
+  loopback HTTP model stub. Require provider-only reply marker and HTTP hit.
+- Download/install start -> first reply <=180000ms; stop dispatch -> accepted
+  Hub stopped/taskkill ACK <=15000ms. No weakened thresholds or offline fallback.
+- Fixed artifact path contains only sanitized JSON; no raw secret/config tree.
+  Required stages initialize NOT_RUN; failures cannot silently become PASS.
+- Cleanup delegates to pinned CLI ownership checks, never raw PID/name kills.
+
+Product/package authority
+Product installer source and its pins are UNCHANGED from 8253bd27.
+CLI release tgz SHA256 from product:
+887fb13eeaaf4f297888f6cf6bbd365ad3e7d0b11e0415f7d36df73cb7bbfd57
+Resolved Node version/executable digest and product download log recorded by CI;
+product uses latest-v22.x, not a newly pinned historical Node distribution.
+Evidence separates PR head, actually tested App checkout, exact Hub source and
+downloaded/installed package identities. No npm/Hub release or production change.
+
+Executed locally, ALL inside Docker
+1. tests/local-daemon-init/Dockerfile (Rust 1.90), normal existing entrypoint:
+   24 passed / 0 failed; includes real public CLI tarball SHA verification with
+   fixture npm and Hub, wrong digest, stop failure and old-version negatives.
+   This is Linux fixture evidence, NOT Windows native acceptance.
+   Log: /tmp/opencode/app-windows-local-daemon-init-linux-run.log
+2. Same image, rustup target add x86_64-pc-windows-gnu; cargo check --locked
+   --manifest-path tests/local-daemon-init/Cargo.toml --all-targets
+   --target x86_64-pc-windows-gnu: PASS (compile only, no Windows execution).
+   Log: /tmp/opencode/app-windows-installer-cross-check.log
+3. Bun bundle parsing and TypeScript --strict --noEmit for native harness:
+   PASS in disposable container, @types/bun 1.4.4 for static checking only;
+   workflow runtime remains Bun 1.3.14.
+   Log: /tmp/opencode/app-windows-smoke-final-static.log
+4. Invoking native harness in Linux container must exit nonzero and save
+   status/environment=NOT_RUN with native-Windows reason: PASS.
+   Log: /tmp/opencode/app-windows-native-guard.log
+5. Docker rhysd/actionlint:1.7.7, workflow syntax/expression lint: PASS.
+   Log: /tmp/opencode/app-windows-workflow-lint.log
+
+NOT_RUN / awaiting authorized CI owner
+- Native Windows ZIP/npm/install/init/start, detached process metadata,
+  actual SDK reply and <=15s accepted ACK: NOT_RUN locally (Linux host only).
+  Windows workflow must run them; no local cross-compile/fixture pass substitutes.
+- macOS regression: NOT_RUN locally (requires macOS matrix runner).
+- Signed NSIS installation, native GUI/IPC and physical clean-machine acceptance:
+  NOT_RUN (this gate compiles installer without Tauri windowing).
+- Desktop helper/credential-store/ACL integration: NOT_RUN. The existing crate
+  supplies temporary app_root/create-dir/atomic-write helpers, not Tauri's
+  credential backend; install logic/launch commands in local_daemon.rs are real.
+- Full read isolation/every process environment inspection: NOT_RUN; unchanged
+  external sentinel proves no sentinel write, not absence of all reads.
+- Runtime crash/dead-wrapper recovery and every descendant cleanup case:
+  NOT_RUN as broader lifecycle acceptance; product stop safeguards unchanged.
+
+Handoff
+Owner fetches this App worktree/branch, pushes and runs local-daemon-init matrix.
+Inspect windows-local-daemon-init-evidence artifact and exact tested checkout.
+On red, export failed-step logs and sanitized JSON; fix narrowly, retain bounds.
+Do not promote #1497 based on this local report alone. No credentials required
+from the owner and no real model key is accepted into the installer environment.
+Reproduction and restoration/rollback boundaries: tests/local-daemon-init/README.md.
+
+First native CI follow-up: run 44037097331
+Observed: Linux/macOS passed; native Windows cargo tests, Hub npm ci and driver
+build passed. Smoke started 07:15:40; daemon registered 07:17:49 and continued
+heartbeats, but no create-node/send_task/reply before the 15min job cancellation.
+Only the initial NOT_RUN artifact survived. This is NOT first-reply acceptance.
+Inputs: /tmp/opencode/1497-win-run44037097331.log,
+        /tmp/opencode/1497-win-evidence.json.
+
+Confirmed harness root cause (not a product root-cause claim):
+- 180s was asserted only after first reply, never actively enforced during waits.
+- Driver execFile had a 15min timeout; the HOME probe had no timeout at all.
+- Stage mutations were only in memory until the final save/finally.
+The old artifact cannot identify whether install/after-scan/parent pipe wait/
+native process metadata/home probe stalled. No claim that ampersand escaping is
+the root cause; the deliberate path containing spaces and '&' remains unchanged.
+SDK creation's source uses daemonCliLaunch -> direct spawn/argv on Windows, not
+cmd /c. That source review does not prove create_node was reached in this run.
+
+Follow-up implementation (product code/pins/thresholds unchanged):
+- NativeGate persists stage ENTER/terminal result immediately and atomically.
+- Shared absolute 180s deadline covers every install-to-reply phase; no step
+  resets it. Each await has a finite phase budget and abort signal. Stop dispatch
+  + accepted ACK remain one <=15000ms phase. Cleanup <=30000ms, separately timed.
+- Rust driver directly journals before_scan/install/after_scan transitions;
+  writes install report before after_scan. Before/after scan subphase caps20s.
+- Parent observes driver history, node/package/profile/PID/report presence and
+  network-scoped daemon session status; saves changes without labelling them
+  verified install successes. Driver exit/spawn metadata also saved immediately.
+- Direct commands use file-backed stdout/stderr and actual exit event; inherited
+  descendant pipe closure cannot indefinitely hold the parent callback open.
+  Deadline abort kills only owned ChildProcess handles, not name/PID-picked trees.
+- On failure save reason/current stage before collecting bounded diagnostics;
+  downstream steps get NOT_RUN reasons naming the failed predecessor. Cleanup
+  has its own journal/budget and cannot replace a failed acceptance with PASS.
+- Windows CI also runs deadline regression tests before native smoke.
+
+Native rerun after this follow-up: NOT_RUN locally, requires owner Windows CI.
+First-run daemon-online evidence is retained, not promoted to SDK-reply/stop green.
+
+Follow-up Docker verification (fresh current-source checks):
+- native-gate.test.ts: 7 pass / 0 fail / 19 assertions. Includes entered/completed
+  disk snapshots, a never-settling promise, shared absolute budget exhaustion,
+  aborting a stalled child, inherited descendant stdout not delaying exit,
+  stalled HTTP, and literal spaces/ampersands in cwd/argv.
+  Log: /tmp/opencode/1497-stage-deadline-tests.log
+- Rust suite: 25 pass / 0 fail. New driver-journal test observes RUNNING on disk
+  inside the operation, PASS/FAIL afterward, and absence of upstream secret text.
+- Same current-source Docker image: Windows target cargo check --all-targets
+  exits0 (compile only, no native execution).
+  Log for both: /tmp/opencode/1497-stage-final-rust.log
+- TS strict/noEmit and Bun bundle: PASS.
+  Log: /tmp/opencode/1497-stage-deadline-static.log
+- Workflow actionlint: PASS.
+  Log: /tmp/opencode/1497-stage-workflow-lint.log
+- Product src-tauri/src/local_daemon.rs and version pins unchanged. No path stripping
+  or threshold relaxation. Await Windows stage evidence to locate product vs
+  harness stall before proposing a product correction.
+
+Second native CI run 44041323108 / Windows HOME correction
+--------------------------------------------------------
+Prior-run identities (not post-fix acceptance): PR f133f12c5c9f1d8ec0051a330265d753225a9e43,
+tested App 6e98073fd0e762b7e9fa95ffe531a16440e37c5e,
+Hub f8332b965cf428cf843daa6888c3e1f433f60b61, CLI .241 / runtime .209.
+Installer137156ms, create_node/sdk_online/send_task/sdk_reply PASS,
+install_to_reply148378ms <=180000ms. isolation FAIL: real App HOME's cloud config
+was replaced by local-hub-only JSON. stop_ack NOT_RUN because isolation failed;
+cleanup PASS8958ms is not strict-stop-ACK acceptance.
+Inputs: /tmp/opencode/1497-win-run44041323108.log,
+ /tmp/opencode/1497-win2-windows-native.json,
+ /tmp/opencode/1497-win2-native-driver.json.
+
+Confirmed writer and trigger:
+- agent-node/src/runtime/create-node-daemon.ts ensureGlobalAnetConfig reads
+  HOME/.anet/config.json; parse error => {}; if hub differs, sets hub and calls
+  atomicWriteJson. handleCreateNodeDoorbell calls it using resolveChildHome(env)
+  and deps.hubUrl, before child config/start. It is not cli.ts global config read
+  nor anet CLI saveGlobal. Valid cloud JSON retains other fields but hub changes.
+- Published .209 package independently inspected and surgical helper execution
+  reproduces hub-only replacement, valid JSON hub replacement, and successful
+  private-HOME redirection. Real fs/crypto/private-write helpers, no model calls;
+  extraction avoids evaluating CLI entrypoint. Simulated platform resolver inputs
+  on Linux are NOT native Windows/macOS acceptance.
+  Runtime tgz SHA256 cc32d818e9f780a60a1d6c976d5a9ea2174b0a9cf4e5700f626f9a377ad489b1
+  Bundle SHA256 1eb55fe79e85de50ddb30de03c8d6359ce8a0b4aa6d28e0e139cb16dec25b568
+  6 overwrite cases (invalid+valid JSON x win32/darwin/linux) reproduced; isolated
+  HOME writer preserved cloud sentinel. Script pinned-global-config-probe.ts;
+  log /tmp/opencode/1497-pinned-writer-probe.log.
+- Windows installer previously isolated init but detached start inherited App
+  HOME/USERPROFILE. Its daemon therefore targeted the user's cloud config.
+
+Narrow fix: share private_home_env between init and Windows detached Command;
+pass the install's existing private home to Windows start. Direct node.exe argv,
+private PATH/runtime pin, DETACHED_PROCESS/CREATE_NEW_PROCESS_GROUP and product
+ownership-checked cleanup remain unchanged. No runtime patch or publication,
+no package bump, no cloud-config restoration, no assertion/timing relaxation.
+Rust regression inspects the actual Command used by Windows start, requiring all
+four home variables to equal init's and checking ampersand-bearing argv literally.
+
+Separate unresolved macOS/Linux product risk (reported to owner):
+- Fetched App main c1fae27504c931514bd2c0d357d91da06717c7e0 still pins CLI .172 /
+  runtime .138; Unix detached startup inherits real HOME. Exact published .138
+  bundle has same ensureGlobalAnetConfig writer and unconditional create call.
+  .138 tgz SHA256 101c9a85622db3c6934e48ec5239d105e1b315cc0f7d53a183056b6514ccfd7f.
+- Therefore the overwrite path also exists in the Unix main/pin combination,
+  not just Windows .209. This is source+published-package evidence, NOT a claim
+  to have executed a signed shipped macOS binary or audited users' actual files.
+- Unix HOME deliberately unchanged in this patch: account logins need real HOME.
+  Follow-up should eliminate runtime global mutation using explicit child profile/
+  launch hub, with login compatibility tests and its own delivery authorization.
+  Existing Unix adapters did not exercise actual runtime child creation and thus
+  do not establish this isolation property. No production/user files touched.
+
+Post-fix native Windows isolation + <=15000ms strict stop ACK: NOT_RUN on Linux;
+owner must rerun Windows CI before promoting this change to native acceptance.
+
+Windows HOME correction verification (Docker only):
+- Rust suite26 passed/0 failed, including actual Windows Command builder's
+  init/start environment-equivalence regression. Windows-target all-targets
+  cargo check exits0 (compilation, not native execution).
+  Initial log /tmp/opencode/1497-home-rust.log.
+- Negative mutation in disposable container: remove ONLY
+  .envs(private_home_env(home)) from windows_daemon_command, then cargo test
+  --locked --manifest-path tests/local-daemon-init/Cargo.toml
+  windows_daemon_start_uses_the_same_private_home_as_init -- --nocapture.
+  Named regression fails "HOME must not inherit cloud HOME";0 pass/1 fail;
+  wrapper confirms expected failure. No checkout/global files mutated.
+  Log /tmp/opencode/1497-home-mutation.log.
+- Final strict TS noEmit covering gate/tests/published-writer diagnostic PASS;
+  existing deadline7 tests/19 assertions PASS; both real runtime package probes
+  PASS, including digest checks before archive extraction.
+  Log /tmp/opencode/1497-home-ts-probe-final.log.
+- Existing native smoke, sentinel assertion,180000ms first-reply bound and15000ms
+  stop+accepted-ACK bound are byte-for-byte unchanged by this correction.
+- No release/global package/production changes. Windows runtime sees private HOME;
+  this patch does not migrate account login state or prove other runtime logins.
+  Unix follow-up and native post-fix acceptance remain explicitly outstanding.

@@ -5,7 +5,7 @@ prefix, executable CLI/npm fixtures, a loopback HTTP Hub fixture and real child
 processes exercise the production installation path. No desktop credentials,
 host services or real AI nodes are used.
 
-Run the same regression on macOS/Linux (CI runs both):
+Run the adapter regression on macOS/Linux (CI runs both):
 
 ```sh
 SHELL=/bin/sh cargo test --locked --manifest-path tests/local-daemon-init/Cargo.toml -- --test-threads=1
@@ -33,3 +33,131 @@ HTTPS and verifies the production-pinned hash before passing its local filename
 to the fixture npm adapter. It needs outbound HTTPS in the container. A separate
 wrong-digest case proves no archive install, init or start occurs. The adapters
 are not evidence of a signed app install or real Codex account authentication.
+
+## Windows native promotion gate (#1497)
+
+`local-daemon-init.yml` also runs `windows-latest`, with fail-fast disabled.
+The crate compiles the production `local_daemon.rs` unchanged. Unix-only
+shell/Python fault adapters print `NOT_RUN` with their POSIX dependency on
+Windows; they are not relabelled as Windows acceptance. Product unit tests still
+run, followed by the mandatory native gate in `windows-native-smoke.ts`.
+
+The Windows gate builds the Rust binary driver and starts a real temporary Hub
+from exact source `f8332b965cf428cf843daa6888c3e1f433f60b61`. Hub dependencies
+and Bun are test-runner prerequisites only. The installer gets a scrubbed,
+OS-tools-only PATH, an empty prefix, isolated app root (containing spaces and
+`&`), no model credentials and no global Node/npm/anet/Git. Nothing installs
+globally on the runner. The driver refuses an ambient Node or an existing
+installation, then calls the actual production `install` function.
+
+The only registry fixture returns 404 for CLI metadata, to exercise the
+production's real HTTPS GitHub release tarball download and pinned SHA256 check.
+All dependency/runtime traffic goes to the public npm registry. No npm adapter
+simulates successful installation. The Node Windows ZIP is downloaded and
+verified against the product-selected official SHASUMS256 manifest, unpacked
+with Windows tar, and used with its private npm. Both installed package versions
+must exactly equal the product pins. The product's latest-v22.x Node selection
+is intentionally not changed; evidence records resolved version and executable
+digest, not a claim of a fixed historical Node archive.
+
+After Rust returns, the real detached daemon must remain online/create-capable;
+native process metadata must show the direct private `node.exe` + `anet.cjs`
+launcher. This invokes the product `DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP`
+path, not a substitute shell wrapper. Private init credentials, an explicit
+HOME/USERPROFILE `os.homedir()` probe and an unchanged external `.anet` sentinel
+are checked. The sentinel proves no sentinel write, not full read isolation or
+inspection of every child process's environment.
+
+The real daemon creates a `claude-agent-sdk` child with per-node `secrets.env`
+containing only a fake key and a loopback model URL. A streaming HTTP stub must
+receive model traffic and supply a unique first reply. Required bounds:
+
+- **Download/install start through first SDK reply ≤180000ms**, including the
+  installer download/hash/npm/init/start path (not Rust compilation/Hub setup).
+- **Stop dispatch through Hub-accepted `status=stopped` ACK ≤15000ms**, with
+  `exit_signal=taskkill`. `stop_failed`, unknown or mere offline are not success.
+
+No threshold increases, timeout swallowing or fallback to a fake reply.
+Windows detached daemon startup now uses the same private `HOME`, `USERPROFILE`,
+`HOMEDRIVE` and `HOMEPATH` as `daemon init`. This is required because the pinned
+runtime's `handleCreateNodeDoorbell` calls `ensureGlobalAnetConfig`, which writes
+the local Hub into HOME's `.anet/config.json`. Isolating only init is insufficient.
+The native cloud sentinel assertion is unchanged, as are the 180s/15s bounds.
+
+`pinned-global-config-probe.ts` is a separate **surgical writer diagnostic**:
+it downloads the real runtime .209 archive, verifies its SHA256, extracts the
+published writer/home resolver/private-write helpers without executing the CLI,
+and uses real filesystem calls in temporary directories. It demonstrates both
+invalid-sentinel replacement and valid-cloud-JSON Hub replacement with simulated
+Windows/macOS/Linux home resolution, then private-home redirection. It also
+inspects the exact .138 package pinned by App main for the same writer/call site.
+This is not a native daemon/installer acceptance test. Reproduce in a disposable
+Bun 1.3.14 container with `tar`, mounting this directory read-only, then run
+`bun /fixture/pinned-global-config-probe.ts`; it needs public npm network access
+but no authentication/model keys. The Rust suite tests the actual Windows
+Command builder, including all four home variables and literal ` & ` argv.
+
+**Unresolved Unix risk:** the Unix detached startup still inherits real HOME to
+preserve Claude/Codex account login. Its runtime's global writer can also replace
+the user's cloud Hub on child creation. This Windows patch deliberately does not
+change Unix HOME or fix that runtime writer. Do not interpret Linux/macOS fixture
+green as proof of local/cloud isolation; the existing Unix fixture is not a real
+published-runtime child-create flow. A separate runtime fix and native acceptance
+are needed. No automatic restoration of already overwritten cloud configs is
+attempted, because their previous contents are unknown.
+
+`native-gate.ts` enforces an active absolute deadline, not merely an assertion
+after a reply eventually arrives. Every phase writes `RUNNING` (with deadline)
+before entering, then `PASS` or `FAIL` immediately. Installer, probes, child
+creation, readiness, send, reply and cleanup all have finite phase budgets.
+All install-to-reply phases share the **same** 180s deadline, so the next phase
+cannot reset it; stop dispatch and ACK share one 15s phase, cleanup has a separate
+30s total cap. Timeout writes FAIL before aborting the operation, independently
+of the workflow's job timeout.
+
+The Rust driver separately journals `before_scan`, `install`, `after_scan` ENTER
+and terminal transitions to `evidence/native-driver.json`, with no upstream
+text/credentials. It writes the install report **before** doing the after-scan.
+The parent observes filesystem presence and scoped Hub session state while the
+driver runs (observations are not hash/install PASS claims). Before/after scans
+have 20s subphase caps within the shared 180s budget. A parent-enforced driver
+timeout is attributed to its last running subphase in the main evidence.
+
+Commands use direct argv, file-backed stdout/stderr, and the **process exit**
+event, not an `execFile` completion callback that can wait on inherited pipes.
+On deadline only the owned ChildProcess handle is killed; no raw PID/tree kill
+fallback is introduced. Cleanup still uses the product's ownership-checked CLI.
+The new `native-gate.test.ts` tests stalled child/HTTP/promise deadlines,
+shared-budget exhaustion, on-disk stage transitions, inherited stdout, and
+literal spaces/ampersands. The deliberate ` & ` fixture path remains unchanged;
+this is not evidence that the first failure was caused by shell escaping.
+
+The resulting sanitized `evidence/windows-native.json` is uploaded even on
+failure; preceding stages remain `NOT_RUN` with a reason, not PASS. It includes
+App/Hub source identity, installed pair, pinned CLI archive SHA256, private Node
+version/digest, stage outcomes/timings and bounded redacted failure diagnostics.
+Never upload the temporary session/config/secret files or raw log directory.
+
+Cleanup delegates only fixture-owned aliases to the pinned product CLI, with
+its ownership checks; there is no raw PID/name-based kill fallback. Cleanup is
+separate from the timed child-stop ACK acceptance. Signed NSIS installation,
+GUI/IPC and physical clean-machine testing remain `NOT_RUN`: this is the actual
+native installer compiled without Tauri windowing, not a signed-app test.
+The existing crate provides temporary app-root/directory/atomic-write helpers;
+desktop credential-store/ACL helper integration is also `NOT_RUN`, not certified
+by the installer source being compiled here.
+
+To reproduce on a disposable native Windows runner, use the exact workflow:
+checkout App source; checkout the pinned Hub into `.native-hub-source`; install
+its server dependencies with `npm ci`; use Rust 1.90.0 and Bun 1.3.14; then:
+
+```powershell
+cargo test --locked --manifest-path tests/local-daemon-init/Cargo.toml -- --test-threads=1 --nocapture
+cargo build --locked --manifest-path tests/local-daemon-init/Cargo.toml
+bun tests/local-daemon-init/windows-native-smoke.ts
+```
+
+Do not reuse a host's daemon prefix, credentials or HOME. This test adds no
+service, production secret, reverse proxy, tunnel, listener or startup topology
+outside its disposable loopback fixture. Rollback is the ordinary code rollback;
+there is no production data migration or promise of restoring user data from Git.
