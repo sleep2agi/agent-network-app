@@ -1,7 +1,7 @@
 // 「对话页看不到别的节点回给这个 agent 的那半」—— 数据层合并 + 方向判定。
 // 场景（2026-11-12 实读 Hub）：A 发给 B 的行，to_name=B、result 是 B 回 A 的话；
 // 对话页只拉 to_name=A ⇒ 这批行永不出现。修复 = 入站 + 出站合并，出站行画在发送侧。
-import { cachedOutgoing, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor } from './chat-outgoing';
+import { agentSentRow, cachedOutgoing, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor } from './chat-outgoing';
 
 let pass = 0;
 const fails: string[] = [];
@@ -75,6 +75,16 @@ ck('reply author falls back when to_name equals alias', outgoingReplyAuthor({ fr
   ck('screen paints inbound together with cached outgoing', screen.includes("paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, params.limit), fetched, confirmed);"));
   ck('screen updates the cache when the outgoing refetch lands', screen.includes('outgoingCacheRef.current = { alias, rows: outgoingRows };'));
   ck('rows that really disappeared are still removed (repaint when cache had rows)', screen.includes('if (!outgoingRows.length && !hadOutgoing) return;'));
+}
+
+// admin 2026-11-17：agent 发给别的节点的长消息不再画成「我」的实底蓝。
+{
+  ck('agent → other node uses the tinted bubble', agentSentRow(false, true));
+  ck('my own message keeps the solid blue bubble', !agentSentRow(true, false));
+  ck('my message that is also outgoing stays mine', !agentSentRow(true, true));
+  const screen2 = require('node:fs').readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8') as string;
+  ck('ChatScreen branches on agentSentRow with a non-mine MarkdownMessage', /agentSentRow\(sender\.isCurrentUser, outgoing\)/.test(screen2) && /styles\.agentSentBubble/.test(screen2));
+  ck('tinted bubble uses theme tokens, no literal colours', /agentSentBubble: \{ backgroundColor: colors\.tonalBg \}/.test(screen2));
 }
 
 console.log(`chat-outgoing: ${pass}/${pass + fails.length}`);

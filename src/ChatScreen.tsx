@@ -73,7 +73,7 @@ import ComposerStopButton from './ComposerStopButton';
 import ComposerInjectButton from './ComposerInjectButton';
 import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
 import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
-import { firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
+import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail from './ChatToolRail';
 import ChatInfoPanel from './ChatInfoPanel';
@@ -2789,15 +2789,19 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                       delayLongPress={300}
                       style={({ pressed }) => [styles.bubblePressable, pressed && { opacity: 0.7 }]}
                     >
-                      <View style={styles.bubble} ref={bubbleRef(`${msgKey(item)}:sent`)}>
-                        <MineBubble value>
+                      {/* admin 2026-11-17「UI/UX 更好一点」：本 agent 发给别的节点的长消息也用实底蓝，整屏一片蓝，
+                          而且看着像是你自己说的。实底蓝只留给你本人发的；agent 发出的用浅色底 + 正常字色，位置仍在发送侧。 */}
+                      {(() => { const agentSent = agentSentRow(sender.isCurrentUser, outgoing); const sentBody = hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—'); return (
+                      <View style={[styles.bubble, agentSent && styles.agentSentBubble]} ref={bubbleRef(`${msgKey(item)}:sent`)}>
+                        <MineBubble value={!agentSent}>
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
-                        <MarkdownMessage tone="mine">{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
-                        {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, true)}
+                        {agentSent ? <MarkdownMessage>{sentBody}</MarkdownMessage> : <MarkdownMessage tone="mine">{sentBody}</MarkdownMessage>}
+                        {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, !agentSent)}
                         </MineBubble>
                       </View>
+                      ); })()}
                       {sentQuoted.quote ? (
                         <View style={[styles.quoteChip, styles.quoteChipSent]} accessibilityLabel={t('chat.quote')}>
                           <Text style={styles.quoteChipText} numberOfLines={1}>{quoteLabel(sentQuoted.quote)}</Text>
@@ -3634,6 +3638,8 @@ const makeStyles = (B = bubbleLayout()) =>
   // 极简:气泡不描边。我发出的用 bubbleMine(#545 晴蓝实底),回复用卡片色——靠底色区分,不靠边框。
   bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
+  // 本 agent 发给别的节点：发送侧、浅色强调底（气泡不描边，theme-minimal），正文用普通字色（不是「我」的实底蓝）。
+  agentSentBubble: { backgroundColor: colors.tonalBg },
   replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   // 微信式引用:气泡下方一条灰底小字「作者: 内容」(单行省略)
