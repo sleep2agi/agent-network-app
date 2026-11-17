@@ -60,8 +60,10 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
   const drill = (id: string) => setRootId(id);
   return (
     <ScrollView testID="org-showcase" style={{ flex: 1, minHeight: 0 }} contentContainerStyle={[styles.page, c && styles.pageCompact]}>
+      {/* admin 2026-11-17 手机截图「这个现在也是很难看」：手机上不要海报 —— 品牌行、宣传标题、头像墙、根节点胶囊、
+          连接线和桌面列宽都去掉；只留一行四个数，部门是整宽卡片，子部门收在卡片里，点卡片往下钻。 */}
       <View testID="org-showcase-hero" style={[styles.hero, c && styles.heroCompact]}>
-        <View style={[styles.heroTop, c && { gap: spacing.md }]}>
+        {c ? (here ? <Text numberOfLines={1} style={styles.phoneHereTitle}>{here.name}</Text> : null) : <View style={[styles.heroTop, c && { gap: spacing.md }]}>
           <View style={{ flex: 1, minWidth: c ? 0 : 240, gap: c ? spacing.xs : spacing.sm }}>
             {/* 管理员 2026-11-15「不放点 ANet 的 LOGO 吗？」:概览左上角品牌行(截图拿去宣传时一眼认得出是 ANet)。 */}
             <View style={styles.brandRow} testID="org-showcase-brand">
@@ -81,7 +83,7 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
             ))}
             {cloud.more ? <View style={[styles.cloudAvatar, styles.cloudMore, { marginLeft: c ? -8 : -12 }, c && { width: 32, height: 32 }]}><Text style={styles.cloudMoreText}>+{cloud.more}</Text></View> : null}
           </View> : null}
-        </View>
+        </View>}
         <View style={[styles.stats, c && { flexWrap: 'nowrap', gap: spacing.xs }]}>
           <Stat compact={c} value={stats.agents} label={t('agentOrg.showcase.agents')} icon="people-outline" testID="org-showcase-stat-agents" />
           <Stat compact={c} value={stats.departments} label={t('agentOrg.showcase.departments')} icon="git-network-outline" testID="org-showcase-stat-departments" />
@@ -90,8 +92,8 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
         </View>
       </View>
 
-      <View style={styles.chartCard} testID="org-showcase-chart" onLayout={e => setAvail(Math.max(0, e.nativeEvent.layout.width - 2 * spacing.lg - 2))}>
-        <View style={styles.chartHead}>
+      <View style={c ? styles.chartPhone : styles.chartCard} testID="org-showcase-chart" onLayout={e => setAvail(Math.max(0, e.nativeEvent.layout.width - 2 * spacing.lg - 2))}>
+        {c && !here ? null : <View style={styles.chartHead}>
           <View style={styles.crumbs} testID="org-showcase-crumbs">
             <Crumb label={p.title} active={!here} onPress={() => setRootId(null)} testID="org-showcase-crumb-root" />
             {trail.map((d, i) => <View key={d.id} style={{ flexDirection: 'row', alignItems: 'center' }}>
@@ -105,11 +107,27 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
             <Ionicons name="list-outline" size={14} color={colors.textSecondary} />
             <Text style={styles.linkText}>{t('agentOrg.showcase.openList')}</Text>
           </Pressable> : <Text style={styles.chartHint}>{t('agentOrg.showcase.chartHint')}</Text>}
-        </View>
+        </View>}
         {n === 0 && here ? (
           // 叶子部门:Agent 卡片墙。
           <AgentWall agents={scoped} onOpenAgent={p.onOpenAgent} />
         ) : (
+          c ? (
+          <View testID="org-showcase-phone-list" style={{ gap: spacing.md }}>
+            {columns.map(col => <Column key={col.dept.id} col={col} width={avail ? avail + 2 * spacing.lg : 0} onOpen={drill} stem={false} />)}
+            {showUnassigned ? (
+              <Pressable testID="org-showcase-unassigned" accessibilityRole="button" onPress={() => p.onOpenDept(null)}
+                style={({ pressed }: { pressed: boolean }) => [styles.unassigned, pressed && { borderColor: colors.blocked }]}>
+                <Ionicons name="file-tray-outline" size={18} color={colors.blocked} />
+                <View style={{ flex: 1, minWidth: 0 }}>
+                  <Text style={styles.deptName}>{t('agentOrg.unowned')}</Text>
+                  <Text style={styles.deptMeta}>{t('agentOrg.agentsCount', { count: stats.unassigned })}</Text>
+                </View>
+                <Text style={{ color: colors.blocked, fontSize: typeScale.small, fontWeight: '600' }}>{t('agentOrg.showcase.assign')}</Text>
+              </Pressable>
+            ) : null}
+          </View>
+          ) :
           <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ paddingHorizontal: spacing.lg, paddingBottom: spacing.lg, minWidth: '100%', justifyContent: 'center' }}>
             <View style={{ width: Math.max(rowW, COL_W) }}>
               <View style={styles.rootWrap}>
@@ -142,10 +160,10 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
           </ScrollView>
         )}
       </View>
-      <View style={styles.footerRow} testID="org-showcase-footer">
+      {c ? null : <View style={styles.footerRow} testID="org-showcase-footer">
         <BrandMark size={16} />
         <Text style={styles.footer}>{t('agentOrg.showcase.footer')}</Text>
-      </View>
+      </View>}
     </ScrollView>
   );
 }
@@ -245,7 +263,9 @@ function AgentWall(p: { agents: PlacedAgent[]; onOpenAgent?: (alias: string) => 
 const makeStyles = () => StyleSheet.create({
   page: { padding: spacing.xl, gap: spacing.xl },
   pageCompact: { padding: spacing.md, gap: spacing.md },
-  heroCompact: { padding: spacing.md, gap: spacing.md },
+  // 手机：不是卡片，是页面上的一行数字（不再框中框）。
+  heroCompact: { padding: 0, gap: spacing.sm, backgroundColor: 'transparent', borderWidth: 0 },
+  phoneHereTitle: { color: colors.text, fontSize: typeScale.title, fontWeight: '600' },
   heroTitleCompact: { fontSize: 20, lineHeight: 26 },
   heroSubCompact: { fontSize: typeScale.small, lineHeight: 18 },
   statCompact: { flexBasis: 0, minWidth: 0, paddingHorizontal: spacing.sm, paddingVertical: spacing.sm, gap: 2 },
@@ -264,6 +284,7 @@ const makeStyles = () => StyleSheet.create({
   stat: { flexGrow: 1, flexBasis: 140, paddingHorizontal: spacing.md, paddingVertical: spacing.md, gap: spacing.xs, borderRadius: radius.control, backgroundColor: colors.subtleFill },
   statValue: { color: colors.text, fontSize: 30, lineHeight: 36, fontWeight: '600', fontVariant: ['tabular-nums'] },
   statLabel: { color: colors.textMuted, fontSize: typeScale.small },
+  chartPhone: {},
   chartCard: { borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' },
   chartHead: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingTop: spacing.lg, paddingBottom: spacing.md },
   crumbs: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 2, flexShrink: 1 },

@@ -42,5 +42,13 @@ ck('long-press only on touch (mouse press selects text)', (screen.match(/onLongP
 ck('avatar stack has a fixed width so names line up', screen.includes('phoneStack: { width: PHONE_STACK_WIDTH,') && screen.includes('size={PHONE_AVATAR} fixedSize'));
 ck('phone hides the jargon info line', screen.includes('{data && !p.fill && !p.phone ? <View testID="agent-org-info"'));
 
+// admin 2026-11-17 第二张截图（手机架构图）「这个现在也是很难看」：手机上的架构图不再是桌面海报。
+const showcase = readFileSync(new URL('./OrgShowcase.tsx', import.meta.url), 'utf8');
+ck('phone chart: no brand row / headline / avatar cloud, only the numbers', /\{c \? \(here \? <Text numberOfLines=\{1\} style=\{styles\.phoneHereTitle\}>/.test(showcase));
+ck('phone chart: full-width department cards, no root pill or connector lines', showcase.includes('testID="org-showcase-phone-list"') && /org-showcase-phone-list[\s\S]*?stem=\{false\}/.test(showcase));
+ck('phone chart: no card frame around the chart, hero is a flat row', showcase.includes('c ? styles.chartPhone : styles.chartCard') && showcase.includes("heroCompact: { padding: 0, gap: spacing.sm, backgroundColor: 'transparent', borderWidth: 0 }"));
+ck('phone chart: crumbs only after drilling in; no footer', showcase.includes('{c && !here ? null : <View style={styles.chartHead}>') && showcase.includes('{c ? null : <View style={styles.footerRow} testID="org-showcase-footer">'));
+ck('phone chart view hides the 调整结构 block', /!p\.fill && !\(p\.phone && view === 'chart'\) \? \(\r?\n\s*<DemoAdjust/.test(screen));
+
 console.log(`org-phone-list: ${pass}/${pass + fails.length}`);
 if (fails.length) { console.error('FAILED:', fails.join(' | ')); process.exit(1); }
