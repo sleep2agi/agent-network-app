@@ -65,6 +65,7 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { canShowPermissionSection } from './node-permission-model';
+import AvatarStatusRing from './AvatarStatusRing';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
@@ -2542,7 +2543,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             <Text style={styles.back}>‹</Text>
           </Pressable>
         ) : null}
-        <AliasAvatar alias={alias} size={32} />
+        <AvatarStatusRing status={sessionStatus} processing={processing} size={ds(32)} testID="chat-header-ring">
+          <AliasAvatar alias={alias} size={32} />
+        </AvatarStatusRing>
         {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
         <View style={styles.headerTitleCol} testID="chat-header-title">
           <Text style={styles.title} numberOfLines={1}>
