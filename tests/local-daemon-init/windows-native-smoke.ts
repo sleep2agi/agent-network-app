@@ -55,8 +55,8 @@ const constant = (key: string) => {
   assert(value, `missing product constant ${key}`); return value;
 };
 const cliPin = constant("ANET_PACKAGE"), runtimePin = constant("AGENT_NODE_PACKAGE"), cliHash = constant("ANET_TARBALL_SHA256");
-assert.equal(cliPin, "@sleep2agi/agent-network@2.3.0-preview.241");
-assert.equal(runtimePin, "@sleep2agi/agent-node@2.5.0-preview.209");
+assert.equal(cliPin, "@sleep2agi/agent-network@2.3.0-preview.242");
+assert.equal(runtimePin, "@sleep2agi/agent-node@2.5.0-preview.210");
 const digest = (path: string) => createHash("sha256").update(readFileSync(path)).digest("hex");
 let token = "", network = "", modelHits = 0, registryMisses = 0;
 const marker = "APP_WINDOWS_SDK_FIRST_REPLY";
