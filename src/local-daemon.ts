@@ -127,3 +127,20 @@ export function hubDaemonView(input: HubDaemonViewInput): HubDaemonView {
   else verdict = '节点行 role 是 host_supervisor 却不在列表里:多半是 node token 被吊销(多次重新注册后旧进程还在跑旧 token)。先停掉旧 daemon 再重新注册。';
   return { ok, lines, verdict };
 }
+
+// ── 开箱即用（admin 2026-11-17「本地 Hub 的这个开箱即用的功能做好一点」）──────────────────────
+// 点「创建本地工作区」本身就是用户的明确动作，所以接着把本机 daemon 也装好、起好，不再让人去「选服务器」
+// 找卡片再点一次（原来的「不偷偷起」原则仍成立：没点这个按钮之前什么都不装）。
+//   unsupported → 跳过（这台机器跑不了 daemon，进 App 照常用）
+//   ready       → 已装好且版本配对 → 不重装（重复打开不再等 2 分钟）
+//   install     → 装 / 升级（私有 Node + 配对的 CLI / 运行时 + init + start）
+export type AutoDaemonPlan = 'unsupported' | 'ready' | 'install';
+export function autoDaemonPlan(scan: Pick<LocalDaemonScan, 'supported' | 'profileExists' | 'anetCompatible' | 'agentNodeCompatible'>): AutoDaemonPlan {
+  if (!scan.supported) return 'unsupported';
+  return scan.profileExists && scan.anetCompatible === true && scan.agentNodeCompatible === true ? 'ready' : 'install';
+}
+
+/** 装完以后去哪：成功 → Agent 列表；失败 → 「选服务器」页（那张卡片上有每一步的输出和「重试」），不把人卡在首屏。 */
+export function afterAutoDaemon(result: { ok: boolean } | 'skipped'): 'agents' | 'picker' {
+  return result === 'skipped' || result.ok ? 'agents' : 'picker';
+}

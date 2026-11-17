@@ -110,6 +110,7 @@ import { openRememberedChatWindow } from './src/desktop-chat-windows';
 import { NEED_COMPOSER_NOTICE } from './src/voice-shortcut-model';
 import { ShortcutToast } from './src/ShortcutToast';
 import { activateHubProfile, LOCAL_HUB_PROFILE_ID, localHubStatus, startLocalHub } from './src/local-hub';
+import { afterAutoDaemon, autoDaemonPlan, installLocalDaemon, scanLocalDaemon } from './src/local-daemon';
 import UnreadBadgeFixtureScreen, { readWebFixture } from './src/UnreadBadgeFixtureScreen';
 import NotifySettingsFixtureScreen, { readNotifyFixture } from './src/NotifySettingsFixtureScreen';
 import UpdatePromptFixtureScreen, { readUpdatePromptFixture } from './src/UpdatePromptFixtureScreen';
@@ -442,7 +443,7 @@ function AppRoot() {
   const [reauthProfile, setReauthProfile] = useState<Pick<HubProfile, 'profileId' | 'serverUrl' | 'username' | 'displayName'> | null>(null);
   const [showRemoteLogin, setShowRemoteLogin] = useState(false);
   const [localHubStarting, setLocalHubStarting] = useState(false);
-  const [localHubStage, setLocalHubStage] = useState<'preparing' | 'starting' | 'migrating' | null>(null);
+  const [localHubStage, setLocalHubStage] = useState<'preparing' | 'starting' | 'migrating' | 'daemon' | null>(null);
   const [localHubError, setLocalHubError] = useState<string | null>(null);
   const initialChat = useMemo(() => requestedChatAlias(), []);
   const initialChatProfile = useMemo(() => requestedChatProfileId(), []);
@@ -945,8 +946,21 @@ function AppRoot() {
                 const local = await startLocalHub();
                 if (!local.session) throw new Error(local.error || '本地工作区启动后没有返回会话');
                 await hydrateProfileLocalState(local.session);
+                // admin 2026-11-17「本地 Hub 这块做好一点」：接着把本机 daemon 装好、起好（同一次点击的一部分），
+                // 不再让人去「选服务器」找卡片。已装好且版本配对就跳过；装失败也照样进 App，落在「选服务器」看原因和重试。
+                let landing: 'agents' | 'picker' = 'agents';
+                try {
+                  const scan = await scanLocalDaemon();
+                  const plan = autoDaemonPlan(scan);
+                  if (plan === 'install') {
+                    setLocalHubStage('daemon');
+                    landing = afterAutoDaemon(await installLocalDaemon());
+                  }
+                } catch {
+                  landing = 'picker';
+                }
                 setCfg(local.session);
-                setScreen({ name: 'agents' });
+                setScreen(landing === 'picker' ? { name: 'picker' } : { name: 'agents' });
                 prefetchStatus(local.session);
               } catch (error) {
                 setLocalHubError(error instanceof Error ? error.message : String(error));
@@ -1223,7 +1237,7 @@ function AppRoot() {
 
 export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
   busy: boolean;
-  stage: 'preparing' | 'starting' | 'migrating' | null;
+  stage: 'preparing' | 'starting' | 'migrating' | 'daemon' | null;
   error: string | null;
   onStartLocal: () => Promise<void>;
   onRemote: () => void;
@@ -1248,10 +1262,11 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
           {busy ? (
             <View style={entryStyles.busyRow} testID={`local-hub-stage-${stage ?? 'preparing'}`}>
               <ActivityIndicator color={colors.onAccent} />
-              <Text style={entryStyles.primaryText}>{stage === 'migrating' ? '正在备份并迁移…' : stage === 'starting' ? '正在启动本地服务…' : '正在准备本地工作区…'}</Text>
+              <Text style={entryStyles.primaryText}>{stage === 'migrating' ? '正在备份并迁移…' : stage === 'starting' ? '正在启动本地服务…' : stage === 'daemon' ? '正在准备本机 Agent 环境…' : '正在准备本地工作区…'}</Text>
             </View>
           ) : <Text style={entryStyles.primaryText}>创建本地工作区</Text>}
         </Pressable>
+        {stage === 'daemon' ? <Text testID="local-hub-daemon-note" style={entryStyles.copy}>第一次会下载一个私有 Node 和 ANet 运行时（约 1–3 分钟），不改动系统设置。好了会直接进入。</Text> : null}
         <Pressable accessibilityRole="button" disabled={busy} style={({ pressed }) => [entryStyles.secondary, pressed && entryStyles.secondaryPressed]} onPress={onRemote}>
           <Ionicons name="globe-outline" size={17} color={colors.textSecondary} />
           <Text style={entryStyles.secondaryText}>使用已有 Hub 登录</Text>

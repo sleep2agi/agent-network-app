@@ -1,7 +1,7 @@
 import { strict as assert } from 'node:assert';
 import { readFileSync } from 'node:fs';
 
-const { daemonChecklist, installBlocker, nodeVersionOk, hubDaemonView } = await import('./local-daemon');
+const { afterAutoDaemon, autoDaemonPlan, daemonChecklist, installBlocker, nodeVersionOk, hubDaemonView } = await import('./local-daemon');
 let ck = 0;
 const check = (cond: boolean, msg: string) => { assert.ok(cond, msg); ck++; };
 
@@ -91,5 +91,20 @@ check(wf.includes('--smoke-local-daemon-install') && wf.includes('if [ "$RUNNER_
   const rows = daemonChecklist({ ...base, anet: { path: '/private/anet', version: '2.3.0-preview.76' }, agentNode: { path: '/private/agent-node', version: '2.5.0-preview.58' }, anetCompatible: false, agentNodeCompatible: false });
   check(rows[2].state === 'bad' && rows[2].detail.includes('升级'), 'old private CLI is shown as incompatible');
   check(rows[3].state === 'bad' && rows[3].detail.includes('升级'), 'old private runtime is shown as incompatible');
+}
+// admin 2026-11-17「本地 Hub 这块做好一点」：点「创建本地工作区」后接着把本机 daemon 装好、起好。
+{
+  const scan = { supported: true, profileExists: true, anetCompatible: true, agentNodeCompatible: true };
+  check(autoDaemonPlan(scan) === 'ready', 'installed + paired versions → no reinstall on every open');
+  check(autoDaemonPlan({ ...scan, profileExists: false }) === 'install', 'no daemon profile yet → install');
+  check(autoDaemonPlan({ ...scan, agentNodeCompatible: false }) === 'install', 'outdated runtime (e.g. .209) → upgrade');
+  check(autoDaemonPlan({ ...scan, anetCompatible: undefined }) === 'install', 'unknown CLI compatibility → install (never assume ready)');
+  check(autoDaemonPlan({ ...scan, supported: false }) === 'unsupported', 'unsupported machine → skip, app still opens');
+  check(afterAutoDaemon({ ok: true }) === 'agents' && afterAutoDaemon('skipped') === 'agents', 'success / skipped → agent list');
+  check(afterAutoDaemon({ ok: false }) === 'picker', 'failure → 选服务器 (card with steps + retry), never stuck on the first screen');
+  const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+  check(/const plan = autoDaemonPlan\(scan\);\s*if \(plan === 'install'\) \{\s*setLocalHubStage\('daemon'\);\s*landing = afterAutoDaemon\(await installLocalDaemon\(\)\);/.test(app), 'first run chains scan → install only when needed');
+  check(/\} catch \{\s*landing = 'picker';\s*\}/.test(app), 'a thrown scan / install still lets the user in (lands on 选服务器)');
+  check(app.includes("stage === 'daemon' ? '正在准备本机 Agent 环境…'") && app.includes('testID="local-hub-daemon-note"'), 'the button says what is happening and why it takes 1–3 minutes');
 }
 console.log(`local daemon: ${ck} checks passed`);
