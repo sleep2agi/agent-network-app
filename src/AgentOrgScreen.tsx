@@ -22,6 +22,8 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
 import OrgShowcase from './OrgShowcase';
+import { phoneDeptFacts, PHONE_TREE_INDENT } from './org-phone-list';
+import { isRunning } from './org-showcase-model';
 import { peekOrg, recallOrg, rememberOrg } from './swr-cache';
 
 /** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
@@ -245,9 +247,9 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
         <SettingsGroup testID="agent-org-empty-hub"><SettingsRow label={t('agentOrg.oldHub')} /></SettingsGroup>
       ) : null}
       {data && (showTree || showDetail || (p.phone && view === 'chart')) ? (
-        <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : p.phone && view === 'chart' ? { flex: 1, minHeight: 0 } : styles.workspace}>
+        <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : p.phone && view === 'chart' ? { flex: 1, minHeight: 0 } : p.phone ? styles.workspacePhone : styles.workspace}>
           {/* 手机看架构图:不再套一层外框 + 「16 个部门 · 27 个未归属」工具条(架构图自己就有这些数)。 */}
-          {!p.fill && !(p.phone && view === 'chart') ? <View style={styles.toolbar} testID="agent-org-department-actions">
+          {!p.fill && !p.phone ? <View style={styles.toolbar} testID="agent-org-department-actions">
             <View style={styles.toolbarContext}>
               {p.phone && p.title ? null : <Text style={styles.title}>{t('agentOrg.workspaceTitle')}</Text>}
               <Text testID="agent-org-summary" style={styles.note}>{t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}</Text>
@@ -279,8 +281,10 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                   {infoOpen ? <View style={{ gap: spacing.xs }}>{editHint}<Text style={styles.note}>{t('agentOrg.infoSummary')}</Text>{infoBody}</View> : null}
                 </View>
               </> : <>
-                {p.phone ? <SettingsGroup testID="agent-org-phone-nav"><SettingsRow label={t('agentOrg.showcase.nav')} onPress={() => setView('chart')} testID="agent-org-chart-open" /></SettingsGroup> : null}
-                <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />
+                {p.phone ? <PhoneChartCard data={data} placed={placed} onPress={() => setView('chart')} /> : null}
+                {p.phone
+                  ? <PhoneDepartmentList data={data} placed={placed} onFocus={setFocus} hint={canEditAnyDepartment(data.departments, p.canManageStructure, treeApi)} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />
+                  : <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />}
               </>}
             </View>
           ) : null}
@@ -339,7 +343,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
           </View>
         </View>
       ) : null}
-      {data && !p.fill ? <View testID="agent-org-info" style={styles.info}>
+      {data && !p.fill && !p.phone ? <View testID="agent-org-info" style={styles.info}>
         <Pressable testID="agent-org-info-toggle" accessibilityRole="button" accessibilityState={{ expanded: infoOpen }} onPress={() => setInfoOpen(v => !v)} style={styles.infoToggle}>
           <Ionicons name="information-circle-outline" size={18} color={colors.textMuted} />
           <Text style={[styles.note, { flex: 1 }]}>{t('agentOrg.infoSummary')}</Text>
@@ -539,6 +543,74 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
       </ScrollView>
     </View>
   );
+}
+
+// admin 2026-11-17「这个里面真的是有点太丑了……要有那种很舒适的感觉」：手机「组织」页。
+// 不再是「外框 + 一段说明 + 设置风格的一行 + 文件夹图标列表」：顶上一张架构图卡片（顺带给总数），
+// 下面每个部门一行 —— 头像叠 + 名字 + 「N 个 Agent · M 个运行中」+ 箭头；说明压成底部一行小字。
+function PhoneChartCard(p: { data: AgentOrgData; placed: PlacedAgent[]; onPress: () => void }) {
+  const { t } = useTranslation();
+  const running = p.placed.filter(isRunning).length;
+  return <Pressable testID="agent-org-chart-open" accessibilityRole="button" onPress={p.onPress}
+    style={({ pressed }) => [styles.phoneChartCard, pressed && { opacity: 0.85 }]}>
+    <View style={styles.phoneChartIcon}><Ionicons name="git-network-outline" size={22} color={colors.accent} /></View>
+    <View style={{ flex: 1, minWidth: 0 }}>
+      <Text style={styles.phoneChartTitle}>{t('agentOrg.phone.chartTitle')}</Text>
+      <Text testID="agent-org-summary" numberOfLines={1} style={styles.phoneRowSub}>{t('agentOrg.phone.chartSub', { departments: p.data.departments.length, agents: p.placed.length, running })}</Text>
+    </View>
+    <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+  </Pressable>;
+}
+
+const PHONE_AVATAR = 26;
+const PHONE_STACK_OVERLAP = 12;
+// 3 个头像（各带 2px 描边）叠起来的宽度；固定宽度，部门名在每一行都从同一条线开始。
+const PHONE_STACK_WIDTH = (PHONE_AVATAR + 4) * 3 - PHONE_STACK_OVERLAP * 2;
+function AvatarStack(p: { aliases: string[]; muted?: boolean }) {
+  if (!p.aliases.length) return <View style={[styles.phoneStackEmpty, p.muted && { opacity: 0.6 }]}><Ionicons name="people-outline" size={18} color={colors.textMuted} /></View>;
+  return <View style={[styles.phoneStack, p.muted && { opacity: 0.7 }]}>
+    {p.aliases.map((alias, i) => <View key={alias} style={[styles.phoneStackItem, { marginLeft: i ? -PHONE_STACK_OVERLAP : 0, zIndex: p.aliases.length - i }]}><AliasAvatar alias={alias} size={PHONE_AVATAR} fixedSize /></View>)}
+  </View>;
+}
+
+function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onFocus: (id: string | null) => void; onMenu?: (dept: Department | null, x: number, y: number) => void; hint: boolean }) {
+  const { t } = useTranslation();
+  const rows = flattenTree(orgTree(p.data));
+  const unowned = phoneDeptFacts(p.placed, p.data, null);
+  const sub = (f: { count: number; running: number }) => f.count === 0 ? t('agentOrg.phone.deptEmpty') : f.running > 0 ? t('agentOrg.phone.deptSub', f) : t('agentOrg.phone.deptSubIdle', f);
+  return <View testID="agent-org-departments" style={styles.phoneList} {...({ dataSet: { orgDeptTree: '1' } } as object)}>
+    <Text style={styles.phoneSection}>{t('agentOrg.departments')}</Text>
+    <View style={styles.phoneGroup}>
+      {rows.length ? rows.map((row, i) => {
+        const f = phoneDeptFacts(p.placed, p.data, row.dept.id);
+        return <Pressable key={row.dept.id} testID={`agent-org-dept-${row.dept.id}`} accessibilityRole="button" accessibilityLabel={`${row.dept.name}, ${sub(f)}`}
+          {...({ dataSet: { orgDept: row.dept.id } } as object)}
+          onPress={() => p.onFocus(row.dept.id)}
+          onLongPress={pointerUi() ? undefined : p.onMenu ? e => p.onMenu!(row.dept, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined}
+          style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md + row.depth * PHONE_TREE_INDENT }, i > 0 && styles.phoneRowDivider, pressed && { backgroundColor: colors.rowHover }]}>
+          <AvatarStack aliases={f.avatars} />
+          <View style={{ flex: 1, minWidth: 0 }}>
+            <Text testID={`agent-org-dept-${row.dept.id}-label`} numberOfLines={1} style={styles.phoneRowTitle}>{row.dept.name}</Text>
+            <Text testID={`agent-org-dept-${row.dept.id}-value`} numberOfLines={1} style={styles.phoneRowSub}>{sub(f)}</Text>
+          </View>
+          <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+        </Pressable>;
+      }) : <Text testID="agent-org-empty" style={[styles.phoneRowSub, { padding: spacing.md }]}>{t('agentOrg.empty')}</Text>}
+    </View>
+    {p.data.directory || unowned.count > 0 ? <View style={[styles.phoneGroup, { marginTop: spacing.md }]}>
+      <Pressable testID="agent-org-dept-unassigned" accessibilityRole="button" onPress={() => p.onFocus(null)}
+        onLongPress={pointerUi() ? undefined : p.onMenu ? e => p.onMenu!(null, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined}
+        style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md }, pressed && { backgroundColor: colors.rowHover }]}>
+        <AvatarStack aliases={unowned.avatars} muted />
+        <View style={{ flex: 1, minWidth: 0 }}>
+          <Text testID="agent-org-dept-unassigned-label" style={styles.phoneRowTitle}>{t('agentOrg.unowned')}</Text>
+          <Text testID="agent-org-dept-unassigned-value" numberOfLines={1} style={styles.phoneRowSub}>{unowned.count > 0 ? t('agentOrg.phone.unownedSub', { count: unowned.count }) : t('agentOrg.phone.unownedNone')}</Text>
+        </View>
+        <Ionicons name="chevron-forward" size={16} color={colors.textMuted} />
+      </Pressable>
+    </View> : null}
+    {p.hint ? <Text testID="agent-org-departments-edit-hint" style={styles.phoneHint}>{t(pointerUi() ? 'agentOrg.departmentsEditHint' : 'agentOrg.phone.hint.touch')}</Text> : null}
+  </View>;
 }
 
 function IconAction(p: { testID: string; icon: 'add' | 'ellipsis-horizontal'; label: string; onPress: (x: number, y: number) => void; size?: number }) {
@@ -1014,6 +1086,21 @@ const makeStyles = () => StyleSheet.create({
   compactAction: { ...buttonStyle('secondary'), height: 'auto', minHeight: 44, maxWidth: '100%', flexDirection: 'row', gap: spacing.xs, paddingHorizontal: spacing.sm, paddingVertical: spacing.xs, flexShrink: 1 },
   actionLabel: { ...buttonTextStyle('secondary'), fontSize: typeScale.small, flexShrink: 1 },
   workspace: { marginHorizontal: spacing.md, borderWidth: 1, borderColor: colors.border, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' },
+  workspacePhone: {},
+  phoneChartCard: { marginHorizontal: spacing.md, marginTop: spacing.sm, padding: spacing.md, borderRadius: radius.surface, backgroundColor: colors.card, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  phoneChartIcon: { width: 44, height: 44, borderRadius: radius.control, backgroundColor: colors.tonalBg, alignItems: 'center', justifyContent: 'center' },
+  phoneChartTitle: { color: colors.text, fontSize: typeScale.body, fontWeight: '600' },
+  phoneList: { paddingTop: spacing.lg, paddingBottom: spacing.xl },
+  phoneSection: { color: colors.textMuted, fontSize: typeScale.small, marginHorizontal: spacing.md + spacing.xs, marginBottom: spacing.xs },
+  phoneGroup: { marginHorizontal: spacing.md, borderRadius: radius.surface, backgroundColor: colors.card, overflow: 'hidden' },
+  phoneRow: { minHeight: 60, paddingRight: spacing.md, paddingVertical: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  phoneRowDivider: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
+  phoneRowTitle: { color: colors.text, fontSize: typeScale.body, fontWeight: '500' },
+  phoneRowSub: { color: colors.textMuted, fontSize: typeScale.small, marginTop: 2 },
+  phoneStack: { width: PHONE_STACK_WIDTH, flexDirection: 'row', alignItems: 'center' },
+  phoneStackItem: { borderRadius: radius.pill, borderWidth: 2, borderColor: colors.card },
+  phoneStackEmpty: { width: PHONE_STACK_WIDTH, height: 30, alignItems: 'flex-start', justifyContent: 'center', paddingLeft: 6 },
+  phoneHint: { color: colors.textMuted, fontSize: typeScale.small, textAlign: 'center', marginTop: spacing.lg, paddingHorizontal: spacing.lg },
   columns: { flexDirection: 'row', minHeight: 440 },
   navigation: { width: 240, flexShrink: 0, borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: colors.listBg },
   sectionLabel: { color: colors.textMuted, fontSize: typeScale.small, fontWeight: '600', padding: spacing.sm, marginBottom: spacing.xs },
