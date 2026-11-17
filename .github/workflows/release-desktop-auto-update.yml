@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.555:
+            - 聊天里 Agent 发给别的节点的消息改成浅色气泡、正常字色；实底蓝只留给你自己发的消息，长消息不再整屏一片蓝，也不会看着像是你说的。
+
             What's new in 0.2.554:
             - 聊天信息里加上「权限」入口（你能改这个节点的权限时出现），和节点页同一个口径。
             - Windows：窗口改成圆角、带阴影（Windows 11；Windows 10 系统不支持圆角，只有阴影）。
