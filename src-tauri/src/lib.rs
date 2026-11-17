@@ -1058,6 +1058,12 @@ pub fn run() {
                     if let Err(error) = window.set_decorations(false) {
                         eprintln!("[window] {label}: set_decorations(false) failed: {error}");
                     }
+                    // admin 2026-11-17「都改成圆角」：运行时去掉标题栏后 tao 不会自动打开无边框阴影，
+                    // Windows 11 就画成直角、也没有阴影。显式 set_shadow(true)：Win11 上 DWM
+                    // 给无边框窗口圆角 + 阴影（Win10 只有阴影，系统本身不支持圆角）。
+                    if let Err(error) = window.set_shadow(true) {
+                        eprintln!("[window] {label}: set_shadow(true) failed: {error}");
+                    }
                 }
             }
             Ok(())

@@ -204,6 +204,7 @@ export const chatTranslations = {
   'chat.info.section:tasks': ['任务', 'Tasks'],
   'chat.info.section:schedules': ['定时任务', 'Schedules'],
   'chat.info.section:logs': ['运行日志', 'Runtime logs'],
+  'chat.info.section:permissions': ['权限', 'Permissions'],
   'chat.menu.copySelection': ['复制选中内容', 'Copy selection'],
   'chat.menu.copy': ['复制', 'Copy'],
   'chat.menu.selectText': ['选择文本', 'Select text'],
