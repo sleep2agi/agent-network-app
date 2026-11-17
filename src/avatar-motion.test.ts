@@ -22,6 +22,7 @@ const ring = read('./AvatarStatusRing.tsx');
 ck('ring is absolutely positioned and ignores touches (layout and taps unchanged)', ring.includes("position: 'absolute' as const") && ring.includes('pointerEvents="none"'));
 ck('ring honours the system reduce-motion setting', ring.includes('AccessibilityInfo.isReduceMotionEnabled()') && /reduce \|\| motion === 'none'/.test(ring));
 ck('animations use the native driver off web', ring.includes("const NATIVE_DRIVER = Platform.OS !== 'web';") && (ring.match(/useNativeDriver: NATIVE_DRIVER/g) ?? []).length === 3);
+ck('looping animations never hold InteractionManager (list batching / older-page loading)', (ring.match(/isInteraction: false }/g) ?? []).length === 3);
 ck('no ring and no wrapper when nothing to show', ring.includes("if (motion === 'none' || !tone) return <>{children}</>;"));
 ck('ring colours come from theme tokens', ring.includes('colors[tone]') && !/#[0-9a-fA-F]{6}/.test(ring));
 

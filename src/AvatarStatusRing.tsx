@@ -7,6 +7,8 @@ import { avatarRadius, colors } from './theme';
 import { AVATAR_PULSE_MS, AVATAR_RING_GAP, AVATAR_RING_STROKE, AVATAR_SPIN_MS, avatarMotion, avatarRingBox } from './avatar-motion';
 
 const NATIVE_DRIVER = Platform.OS !== 'web';
+// 🔴 isInteraction: false —— 循环动画默认算「交互中」，永不结束 ⇒ InteractionManager 永远不空，
+//    聊天列表的分批渲染和「加载更早消息」都会被卡住（test-chat-older-batches 桌面端红）。
 
 function useReduceMotion(): boolean {
   const [reduce, setReduce] = useState(false);
@@ -37,10 +39,10 @@ export default function AvatarStatusRing({ status, processing = false, size, chi
     spin.setValue(0); pulse.setValue(1);
     if (reduce || motion === 'none') return;
     const loop = motion === 'working'
-      ? Animated.loop(Animated.timing(spin, { toValue: 1, duration: AVATAR_SPIN_MS, easing: Easing.linear, useNativeDriver: NATIVE_DRIVER }))
+      ? Animated.loop(Animated.timing(spin, { toValue: 1, duration: AVATAR_SPIN_MS, easing: Easing.linear, useNativeDriver: NATIVE_DRIVER, isInteraction: false }))
       : Animated.loop(Animated.sequence([
-        Animated.timing(pulse, { toValue: 0.25, duration: AVATAR_PULSE_MS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: NATIVE_DRIVER }),
-        Animated.timing(pulse, { toValue: 1, duration: AVATAR_PULSE_MS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: NATIVE_DRIVER }),
+        Animated.timing(pulse, { toValue: 0.25, duration: AVATAR_PULSE_MS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: NATIVE_DRIVER, isInteraction: false }),
+        Animated.timing(pulse, { toValue: 1, duration: AVATAR_PULSE_MS / 2, easing: Easing.inOut(Easing.ease), useNativeDriver: NATIVE_DRIVER, isInteraction: false }),
       ]));
     loop.start();
     return () => loop.stop();
