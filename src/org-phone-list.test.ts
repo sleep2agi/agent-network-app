@@ -48,7 +48,7 @@ ck('phone chart: no brand row / headline / avatar cloud, only the numbers', /\{c
 ck('phone chart: full-width department cards, no root pill or connector lines', showcase.includes('testID="org-showcase-phone-list"') && /org-showcase-phone-list[\s\S]*?stem=\{false\}/.test(showcase));
 ck('phone chart: no card frame around the chart, hero is a flat row', showcase.includes('c ? styles.chartPhone : styles.chartCard') && showcase.includes("heroCompact: { padding: 0, gap: spacing.sm, backgroundColor: 'transparent', borderWidth: 0 }"));
 ck('phone chart: crumbs only after drilling in; no footer', showcase.includes('{c && !here ? null : <View style={styles.chartHead}>') && showcase.includes('{c ? null : <View style={styles.footerRow} testID="org-showcase-footer">'));
-ck('phone chart view hides the 调整结构 block', screen.includes("!p.fill && !(p.phone && view === 'chart') ? (\n        <DemoAdjust"));
+ck('phone chart view hides the 调整结构 block', /!p\.fill && !\(p\.phone && view === 'chart'\) \? \(\r?\n\s*<DemoAdjust/.test(screen));
 
 console.log(`org-phone-list: ${pass}/${pass + fails.length}`);
 if (fails.length) { console.error('FAILED:', fails.join(' | ')); process.exit(1); }
