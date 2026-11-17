@@ -64,6 +64,7 @@ import { sessionControlTarget } from './node-session-control';
 import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
+import { canShowPermissionSection } from './node-permission-model';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
@@ -556,7 +557,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 聊天信息(chat-info-model.ts):页头右侧只剩「⋯」,搜索 / 置顶 / 免打扰 / 窗口置顶 / 节点设置都在里面。
   const [infoOpen, setInfoOpen] = useState(false);
   // #4863 —— 聊天信息里的「所属部门」：值 + 节点/组织上下文（点开直接改，未归属也显示）。
-  const [deptInfo, setDeptInfo] = useState<{ label: string; nodeId: string | null; departmentId: string | null; org: OrgLike; editable: boolean } | null>(null);
+  const [deptInfo, setDeptInfo] = useState<{ label: string; nodeId: string | null; departmentId: string | null; org: OrgLike; editable: boolean; permissionsAllowed: boolean } | null>(null);
   const [deptPickerOpen, setDeptPickerOpen] = useState(false);
   const [forkOpenScope, setForkOpenScope] = useState<object | null>(null);
   const [paneWidth, setPaneWidth] = useState(0);
@@ -2371,6 +2372,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         departmentId,
         org,
         editable: canEditDepartments(org, false) && !!node?.node_id,
+        // 「权限」行：同一份 /api/nodes 行的 viewer_can（口径同节点页 canShowPermissionSection）。
+        permissionsAllowed: canShowPermissionSection(node),
       });
     })();
     return () => { live = false; };
@@ -2448,6 +2451,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     hasRulesTarget: sessionCaps.rules,
     skillsCapable: sessionCaps.skills,
     secretsCapable: sessionCaps.secrets,
+    permissionsAllowed: deptInfo?.permissionsAllowed === true,
     department: deptInfo ? { label: deptInfo.label, editable: deptInfo.editable } : null,
   });
   const onInfoRow = (row: ChatInfoRow) => {

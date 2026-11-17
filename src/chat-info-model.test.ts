@@ -143,3 +143,17 @@ console.log(`chat info: ${ck}/${ck} checks passed`);
   check(chatInfoCaps({ agent: 'agent-node', node_secrets_capable: true } as any).secrets === true,
     'capability helper: reported true is true');
 }
+
+// admin 2026-11-17 截图：聊天信息里没有「权限」入口 —— chatInfoGroups 从没把 viewer_can 传给 visibleNodeSections。
+{
+  const without = keys({ ...base }).flat();
+  check(!without.includes('section:permissions'), 'no 权限 row when the Hub did not grant viewer_can.permission_mode');
+  const withPerm = keys({ ...base, permissionsAllowed: true });
+  const sec = withPerm.find(g => g.includes('section:permissions')) ?? [];
+  check(sec.includes('section:permissions') && sec.indexOf('section:permissions') === sec.length - 1, 'granted → 权限 row, last in the node-section group');
+  check(!(withPerm.flat() as string[]).includes('section:danger'), 'still no 危险操作 row');
+  const screen = read('ChatScreen.tsx');
+  check(/permissionsAllowed: canShowPermissionSection\(node\)/.test(screen) && /permissionsAllowed: deptInfo\?\.permissionsAllowed === true/.test(screen), 'ChatScreen feeds viewer_can from the same /api/nodes row');
+  const i18n = read('i18n-chat.ts');
+  check(/'chat\.info\.section:permissions': \['权限'/.test(i18n), '权限 row has an i18n label (no raw key)');
+}

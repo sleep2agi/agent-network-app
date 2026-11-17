@@ -53,6 +53,9 @@ export interface ChatInfoInput {
    *  legacy node-server 的 claude-code 会话)没有该能力,给了只会点进一个
    *  “不支持”的空页(owner 2026-11-09 截图)。 */
   secretsCapable: boolean;
+  /** 「权限」行：Hub 说调用者能改这个节点的权限模式（viewer_can.permission_mode）才给，口径同节点页。
+   *  admin 2026-11-17 截图：聊天信息里没有权限入口 —— 以前这里根本没传这个位。 */
+  permissionsAllowed?: boolean;
   /** #4863 —— 「所属部门」行。**未归属时必须给 `{ label: '未归属' }`**（这一行不能消失）。 */
   department?: { label: string; editable?: boolean } | null;
 }
@@ -83,7 +86,7 @@ export function chatInfoGroups(input: ChatInfoInput): ChatInfoRow[][] {
   if (toggles.length) groups.push(toggles);
 
   if (input.canOpenNode) {
-    const visible = visibleNodeSections({ readOnly: true, hasRulesTarget: input.hasRulesTarget, skillsCapable: input.skillsCapable, secretsCapable: input.secretsCapable });
+    const visible = visibleNodeSections({ readOnly: true, hasRulesTarget: input.hasRulesTarget, skillsCapable: input.skillsCapable, secretsCapable: input.secretsCapable, permissionsAllowed: input.permissionsAllowed === true });
     const sections = NODE_SECTIONS
       .filter(s => s.key !== 'overview' && s.key !== 'danger' && visible.includes(s.key))
       .map((s): ChatInfoRow => ({ key: `section:${s.key}` as ChatInfoRowKey, kind: 'link', label: s.label, section: s.key }));
