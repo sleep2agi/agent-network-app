@@ -614,6 +614,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.554:
+            - 聊天信息里加上「权限」入口（你能改这个节点的权限时出现），和节点页同一个口径。
+            - Windows：窗口改成圆角、带阴影（Windows 11；Windows 10 系统不支持圆角，只有阴影）。
+
             What's new in 0.2.553:
             - 「组织」和「架构图」里，超过 7 天没上线的 Agent 也显示出来（头像变灰、标「N 天未上线」、排在后面），部门不再显示成空的；部门人数把它们也算上，「运行中」只算最近真正在跑的。
             - 删除部门时，对话框列出里面的 Agent；只剩 Agent 挡着时可以一键「移到未归属并删除」。
