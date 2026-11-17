@@ -73,8 +73,9 @@ const wired: Record<string, string[]> = {
   'AuthedThumb.tsx': ["useBubbleInk('link')"],
   'AuthedWebThumb.tsx': ["useBubbleInk('link')"],
 };
-ck('ChatScreen.tsx wraps own bubble in <MineBubble value>', src('ChatScreen.tsx').includes('<MineBubble value>'));
-ck('ChatScreen.tsx own-bubble attachments get mine=true', src('ChatScreen.tsx').includes('renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, true)'));
+// admin 2026-11-17：发送侧气泡里只有「本人发的」是 mine；本 agent 发给别的节点的用浅色底（agentSent），同 DmChatScreen 的 value={out} 写法。
+ck('ChatScreen.tsx wraps own bubble in <MineBubble value={!agentSent}>', src('ChatScreen.tsx').includes('<MineBubble value={!agentSent}>'));
+ck('ChatScreen.tsx own-bubble attachments get mine for own messages', src('ChatScreen.tsx').includes('renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, !agentSent)'));
 ck('DmChatScreen.tsx wraps bubble in <MineBubble value={out}>', src('DmChatScreen.tsx').includes('<MineBubble value={out}>'));
 for (const [f, needles] of Object.entries(wired)) for (const n of needles) ck(`${f} uses ${n}`, src(f).includes(n));
 

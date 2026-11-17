@@ -58,3 +58,9 @@ export function outgoingReplyAuthor(row: ConversationRow, alias: string): string
   const to = (row.to_name ?? '').trim();
   return to && to !== alias ? to : alias;
 }
+
+/** 发送侧的气泡用哪种底：只有当前登录的人本人发的才是实底「我」蓝；
+ *  本 agent 发给别的节点（outgoing 且不是本人）用浅色底（admin 2026-11-17）。 */
+export function agentSentRow(isCurrentUser: boolean, outgoing: boolean): boolean {
+  return outgoing && !isCurrentUser;
+}
