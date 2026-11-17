@@ -150,9 +150,9 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
     <RowShell onPress={onPress} disabled={disabled} testID={id} accessibilityLabel={accessibilityLabel ?? label} accessibilityRole={external ? 'link' : 'button'} accessibilityState={busy ? { busy } : undefined}>
       {icon ? (
         <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}>
-          {/* 自带 iconColor 的色块(需求 4093 的分类色)是深浅两色共用的固定色,图形用固定白(onBubbleMine,两档都是白);
+          {/* 自带 iconColor 的色块(需求 4093 的分类色)是深浅两色共用的固定色,图形用固定白(onSolid,两档都是白);
               没给色就是主色块,图形照旧 onAccent(深色下 accent 偏亮、onAccent 是深色)。 */}
-          <View style={[styles.iconTile, { backgroundColor: iconColor ?? colors.accent }]}><Ionicons name={icon as any} size={17} color={iconColor ? colors.onBubbleMine : colors.onAccent} /></View>
+          <View style={[styles.iconTile, { backgroundColor: iconColor ?? colors.accent }]}><Ionicons name={icon as any} size={17} color={iconColor ? colors.onSolid : colors.onAccent} /></View>
         </View>
       ) : null}
       <RowLabel label={label} subtitle={subtitle} tone={tone} subtitleTone={subtitleTone} testID={`${id}-label`} centered={centered} />
@@ -387,7 +387,7 @@ export function SettingsTextField({ label, testID, ...input }: TextInputProps & 
  * 设置首页顶部的身份卡(#4093「移动端设置首页丑」)
  * 子元素 testID 沿用积木的后缀约定(-label / -label-pill / -value / -accessory):drive 按「settings-row-* 去掉这些后缀」
  * 收集分类行,自造后缀(-subtitle / -pill)会被当成一个分类去点。:主色底 + 一枚装饰圆,头像 · 名字(+ 角色小标)· 一行地址,整卡一个按钮。
- * 底色用「我发出的气泡」那一档(bubbleMine,深浅两档都是实底蓝),字和图形用 onBubbleMine(两档都是白)——
+ * 底色用实底品牌色(solidBrand,深浅两档都是实底蓝),字和图形用 onSolid(两档都是白)——
  * 不用 accent:深色下 accent 是亮蓝、onAccent 是黑字,整张卡会发灰。
  */
 export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
@@ -437,11 +437,11 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
           onPress={(e: any) => { e?.stopPropagation?.(); onMore(moreRef.current); }}
           style={({ pressed, hovered }: any) => [styles.profileChevron, styles.profileMore, (pressed || hovered) && styles.profileMoreHover]}
         >
-          <Ionicons name="ellipsis-horizontal" size={18} color={colors.onBubbleMine} />
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.onSolid} />
         </Pressable>
       ) : onPress ? (
         <View style={styles.profileChevron} testID={`${id}-accessory`}>
-          <Ionicons name="chevron-forward" size={18} color={colors.onBubbleMine} />
+          <Ionicons name="chevron-forward" size={18} color={colors.onSolid} />
         </View>
       ) : null}
     </Pressable>
@@ -520,16 +520,16 @@ const makeStyles = () => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     marginHorizontal: SETTINGS_GUTTER, marginTop: spacing.md,
     paddingHorizontal: SETTINGS_ROW_PAD_X, paddingVertical: spacing.md,
-    borderRadius: radius.surface, backgroundColor: colors.bubbleMine, overflow: 'hidden',
+    borderRadius: radius.surface, backgroundColor: colors.solidBrand, overflow: 'hidden',
     ...elevated('raised'),
   },
   profileOrb: { position: 'absolute', right: -48, top: -64, width: 170, height: 170, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)' },
   profileOrbSmall: { position: 'absolute', right: 56, bottom: -54, width: 96, height: 96, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.08)' },
   profileAvatar: { padding: 3, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.35)', flexShrink: 0 },
-  profileName: { color: colors.onBubbleMine, fontSize: 19, fontWeight: '600', flexShrink: 1, minWidth: 0 },
-  profilePill: { color: colors.onBubbleMine, backgroundColor: 'rgba(255,255,255,0.22)' },
+  profileName: { color: colors.onSolid, fontSize: 19, fontWeight: '600', flexShrink: 1, minWidth: 0 },
+  profilePill: { color: colors.onSolid, backgroundColor: 'rgba(255,255,255,0.22)' },
   profileChevron: { width: ACCESSORY, height: ACCESSORY, marginLeft: 'auto', alignItems: 'center', justifyContent: 'center' },
-  profileSub: { color: colors.onBubbleMine, opacity: 0.88, fontSize: 13, lineHeight: 18 },
+  profileSub: { color: colors.onSolid, opacity: 0.88, fontSize: 13, lineHeight: 18 },
   profileWarning: { opacity: 1, fontWeight: '600' },
   profileMore: { borderRadius: radius.pill },
   profileMoreHover: { backgroundColor: 'rgba(255,255,255,0.18)' },

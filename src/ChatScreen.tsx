@@ -3642,7 +3642,7 @@ const makeStyles = (B = bubbleLayout()) =>
   bubble: { ...B.bubble, backgroundColor: colors.bubbleMine, borderRadius: radius.bubble },
   replyBubble: { ...B.replyBubble, backgroundColor: colors.card },
   // 本 agent 发给别的节点：发送侧、浅色强调底（气泡不描边，theme-minimal），正文用普通字色（不是「我」的实底蓝）。
-  agentSentBubble: { backgroundColor: colors.tonalBg },
+  agentSentBubble: { backgroundColor: colors.card },
   replyBubbleDesktop: B.replyBubbleDesktop,
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   // 微信式引用:气泡下方一条灰底小字「作者: 内容」(单行省略)

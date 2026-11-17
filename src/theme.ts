@@ -9,13 +9,18 @@
 //   bubbleMine       我发出的聊天气泡底(实底蓝,iMessage / Telegram 一类)
 //   onBubbleMine     我发出的气泡里的字(≥ 4.5)
 //   linkOnBubbleMine 我发出的气泡里的链接 / 行内强调(≥ 4.5)
+// 2026-11-17 admin「学学他们的美学吧」（magpie / t3code）：「我发出的」气泡从实底蓝改成安静的中性灰、正文深色，
+//   页面只剩一个强调色用在按钮 / 链接 / 选中态上，不再整屏蓝块。实底蓝留给 solidBrand（设置页头像卡等）。
 export type AccentTokens = {
   accent: string; onAccent: string; tonalBg: string; railActiveBg: string;
   bubbleMine: string; onBubbleMine: string; linkOnBubbleMine: string;
+  /** 实底品牌色块（设置页头像卡、分类图标色块的底）与其上的固定白字。原来借用 bubbleMine / onBubbleMine，
+   *  2026-11-17 气泡改成中性色后分开：色块仍是晴蓝实底，字仍是白。 */
+  solidBrand: string; onSolid: string;
 };
 export const ACCENT: { light: AccentTokens; dark: AccentTokens } = {
-  light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#1b65db', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
-  dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2563d9', onBubbleMine: '#ffffff', linkOnBubbleMine: '#ffffff' },
+  light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#e8e8ed', onBubbleMine: '#1d2026', linkOnBubbleMine: '#1857c2', solidBrand: '#1b65db', onSolid: '#ffffff' },
+  dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2a2a2f', onBubbleMine: '#ededef', linkOnBubbleMine: '#7fb0ff', solidBrand: '#2563d9', onSolid: '#ffffff' },
 };
 /** 永远画在深色底上的强调(语音浮层的电平条):不随浅 / 深主题变。 */
 export const ACCENT_ON_DARK = ACCENT.dark.accent;
@@ -61,8 +66,9 @@ const DARK = {
   // 手机「按住 说话」浮层(微信式布局):语音气泡 + 底部弧形面板。
   // #609(Vincent 2026-10-06「语音输入…改成那个蓝色主题,那个蓝色现在是那个微信的绿」):气泡不再是微信绿,
   // 与「我发出的气泡」同一色 —— 直接引用 ACCENT 的 bubbleMine / onBubbleMine,不另写色值(src/voice-accent-guard.test.ts 守)。
-  voiceBubble: ACCENT.dark.bubbleMine,
-  onVoiceBubble: ACCENT.dark.onBubbleMine,
+  // 2026-11-17：「我发出的」气泡改成中性灰后，语音浮层仍用实底品牌蓝 —— 它是「正在录音」的激活态，正是强调色该在的地方。
+  voiceBubble: ACCENT.dark.solidBrand,
+  onVoiceBubble: ACCENT.dark.onSolid,
   voiceArc: '#2c2c30',
   // 手指离开中间区(在 ✕ / 文 上)时面板暗一档 —— 实色,不能用透明度(会透出下面的大条)。
   voiceArcDim: '#1c1c1f',
@@ -101,8 +107,8 @@ const LIGHT: typeof DARK = {
   groupedBg: '#ededf0',
   groupedRow: '#ffffff',
   groupedRowPressed: '#e9eaee',
-  voiceBubble: ACCENT.light.bubbleMine,
-  onVoiceBubble: ACCENT.light.onBubbleMine,
+  voiceBubble: ACCENT.light.solidBrand,
+  onVoiceBubble: ACCENT.light.onSolid,
   voiceArc: '#f2f2f4',
   voiceArcDim: '#d4d4d8',
   voiceArcText: '#1d2026',

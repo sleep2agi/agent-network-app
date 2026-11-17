@@ -84,7 +84,7 @@ ck('reply author falls back when to_name equals alias', outgoingReplyAuthor({ fr
   ck('my message that is also outgoing stays mine', !agentSentRow(true, true));
   const screen2 = require('node:fs').readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8') as string;
   ck('ChatScreen branches on agentSentRow with a non-mine MarkdownMessage', /agentSentRow\(sender\.isCurrentUser, outgoing\)/.test(screen2) && /styles\.agentSentBubble/.test(screen2));
-  ck('tinted bubble uses theme tokens, no literal colours', /agentSentBubble: \{ backgroundColor: colors\.tonalBg \}/.test(screen2));
+  ck('tinted bubble uses theme tokens, no literal colours', /agentSentBubble: \{ backgroundColor: colors\.card \}/.test(screen2));
 }
 
 console.log(`chat-outgoing: ${pass}/${pass + fails.length}`);

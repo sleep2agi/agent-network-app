@@ -62,7 +62,8 @@ ck(`src/ 里没有微信绿(扫了 ${real.files.length} 个文件,允许:${[...A
 // ── 语音浮层的颜色从 ACCENT 取 ──
 for (const m of ['light', 'dark'] as const) {
   setThemeMode(m);
-  ck(`${m}:语音气泡 = bubbleMine(${ACCENT[m].bubbleMine})、字 = onBubbleMine`, colors.voiceBubble === ACCENT[m].bubbleMine && colors.onVoiceBubble === ACCENT[m].onBubbleMine, `${colors.voiceBubble}/${colors.onVoiceBubble}`);
+  // 2026-11-17：聊天里「我发出的」气泡改中性灰；语音浮层是录音激活态，仍是实底品牌蓝（solidBrand / onSolid）。
+  ck(`${m}:语音气泡 = solidBrand(${ACCENT[m].solidBrand})、字 = onSolid`, colors.voiceBubble === ACCENT[m].solidBrand && colors.onVoiceBubble === ACCENT[m].onSolid, `${colors.voiceBubble}/${colors.onVoiceBubble}`);
 }
 const ui = readFileSync(join(HERE, 'VoiceInputUI.tsx'), 'utf8');
 ck('VoiceInputUI:气泡 / 「文」圈用 voiceBubble,电平条用 ACCENT_ON_DARK,按下的大条用 accent', ui.includes('colors.voiceBubble') && ui.includes('holdCircleOn: { backgroundColor: colors.voiceBubble }') && ui.includes('backgroundColor: ACCENT_ON_DARK') && ui.includes('holdBarPressed: { backgroundColor: colors.accent'));
