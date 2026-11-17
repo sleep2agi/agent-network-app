@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.557:",
+  "- 头像状态动效：Agent 工作中时头像外圈有一段弧线慢慢转；阻塞或出错时外圈琥珀色 / 红色呼吸闪烁；空闲时不动。在 Agent 列表和聊天页顶部都有，系统开了「减少动态效果」时只显示静止的圈。",
+  "- 本机 daemon 升级到运行时 2.5.0-preview.210 + CLI 2.3.0-preview.242：创建或克隆节点时不再改写你自己的 .anet/config.json（用户目录下）；已经装过的，在「选服务器」的本机卡片里点一次「重新注册并启动本机 daemon」就会升级到新版本。",
+  "",
   "What's new in 0.2.556:",
   "- Windows 也能一键装本机 daemon 了：「选服务器」里的本机卡片会下载私有 Node、校验后安装配套的 CLI 2.3.0-preview.241 和运行时 2.5.0-preview.209，不改系统 PATH，不动你已有的 anet 配置。",
   "- Windows 上的本机 daemon 用私有的家目录运行，不会把本地 Hub 地址写进你自己的 .anet/config.json（用户目录下）。",
