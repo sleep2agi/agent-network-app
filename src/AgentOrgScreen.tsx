@@ -285,12 +285,14 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                   summary={t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}
                   onCreateRoot={canCreateRoot ? () => runMenu('createRoot', null) : undefined} />
                 <View testID="agent-org-info" style={styles.treeFooter}>
+                  {/* 右键能编辑这件事要一直看得见（不然管理员不知道能改）；只这一行小字，其余说明仍收在「关于这棵树」里。 */}
+                  {editHint ? <View style={styles.treeFooterHint}>{editHint}</View> : null}
                   <Pressable testID="agent-org-info-toggle" accessibilityRole="button" accessibilityState={{ expanded: infoOpen }} onPress={() => setInfoOpen(v => !v)} style={styles.treeFooterToggle}>
                     <Ionicons name="information-circle-outline" size={15} color={colors.textMuted} />
                     <Text style={[styles.note, { flex: 1 }]} numberOfLines={1}>{t('agentOrg.aboutTree')}</Text>
                     <Ionicons name={infoOpen ? 'chevron-down' : 'chevron-up'} size={14} color={colors.textMuted} />
                   </Pressable>
-                  {infoOpen ? <View style={{ gap: spacing.xs }}>{editHint}<Text style={styles.note}>{t('agentOrg.infoSummary')}</Text>{infoBody}</View> : null}
+                  {infoOpen ? <View style={{ gap: spacing.xs }}><Text style={styles.note}>{t('agentOrg.infoSummary')}</Text>{infoBody}</View> : null}
                 </View>
               </> : <>
                 {p.phone ? <PhoneChartCard data={data} placed={placed} onPress={() => setView('chart')} /> : null}
@@ -1137,6 +1139,7 @@ const makeStyles = () => StyleSheet.create({
   treeHeadTitle: { color: colors.text, fontSize: typeScale.body, fontWeight: '600' },
   treeHeadSub: { color: colors.textMuted, fontSize: typeScale.small - 1, marginTop: 1 },
   treeDivider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginVertical: spacing.xs, marginHorizontal: spacing.xs },
+  treeFooterHint: { paddingBottom: spacing.xs },
   treeFooter: { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, gap: spacing.xs },
   treeFooterToggle: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, minHeight: 32 },
   treeChevron: { width: 18, height: 22, alignItems: 'center', justifyContent: 'center' },

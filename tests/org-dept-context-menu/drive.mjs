@@ -165,7 +165,8 @@ try {
     calls = await page.evaluate(() => window.__deptCalls);
     assert.deepEqual(calls.at(-1), { method: 'DELETE', path: '/api/networks/net-org/departments/d_c', body: null });
     assert.equal(await page.locator('[data-testid="agent-org-dept-d_c"]').count(), 0, '删掉的部门不在树里');
-    assert.match(await page.locator('[data-testid="agent-org-department-result"]').innerText(), /已删除「运营」/);
+    // 2026-11-17：设置里改用紧凑布局后，结果是底部几秒就消失的提示条（agent-org-toast），不再是常驻一行。
+    assert.match(await page.locator('[data-testid="agent-org-department-result"], [data-testid="agent-org-toast"]').first().innerText(), /已删除「运营」/);
 
     // ④c 树上 0 个、Hub 里还有 2 个久未上线的 Agent:说清楚是谁,并能一键移到未归属再删
     assert.equal(await page.locator('[data-testid="agent-org-dept-d_d-value"]').innerText(), '2', '久未上线的也算进树上的数字（admin 2026-11-16）');
