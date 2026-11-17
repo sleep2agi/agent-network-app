@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.560:",
+  "- 手机「组织」页：顶部可以搜索 Agent、部门或负责人；首屏只列一级部门，点进去再看子部门和成员；有 Agent 阻塞或出错时，顶部出现「需要关注」，点开就能直接处理。",
+  "",
   "What's new in 0.2.559:",
   "- 手机上的「架构图」不再是缩小的桌面海报：顶部一行四个数（Agent / 部门 / 运行中 / 负责人），每个部门一张整宽卡片，子部门收在卡片里，点卡片往下钻。",
   "",
