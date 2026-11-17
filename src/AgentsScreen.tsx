@@ -101,6 +101,7 @@ import { applyAgentFilter, filterLabel, isFilterActive, STATUS_FILTER_LABEL, typ
 import { pointerUi } from './pointer-ui';
 import { conversationDraftKey, draftPreview, draftTextFor, useDraftsVersion, type DraftConversation } from './composer-drafts';
 import { rememberAgentNetworks } from './agent-network';
+import AvatarStatusRing from './AvatarStatusRing';
 
 // 受限成员的空态文案比「还没有 agent」长,窄屏会折行:居中并留出与列表同宽的边距。
 const restrictedEmptyCopy = () => ({ textAlign: 'center' as const, paddingHorizontal: spacing.xl });
@@ -757,7 +758,9 @@ export default function AgentsScreen({
       delayLongPress={400}
     >
       <View style={styles.avatarWrap}>
-        <AliasAvatar alias={item.alias} size={34} />
+        <AvatarStatusRing status={item.status} size={ds(34)} testID={`agent-ring-${item.alias}`}>
+          <AliasAvatar alias={item.alias} size={34} />
+        </AvatarStatusRing>
         {/* 更像微信·round-5: 头像右下在线态圆点(带描边环·offline 灰暗) */}
         <View
           testID={`agent-dot-${item.alias}`}
@@ -963,7 +966,9 @@ export default function AgentsScreen({
       >
         <View style={rowStyles.avatar}>
           <View style={!model.status.online ? rowStyles.avatarOffline : null}>
-            <AliasAvatar alias={item.alias} size={rowGeom().avatar} fixedSize />
+            <AvatarStatusRing status={item.status} size={rowGeom().avatar} testID={`agent-ring-${item.alias}`}>
+              <AliasAvatar alias={item.alias} size={rowGeom().avatar} fixedSize />
+            </AvatarStatusRing>
           </View>
           <View
             testID={`agent-dot-${item.alias}`}
