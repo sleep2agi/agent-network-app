@@ -9,8 +9,10 @@
 //! 凭据隔离:`anet daemon init` 从 `$HOME/.anet/config.json` 读 hub/token/network_id 并往
 //! `$cwd/.anet/nodes/<name>/config.json` 写 daemon 配置。用户自己的 `~/.anet/config.json`
 //! 可能指向别的 Hub,所以 init 这一步用一个私有 HOME(`~/.anet/app/local-daemon/home`),
-//! 写好的 daemon 配置里已经带了 hub/token/network_id;`daemon start` 用用户真实 HOME 跑,
-//! 它派生出来的节点才看得到用户的 claude/codex 等工具。
+//! 写好的 daemon 配置里已经带了 hub/token/network_id;Windows `daemon start` 也必须用私有 HOME,
+//! 因为配对 runtime 的 create-node 会向 HOME/.anet/config.json 写 hub。Unix 暂保留真实 HOME
+//! 以复用 claude/codex 登录;该平台的全局配置写入风险需在 runtime 层单独修复。
+//! Unix 的真实 HOME 让它派生的节点继续看到用户的 claude/codex 登录。
 use std::{
     fs,
     io::Read,
@@ -929,7 +931,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
         }
     };
 
-    // 2. 私有 HOME 里写 anet 全局配置(只给 daemon init 用)
+    // 2. 私有 HOME 里写 anet 全局配置(init + Windows daemon start)
     let home = isolated_home()?;
     let anet_dir = home.join(".anet");
     ensure_private_dir(&home)?;
@@ -944,9 +946,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
 
     // 3. anet daemon init(HOME=私有)
     // Windows 上 Node 的 os.homedir() 读的是 USERPROFILE,不是 HOME —— 两个都设,私有 HOME 才真隔离。
-    let home_s = home.display().to_string();
-    let (home_drive, home_path) = split_home_drive(&home_s);
-    let init_env = [("HOME", home_s.clone()), ("USERPROFILE", home_s.clone()), ("HOMEDRIVE", home_drive), ("HOMEPATH", home_path)];
+    let init_env = private_home_env(&home);
     let init = run_anet(&anet.path, &["daemon", "init", LOCAL_DAEMON_NAME, "--force"], Some(&daemon_dir), &init_env, &path_prefix, Duration::from_secs(90))?;
     let init_ok = init.code == Some(0);
     steps.push(StepReport { name: format!("anet daemon init {LOCAL_DAEMON_NAME}"), ok: init_ok, output: tail(&init.output, 1500) });
@@ -977,7 +977,7 @@ pub(crate) fn install_with_cli_download(session: &LocalHubSession, download_cli:
     let start_log = daemon_dir.join("start.log");
     let agent_node_bin = Path::new(&agent_node.path).join("dist").join("cli.js").display().to_string();
     #[cfg(windows)]
-    let start = start_detached_windows(&node_exe_in(&node_bin_dir), &anet.path, LOCAL_DAEMON_NAME, &start_log, &daemon_dir, &path_prefix, &agent_node_bin)?;
+    let start = start_detached_windows(&node_exe_in(&node_bin_dir), &anet.path, LOCAL_DAEMON_NAME, &start_log, &daemon_dir, &path_prefix, &agent_node_bin, &home)?;
     #[cfg(not(windows))]
     let start = run_shell(
         &with_path(&detached_start_command(&anet.path, LOCAL_DAEMON_NAME, &start_log)),
@@ -1113,20 +1113,32 @@ pub fn split_home_drive(home: &str) -> (String, String) {
     if b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':' { (home[..2].to_string(), home[2..].to_string()) } else { (String::new(), home.to_string()) }
 }
 
-/// Windows:没有 setsid/nohup。直接起一个脱离控制台的 `cmd /c "<anet> daemon start <name> > log 2>&1"`,
+fn private_home_env(home: &Path) -> [(&'static str, String); 4] {
+    let home = home.display().to_string();
+    let (drive, path) = split_home_drive(&home);
+    [("HOME", home.clone()), ("USERPROFILE", home), ("HOMEDRIVE", drive), ("HOMEPATH", path)]
+}
+
+// Shared with the regression test so it examines the actual launch command,
+// not a second implementation of the environment contract. Does not spawn.
+#[cfg(any(windows, test))]
+fn windows_daemon_command(node_exe: &Path, anet_path: &str, name: &str, cwd: &Path, path_prefix: &str, agent_node_bin: &str, home: &Path) -> Command {
+    let path = format!("{path_prefix};{}", std::env::var("PATH").unwrap_or_default());
+    let mut command = Command::new(node_exe);
+    command.arg(anet_path).args(["daemon", "start", name]).current_dir(cwd)
+        .env("PATH", path).env("ANET_AGENT_NODE_BIN", agent_node_bin)
+        .envs(private_home_env(home));
+    command
+}
+
+/// Windows:没有 setsid/nohup。直接以 node.exe + argv 起脱离控制台的 CLI,不经过 cmd /c。
 /// DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP:App 退出、关窗都不会带走它;立刻返回。
 #[cfg(windows)]
-fn start_detached_windows(node_exe: &Path, anet_path: &str, name: &str, log: &Path, cwd: &Path, path_prefix: &str, agent_node_bin: &str) -> Result<CommandOutcome, String> {
+fn start_detached_windows(node_exe: &Path, anet_path: &str, name: &str, log: &Path, cwd: &Path, path_prefix: &str, agent_node_bin: &str, home: &Path) -> Result<CommandOutcome, String> {
     use std::os::windows::process::CommandExt;
-    let path = format!("{path_prefix};{}", std::env::var("PATH").unwrap_or_default());
     let out = fs::File::create(log).map_err(|error| format!("cannot open {}: {error}", log.display()))?;
     let err = out.try_clone().map_err(|error| error.to_string())?;
-    Command::new(node_exe)
-        .arg(anet_path)
-        .args(["daemon", "start", name])
-        .current_dir(cwd)
-        .env("PATH", path)
-        .env("ANET_AGENT_NODE_BIN", agent_node_bin)
+    windows_daemon_command(node_exe, anet_path, name, cwd, path_prefix, agent_node_bin, home)
         .stdin(Stdio::null())
         .stdout(Stdio::from(out))
         .stderr(Stdio::from(err))
@@ -1140,6 +1152,19 @@ fn start_detached_windows(node_exe: &Path, anet_path: &str, name: &str, log: &Pa
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn windows_daemon_start_uses_the_same_private_home_as_init() {
+        let home = Path::new(r"C:\Users\local & private\home");
+        let command = windows_daemon_command(Path::new("node.exe"), "private & cli.cjs", "local-daemon", Path::new("private cwd"), "private node", "private runtime", home);
+        let env: std::collections::BTreeMap<_, _> = command.get_envs().map(|(k,v)| (k.to_str().unwrap(), v.unwrap().to_str().unwrap())).collect();
+        for (key, value) in private_home_env(home) { assert_eq!(env.get(key).copied(), Some(value.as_str()), "{key} must not inherit cloud HOME"); }
+        assert_eq!(env["HOMEDRIVE"], "C:");
+        assert_eq!(env["HOMEPATH"], r"\Users\local & private\home");
+        assert_eq!(command.get_program(), "node.exe");
+        assert_eq!(command.get_args().collect::<Vec<_>>(), ["private & cli.cjs", "daemon", "start", "local-daemon"]);
+        assert_eq!(env["ANET_AGENT_NODE_BIN"], "private runtime");
+    }
 
     #[test]
     fn registration_requires_the_exact_online_create_capable_daemon() {

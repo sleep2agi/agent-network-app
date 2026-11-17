@@ -78,6 +78,34 @@ receive model traffic and supply a unique first reply. Required bounds:
   `exit_signal=taskkill`. `stop_failed`, unknown or mere offline are not success.
 
 No threshold increases, timeout swallowing or fallback to a fake reply.
+Windows detached daemon startup now uses the same private `HOME`, `USERPROFILE`,
+`HOMEDRIVE` and `HOMEPATH` as `daemon init`. This is required because the pinned
+runtime's `handleCreateNodeDoorbell` calls `ensureGlobalAnetConfig`, which writes
+the local Hub into HOME's `.anet/config.json`. Isolating only init is insufficient.
+The native cloud sentinel assertion is unchanged, as are the 180s/15s bounds.
+
+`pinned-global-config-probe.ts` is a separate **surgical writer diagnostic**:
+it downloads the real runtime .209 archive, verifies its SHA256, extracts the
+published writer/home resolver/private-write helpers without executing the CLI,
+and uses real filesystem calls in temporary directories. It demonstrates both
+invalid-sentinel replacement and valid-cloud-JSON Hub replacement with simulated
+Windows/macOS/Linux home resolution, then private-home redirection. It also
+inspects the exact .138 package pinned by App main for the same writer/call site.
+This is not a native daemon/installer acceptance test. Reproduce in a disposable
+Bun 1.3.14 container with `tar`, mounting this directory read-only, then run
+`bun /fixture/pinned-global-config-probe.ts`; it needs public npm network access
+but no authentication/model keys. The Rust suite tests the actual Windows
+Command builder, including all four home variables and literal ` & ` argv.
+
+**Unresolved Unix risk:** the Unix detached startup still inherits real HOME to
+preserve Claude/Codex account login. Its runtime's global writer can also replace
+the user's cloud Hub on child creation. This Windows patch deliberately does not
+change Unix HOME or fix that runtime writer. Do not interpret Linux/macOS fixture
+green as proof of local/cloud isolation; the existing Unix fixture is not a real
+published-runtime child-create flow. A separate runtime fix and native acceptance
+are needed. No automatic restoration of already overwritten cloud configs is
+attempted, because their previous contents are unknown.
+
 `native-gate.ts` enforces an active absolute deadline, not merely an assertion
 after a reply eventually arrives. Every phase writes `RUNNING` (with deadline)
 before entering, then `PASS` or `FAIL` immediately. Installer, probes, child

@@ -136,3 +136,82 @@ Follow-up Docker verification (fresh current-source checks):
 - Product src-tauri/src/local_daemon.rs and version pins unchanged. No path stripping
   or threshold relaxation. Await Windows stage evidence to locate product vs
   harness stall before proposing a product correction.
+
+Second native CI run 44041323108 / Windows HOME correction
+--------------------------------------------------------
+Prior-run identities (not post-fix acceptance): PR f133f12c5c9f1d8ec0051a330265d753225a9e43,
+tested App 6e98073fd0e762b7e9fa95ffe531a16440e37c5e,
+Hub f8332b965cf428cf843daa6888c3e1f433f60b61, CLI .241 / runtime .209.
+Installer137156ms, create_node/sdk_online/send_task/sdk_reply PASS,
+install_to_reply148378ms <=180000ms. isolation FAIL: real App HOME's cloud config
+was replaced by local-hub-only JSON. stop_ack NOT_RUN because isolation failed;
+cleanup PASS8958ms is not strict-stop-ACK acceptance.
+Inputs: /tmp/opencode/1497-win-run44041323108.log,
+ /tmp/opencode/1497-win2-windows-native.json,
+ /tmp/opencode/1497-win2-native-driver.json.
+
+Confirmed writer and trigger:
+- agent-node/src/runtime/create-node-daemon.ts ensureGlobalAnetConfig reads
+  HOME/.anet/config.json; parse error => {}; if hub differs, sets hub and calls
+  atomicWriteJson. handleCreateNodeDoorbell calls it using resolveChildHome(env)
+  and deps.hubUrl, before child config/start. It is not cli.ts global config read
+  nor anet CLI saveGlobal. Valid cloud JSON retains other fields but hub changes.
+- Published .209 package independently inspected and surgical helper execution
+  reproduces hub-only replacement, valid JSON hub replacement, and successful
+  private-HOME redirection. Real fs/crypto/private-write helpers, no model calls;
+  extraction avoids evaluating CLI entrypoint. Simulated platform resolver inputs
+  on Linux are NOT native Windows/macOS acceptance.
+  Runtime tgz SHA256 cc32d818e9f780a60a1d6c976d5a9ea2174b0a9cf4e5700f626f9a377ad489b1
+  Bundle SHA256 1eb55fe79e85de50ddb30de03c8d6359ce8a0b4aa6d28e0e139cb16dec25b568
+  6 overwrite cases (invalid+valid JSON x win32/darwin/linux) reproduced; isolated
+  HOME writer preserved cloud sentinel. Script pinned-global-config-probe.ts;
+  log /tmp/opencode/1497-pinned-writer-probe.log.
+- Windows installer previously isolated init but detached start inherited App
+  HOME/USERPROFILE. Its daemon therefore targeted the user's cloud config.
+
+Narrow fix: share private_home_env between init and Windows detached Command;
+pass the install's existing private home to Windows start. Direct node.exe argv,
+private PATH/runtime pin, DETACHED_PROCESS/CREATE_NEW_PROCESS_GROUP and product
+ownership-checked cleanup remain unchanged. No runtime patch or publication,
+no package bump, no cloud-config restoration, no assertion/timing relaxation.
+Rust regression inspects the actual Command used by Windows start, requiring all
+four home variables to equal init's and checking ampersand-bearing argv literally.
+
+Separate unresolved macOS/Linux product risk (reported to owner):
+- Fetched App main c1fae27504c931514bd2c0d357d91da06717c7e0 still pins CLI .172 /
+  runtime .138; Unix detached startup inherits real HOME. Exact published .138
+  bundle has same ensureGlobalAnetConfig writer and unconditional create call.
+  .138 tgz SHA256 101c9a85622db3c6934e48ec5239d105e1b315cc0f7d53a183056b6514ccfd7f.
+- Therefore the overwrite path also exists in the Unix main/pin combination,
+  not just Windows .209. This is source+published-package evidence, NOT a claim
+  to have executed a signed shipped macOS binary or audited users' actual files.
+- Unix HOME deliberately unchanged in this patch: account logins need real HOME.
+  Follow-up should eliminate runtime global mutation using explicit child profile/
+  launch hub, with login compatibility tests and its own delivery authorization.
+  Existing Unix adapters did not exercise actual runtime child creation and thus
+  do not establish this isolation property. No production/user files touched.
+
+Post-fix native Windows isolation + <=15000ms strict stop ACK: NOT_RUN on Linux;
+owner must rerun Windows CI before promoting this change to native acceptance.
+
+Windows HOME correction verification (Docker only):
+- Rust suite26 passed/0 failed, including actual Windows Command builder's
+  init/start environment-equivalence regression. Windows-target all-targets
+  cargo check exits0 (compilation, not native execution).
+  Initial log /tmp/opencode/1497-home-rust.log.
+- Negative mutation in disposable container: remove ONLY
+  .envs(private_home_env(home)) from windows_daemon_command, then cargo test
+  --locked --manifest-path tests/local-daemon-init/Cargo.toml
+  windows_daemon_start_uses_the_same_private_home_as_init -- --nocapture.
+  Named regression fails "HOME must not inherit cloud HOME";0 pass/1 fail;
+  wrapper confirms expected failure. No checkout/global files mutated.
+  Log /tmp/opencode/1497-home-mutation.log.
+- Final strict TS noEmit covering gate/tests/published-writer diagnostic PASS;
+  existing deadline7 tests/19 assertions PASS; both real runtime package probes
+  PASS, including digest checks before archive extraction.
+  Log /tmp/opencode/1497-home-ts-probe-final.log.
+- Existing native smoke, sentinel assertion,180000ms first-reply bound and15000ms
+  stop+accepted-ACK bound are byte-for-byte unchanged by this correction.
+- No release/global package/production changes. Windows runtime sees private HOME;
+  this patch does not migrate account login state or prove other runtime logins.
+  Unix follow-up and native post-fix acceptance remain explicitly outstanding.
