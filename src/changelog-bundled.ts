@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.562:",
+  "- 点了附件下载再切到别的会话，下载会在后台继续；回来能看到进度，或者「已保存到…」。下载中再点一次不会重复下载。",
+  "",
   "What's new in 0.2.561:",
   "- 聊天更安静：你发出的消息改成中性灰气泡、正常字色，蓝色只留给按钮、链接和选中态；Agent 发给别的节点的消息也用同样的卡片。",
   "- 点「创建本地工作区」会接着自动装好并启动本机 daemon（显示进度，第一次约 1–3 分钟）；已经装好的直接跳过，失败也能进 App 并看到原因和重试。",
