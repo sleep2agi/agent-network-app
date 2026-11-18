@@ -28,6 +28,21 @@ jobs:
   android-apk:
     runs-on: ubuntu-latest
     steps:
+      # 2026-11-19：手动 dispatch 传短 SHA 时，坏输入原本在 checkout 就报「找不到分支」，
+      # 真正的格式校验（下面「Require exact merged commit」）反而走不到。
+      # 这里在 checkout 之前先把格式挡住，失败信息才指向真正的原因。
+      - name: Validate dispatch commit input
+        if: ${{ inputs.commit != '' }}
+        shell: bash
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          if ! [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::inputs.commit 必须是 40 位小写十六进制（收到 '$REQUESTED_COMMIT'）"
+            exit 1
+          fi
+
       - uses: actions/checkout@v4
         with:
           ref: ${{ inputs.commit || github.sha }}
