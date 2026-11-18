@@ -61,6 +61,10 @@ const CATALOG_MAX_POLLS = 15;
 /** 写后读回：心跳间隔内等 model_effective（约 6s）。 */
 const READBACK_POLLS = 4;
 const READBACK_POLL_MS = 1500;
+// #4823 review（负责人）：ACK applied 但 variant 未回填时，UI 不能停在「等待」不管。
+// 每 30 秒重读一次，最多 60 分钟；读到目标值→已确认，读到别的值→不一致，超时→提示可刷新。
+const VARIANT_CONFIRM_POLL_MS = 30_000;
+const VARIANT_CONFIRM_MAX_MS = 60 * 60 * 1000;
 
 const INTERNAL_AGENTS = new Set(['compaction', 'title', 'summary']);
 
@@ -81,6 +85,10 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const [errorText, setErrorText] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
+  // 正在等节点回填档位的那次切换（panel 关闭/切节点时随之丢弃，不跨面板残留）。
+  const [pendingVariant, setPendingVariant] = useState<{ nodeId: string; updateId?: string; model: string; variant: string; startedAt: number } | null>(null);
+  // 超时后进入「无法确认」：给一个显式的「重新读取」入口，不写成失败。
+  const [variantUnconfirmed, setVariantUnconfirmed] = useState(false);
   const lock = useRef(false);
   const scope = useMemo(() => ({}), [node?.node_id, cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
   const scopeRef = useRef<object | null>(scope);
@@ -402,6 +410,19 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         requestedVariant: next,
       });
       if (!verdict.confirmed) {
+        // #4823（负责人 2026-11-19）：ACK 已 applied 但节点还没回填 variant ⇒ 显示「已下发，等待节点确认」，
+        // 不当失败。生产实测回填可能延迟到几十分钟（模型字段是即时的）。
+        if (verdict.pending) {
+          setErrorText(null);
+          setErrorDetail(null);
+          setNotice(t('chat.modelPicker.variantPending', { value: next ?? t('chat.variantDefaultShort') }));
+          // 进入「等节点确认」：由下面的 effect 持续轮询，直到确认 / 不一致 / 超时。
+          if (next) {
+            setVariantUnconfirmed(false);
+          setPendingVariant({ nodeId: node.node_id, updateId: res.update_id, model: effectiveModel, variant: next, startedAt: Date.now() });
+          }
+          return;
+        }
         setErrorText(t('chat.modelPicker.failed', { message: t('chat.modelPicker.variantAcceptedUnconfirmed') }));
         setErrorDetail(t('chat.modelPicker.variantUnknownDetail', { reason: verdict.reason }));
         return;
@@ -416,6 +437,55 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       setBusy(false);
     }
   };
+
+  // #4823 review（负责人）：pending 不能永远挂着。每 30s 重读一次，最多 60 分钟；
+  // 面板关闭（组件卸载）或切节点时停掉，绝不跨会话继续轮询。
+  useEffect(() => {
+    if (!pendingVariant) return;
+    if (!node || node.node_id !== pendingVariant.nodeId) { setPendingVariant(null); return; }
+    let alive = true;
+    const tick = async () => {
+      if (!alive) return;
+      if (Date.now() - pendingVariant.startedAt > VARIANT_CONFIRM_MAX_MS) {
+        setPendingVariant(null);
+        setErrorText(null);
+        setErrorDetail(null);
+        // review（负责人）：超时不是失败 —— 显示「无法确认（节点未回读）」，面板里仍有重新读取入口。
+        setNotice(t('chat.modelPicker.variantPendingTimeout'));
+        setVariantUnconfirmed(true);
+        return;
+      }
+      try {
+        const after = await fetchNodeConfig(cfgRef.current, pendingVariant.nodeId);
+        if (!alive || !after) return;
+        setConfig(after);
+        const verdict = confirmComposerVariantSwitch({
+          after,
+          updateId: pendingVariant.updateId,
+          requestedModel: pendingVariant.model,
+          requestedVariant: pendingVariant.variant,
+        });
+        if (verdict.confirmed) {
+          setPendingVariant(null);
+          setVariantUnconfirmed(false);
+          setErrorText(null);
+          setErrorDetail(null);
+          readbackRef.current(after);
+          setNotice(t('chat.modelPicker.variantApplied', { value: pendingVariant.variant }));
+          return;
+        }
+        if (!verdict.pending) {
+          // 回填了但值不对 —— 这是真失败，不再继续等。
+          setPendingVariant(null);
+          setNotice(null);
+          setErrorText(t('chat.modelPicker.failed', { message: t('chat.modelPicker.variantAcceptedUnconfirmed') }));
+          setErrorDetail(t('chat.modelPicker.variantUnknownDetail', { reason: verdict.reason }));
+        }
+      } catch { /* 网络抖动不算失败：等下一次 tick */ }
+    };
+    const timer = setInterval(() => { void tick(); }, VARIANT_CONFIRM_POLL_MS);
+    return () => { alive = false; clearInterval(timer); };
+  }, [pendingVariant, node?.node_id]);
 
   // admin 2026-11-13（营销神明等 claude-code 节点截图）：不是 OpenCode V2 的节点在聊天里切不了模型，
   // 以前照样弹出整个搜索面板，再给一段红字「不是 OpenCode V2」。现在只给一张说明卡：当前模型 + 原因，
@@ -585,6 +655,18 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
               ) : null}
             </>
           )}
+          {/* #4823（通信欧 2026-11-19）：档位是 live-session-only，不能让人以为已持久化。 */}
+          <Text style={styles.variantNote} testID="node-variant-live-only">{t('chat.modelPicker.variantLiveOnly')}</Text>
+          {variantUnconfirmed ? (
+            <Pressable
+              testID="composer-variant-recheck"
+              accessibilityRole="button"
+              onPress={() => { setVariantUnconfirmed(false); void reloadConfig().then(() => setNotice(null)); }}
+              style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.variantClear}>{t('chat.modelPicker.variantRecheck')}</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
