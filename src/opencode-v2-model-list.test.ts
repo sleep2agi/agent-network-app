@@ -1,4 +1,4 @@
-import { catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, peerCatalogSources, reportedCatalogModels, catalogStatusLine, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogErrorText, catalogStateOf, catalogStateNotice, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, peerCatalogSources, reportedCatalogModels, catalogStatusLine, reportsCatalogSince } from './opencode-v2-model-list';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else { console.error('❌', n); } };
@@ -71,6 +71,20 @@ ck('reported catalog: 缺字段/旧 Hub → 空数组（不是内置表）', rep
 ck('reportsCatalogSince: .160 起为真', reportsCatalogSince('2.5.0-preview.160') === true && reportsCatalogSince('2.5.0-preview.161') === true);
 ck('reportsCatalogSince: .146 / .159 为假（正是 TMAI欧 / 空转版）', reportsCatalogSince('2.5.0-preview.146') === false && reportsCatalogSince('2.5.0-preview.159') === false);
 ck('reportsCatalogSince: 看不懂的版本不判断（null）', reportsCatalogSince('dev') === null && reportsCatalogSince('') === null && reportsCatalogSince(null) === null && reportsCatalogSince('2.6.0-preview.200') === null);
+
+// #4976 —— 服务端四态（Hub 0.9.0-preview.287 / #3641）
+ck('四态:reported 直传', catalogStateOf({ opencode_catalog_state: 'reported', runtime: 'opencode-cli' }) === 'reported');
+ck('四态:reported_empty 不当成错误', catalogStateOf({ opencode_catalog_state: 'reported_empty' }) === 'reported_empty');
+ck('四态:not_reported 可重试', catalogStateOf({ opencode_catalog_state: 'not_reported' }) === 'not_reported');
+ck('四态:unsupported_runtime 不可能重试', catalogStateOf({ opencode_catalog_state: 'unsupported_runtime' }) === 'unsupported_runtime');
+ck('服务端字段优先于客户端推断', catalogStateOf({ opencode_catalog_state: 'unsupported_runtime', opencode_catalog: ['a/b'] }) === 'unsupported_runtime');
+ck('旧 Hub 无字段:有清单⇒reported', catalogStateOf({ opencode_catalog: ['a/b'] }) === 'reported');
+ck('旧 Hub 无字段:空数组⇒reported_empty', catalogStateOf({ opencode_catalog: [] }) === 'reported_empty');
+ck('旧 Hub 无字段:null⇒null(不猜 unsupported)', catalogStateOf({ opencode_catalog: null, runtime: 'codex-cli' }) === null);
+ck('unsupported_runtime 文案明确「重试也不会有」且不给重试', catalogStateNotice('unsupported_runtime').retry === false && catalogStateNotice('unsupported_runtime').text.includes('不是 OpenCode V2'));
+ck('not_reported 文案带重试', catalogStateNotice('not_reported').retry === true);
+ck('reported_empty 文案说「不是错误」且无重试', catalogStateNotice('reported_empty').retry === false && catalogStateNotice('reported_empty').text.includes('不是错误'));
+ck('reported 不额外渲染', catalogStateNotice('reported').text === '');
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);

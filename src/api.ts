@@ -346,6 +346,16 @@ export interface HubNode {
   /** admin 2026-11-11 —— 每个模型的思考档位：`provider/model=none,low,high,max`（agent-node ≥ 2.5.0-preview.202 上报）。 */
   opencode_catalog_variants?: string[] | null;
   /**
+   * #4976（Hub ≥ 0.9.0-preview.287 / #3641）—— 服务端把「目录会不会有」这件事显式投影出来，
+   * 客户端不用再靠 runtime + catalog 猜：
+   *   reported            有目录
+   *   reported_empty      报了但是空数组（无可用模型，不是错误）
+   *   not_reported        OpenCode 运行时但没上报 ⇒ 可重试
+   *   unsupported_runtime 不是 OpenCode 运行时 ⇒ 永远不会有，不要显示重试
+   * 旧 Hub 没有这一格 ⇒ undefined（按老逻辑推断，不显示重试误导）。
+   */
+  opencode_catalog_state?: 'reported' | 'reported_empty' | 'not_reported' | 'unsupported_runtime' | null;
+  /**
    * #2293 —— `/api/nodes` 从快照里放出来的三个标量（**不是**整个快照）：
    * 代际（v1/v2）、模式（copresence/…）、OpenCode serve 的 loopback 端点。
    * 为什么需要：`/api/nodes` 刻意不带 `config_snapshot`（见终端 #312 约定），

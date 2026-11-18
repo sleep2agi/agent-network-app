@@ -373,3 +373,38 @@ export function peerCatalogWithVariants(
   }
   return { models: [...byKey.values()], nodes: contributing };
 }
+
+/** #4976 —— 服务端（Hub ≥ 0.9.0-preview.287）显式给出的四态；旧 Hub 没有这一格。 */
+export type OpenCodeCatalogState = 'reported' | 'reported_empty' | 'not_reported' | 'unsupported_runtime';
+
+/**
+ * #4976 —— 四态回落：**服务端说了算，客户端只在旧 Hub 上按老信息推断**。
+ * 推断时绝不产出 `unsupported_runtime`（无法区分「非 OpenCode」与「OpenCode 但没报」），
+ * 以免把「等待上报」误渲染成「永远不会有」。
+ */
+export function catalogStateOf(
+  node: { opencode_catalog_state?: OpenCodeCatalogState | null; runtime?: string | null; opencode_catalog?: string[] | null } | null | undefined,
+): OpenCodeCatalogState | null {
+  const explicit = node?.opencode_catalog_state;
+  if (explicit) return explicit;
+  if (!node) return null;
+  const reported = Array.isArray(node.opencode_catalog) ? node.opencode_catalog.length : 0;
+  if (reported > 0) return 'reported';
+  if (Array.isArray(node.opencode_catalog)) return 'reported_empty';
+  return null;
+}
+
+/**
+ * #4976 —— 每种终态给一句能读的话 + 能不能重试。
+ * 关键：`unsupported_runtime` **不给重试**（重试一百次也不会出现目录），
+ * `not_reported` 给重试（节点侧上报后就会好）。
+ */
+export function catalogStateNotice(state: OpenCodeCatalogState | null): { text: string; retry: boolean } {
+  switch (state) {
+    case 'reported': return { text: '', retry: false };
+    case 'reported_empty': return { text: '这台节点上报了模型目录，但里面没有可用模型（不是错误）。仍可手输 provider/model。', retry: false };
+    case 'not_reported': return { text: '这台是 OpenCode 运行时，但还没上报模型目录——可以点「重新读取」；多次仍为空时把节点详情里的诊断行发给该节点运维。', retry: true };
+    case 'unsupported_runtime': return { text: '该节点不是 OpenCode V2，没有模型目录可读（重试也不会有）。', retry: false };
+    default: return { text: '', retry: false };
+  }
+}
