@@ -77,7 +77,7 @@ import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
 import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail, { useChatToolRail } from './ChatToolRail';
-import { chatToolRailReserve } from './chat-tool-rail-layout';
+import { chatToolRailReserve, composerShowsShortcutHint } from './chat-tool-rail-layout';
 import ChatInfoPanel from './ChatInfoPanel';
 import NodeDepartmentPicker from './NodeDepartmentPicker';
 import { canEditDepartments, departmentDisplayLabel, type OrgLike } from './node-department-edit';
@@ -3266,7 +3266,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   onPress={() => void submit({ inject: true })}
                 />
               ) : null}
-              <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
+              {/* 聊天区窄(右侧边栏展开 / 小窗口)时先省掉快捷键提示,保证 🎤 和发送在。 */}
+              {composerShowsShortcutHint(paneWidth) ? <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text> : null}
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
@@ -3843,7 +3844,7 @@ const makeStyles = (B = bubbleLayout()) =>
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
   // 桌面:模型 + 档位两个下拉控件挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
-  desktopModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200, height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
+  desktopModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200, flexShrink: 1, minWidth: 0, height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
   desktopModelPillText: { fontSize: ds(11), color: colors.text, flexShrink: 1 },
   desktopVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 8, borderRadius: radius.pill },
   desktopVariantPillText: { fontSize: ds(11), color: colors.textMuted },
@@ -3876,7 +3877,8 @@ const makeStyles = (B = bubbleLayout()) =>
   } as any,
   desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, height: 38 },
   desktopToolButton: { width: 34, height: 34, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
-  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // flexShrink + minWidth 0:右侧边栏展开后聊天区可能只有 ~430,这一行要能收窄(模型名截断),不能把 🎤 / 发送挤出去。
+  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 1, minWidth: 0 },
   priorityButton: { height: 28, borderRadius: radius.item, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },

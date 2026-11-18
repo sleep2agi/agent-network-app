@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CHAT_MIN_WIDTH_WITH_PANEL, CHAT_TOOL_RAIL_WIDTH, chatToolRailReserve } from './chat-tool-rail-layout';
+import { CHAT_MIN_WIDTH_WITH_PANEL, CHAT_TOOL_RAIL_WIDTH, COMPOSER_HINT_MIN_WIDTH, chatToolRailReserve, composerShowsShortcutHint } from './chat-tool-rail-layout';
+const chatSrc = () => readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 import { SHOW_CHAT_TOOL_RAIL } from './chat-entry-flags';
 
 // 收起:只留图标条
@@ -12,6 +13,12 @@ assert.equal(chatToolRailReserve(true, 340, 0), CHAT_TOOL_RAIL_WIDTH + 340);
 // 窗口太窄:不让面板把聊天挤到最小宽度以下
 assert.equal(chatToolRailReserve(true, 340, CHAT_TOOL_RAIL_WIDTH + 340 + CHAT_MIN_WIDTH_WITH_PANEL - 1), CHAT_TOOL_RAIL_WIDTH);
 assert.equal(chatToolRailReserve(true, 340, CHAT_TOOL_RAIL_WIDTH + 340 + CHAT_MIN_WIDTH_WITH_PANEL), CHAT_TOOL_RAIL_WIDTH + 340);
+
+// 窄聊天区省掉快捷键提示(🎤 / 发送不能被挤出去,CI voice-hold-overlay 1200x850 抓到过)
+assert.equal(composerShowsShortcutHint(0), true);
+assert.equal(composerShowsShortcutHint(432), false);
+assert.equal(composerShowsShortcutHint(COMPOSER_HINT_MIN_WIDTH), true);
+assert.match(chatSrc(), /composerShowsShortcutHint\(paneWidth\)/);
 
 // admin 2026-11-18:右侧边栏打开
 assert.equal(SHOW_CHAT_TOOL_RAIL, true);

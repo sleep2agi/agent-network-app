@@ -37,12 +37,13 @@ function readState(): ChatToolRailState {
     const raw = (globalThis as { localStorage?: Storage }).localStorage?.getItem(KEY) ?? null;
     const v = raw ? JSON.parse(raw) : null;
     return {
-      // admin 2026-11-18「右侧是不是可以再加一个边侧栏」:第一次打开默认展开,之后按设备记忆。
-      open: v ? !!v.open : true,
+      // 默认只亮 44px 图标条(常驻侧栏),点图标才展开面板;展开与否按设备记忆。
+      // 不默认展开:1000~1200 宽的窗口里展开会把聊天区挤到 ~430。
+      open: !!v?.open,
       tool: TOOLS.some(t => t.key === v?.tool) ? v.tool : 'tasks',
       width: Number.isFinite(v?.width) ? Math.min(560, Math.max(280, v.width)) : 340,
     };
-  } catch { return { open: true, tool: 'tasks', width: 340 }; }
+  } catch { return { open: false, tool: 'tasks', width: 340 }; }
 }
 function writeState(s: ChatToolRailState): void {
   try { (globalThis as { localStorage?: Storage }).localStorage?.setItem(KEY, JSON.stringify(s)); } catch { /* 只是偏好 */ }

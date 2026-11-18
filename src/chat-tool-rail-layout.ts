@@ -10,3 +10,9 @@ export function chatToolRailReserve(open: boolean, panelWidth: number, outerWidt
   if (outerWidth > 0 && outerWidth - withPanel < CHAT_MIN_WIDTH_WITH_PANEL) return CHAT_TOOL_RAIL_WIDTH;
   return withPanel;
 }
+
+/** 桌面输入框工具条的「Enter 发送 · Shift/Ctrl+Enter 换行」提示:聊天区窄于这个宽度就不画(0 = 还没量到,照常画)。 */
+export const COMPOSER_HINT_MIN_WIDTH = 640;
+export function composerShowsShortcutHint(paneWidth: number): boolean {
+  return paneWidth === 0 || paneWidth >= COMPOSER_HINT_MIN_WIDTH;
+}
