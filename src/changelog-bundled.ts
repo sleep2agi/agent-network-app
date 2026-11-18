@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.564:",
+  "- 节点设置里的模型列表不会再一直停在「正在读取…」：拿不到目录时会直接说明原因；不是 OpenCode 的节点不再显示没用的「重新读取」按钮。",
+  "",
   "What's new in 0.2.563:",
   "- 聊天页右侧新增边栏：最右边一排图标（任务 / 技能 / 文件 / 日志），点一下展开面板，再点收起；窗口够宽时面板占自己一列，不会盖住消息。",
   "",
