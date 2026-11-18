@@ -124,6 +124,26 @@ ck('applied ack but null variant readback is NOT confirmed', !confirmComposerVar
   after: { model_effective: 'p/m', modelVariant: null, last_update: variantAck },
   updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
 }).confirmed);
+// #4823（负责人 2026-11-19）：ACK applied + variant 尚未回填 ⇒ pending，不是失败
+ck('applied ack + null variant readback is pending (waiting node)', confirmComposerVariantSwitch({
+  after: { model_effective: 'p/m', modelVariant: null, last_update: variantAck },
+  updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
+}).pending === true);
+ck('wrong concrete variant is NOT pending (it is a mismatch)', confirmComposerVariantSwitch({
+  after: { model_effective: 'p/m', modelVariant: 'low', last_update: variantAck },
+  updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
+}).pending !== true);
+ck('missing variant with applied ack is pending too', confirmComposerVariantSwitch({
+  after: { model_effective: 'p/m', last_update: variantAck },
+  updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
+}).pending === true);
+ck('explicit clear with null readback confirmed, not pending', (() => {
+  const v = confirmComposerVariantSwitch({
+    after: { model_effective: 'p/m', modelVariant: null, last_update: variantAck },
+    updateId: 'u2', requestedModel: 'p/m', requestedVariant: null,
+  });
+  return v.confirmed === true && v.pending !== true;
+})());
 ck('variant ack missing rejected', !confirmComposerVariantSwitch({
   after: { model_effective: 'p/m', modelVariant: 'high' },
   updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',

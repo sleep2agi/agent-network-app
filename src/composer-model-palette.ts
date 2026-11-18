@@ -177,6 +177,10 @@ export interface ComposerSwitchConfirmation {
   /** 本次 ACK 已 applied，但节点不回报 model_effective（agent-node 旧版 / 尚未心跳）。
    *  不是「已确认」，也不是失败：Hub 回执说节点已经换好，只是没有会话级读回。 */
   ackOnly?: boolean;
+  /** #4823（负责人 2026-11-19 决定）：ACK 已 applied、模型也对，但 `modelVariant` 还没回填。
+   *  生产实测这台节点回填要 ~29 分钟 ⇒ UI 必须显示「已下发，等待节点确认」，
+   *  而不是当成失败（「未确认」）让人以为要重试。 */
+  pending?: boolean;
 }
 
 /** 模型切换：本次 update_id 的终局 ACK + model_effective 真实读回，两者都匹配才算生效。 */
@@ -213,11 +217,19 @@ export function confirmComposerVariantSwitch(input: {
   if (effective !== input.requestedModel) {
     return { confirmed: false, reason: `model_effective=${effective || 'unknown'} 与请求 ${input.requestedModel} 不一致` };
   }
-  if (!Object.prototype.hasOwnProperty.call(input.after, 'modelVariant')) {
-    return { confirmed: false, reason: '读回缺 modelVariant（unknown，不当作明确默认档）' };
+  const hasReadback = Object.prototype.hasOwnProperty.call(input.after, 'modelVariant');
+  const observed = hasReadback ? (input.after.modelVariant ?? null) : undefined;
+  // 「还没回填」与「回填了但值不对」必须分开：前者等，后者是错。
+  const awaitingNode = !hasReadback || (observed === null && input.requestedVariant !== null);
+  if (awaitingNode) {
+    return {
+      confirmed: false,
+      pending: true,
+      reason: hasReadback ? 'modelVariant 尚未回填（null），节点上报可能延迟' : '读回缺 modelVariant（unknown，等待节点上报）',
+    };
   }
-  if (input.after.modelVariant !== input.requestedVariant) {
-    return { confirmed: false, reason: `modelVariant=${input.after.modelVariant ?? 'null'} 与请求 ${input.requestedVariant ?? 'null'} 不一致` };
+  if (observed !== input.requestedVariant) {
+    return { confirmed: false, reason: `modelVariant=${observed ?? 'null'} 与请求 ${input.requestedVariant ?? 'null'} 不一致` };
   }
   return { confirmed: true, reason: 'last_update=applied 且 modelVariant 读回一致' };
 }

@@ -13,6 +13,7 @@ export const chatTranslations = {
   'chat.modelPicker.catalogSource': ['目录来自这台节点的 OpenCode 服务器（只读）', 'Catalog from this node’s OpenCode server (read-only)'],
   'chat.modelPicker.appliedNoReadback': ['已切换到 {model}（节点已确认；该节点版本不回报会话模型，升级 agent-node 后可显示实时读回）', 'Switched to {model} (the node acknowledged it; this node version does not report its session model)'],
   'chat.modelPicker.acceptedUnconfirmed': ['已接受，但生效模型未确认', 'Accepted, but the effective model is not confirmed'],
+  'chat.modelPicker.variantPending': ['已下发「{value}」，等待节点确认（节点上报可能延迟几分钟到几十分钟，不是失败）', 'Sent "{value}"; waiting for the node to confirm (node reporting can lag by minutes — this is not a failure)'],
   'chat.modelPicker.variantAcceptedUnconfirmed': ['已接受，但当前档位未确认', 'Accepted, but the current variant is not confirmed'],
   'chat.modelPicker.variantApplied': ['已生效：{value}', 'Applied: {value}'],
   // #4823/#4822 —— 换模型后原档位在新模型上未必成立。我们不自动清除档位（省略=不改），

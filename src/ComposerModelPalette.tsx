@@ -402,6 +402,14 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         requestedVariant: next,
       });
       if (!verdict.confirmed) {
+        // #4823（负责人 2026-11-19）：ACK 已 applied 但节点还没回填 variant ⇒ 显示「已下发，等待节点确认」，
+        // 不当失败。生产实测回填可能延迟到几十分钟（模型字段是即时的）。
+        if (verdict.pending) {
+          setErrorText(null);
+          setErrorDetail(null);
+          setNotice(t('chat.modelPicker.variantPending', { value: next ?? t('chat.variantDefaultShort') }));
+          return;
+        }
         setErrorText(t('chat.modelPicker.failed', { message: t('chat.modelPicker.variantAcceptedUnconfirmed') }));
         setErrorDetail(t('chat.modelPicker.variantUnknownDetail', { reason: verdict.reason }));
         return;
