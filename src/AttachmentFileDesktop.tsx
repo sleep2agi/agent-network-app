@@ -9,6 +9,9 @@ import { chooseSavePath, displayDownloadPath, downloadAuthedBytes, isTauriDeskto
 import { colors } from './theme';
 import { downloadEta, formatEta } from './download-eta';
 import { useBubbleInk } from './bubble-ink';
+import { attachmentCacheScope } from './attach-download';
+import { runDownloadJob } from './download-jobs';
+import { useDownloadJob } from './use-download-job';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
 
@@ -19,41 +22,46 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
   const busy = useRef(false);
   const [previewOpen, setPreviewOpen] = useState(false);
   const previewable = isTextPreviewable(name, mime, size);
-  const [state, setState] = useState<{ kind: 'ready' | 'downloading' | 'saved' | 'error'; path?: string; message?: string; messageKey?: string; eta?: string }>({ kind: 'ready' });
+  // 下载任务挂在模块级任务表里(download-jobs.ts):切会话卸载这张卡,下载照样跑完,回来还能看到进度/结果。
+  const jobKey = `desktop|${attachmentCacheScope(uri, token)}`;
+  const job = useDownloadJob(jobKey);
+  const [note, setNote] = useState<{ message?: string; messageKey?: string } | null>(null);
+  const state: { kind: 'ready' | 'downloading' | 'saved' | 'error'; path?: string; message?: string; messageKey?: string; eta?: string } =
+    job?.kind === 'downloading' ? { kind: 'downloading', eta: job.progress }
+      : job?.kind === 'error' ? { kind: 'error', message: job.message }
+        : job?.kind === 'done' && job.result ? { kind: 'saved', path: job.result, ...note }
+          : job?.kind === 'done' ? { kind: 'ready', messageKey: 'chat.file.browserHandedOff' }
+            : { kind: 'ready', ...note };
   const download = async (direct: boolean) => {
-    if (busy.current) return;
+    if (busy.current || job?.kind === 'downloading') return;
     busy.current = true;
-    const previous = state;
-    setState({ kind: 'downloading' });
+    setNote(null);
     try {
       let target: string | null | undefined;
       if (isTauriDesktop() && !direct) {
         target = await chooseSavePath(name);
-        if (target === null) { setState(previous); return; }
+        if (target === null) return;
       }
-      // 边下边算剩余时长:每 ~400ms 更新一次,避免每个 chunk 都触发重绘。
-      const startedAt = Date.now();
-      let lastPaint = 0;
-      const onProgress = (received: number, total?: number) => {
-        const now = Date.now();
-        if (now - lastPaint < 400 && received !== total) return;
-        lastPaint = now;
-        const { percent, etaSeconds } = downloadEta(received, total ?? size, now - startedAt);
-        const eta = formatEta(etaSeconds);
-        setState({ kind: 'downloading', eta: percent !== null && eta ? `${percent}% · 剩余约 ${eta}` : (eta ? `剩余约 ${eta}` : undefined) });
-      };
-      const bytes = await downloadAuthedBytes(appFetch, uri, token, onProgress);
-      if (isTauriDesktop()) {
-        const path = await saveToDownloads(name, bytes, target ?? null);
-        setState({ kind: 'saved', path });
-      } else {
+      await runDownloadJob(jobKey, async (report) => {
+        // 边下边算剩余时长:每 ~400ms 更新一次,避免每个 chunk 都触发重绘。
+        const startedAt = Date.now();
+        let lastPaint = 0;
+        const onProgress = (received: number, total?: number) => {
+          const now = Date.now();
+          if (now - lastPaint < 400 && received !== total) return;
+          lastPaint = now;
+          const { percent, etaSeconds } = downloadEta(received, total ?? size, now - startedAt);
+          const eta = formatEta(etaSeconds);
+          report(percent !== null && eta ? `${percent}% · 剩余约 ${eta}` : (eta ? `剩余约 ${eta}` : undefined));
+        };
+        const bytes = await downloadAuthedBytes(appFetch, uri, token, onProgress);
+        if (isTauriDesktop()) return saveToDownloads(name, bytes, target ?? null);
         saveBrowserDownload(bytes, name, mime);
         // The browser does not report whether the user actually saved the file.
-        setState({ kind: 'ready', messageKey: 'chat.file.browserHandedOff' });
-      }
-    } catch (error) {
-      setState({ kind: 'error', message: error instanceof Error ? error.message : String(error) });
-    } finally {
+        return '';
+      });
+    } catch { /* 失败已记在任务表里,卡片显示 */ }
+    finally {
       busy.current = false;
     }
   };
@@ -61,7 +69,7 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
     if (!state.path || busy.current) return;
     busy.current = true;
     try { await revealInFolder(state.path); }
-    catch (error) { setState({ ...state, messageKey: 'chat.file.revealFailed', message: error instanceof Error ? error.message : String(error) }); }
+    catch (error) { setNote({ messageKey: 'chat.file.revealFailed', message: error instanceof Error ? error.message : String(error) }); }
     finally { busy.current = false; }
   };
   return (

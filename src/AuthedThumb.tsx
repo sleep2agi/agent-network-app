@@ -1,6 +1,7 @@
 import { downloadEta, formatEta, videoProgressLabel } from './download-eta';
 import * as FileSystem from 'expo-file-system/legacy';
 import {
+  attachmentCacheScope,
   describeAttachmentError,
   downloadAttachmentWith,
   purgeLegacyAttachmentCacheWith,
@@ -11,6 +12,8 @@ import {
 import * as Sharing from 'expo-sharing';
 import { VideoView, useVideoPlayer } from 'expo-video';
 import { useEffect, useRef, useState } from 'react';
+import { runDownloadJob } from './download-jobs';
+import { useDownloadJob } from './use-download-job';
 import AttachmentFileCard from './AttachmentFileCard';
 import AttachmentTextPreview, { TextPreviewLink } from './AttachmentTextPreview';
 import { isTextPreviewable } from './attachment-file-model';
@@ -51,6 +54,33 @@ export const downloadAttachment = (
     serverUrl, token, fileId, name, mime, onProgress,
   );
 
+/** 同一个附件(服务器 + 凭据作用域 + 文件)的下载任务键:卡片、视频、「下载视频」共用,切会话回来还在。 */
+const nativeJobKey = (serverUrl: string, token: string, fileId: string) => `native|${attachmentCacheScope(serverUrl, token)}|${fileId}`;
+
+/** 在任务表里下载(或复用正在跑的下载),进度按「62% · 剩余约 8 秒」报。 */
+const runNativeDownload = (
+  serverUrl: string, token: string, fileId: string, name: string, mime: string | undefined, size: number | undefined,
+  label: (received: number, total: number | undefined, elapsedMs: number) => string | undefined,
+) => runDownloadJob(nativeJobKey(serverUrl, token, fileId), async (report) => {
+  const startedAt = Date.now();
+  let lastPaint = 0;
+  const onProgress = (received: number, total?: number) => {
+    const now = Date.now();
+    if (now - lastPaint < 400 && received !== total) return;
+    lastPaint = now;
+    report(label(received, total ?? size, now - startedAt));
+  };
+  // 任务表里存的是给人看的那句(哪一层失败),卡片直接显示。
+  try { return await downloadAttachment(serverUrl, token, fileId, name, mime, onProgress); }
+  catch (e) { throw new Error(describeAttachmentError(e)); }
+});
+
+const etaLabel = (received: number, total: number | undefined, elapsedMs: number) => {
+  const eta = downloadEta(received, total, elapsedMs);
+  const left = formatEta(eta.etaSeconds);
+  return eta.percent !== null && left ? `${eta.percent}% · 剩余约 ${left}` : left ? `剩余约 ${left}` : undefined;
+};
+
 
 /** 任意文件附件：点 📎 → 鉴权下载到缓存 → 系统「打开方式」(视频/Excel/PDF…)
  *  (Vincent tg 760)。 */
@@ -73,47 +103,33 @@ export function AttachmentFile({
 }) {
   const { t } = useTranslation();
   const ink = useBubbleInk('link');
-  const [busy, setBusy] = useState(false);
-  const busyRef = useRef(false);
-  const [error, setError] = useState<string | null>(null);
-  /** 「62% · 剩余约 8 秒」—— 没有总量或还没算出速度时是 undefined。 */
-  const [progress, setProgress] = useState<string | undefined>(undefined);
   const [previewOpen, setPreviewOpen] = useState(false);
+  // admin 2026-11-18：切会话后下载要在后台继续。任务挂在 download-jobs 表里，卡片卸载不影响；
+  // 回来时 job 还是「下载中 / 已下载 / 失败」。只有本卡片还在屏幕上时才自动弹「打开方式」。
+  const job = useDownloadJob(nativeJobKey(serverUrl, token, fileId));
+  const mounted = useRef(true);
+  useEffect(() => { mounted.current = true; return () => { mounted.current = false; }; }, []);
+  const busy = job?.kind === 'downloading';
+  const progress = job?.kind === 'downloading' ? job.progress : undefined;
+  const error = job?.kind === 'error' ? job.message : null;
+  const downloaded = job?.kind === 'done';
 
   const open = async () => {
-    if (busyRef.current) return;
-    busyRef.current = true;
-    setBusy(true);
-    setError(null);
+    if (busy) return;
+    const resolvedMime = mime || mimeFromName(name);
     try {
-      const resolvedMime = mime || mimeFromName(name);
-      const startedAt = Date.now();
-      let lastPaint = 0;
-      const onProgress = (received: number, total?: number) => {
-        const now = Date.now();
-        if (now - lastPaint < 400 && received !== total) return;
-        lastPaint = now;
-        const eta = downloadEta(received, total ?? size, now - startedAt);
-        const left = formatEta(eta.etaSeconds);
-        setProgress(eta.percent !== null && left ? `${eta.percent}% · 剩余约 ${left}` : left ? `剩余约 ${left}` : undefined);
-      };
-      const local = await downloadAttachment(serverUrl, token, fileId, name, resolvedMime, onProgress);
+      const local = await runNativeDownload(serverUrl, token, fileId, name, resolvedMime, size, etaLabel);
+      if (!mounted.current) return;
       await Sharing.shareAsync(local, {
         mimeType: resolvedMime || 'application/octet-stream',
         dialogTitle: name,
       });
-    } catch (e) {
-      setError(describeAttachmentError(e));
-      setProgress(undefined);
-    } finally {
-      busyRef.current = false;
-      setBusy(false);
-    }
+    } catch { /* 失败原因已记在任务表里(describeAttachmentError 在渲染时套) */ }
   };
 
   if (!label) return (
     <View style={{ maxWidth: '100%' }}>
-      <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} progress={busy ? progress : undefined} detail={error ?? t('chat.file.nativeHint')} onPress={() => { void open(); }} />
+      <AttachmentFileCard name={name} mime={mime} size={size} status={busy ? 'downloading' : error ? 'error' : 'ready'} progress={busy ? progress : undefined} detail={error ? error : downloaded ? t('chat.file.downloadedHint') : t('chat.file.nativeHint')} onPress={() => { void open(); }} />
       {/* admin 2026-11-11：.md / 文本附件可以直接在应用里预览。 */}
       {isTextPreviewable(name, mime, size) ? (
         <View style={{ flexDirection: 'row', paddingVertical: 8 }}><TextPreviewLink name={name} onPress={() => setPreviewOpen(true)} /></View>
@@ -163,37 +179,21 @@ export function AuthedVideo({
   token: string;
 }) {
   const { t } = useTranslation();
-  const [localUri, setLocalUri] = useState<string | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [error, setError] = useState<string | null>(null);
+  // admin 2026-11-18：切会话后下载继续在后台跑，回来时直接是进度或已下好的视频（download-jobs 任务表）。
+  const job = useDownloadJob(nativeJobKey(serverUrl, token, fileId));
+  const localUri = job?.kind === 'done' ? job.result : null;
+  const busy = job?.kind === 'downloading';
   /** admin 2026-11-16「点击没反应吧」：11MB 视频走慢网要下几分钟，原来卡片上只有 ⏳，看着像没点上。 */
-  const [progress, setProgress] = useState<string | undefined>(undefined);
+  const progress = job?.kind === 'downloading' ? job.progress : undefined;
+  // #511 — say which LAYER failed (the job stores describeAttachmentError's sentence).
+  const error = job?.kind === 'error' ? `${job.message}，点击重试` : null;
   const tooLarge = typeof size === 'number' && size > MAX_ATTACHMENT_BYTES;
 
   const load = async () => {
     if (busy || localUri || tooLarge) return;
-    setBusy(true);
-    setError(null);
-    setProgress(undefined);
     try {
-      const startedAt = Date.now();
-      let lastPaint = 0;
-      const onProgress = (received: number, total?: number) => {
-        const now = Date.now();
-        if (now - lastPaint < 400 && received !== total) return;
-        lastPaint = now;
-        setProgress(videoProgressLabel(received, total ?? size, now - startedAt));
-      };
-      const local = await downloadAttachment(serverUrl, token, fileId, name, mime || mimeFromName(name), onProgress);
-      setLocalUri(local);
-    } catch (e) {
-      // #511 — say which LAYER failed. The generic "下载失败" sent Vincent
-      // looking at the file itself when the file had never arrived; the
-      // download error carries the server status, so show it.
-      setError(`${describeAttachmentError(e)}，点击重试`);
-    } finally {
-      setBusy(false);
-    }
+      await runNativeDownload(serverUrl, token, fileId, name, mime || mimeFromName(name), size, videoProgressLabel);
+    } catch { /* 失败已记在任务表里 */ }
   };
 
   if (tooLarge) {

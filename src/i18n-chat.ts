@@ -50,6 +50,7 @@ export const chatTranslations = {
   'chat.file.saveAs': ['另存为', 'Save as'],
   'chat.file.revealFailed': ['无法显示文件: {error}', 'Could not reveal file: {error}'],
   'chat.file.nativeHint': ['下载后使用系统分享或打开方式', 'Download, then share or open with another app'],
+  'chat.file.downloadedHint': ['已在后台下载完成，点击打开', 'Downloaded in the background — tap to open'],
   'chat.me': ['我', 'Me'],
   'chat.voiceUnavailable': ['当前环境不支持语音输入', 'Voice input is unavailable here'],
   'chat.forwardUncertain': ['转发结果待确认', 'Forwarding not confirmed'],
