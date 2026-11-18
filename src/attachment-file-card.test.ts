@@ -128,5 +128,5 @@ assert.ok(card.includes('backgroundColor: colors.card') && card.includes('color:
 assert.ok(card.includes('useTranslation()') && card.includes('t(fileStatusKey[status])'), 'file cards resolve current language reactively');
 assert.ok(desktop.indexOf('busy.current = true') < desktop.indexOf('await chooseSavePath(name)'));
 assert.ok(!desktop.includes('openPath') && !desktop.includes('shell'));
-assert.ok(native.includes('await downloadAttachment(serverUrl, token, fileId, name, resolvedMime, onProgress)') && native.includes('await Sharing.shareAsync(local'));
+assert.ok(native.includes('await runNativeDownload(serverUrl, token, fileId, name, resolvedMime, size, etaLabel)') && native.includes('await Sharing.shareAsync(local'));
 console.log('attachment file card: pure model, metadata, browser transport and wiring checks passed');
