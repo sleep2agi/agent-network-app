@@ -49,7 +49,7 @@ import {
 } from './node-model-change';
 import { variantOutcomeOf } from './variant-outcome';
 import { suggestedModels } from './runtime-catalog';
-import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince } from './opencode-v2-model-list';
+import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince, catalogStateOf, catalogNoticeFor, canRetryCatalog } from './opencode-v2-model-list';
 import { opencodeFlagsOf,
   generationOf,
 } from './node-info';
@@ -113,6 +113,9 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
   // 观测窗口的「一次提交」凭据（scope 用对象身份，切节点即失效）。
   const [variantWatch, setVariantWatch] = useState<{ scope: object; target: string | null; effectiveModel: string; updateId?: string } | null>(null);
   const v2 = isOpenCodeV2Node(node);
+  // #4976 —— 服务端四态。unsupported_runtime 直接走终态，不发起目录读取（重试也不会好）。
+  const catalogState = catalogStateOf(node);
+  const catalogNotice = catalogNoticeFor({ v2, state: catalogState });
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
   const [v2VariantMap, setV2VariantMap] = useState<Record<string, unknown> | null>(null);
@@ -158,6 +161,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
 
   useEffect(() => {
     if (!v2) return;
+    // #4976：服务端说这个 runtime 永远不会有目录 ⇒ 不发请求、不转圈，直接由下方终态文案兜住。
+    if (catalogState === 'unsupported_runtime') return;
     let live = true;
     let retryTimer: ReturnType<typeof setTimeout> | null = null;
     const daemonId = nodeProviderDaemon(node);
@@ -226,7 +231,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
       if (live) void fallback('OpenCode 服务器还没返回模型列表。');
     })();
     return () => { live = false; if (retryTimer) clearTimeout(retryTimer); };
-  }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status, catalogAttempt]);
+  }, [v2, cfg, node.node_id, node.lifecycle_daemon_node_id, node.adoption?.daemon_node_id, node.adoption?.status, catalogAttempt, catalogState]);
 
   const requested = phase.kind === 'restarting' ? phase.requested : null;
   const baseRevision = phase.kind === 'restarting' ? phase.baseRevision : null;
@@ -325,6 +330,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
     : (v2 && peerModels.length > 0 ? peerModels : suggestedModels(node.runtime));
   const usingBuiltinFallback = v2 && v2Catalog.length === 0 && peerModels.length === 0;
   const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
+  // #4976 review：按钮与状态行提示共用同一判据；unsupported_runtime / 非 v2 都不给重试。
+  const retryAllowed = canRetryCatalog({ v2, state: catalogState, fallback: usingBuiltinFallback || usingPeerFallback });
   const currentModel = view?.model_effective ?? view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
   // 只在「opencode 系 runtime 却没写代际」时提示;写了 v1/v2 或不是 opencode 都不打扰。
@@ -548,7 +555,12 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
             ) : null}
             {!v2 ? (
               <Text testID="node-model-catalog-na" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
-                这个 runtime 不上报模型清单，模型由节点自己的配置决定（下面的候选是内置建议）。
+                {catalogNotice.text || '这个 runtime 不上报模型清单，模型由节点自己的配置决定（下面的候选是内置建议）。'}
+              </Text>
+            ) : null}
+            {v2 && catalogNotice.text ? (
+              <Text testID="node-model-catalog-state" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+                {catalogNotice.text}
               </Text>
             ) : null}
             {v2 ? (
@@ -558,11 +570,11 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
                   void import('expo-clipboard').then(m => m.setStringAsync(line)).catch(() => undefined);
                 }}>
                 {catalogStatusLine(v2Catalog.length, runtimeVersion)}
-                {v2Catalog.length === 0 ? '（下方按钮可立刻重试）' : ''}
+                {retryAllowed ? '（下方按钮可立刻重试）' : ''}
               </Text>
             ) : null}
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
-            {usingBuiltinFallback || usingPeerFallback ? (
+            {retryAllowed ? (
               <Pressable testID="node-model-catalog-retry" disabled={busy}
                 onPress={() => setCatalogAttempt((n) => n + 1)}
                 style={({ pressed }) => [
