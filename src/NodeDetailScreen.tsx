@@ -698,8 +698,15 @@ export default function NodeDetailScreen({
     daemonNodeId: node?.lifecycle_daemon_node_id,
     hostSupervisor: node ? isHostSupervisorNode(node) : false,
   });
+  // #1524 —— 共用目录提示需要源节点的工作目录。Hub 目前不保证暴露这一格：
+  // 有（节点行上的 workdir，或 config_snapshot.flags.workdir/cwd）就传，取不到就让对话框退化到只写 alias。
+  const cloneSourceWorkdir = (() => {
+    const flags = (node?.config_snapshot?.flags ?? {}) as Record<string, unknown>;
+    const raw = (node as unknown as { workdir?: unknown } | undefined)?.workdir ?? flags.workdir ?? flags.cwd;
+    return typeof raw === 'string' && raw.trim() ? raw.trim() : null;
+  })();
   const cloneSource = node?.node_id && node.lifecycle_daemon_node_id && !isHostSupervisorNode(node)
-    ? { nodeId: node.node_id, alias: node.alias, name: node.node_name?.trim() || node.alias, daemonNodeId: node.lifecycle_daemon_node_id }
+    ? { nodeId: node.node_id, alias: node.alias, name: node.node_name?.trim() || node.alias, daemonNodeId: node.lifecycle_daemon_node_id, workdir: cloneSourceWorkdir }
     : null;
 
   const content = (() => {

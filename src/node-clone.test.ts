@@ -84,11 +84,26 @@ ck('daemon node list and selected node both open the same dialog', daemon.includ
 ck('list row still opens chat from its own press', daemon.includes('onOpenManagedChat?.(row.alias)'));
 ck('managed row test id stays on the chat pressable, beside the clone button', /<Pressable\n\s+testID=\{`daemon-mgmt-row-\$\{row\.nodeId\}`\}[\s\S]*?onPress=\{onPress\}/.test(daemon) && daemon.includes('<CloneNodeButton testID={`daemon-mgmt-clone-${row.nodeId}`} onPress={onClone} />'));
 ck('client calls clone_node with the preview and only a missing tool is a demo', api.includes("params: { name: 'clone_node', arguments: preview }") && api.includes('workdir_policy: req.workdir_policy') && api.includes('isCloneToolMissing') && api.includes('interpretCloneReply') && api.includes("if (parsed.kind === 'malformed') return interpretCloneReply({ kind: 'error', error: 'clone_node response was not a tool result' }, preview);"));
-ck('dialog shows the name, the session switch defaulting on, workdir modes, and the notes', dialog.includes('testID="clone-node-name"') && dialog.includes('useState(true)') && dialog.includes("useState<CloneWorkdirPolicy>('new_empty')") && dialog.includes('testID="clone-node-copy-session"') && dialog.includes('testID="clone-node-workdir"') && dialog.includes('testID={`clone-node-workdir-${policy}`}') && dialog.includes('testID="clone-node-notes"') && dialog.includes('testID="clone-node-demo"') && dialog.includes('colors.card') && dialog.includes('colors.accent') && dialog.includes('colors.tonalBg') && dialog.includes('pending: true'));
+ck('dialog shows the name, the session switch defaulting OFF, workdir defaulting to share_source, and the notes', dialog.includes('testID="clone-node-name"') && dialog.includes('useState(false)') && dialog.includes("useState<CloneWorkdirPolicy>('share_source')") && dialog.includes('testID="clone-node-copy-session"') && dialog.includes('testID="clone-node-workdir"') && dialog.includes('testID={`clone-node-workdir-${policy}`}') && dialog.includes('testID="clone-node-notes"') && dialog.includes('testID="clone-node-demo"') && dialog.includes('colors.card') && dialog.includes('colors.accent') && dialog.includes('colors.tonalBg') && dialog.includes('pending: true'));
 
 const sample: CloneDialogResult = { demo: false, pending: true, name: 'planner-copy-2', copySession: true, workdirPolicy: 'new_empty', sessionDetail: null };
 ck('dialog result type stays pending until the daemon creates the node', sample.pending === true && sample.demo === false);
 
 setLanguagePreference('system');
+// #1524（负责人 2026-11-19）：三条必须被看见的内容
+ck('share_source shows alias+path warning when source workdir is known', dialog.includes('nodeClone.share.titleWithPath') && dialog.includes('source.workdir'));
+ck('share_source falls back to alias-only copy when path is unknown', dialog.includes('nodeClone.share.title') && dialog.includes('testID="clone-node-share-warning"'));
+ck('department notice is shown when present', cloneNoticeMessage({ demo: false, name: 'x', workdirPolicy: 'share_source', sessionDetail: null, departmentNotice: '已归入部门：安全' }, t).includes('已归入部门：安全'));
+ck('department notice absent adds nothing', !cloneNoticeMessage({ demo: false, name: 'x', workdirPolicy: 'share_source', sessionDetail: null, departmentNotice: null }, t).includes('已归入部门'));
+
+// #1524（负责人 2026-11-19）：源目录路径从节点数据取（workdir / config_snapshot.flags.workdir|cwd），取不到退化
+ck('node detail passes source workdir when available', detail.includes('cloneSourceWorkdir') && detail.includes('flags.workdir') && detail.includes('flags.cwd') && detail.includes('workdir: cloneSourceWorkdir'));
+ck('share warning talks about files/uncommitted changes, not messages', (() => {
+  const raw = readFileSync(new URL('./i18n-node-clone.ts', import.meta.url), 'utf8');
+  const m = /nodeClone\.share\.warning': \[([^\]]+)\]/.exec(raw);
+  const zh = m ? m[1] : '';
+  return zh.includes('文件和未提交改动') && !zh.includes('消息');
+})());
+
 console.log(`${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
