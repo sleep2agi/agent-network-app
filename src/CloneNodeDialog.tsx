@@ -74,8 +74,10 @@ export default function CloneNodeDialog({
   useTranslation();
   const styles = makePaletteStyles();
   const [name, setName] = useState(() => suggestCloneName(source.name || source.alias, takenNames));
-  const [copySession, setCopySession] = useState(true);
-  const [workdirPolicy, setWorkdirPolicy] = useState<CloneWorkdirPolicy>('new_empty');
+  // #1524（负责人 2026-11-19）：默认与 Hub 新默认对齐 —— 不带历史 + 共用源目录；
+  // 客户端显式发这两个值，新旧 Hub 行为一致（否则会把 Hub 的新默认覆盖回去）。
+  const [copySession, setCopySession] = useState(false);
+  const [workdirPolicy, setWorkdirPolicy] = useState<CloneWorkdirPolicy>('share_source');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [demo, setDemo] = useState(false);
@@ -103,6 +105,7 @@ export default function CloneNodeDialog({
         copySession: result.copy_session,
         workdirPolicy: result.workdir_policy,
         sessionDetail: result.sessionDetail,
+        departmentNotice: result.departmentNotice ?? null,
       });
       return;
     }
@@ -160,7 +163,7 @@ export default function CloneNodeDialog({
             accessibilityRole="button"
             disabled={busy || (!demo && !draft.ok)}
             onPress={() => {
-              if (demo) finish({ demo: true, pending: false, name: draft.ok ? draft.request.name : name.trim(), copySession, workdirPolicy, sessionDetail: null });
+              if (demo) finish({ demo: true, pending: false, name: draft.ok ? draft.request.name : name.trim(), copySession, workdirPolicy, sessionDetail: null, departmentNotice: null });
               else void submit();
             }}
             style={[styles.primaryBtn, (busy || (!demo && !draft.ok)) && { opacity: 0.4 }]}
@@ -203,6 +206,17 @@ export default function CloneNodeDialog({
             })}
           </View>
           <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t(`nodeClone.workdir.hint.${workdirPolicy}`)}</Text>
+          {/* #1524：选共用目录时必须让人看见「跟谁共用、共用哪个目录、会互相踩」。 */}
+          {workdirPolicy === 'share_source' ? (
+            <View testID="clone-node-share-warning" style={{ backgroundColor: colors.tonalBg, borderRadius: radius.control, padding: spacing.sm, gap: 2 }}>
+              <Text style={{ color: colors.blocked, fontSize: typeScale.small, lineHeight: 18 }}>
+                {(source.workdir ?? '').trim()
+                  ? t('nodeClone.share.titleWithPath', { alias: source.alias || source.name, path: source.workdir as string })
+                  : t('nodeClone.share.title', { alias: source.alias || source.name })}
+              </Text>
+              <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t('nodeClone.share.warning')}</Text>
+            </View>
+          ) : null}
         </View>
 
         <View style={{ backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>

@@ -45,6 +45,8 @@ export interface CloneSource {
   alias: string;
   name: string;
   daemonNodeId: string;
+  /** #1524 —— 源节点的工作目录（有就展示「与源节点共用 <path>」，没有就只写 alias，不留空）。 */
+  workdir?: string | null;
 }
 
 export const CLONE_NOTE_KEYS = [
@@ -180,6 +182,8 @@ export type CloneSuccess = {
   copy_session: boolean;
   workdir_policy: CloneWorkdirPolicy;
   sessionDetail: string | null;
+  /** #1524：Hub 有就给，没有就是 null（旧 Hub 没有这一格）。 */
+  departmentNotice: string | null;
 };
 
 export type CloneOutcome =
@@ -211,6 +215,8 @@ export function interpretCloneReply(reply: CloneToolReply, preview: CloneNodeArg
       copy_session?: unknown;
       workdir_policy?: unknown;
       session_contract?: unknown;
+      /** #1524 / #4826：Hub 给的部门提示（旧 Hub 没有这一格）。 */
+      department_notice?: unknown;
     }
     : null;
   if (!payload) return { ok: false, demo: false, error: 'empty hub response', errorKey: null };
@@ -238,6 +244,8 @@ export function interpretCloneReply(reply: CloneToolReply, preview: CloneNodeArg
     copy_session: typeof payload.copy_session === 'boolean' ? payload.copy_session : preview.copy_session,
     workdir_policy: isCloneWorkdirPolicy(payload.workdir_policy) ? payload.workdir_policy : preview.workdir_policy,
     sessionDetail: sessionDetailOf(payload),
+    departmentNotice: typeof payload.department_notice === 'string' && payload.department_notice.trim()
+      ? payload.department_notice.trim() : null,
   };
 }
 
@@ -248,10 +256,12 @@ export interface CloneDialogResult {
   copySession: boolean;
   workdirPolicy: CloneWorkdirPolicy;
   sessionDetail: string | null;
+  /** #1524：有就显示，没有就不显示（新旧 Hub 都可用）。 */
+  departmentNotice?: string | null;
 }
 
 export function cloneNoticeMessage(
-  outcome: Pick<CloneDialogResult, 'demo' | 'name' | 'workdirPolicy' | 'sessionDetail'>,
+  outcome: Pick<CloneDialogResult, 'demo' | 'name' | 'workdirPolicy' | 'sessionDetail' | 'departmentNotice'>,
   translate: (key: string, values?: Record<string, string | number>) => string,
 ): string {
   if (outcome.demo) return translate('nodeClone.demoAck');
@@ -261,5 +271,8 @@ export function cloneNoticeMessage(
   ];
   const detail = outcome.sessionDetail?.trim();
   if (detail) lines.push(detail);
+  // #1524：Hub 返回部门提示时原样显示（不是写日志）。
+  const dept = outcome.departmentNotice?.trim();
+  if (dept) lines.push(dept);
   return lines.join('\n');
 }
