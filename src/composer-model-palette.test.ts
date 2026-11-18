@@ -133,16 +133,32 @@ ck('wrong concrete variant is NOT pending (it is a mismatch)', confirmComposerVa
   after: { model_effective: 'p/m', modelVariant: 'low', last_update: variantAck },
   updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
 }).pending !== true);
-ck('missing variant with applied ack is pending too', confirmComposerVariantSwitch({
-  after: { model_effective: 'p/m', last_update: variantAck },
-  updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
-}).pending === true);
+// review（负责人）：字段缺失不是 pending —— 老 runtime 从不上报档位
+ck('missing variant field is NOT pending (unconfirmable, not waiting)', (() => {
+  const v = confirmComposerVariantSwitch({
+    after: { model_effective: 'p/m', last_update: variantAck },
+    updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
+  });
+  return v.confirmed === false && v.pending !== true;
+})());
 ck('explicit clear with null readback confirmed, not pending', (() => {
   const v = confirmComposerVariantSwitch({
     after: { model_effective: 'p/m', modelVariant: null, last_update: variantAck },
     updateId: 'u2', requestedModel: 'p/m', requestedVariant: null,
   });
   return v.confirmed === true && v.pending !== true;
+})());
+// review（负责人）：pending 之后读到目标值必须变成 confirmed（轮询收口的纯函数依据）
+ck('pending then matching readback becomes confirmed', (() => {
+  const first = confirmComposerVariantSwitch({
+    after: { model_effective: 'p/m', modelVariant: null, last_update: variantAck },
+    updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
+  });
+  const later = confirmComposerVariantSwitch({
+    after: { model_effective: 'p/m', modelVariant: 'high', last_update: variantAck },
+    updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
+  });
+  return first.pending === true && first.confirmed === false && later.confirmed === true && later.pending !== true;
 })());
 ck('variant ack missing rejected', !confirmComposerVariantSwitch({
   after: { model_effective: 'p/m', modelVariant: 'high' },

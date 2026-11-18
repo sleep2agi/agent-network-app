@@ -217,16 +217,15 @@ export function confirmComposerVariantSwitch(input: {
   if (effective !== input.requestedModel) {
     return { confirmed: false, reason: `model_effective=${effective || 'unknown'} 与请求 ${input.requestedModel} 不一致` };
   }
-  const hasReadback = Object.prototype.hasOwnProperty.call(input.after, 'modelVariant');
-  const observed = hasReadback ? (input.after.modelVariant ?? null) : undefined;
-  // 「还没回填」与「回填了但值不对」必须分开：前者等，后者是错。
-  const awaitingNode = !hasReadback || (observed === null && input.requestedVariant !== null);
-  if (awaitingNode) {
-    return {
-      confirmed: false,
-      pending: true,
-      reason: hasReadback ? 'modelVariant 尚未回填（null），节点上报可能延迟' : '读回缺 modelVariant（unknown，等待节点上报）',
-    };
+  // #4823 review（负责人）：**字段缺失 ≠ 等待**。老 runtime 从不上报档位，
+  // 判成 pending 会永远停在「等待节点确认」，比「无法确认」更误导。
+  if (!Object.prototype.hasOwnProperty.call(input.after, 'modelVariant')) {
+    return { confirmed: false, reason: '读回缺 modelVariant（该节点不上报档位，无法确认）' };
+  }
+  const observed = input.after.modelVariant ?? null;
+  // 字段存在但为 null：要么是「还没回填」（请求非 null 时算 pending），要么是清除档位的正常结果。
+  if (observed === null && input.requestedVariant !== null) {
+    return { confirmed: false, pending: true, reason: 'modelVariant 尚未回填（null），节点上报可能延迟' };
   }
   if (observed !== input.requestedVariant) {
     return { confirmed: false, reason: `modelVariant=${observed ?? 'null'} 与请求 ${input.requestedVariant ?? 'null'} 不一致` };
