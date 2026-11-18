@@ -5,7 +5,8 @@
 //   技能  —— 这个节点装了哪些 skills(NodeSkillsSection)
 // 文件 / 日志 需要完整的 node/session 上下文,留到下一版接(现在点了会给「需要节点上下文」的提示)。
 //
-// 形态:贴右侧边缘的竖直图标条(常驻);点开面板浮在条左侧,不挤压聊天区,关掉即恢复。
+// 形态:贴右侧边缘的竖直图标条(常驻);点开面板停靠在条左侧。0.2.563 起聊天页按
+// chatToolRailReserve() 给自己留右边距,侧栏占自己的列宽,不再压住气泡(0.2.368 隐藏它的原因)。
 // 展开状态、当前工具、面板宽度都按设备记忆(localStorage)。
 import { useEffect, useState } from 'react';
 import { Pressable, ScrollView, View } from 'react-native';
@@ -17,9 +18,11 @@ import NodeSkillsSection from './NodeSkillsSection';
 import NodeTasksSection from './NodeTasksSection';
 import type { HubConfig, Session } from './api';
 import { colors, radius, spacing, type as typeScale } from './theme';
+import { CHAT_TOOL_RAIL_WIDTH } from './chat-tool-rail-layout';
 
 const KEY = 'anet_chat_toolrail_v1';
 type Tool = 'tasks' | 'skills' | 'files' | 'logs';
+export type ChatToolRailState = { open: boolean; tool: Tool; width: number };
 
 /** needSession 的工具要拿到该会话的 Session(聊天页的 controlSession)才能发请求,没有就置灰。 */
 const TOOLS: { key: Tool; label: string; icon: string; needSession?: boolean }[] = [
@@ -29,24 +32,34 @@ const TOOLS: { key: Tool; label: string; icon: string; needSession?: boolean }[]
   { key: 'logs', label: '日志', icon: 'document-text-outline', needSession: true },
 ];
 
-function readState(): { open: boolean; tool: Tool; width: number } {
+function readState(): ChatToolRailState {
   try {
     const raw = (globalThis as { localStorage?: Storage }).localStorage?.getItem(KEY) ?? null;
     const v = raw ? JSON.parse(raw) : null;
     return {
+      // 默认只亮 44px 图标条(常驻侧栏),点图标才展开面板;展开与否按设备记忆。
+      // 不默认展开:1000~1200 宽的窗口里展开会把聊天区挤到 ~430。
       open: !!v?.open,
-      tool: v?.tool === 'skills' ? 'skills' : 'tasks',
-      width: Number.isFinite(v?.width) ? Math.min(560, Math.max(280, v.width)) : 360,
+      tool: TOOLS.some(t => t.key === v?.tool) ? v.tool : 'tasks',
+      width: Number.isFinite(v?.width) ? Math.min(560, Math.max(280, v.width)) : 340,
     };
-  } catch { return { open: false, tool: 'tasks', width: 360 }; }
+  } catch { return { open: false, tool: 'tasks', width: 340 }; }
 }
-function writeState(s: { open: boolean; tool: Tool; width: number }): void {
+function writeState(s: ChatToolRailState): void {
   try { (globalThis as { localStorage?: Storage }).localStorage?.setItem(KEY, JSON.stringify(s)); } catch { /* 只是偏好 */ }
 }
 
-export default function ChatToolRail({ cfg, alias, session }: { cfg: HubConfig; alias: string; session?: Session | null }) {
+/** 状态提到聊天页:聊天页要按「图标条 + 展开面板」的宽度给自己留出右边距(停靠,不再浮在气泡上)。 */
+export function useChatToolRail(): [ChatToolRailState, (f: (s: ChatToolRailState) => ChatToolRailState) => void] {
   const [state, setState] = useState(readState);
   useEffect(() => { writeState(state); }, [state]);
+  return [state, setState];
+}
+
+export default function ChatToolRail({ cfg, alias, session, state, setState }: {
+  cfg: HubConfig; alias: string; session?: Session | null;
+  state: ChatToolRailState; setState: (f: (s: ChatToolRailState) => ChatToolRailState) => void;
+}) {
   const pick = (tool: Tool) => setState(s => (s.open && s.tool === tool ? { ...s, open: false } : { ...s, open: true, tool }));
   const active = state.open ? state.tool : null;
   // 只读区块要一个 session 形状;聊天页没有完整的 node 上下文,退到按 alias 发。
@@ -55,7 +68,7 @@ export default function ChatToolRail({ cfg, alias, session }: { cfg: HubConfig; 
   return (
     <>
       {state.open ? (
-        <View testID="chat-tool-panel" style={{ position: 'absolute', right: 44, top: 0, bottom: 0, width: state.width, zIndex: 25,
+        <View testID="chat-tool-panel" style={{ position: 'absolute', right: CHAT_TOOL_RAIL_WIDTH, top: 0, bottom: 0, width: state.width, zIndex: 25,
           backgroundColor: colors.bg, borderLeftWidth: 1, borderLeftColor: colors.border }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, height: 44, borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body, fontWeight: '600' }} testID="chat-tool-title">
@@ -88,7 +101,7 @@ export default function ChatToolRail({ cfg, alias, session }: { cfg: HubConfig; 
         所以这里改成绝对定位：不参与列流、不占高度、永远贴右边。
         zIndex 低于工具面板（面板是 25），面板浮在它左侧（right: 44）。
       */}
-      <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20, width: 44, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
+      <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20, width: CHAT_TOOL_RAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
         {TOOLS.map(t => {
           const on = active === t.key;
           const disabled = !!t.needSession && !realSession;

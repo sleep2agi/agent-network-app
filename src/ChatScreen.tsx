@@ -76,7 +76,8 @@ import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupte
 import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
 import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
-import ChatToolRail from './ChatToolRail';
+import ChatToolRail, { useChatToolRail } from './ChatToolRail';
+import { chatToolRailReserve, composerShowsShortcutHint } from './chat-tool-rail-layout';
 import ChatInfoPanel from './ChatInfoPanel';
 import NodeDepartmentPicker from './NodeDepartmentPicker';
 import { canEditDepartments, departmentDisplayLabel, type OrgLike } from './node-department-edit';
@@ -561,7 +562,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [deptInfo, setDeptInfo] = useState<{ label: string; nodeId: string | null; departmentId: string | null; org: OrgLike; editable: boolean; permissionsAllowed: boolean } | null>(null);
   const [deptPickerOpen, setDeptPickerOpen] = useState(false);
   const [forkOpenScope, setForkOpenScope] = useState<object | null>(null);
-  const [paneWidth, setPaneWidth] = useState(0);
+  // 右侧边栏(ChatToolRail)停靠:root 的 paddingRight 让出它的宽度,气泡区随之变窄。
+  // root 的 onLayout 量到的是含 padding 的外宽,paneWidth 要扣掉侧栏才是聊天区真实宽度。
+  const [rootWidth, setRootWidth] = useState(0);
+  const [toolRail, setToolRail] = useChatToolRail();
+  const showToolRail = desktop && SHOW_CHAT_TOOL_RAIL;
+  const toolRailReserve = showToolRail ? chatToolRailReserve(toolRail.open, toolRail.width, rootWidth) : 0;
+  const paneWidth = rootWidth > 0 ? Math.max(0, rootWidth - toolRailReserve) : 0;
   const [headerHeight, setHeaderHeight] = useState(0);
   const windowPin = useDesktopWindowPin();
   // Switching conversation (two-pane sidebar) never carries the panel over.
@@ -2514,7 +2521,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, iosKeyboard.style]}
+      style={[styles.root, iosKeyboard.style, toolRailReserve > 0 && { paddingRight: toolRailReserve }]}
       testID="chat-pane"
       // Edge-to-edge Android ignores adjustResize, so behavior=undefined
       // left the keyboard covering the input (Vincent tg 738). 'padding'
@@ -2528,7 +2535,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       // under the composer after dismissing (Vincent, 0.2.102 foldable). Only
       // let it pad while the keyboard is actually up. See keyboard-visibility.ts.
       enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}
-      onLayout={(event) => { const { height: h, width: w } = event.nativeEvent.layout; rootHeightRef.current = h; setRootHeight(h); setPaneWidth(w); }}
+      onLayout={(event) => { const { height: h, width: w } = event.nativeEvent.layout; rootHeightRef.current = h; setRootHeight(h); setRootWidth(w); }}
       keyboardVerticalOffset={Platform.OS === 'android' ? (StatusBar.currentHeight ?? 0) : 0}
     >
       {iosKeyboard.probe}
@@ -3259,7 +3266,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   onPress={() => void submit({ inject: true })}
                 />
               ) : null}
-              <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text>
+              {/* 聊天区窄(右侧边栏展开 / 小窗口)时先省掉快捷键提示,保证 🎤 和发送在。 */}
+              {composerShowsShortcutHint(paneWidth) ? <Text style={styles.shortcutHint} testID="composer-shortcut-hint">{t(sendKey === 'modEnter' ? 'chat.shortcutMod' : 'chat.shortcutEnter', { modifier: isMacKeyboard() ? '⌘' : 'Ctrl' })}</Text> : null}
               {voice.available ? <DesktopMicButton voice={voice} onPress={desktopMicClick} /> : null}
               <Pressable
                 style={({ pressed }) => [styles.desktopSend, !canSend(draft, attached.length > 0, sending) && styles.desktopSendDisabled, pressed && { opacity: 0.7 }]}
@@ -3481,7 +3489,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
-      {desktop && SHOW_CHAT_TOOL_RAIL ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} /> : null}
+      {showToolRail ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} state={toolRail} setState={setToolRail} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}
@@ -3836,7 +3844,7 @@ const makeStyles = (B = bubbleLayout()) =>
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
   // 桌面:模型 + 档位两个下拉控件挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
-  desktopModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200, height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
+  desktopModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200, flexShrink: 1, minWidth: 0, height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
   desktopModelPillText: { fontSize: ds(11), color: colors.text, flexShrink: 1 },
   desktopVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 8, borderRadius: radius.pill },
   desktopVariantPillText: { fontSize: ds(11), color: colors.textMuted },
@@ -3869,7 +3877,8 @@ const makeStyles = (B = bubbleLayout()) =>
   } as any,
   desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, height: 38 },
   desktopToolButton: { width: 34, height: 34, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
-  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  // flexShrink + minWidth 0:右侧边栏展开后聊天区可能只有 ~430,这一行要能收窄(模型名截断),不能把 🎤 / 发送挤出去。
+  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 1, minWidth: 0 },
   priorityButton: { height: 28, borderRadius: radius.item, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
