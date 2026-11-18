@@ -25,4 +25,6 @@ export const SHOW_BOLT_ENTRY = false;
  *  (实测还压住了聊天内容,两个 drive 因此点不到元素)。定位已由 #1176 改成绝对定位,
  *  但"常驻 44px 会不会压气泡"还没在真实窗口确认过 —— 先把入口藏起来,布局回到原样。
  *  确认后把下面这行改成 true 即可,不用改别的。 */
-export const SHOW_CHAT_TOOL_RAIL = false;
+// 2026-11-18 admin「右侧是不是可以再加一个边侧栏」→ 重新打开,并改成停靠(ChatScreen 按
+// chatToolRailReserve 留出右边距),不再浮在气泡上,上面「压住气泡」的顾虑不存在了。
+export const SHOW_CHAT_TOOL_RAIL = true;
