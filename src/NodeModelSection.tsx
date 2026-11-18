@@ -49,7 +49,7 @@ import {
 } from './node-model-change';
 import { variantOutcomeOf } from './variant-outcome';
 import { suggestedModels } from './runtime-catalog';
-import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince, catalogStateOf, catalogStateNotice } from './opencode-v2-model-list';
+import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince, catalogStateOf, catalogNoticeFor, canRetryCatalog } from './opencode-v2-model-list';
 import { opencodeFlagsOf,
   generationOf,
 } from './node-info';
@@ -115,7 +115,7 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
   const v2 = isOpenCodeV2Node(node);
   // #4976 —— 服务端四态。unsupported_runtime 直接走终态，不发起目录读取（重试也不会好）。
   const catalogState = catalogStateOf(node);
-  const catalogNotice = catalogStateNotice(catalogState);
+  const catalogNotice = catalogNoticeFor({ v2, state: catalogState });
   const [v2Models, setV2Models] = useState<string[] | null>(null);
   // #4099：per-model variants（catalog 提供后填充；当前未提供 → 未知）
   const [v2VariantMap, setV2VariantMap] = useState<Record<string, unknown> | null>(null);
@@ -330,6 +330,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
     : (v2 && peerModels.length > 0 ? peerModels : suggestedModels(node.runtime));
   const usingBuiltinFallback = v2 && v2Catalog.length === 0 && peerModels.length === 0;
   const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
+  // #4976 review：按钮与状态行提示共用同一判据；unsupported_runtime / 非 v2 都不给重试。
+  const retryAllowed = canRetryCatalog({ v2, state: catalogState, fallback: usingBuiltinFallback || usingPeerFallback });
   const currentModel = view?.model_effective ?? view?.model ?? node.model ?? node.config_snapshot?.model ?? null;
   const candidate = custom.trim() ? custom : picked;
   // 只在「opencode 系 runtime 却没写代际」时提示;写了 v1/v2 或不是 opencode 都不打扰。
@@ -568,11 +570,11 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
                   void import('expo-clipboard').then(m => m.setStringAsync(line)).catch(() => undefined);
                 }}>
                 {catalogStatusLine(v2Catalog.length, runtimeVersion)}
-                {v2Catalog.length === 0 ? '（下方按钮可立刻重试）' : ''}
+                {retryAllowed ? '（下方按钮可立刻重试）' : ''}
               </Text>
             ) : null}
             {v2 && hint ? <Text testID="opencode-v2-models-note" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>{hint}</Text> : null}
-            {usingBuiltinFallback || usingPeerFallback || catalogNotice.retry ? (
+            {retryAllowed ? (
               <Pressable testID="node-model-catalog-retry" disabled={busy}
                 onPress={() => setCatalogAttempt((n) => n + 1)}
                 style={({ pressed }) => [

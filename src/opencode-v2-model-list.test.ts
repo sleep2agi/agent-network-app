@@ -1,4 +1,4 @@
-import { catalogErrorText, catalogStateOf, catalogStateNotice, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, peerCatalogSources, reportedCatalogModels, catalogStatusLine, reportsCatalogSince } from './opencode-v2-model-list';
+import { canRetryCatalog, catalogErrorText, catalogNoticeFor, catalogStateOf, catalogStateNotice, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogModels, peerCatalogSources, reportedCatalogModels, catalogStatusLine, reportsCatalogSince } from './opencode-v2-model-list';
 
 let p = 0, t = 0;
 const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else { console.error('❌', n); } };
@@ -85,6 +85,15 @@ ck('unsupported_runtime 文案明确「重试也不会有」且不给重试', ca
 ck('not_reported 文案带重试', catalogStateNotice('not_reported').retry === true);
 ck('reported_empty 文案说「不是错误」且无重试', catalogStateNotice('reported_empty').retry === false && catalogStateNotice('reported_empty').text.includes('不是错误'));
 ck('reported 不额外渲染', catalogStateNotice('reported').text === '');
+
+// #4976 review（负责人 A/B 两条）：按钮与提示必须同判据
+ck('A: v2 + unsupported_runtime 即使走了内置候选也不给重试', canRetryCatalog({ v2: true, state: 'unsupported_runtime', fallback: true }) === false);
+ck('B: 非 v2 + not_reported 不给重试（effect 会直接 return）', canRetryCatalog({ v2: false, state: 'not_reported', fallback: false }) === false);
+ck('v2 + not_reported 给重试', canRetryCatalog({ v2: true, state: 'not_reported', fallback: false }) === true);
+ck('v2 + 内置/兄弟候选兜底给重试', canRetryCatalog({ v2: true, state: 'reported', fallback: true }) === true);
+ck('v2 + reported 且无兜底（有列表）不画按钮', canRetryCatalog({ v2: true, state: 'reported', fallback: false }) === false);
+ck('非 v2 + not_reported 文案不叫人点重试', !catalogNoticeFor({ v2: false, state: 'not_reported' }).text.includes('重新读取') && catalogNoticeFor({ v2: false, state: 'not_reported' }).retry === false);
+ck('v2 + not_reported 文案保留「重新读取」', catalogNoticeFor({ v2: true, state: 'not_reported' }).text.includes('重新读取'));
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);

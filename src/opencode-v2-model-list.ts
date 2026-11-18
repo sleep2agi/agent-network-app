@@ -408,3 +408,25 @@ export function catalogStateNotice(state: OpenCodeCatalogState | null): { text: 
     default: return { text: '', retry: false };
   }
 }
+
+/**
+ * #4976 review（负责人）：**按钮与提示必须用同一个判据**。
+ * A) v2 + unsupported_runtime：effect 提前 return，v2Catalog 为空 → 光看「用了内置候选」会照样画按钮，
+ *    但点了也不会重读（状态行的「下方按钮可立刻重试」同样是空头支票）。
+ * B) 非 v2：effect 第一行就 `if (!v2) return`，任何重试都不会发生 —— 即使服务端说 not_reported 也不该给按钮。
+ */
+export function canRetryCatalog(input: { v2: boolean; state: OpenCodeCatalogState | null; fallback: boolean }): boolean {
+  if (!input.v2) return false;
+  if (input.state === 'unsupported_runtime') return false;
+  return input.fallback || input.state === 'not_reported';
+}
+
+/** 非 v2 时不要叫人点重试（点了没反应）；其余情况沿用 catalogStateNotice。 */
+export function catalogNoticeFor(input: { v2: boolean; state: OpenCodeCatalogState | null }): { text: string; retry: boolean } {
+  const notice = catalogStateNotice(input.state);
+  if (input.v2) return notice;
+  if (input.state === 'not_reported') {
+    return { text: '该节点当前不会提供可读的模型目录（模型由节点自己的配置决定）。', retry: false };
+  }
+  return { ...notice, retry: false };
+}
