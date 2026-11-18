@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.565:",
+  "- 切换思考档位后，节点还没回报时显示「已下发，等待节点确认」，不再当成失败；60 分钟仍未回报会提示「无法确认」并提供「重新读取」。档位只对当前会话生效，节点重启后回到默认。",
+  "",
   "What's new in 0.2.564:",
   "- 节点设置里的模型列表不会再一直停在「正在读取…」：拿不到目录时会直接说明原因；不是 OpenCode 的节点不再显示没用的「重新读取」按钮。",
   "",
