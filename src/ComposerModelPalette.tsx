@@ -649,6 +649,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
               ) : null}
             </>
           )}
+          {/* #4823（通信欧 2026-11-19）：档位是 live-session-only，不能让人以为已持久化。 */}
+          <Text style={styles.variantNote} testID="node-variant-live-only">{t('chat.modelPicker.variantLiveOnly')}</Text>
         </View>
       ) : null}
 

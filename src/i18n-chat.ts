@@ -14,6 +14,7 @@ export const chatTranslations = {
   'chat.modelPicker.appliedNoReadback': ['已切换到 {model}（节点已确认；该节点版本不回报会话模型，升级 agent-node 后可显示实时读回）', 'Switched to {model} (the node acknowledged it; this node version does not report its session model)'],
   'chat.modelPicker.acceptedUnconfirmed': ['已接受，但生效模型未确认', 'Accepted, but the effective model is not confirmed'],
   'chat.modelPicker.variantPendingTimeout': ['节点长时间未确认这次切换（已等待 60 分钟）。可点「刷新」或重开面板再看一次当前值。', 'The node has not confirmed this switch for 60 minutes. Refresh or reopen the panel to re-read the current value.'],
+  'chat.modelPicker.variantLiveOnly': ['档位只对当前会话生效；节点重启后回到默认。', 'Thinking level applies to the current session only; it resets after the node restarts.'],
   'chat.modelPicker.variantPending': ['已下发「{value}」，等待节点确认（节点上报可能延迟几分钟到几十分钟，不是失败）', 'Sent "{value}"; waiting for the node to confirm (node reporting can lag by minutes — this is not a failure)'],
   'chat.modelPicker.variantAcceptedUnconfirmed': ['已接受，但当前档位未确认', 'Accepted, but the current variant is not confirmed'],
   'chat.modelPicker.variantApplied': ['已生效：{value}', 'Applied: {value}'],
