@@ -96,5 +96,14 @@ ck('share_source falls back to alias-only copy when path is unknown', dialog.inc
 ck('department notice is shown when present', cloneNoticeMessage({ demo: false, name: 'x', workdirPolicy: 'share_source', sessionDetail: null, departmentNotice: '已归入部门：安全' }, t).includes('已归入部门：安全'));
 ck('department notice absent adds nothing', !cloneNoticeMessage({ demo: false, name: 'x', workdirPolicy: 'share_source', sessionDetail: null, departmentNotice: null }, t).includes('已归入部门'));
 
+// #1524（负责人 2026-11-19）：源目录路径从节点数据取（workdir / config_snapshot.flags.workdir|cwd），取不到退化
+ck('node detail passes source workdir when available', detail.includes('cloneSourceWorkdir') && detail.includes('flags.workdir') && detail.includes('flags.cwd') && detail.includes('workdir: cloneSourceWorkdir'));
+ck('share warning talks about files/uncommitted changes, not messages', (() => {
+  const raw = readFileSync(new URL('./i18n-node-clone.ts', import.meta.url), 'utf8');
+  const m = /nodeClone\.share\.warning': \[([^\]]+)\]/.exec(raw);
+  const zh = m ? m[1] : '';
+  return zh.includes('文件和未提交改动') && !zh.includes('消息');
+})());
+
 console.log(`${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);
