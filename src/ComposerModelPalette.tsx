@@ -87,6 +87,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const [notice, setNotice] = useState<string | null>(null);
   // 正在等节点回填档位的那次切换（panel 关闭/切节点时随之丢弃，不跨面板残留）。
   const [pendingVariant, setPendingVariant] = useState<{ nodeId: string; updateId?: string; model: string; variant: string; startedAt: number } | null>(null);
+  // 超时后进入「无法确认」：给一个显式的「重新读取」入口，不写成失败。
+  const [variantUnconfirmed, setVariantUnconfirmed] = useState(false);
   const lock = useRef(false);
   const scope = useMemo(() => ({}), [node?.node_id, cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
   const scopeRef = useRef<object | null>(scope);
@@ -416,7 +418,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           setNotice(t('chat.modelPicker.variantPending', { value: next ?? t('chat.variantDefaultShort') }));
           // 进入「等节点确认」：由下面的 effect 持续轮询，直到确认 / 不一致 / 超时。
           if (next) {
-            setPendingVariant({ nodeId: node.node_id, updateId: res.update_id, model: effectiveModel, variant: next, startedAt: Date.now() });
+            setVariantUnconfirmed(false);
+          setPendingVariant({ nodeId: node.node_id, updateId: res.update_id, model: effectiveModel, variant: next, startedAt: Date.now() });
           }
           return;
         }
@@ -445,9 +448,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       if (!alive) return;
       if (Date.now() - pendingVariant.startedAt > VARIANT_CONFIRM_MAX_MS) {
         setPendingVariant(null);
-        setNotice(null);
-        setErrorText(t('chat.modelPicker.variantPendingTimeout'));
+        setErrorText(null);
         setErrorDetail(null);
+        // review（负责人）：超时不是失败 —— 显示「无法确认（节点未回读）」，面板里仍有重新读取入口。
+        setNotice(t('chat.modelPicker.variantPendingTimeout'));
+        setVariantUnconfirmed(true);
         return;
       }
       try {
@@ -462,6 +467,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         });
         if (verdict.confirmed) {
           setPendingVariant(null);
+          setVariantUnconfirmed(false);
           setErrorText(null);
           setErrorDetail(null);
           readbackRef.current(after);
@@ -651,6 +657,16 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           )}
           {/* #4823（通信欧 2026-11-19）：档位是 live-session-only，不能让人以为已持久化。 */}
           <Text style={styles.variantNote} testID="node-variant-live-only">{t('chat.modelPicker.variantLiveOnly')}</Text>
+          {variantUnconfirmed ? (
+            <Pressable
+              testID="composer-variant-recheck"
+              accessibilityRole="button"
+              onPress={() => { setVariantUnconfirmed(false); void reloadConfig().then(() => setNotice(null)); }}
+              style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.variantClear}>{t('chat.modelPicker.variantRecheck')}</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : null}
 
