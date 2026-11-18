@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.566:
+            - 复制节点（fork）默认不带对话历史、和源节点共用项目目录；选共用目录时会明确提示两个 agent 改同一目录会互相覆盖。新节点放不进源节点部门时会直接告诉你。
+
             What's new in 0.2.565:
             - 切换思考档位后，节点还没回报时显示「已下发，等待节点确认」，不再当成失败；60 分钟仍未回报会提示「无法确认」并提供「重新读取」。档位只对当前会话生效，节点重启后回到默认。
 
