@@ -17,7 +17,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 
-const ROOT_PACKAGE = 'agent-network-desktop';
 
 function fail(message) {
   console.error(`✗ ${message}`);
@@ -97,24 +96,28 @@ replaceOnce('app.json', appRaw, /"versionCode":\s*\d+/, `"versionCode": ${wantCo
 // 5 tauri.conf.json
 replaceOnce('src-tauri/tauri.conf.json', read('src-tauri/tauri.conf.json'), /"version":\s*"[^"]+"/, `"version": "${args.to}"`, 'version');
 
-// 6 Cargo.toml —— 锚定 [package] 段；不靠第一个匹配
+// 6 Cargo.toml —— 根包名**从 [package].name 读**，不写死；版本只在该段内取
 const cargoToml = read('src-tauri/Cargo.toml');
+const rootName = (() => {
+  const m = /\[package\][\s\S]*?\nname\s*=\s*"([^"]+)"/.exec(cargoToml);
+  if (!m) fail('Cargo.toml: 找不到 [package].name');
+  return m[1];
+})();
 {
-  const m = /\[package\][\s\S]*?\nname\s*=\s*"([^"]+)"[\s\S]*?\nversion\s*=\s*"([^"]+)"/.exec(cargoToml);
-  if (!m) fail('Cargo.toml: 找不到 [package] 段的 name/version');
-  if (m[1] !== ROOT_PACKAGE) fail(`Cargo.toml: [package].name=${m[1]}，期望 ${ROOT_PACKAGE}`);
-  if (m[2] !== current) fail(`Cargo.toml: [package].version=${m[2]}，与 ${current} 不一致`);
-  plan('src-tauri/Cargo.toml', `[package] ${ROOT_PACKAGE}.version`, m[2], args.to);
+  const m = /\[package\][\s\S]*?\nversion\s*=\s*"([^"]+)"/.exec(cargoToml);
+  if (!m) fail(`Cargo.toml: 找不到 [package] 段的 version（根包 ${rootName}）`);
+  if (m[1] !== current) fail(`Cargo.toml: [package].version=${m[1]}，与 ${current} 不一致`);
+  plan('src-tauri/Cargo.toml', `[package] ${rootName}.version`, m[1], args.to);
 }
 
-// 7 Cargo.lock —— 锚定包裹名的块
+// 7 Cargo.lock —— 用同一个根包名锚定块
 const cargoLock = read('src-tauri/Cargo.lock');
 {
-  const re = new RegExp(`(\\[\\[package\\]\\]\\nname = "${ROOT_PACKAGE}"\\nversion = ")([^"]+)(")`);
+  const re = new RegExp(`(\\[\\[package\\]\\]\\nname = "${rootName}"\\nversion = ")([^"]+)(")`);
   const m = re.exec(cargoLock);
-  if (!m) fail(`Cargo.lock: 找不到 [[package]] name = "${ROOT_PACKAGE}" 块`);
+  if (!m) fail(`Cargo.lock: 找不到 [[package]] name = "${rootName}" 块（根包名取自 Cargo.toml）`);
   if (m[2] !== current) fail(`Cargo.lock: 根包 version=${m[2]}，与 ${current} 不一致`);
-  plan('src-tauri/Cargo.lock', `[[package]] ${ROOT_PACKAGE}.version`, m[2], args.to);
+  plan('src-tauri/Cargo.lock', `[[package]] ${rootName}.version`, m[2], args.to);
 }
 
 // 8 src/version.ts
