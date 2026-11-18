@@ -1,0 +1,9 @@
+# Android 发行签名证书（APK v2/v3）的固定指纹 —— 防止「换了 key 还能发出去」
+#
+# 来源：0.2.565 与 0.2.566 的 Agent.Network_*_android-universal.apk 实测（2026-11-19，v2 签名块）
+#   两版 DER 均为 895 字节，指纹逐字相同。
+# 提取方式：python3 scripts/apk-cert-sha256.py <apk>（纯 Python，无需 Java/apksigner）
+#
+# 判据：每版 APK 的证书 SHA-256 必须等于下面这一行；不等 ⇒ 阻止发布。
+# 轮换证书时，必须改本文件并在 PR 里说明原因（这是人工关卡，不是自动更新）。
+fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
