@@ -13,7 +13,7 @@ export const chatTranslations = {
   'chat.modelPicker.catalogSource': ['目录来自这台节点的 OpenCode 服务器（只读）', 'Catalog from this node’s OpenCode server (read-only)'],
   'chat.modelPicker.appliedNoReadback': ['已切换到 {model}（节点已确认；该节点版本不回报会话模型，升级 agent-node 后可显示实时读回）', 'Switched to {model} (the node acknowledged it; this node version does not report its session model)'],
   'chat.modelPicker.acceptedUnconfirmed': ['已接受，但生效模型未确认', 'Accepted, but the effective model is not confirmed'],
-  'chat.modelPicker.variantPendingTimeout': ['无法确认（节点未回读）。已等待 60 分钟，可点「重新读取」再看一次。仅对当前会话生效，节点重启后回到默认。', 'Unconfirmed: the node has not reported back. Waited 60 minutes — tap Reload to read again. Applies to this session only; resets after the node restarts.'],
+  'chat.modelPicker.variantPendingTimeout': ['无法确认（节点 60 分钟内未回读）。可点「重新读取」再看当前值。', 'Unconfirmed: the node did not report back within 60 minutes. Tap Reload to read the current value.'],
   'chat.modelPicker.variantLiveOnly': ['档位只对当前会话生效；节点重启后回到默认。', 'Thinking level applies to the current session only; it resets after the node restarts.'],
   'chat.modelPicker.variantRecheck': ['重新读取', 'Reload'],
   'chat.modelPicker.variantPending': ['已下发「{value}」，等待节点确认（节点上报可能延迟，不是失败）。仅对当前会话生效，节点重启后回到默认。', 'Sent "{value}"; waiting for the node to confirm (reporting can lag — this is not a failure). Applies to this session only; resets after the node restarts.'],
