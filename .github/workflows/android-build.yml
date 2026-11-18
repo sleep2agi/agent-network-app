@@ -89,11 +89,19 @@ jobs:
       - name: Verify APK (versionCode, install permission, signing certificate)
         env:
           APK: ${{ steps.apk.outputs.path }}
-          # SHA-256 of the signing certificate of every released APK so far. Changing it means every
-          # existing install fails to update in place (「应用未安装 / 与已安装的应用签名冲突」).
-          EXPECTED_SIGNER_SHA256: fac61745dc0903786fb9ede62a962b399f7348f0bb6f899b8332667591033b9c
         run: |
           set -euo pipefail
+          # SHA-256 of the signing certificate of every released APK so far. Changing it means every
+          # existing install fails to update in place (「应用未安装 / 与已安装的应用签名冲突」).
+          # 单一真源：仓库里的 scripts/android-signing-cert.sha256（第一个非 # 行）。
+          # 读空 / 不是 64 位十六进制 ⇒ 直接失败：绝不能让「读不到」退化成「跳过比对」。
+          pin_file=scripts/android-signing-cert.sha256
+          EXPECTED_SIGNER_SHA256=$(awk 'NF && $1 !~ /^#/ {print $1; exit}' "$pin_file" 2>/dev/null | tr -d '[:space:]' || true)
+          if ! [[ "$EXPECTED_SIGNER_SHA256" =~ ^[0-9a-fA-F]{64}$ ]]; then
+            echo "::error::无法从 $pin_file 读到 64 位十六进制指纹（读到: '$EXPECTED_SIGNER_SHA256'）"
+            exit 1
+          fi
+          echo "expected signer sha256 = $EXPECTED_SIGNER_SHA256 (from $pin_file)"
           bt_list=$(ls "$ANDROID_HOME/build-tools" | sort -V)
           BT="$ANDROID_HOME/build-tools/${bt_list##*$'\n'}"
           expected_code=$(node -e 'const v=require("./app.json").expo.version.split(".").map(Number);process.stdout.write(String(v[0]*1e6+v[1]*1e3+v[2]))')
