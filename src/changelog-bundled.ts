@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.563:",
+  "- 聊天页右侧新增边栏：最右边一排图标（任务 / 技能 / 文件 / 日志），点一下展开面板，再点收起；窗口够宽时面板占自己一列，不会盖住消息。",
+  "",
   "What's new in 0.2.562:",
   "- 点了附件下载再切到别的会话，下载会在后台继续；回来能看到进度，或者「已保存到…」。下载中再点一次不会重复下载。",
   "",
