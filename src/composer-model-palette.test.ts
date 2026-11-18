@@ -118,6 +118,12 @@ ck('wrong variant rejected', !confirmComposerVariantSwitch({
   after: { model_effective: 'p/m', modelVariant: 'low', last_update: variantAck },
   updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
 }).confirmed);
+// 2026-11-19 生产实测（anet安全员 n_c5052bf7）：ack applied + requested_variant=high，但读回 modelVariant=null
+// ⇒ 必须判「未确认」，不能在 UI 上显示已切到 high。
+ck('applied ack but null variant readback is NOT confirmed', !confirmComposerVariantSwitch({
+  after: { model_effective: 'p/m', modelVariant: null, last_update: variantAck },
+  updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
+}).confirmed);
 ck('variant ack missing rejected', !confirmComposerVariantSwitch({
   after: { model_effective: 'p/m', modelVariant: 'high' },
   updateId: 'u2', requestedModel: 'p/m', requestedVariant: 'high',
