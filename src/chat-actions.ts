@@ -4,8 +4,20 @@ import { clientRequestIdOfRow, rowIsLocalSend } from './chat-echo';
 // 微信「引用」:把被引用内容压成单行、截断,包成引用块前缀,拼到正文前。
 // 2026-09-15(Vincent:抄微信的引用设计):带作者时写成「@作者: 文本」,客户端把这一行从气泡里
 // 拆出来,渲染成气泡下方的灰色引用条;agent 收到的仍是纯文本,上下文不丢。不带作者的旧格式照旧。
+/** 引用条是一行纯文本:把常见的行内 Markdown 记号去掉,只留字(admin 2026-11-19 截图里引用条露着 `**积分不足**`)。
+ *  只去成对的强调记号,单个 `*`(比如 2*3)原样保留。 */
+export const stripInlineMarkdown = (text: string): string => text
+  .replace(/!\[([^\]]*)\]\([^)]*\)/g, (_m, alt: string) => (alt ? `[${alt}]` : '[图片]'))
+  .replace(/\[([^\]]+)\]\([^)]*\)/g, '$1')
+  .replace(/(\*\*|__)(?=\S)([\s\S]*?\S)\1/g, '$2')
+  .replace(/~~(?=\S)([\s\S]*?\S)~~/g, '$1')
+  .replace(/(^|[^*\w])\*(?=\S)([^*\n]*?\S)\*(?![*\w])/g, '$1$2')
+  .replace(/```[a-zA-Z0-9_-]*\n?/g, '')
+  .replace(/`([^`\n]+)`/g, '$1')
+  .replace(/^\s{0,3}(#{1,6}\s+|>\s?|[-*+]\s+|\d+[.)]\s+)/gm, '');
+
 export const compactQuoteText = (content?: string, max = 40): string => {
-  const t = (content || '').replace(/\s+/g, ' ').trim();
+  const t = stripInlineMarkdown(content || '').replace(/\s+/g, ' ').trim();
   if (!t) return '';
   return t.length > max ? `${t.slice(0, max)}…` : t;
 };

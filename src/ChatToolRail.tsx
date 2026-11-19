@@ -103,7 +103,7 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
             {active === 'tasks' ? <NodeTasksSection cfg={cfg} alias={alias} embedded /> : null}
             {active === 'schedules' ? (
               scheduleNodeId
-                ? <NodeSchedulesSection cfg={cfg} nodeId={scheduleNodeId} editable createSeq={scheduleCreateSeq} />
+                ? <NodeSchedulesSection cfg={cfg} nodeId={scheduleNodeId} editable createSeq={scheduleCreateSeq} emptyCreate={false} />
                 : <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }} testID="chat-tool-schedules-no-node">
                     这个会话还没上报节点 id（或节点离线），暂时不能给它建定时任务；可以到左侧「定时任务」页新建。
                   </Text>
