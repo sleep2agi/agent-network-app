@@ -10,10 +10,10 @@ const check = (name: string, condition: boolean) => {
 };
 
 const dark = {
-  card: '#161618', border: '#26262b', textSecondary: '#a1a1aa', blocked: '#f59e0b', failed: '#ef4444', accent: '#5e9bff',
+  card: '#161618', border: '#26262b', textSecondary: '#a1a1aa', blocked: '#f59e0b', failed: '#ef4444', accent: '#7c93ff',
 };
 const light = {
-  card: '#ffffff', border: '#e1e5ea', textSecondary: '#626a76', blocked: '#d97706', failed: '#dc2626', accent: '#1b65db',
+  card: '#ffffff', border: '#e1e5ea', textSecondary: '#626a76', blocked: '#d97706', failed: '#dc2626', accent: '#375ada',
 };
 
 for (const [name, palette] of [['dark', dark], ['light', light]] as const) {

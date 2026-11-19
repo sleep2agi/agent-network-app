@@ -203,7 +203,7 @@ for (const scheme of ['light', 'dark']) {
   const dim = await bg(page, '[data-testid="voice-overlay"]');
   ck(tag, '全屏压暗 50% 黑', dim === 'rgba(0, 0, 0, 0.5)', dim);
   const bubbleBg = await bg(page, '[data-testid="voice-hold-bubble"] > div');
-  ck(tag, '气泡是晴蓝(#609:亮 #1b65db / 暗 #2563d9,= solidBrand;聊天气泡 2026-11-17 起是中性灰)', bubbleBg === (scheme === 'light' ? 'rgb(27, 101, 219)' : 'rgb(37, 99, 217)'), bubbleBg);
+  ck(tag, '气泡是品牌蓝(#609:亮 #375ada / 暗 #3a55d0,= solidBrand;2026-11-19 起偏靛;聊天气泡 2026-11-17 起是中性灰)', bubbleBg === (scheme === 'light' ? 'rgb(55, 90, 218)' : 'rgb(58, 85, 208)'), bubbleBg);
 
   // ── 2 几何 ──
   const pane = await box(page, 'chat-pane');

@@ -28,7 +28,7 @@ const FULL_URL = `http://${FULL_HOST}`;
 const MASKED = 'm****.invalid';
 const OTHER_FULL = 'other-hub.invalid';
 const OTHER_MASKED = 'o****.invalid:9300';
-const ACCENT = { light: 'rgb(27, 101, 219)', dark: 'rgb(94, 155, 255)' };
+const ACCENT = { light: 'rgb(55, 90, 218)', dark: 'rgb(124, 147, 255)' };
 
 let pass = 0; const failures = [];
 const ck = (name, ok, extra = '') => {

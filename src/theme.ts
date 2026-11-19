@@ -19,8 +19,9 @@ export type AccentTokens = {
   solidBrand: string; onSolid: string;
 };
 export const ACCENT: { light: AccentTokens; dark: AccentTokens } = {
-  light: { accent: '#1b65db', onAccent: '#ffffff', tonalBg: '#edf3fe', railActiveBg: '#e6eefd', bubbleMine: '#e8e8ed', onBubbleMine: '#1d2026', linkOnBubbleMine: '#1857c2', solidBrand: '#1b65db', onSolid: '#ffffff' },
-  dark: { accent: '#5e9bff', onAccent: '#0b0b0d', tonalBg: '#172a48', railActiveBg: '#15243b', bubbleMine: '#2a2a2f', onBubbleMine: '#ededef', linkOnBubbleMine: '#7fb0ff', solidBrand: '#2563d9', onSolid: '#ffffff' },
+  // admin 2026-11-19「主题色调了吗？」：照参考图（TMWork）把晴蓝换成偏靛的蓝 #375ada，和窗口的暖桃 / 淡紫蓝渐变同一色系。
+  light: { accent: '#375ada', onAccent: '#ffffff', tonalBg: '#eef1fd', railActiveBg: '#e8ecfc', bubbleMine: '#e8e8ed', onBubbleMine: '#1d2026', linkOnBubbleMine: '#3150c4', solidBrand: '#375ada', onSolid: '#ffffff' },
+  dark: { accent: '#7c93ff', onAccent: '#0b0b0d', tonalBg: '#1c2347', railActiveBg: '#1a2140', bubbleMine: '#2a2a2f', onBubbleMine: '#ededef', linkOnBubbleMine: '#9aacff', solidBrand: '#3a55d0', onSolid: '#ffffff' },
 };
 /** 永远画在深色底上的强调(语音浮层的电平条):不随浅 / 深主题变。 */
 export const ACCENT_ON_DARK = ACCENT.dark.accent;

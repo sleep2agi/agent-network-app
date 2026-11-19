@@ -92,7 +92,7 @@ ck('the link parses back', JSON.stringify(parseTaskLink('anet://task/net%20a/req
 // ── 主题 ──────────────────────────────────────────────────────────────────────────────────────
 setThemePreference('light');
 const light = drawerTokens();
-ck('light: accent is the brand blue #1b65db', light.accent === '#1b65db' && light.accent === ACCENT.light.accent);
+ck('light: accent is the brand blue #375ada', light.accent === '#375ada' && light.accent === ACCENT.light.accent);
 ck('light: every token is a live theme colour', light.bg === colors.bg && light.border === colors.border && light.text === colors.text && light.pillBg === colors.subtleFill);
 setThemePreference('dark');
 const dark = drawerTokens();

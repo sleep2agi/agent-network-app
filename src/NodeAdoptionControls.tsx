@@ -57,7 +57,7 @@ export default function NodeAdoptionControls({ cfg, node, online, onRefresh, ini
   if (!adoptionSupported(node) || node.managed === 'created' || !cfg.networkId) return null;
   const adopted = isAdopted(node), disabled = busy || !!pending;
   const down = nodeIsDown(online, node.lifecycle_state);
-  const button = (id: string, label: string, press: () => void, off = false) => <Pressable testID={id} accessibilityRole="button" accessibilityState={{ disabled: off }} disabled={off} onPress={press} style={{ minHeight: 44, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: '#1b65db', borderRadius: radius.item, opacity: off ? 0.45 : 1 }}><Text style={{ color: colors.text, fontSize: 14 }}>{label}</Text></Pressable>;
+  const button = (id: string, label: string, press: () => void, off = false) => <Pressable testID={id} accessibilityRole="button" accessibilityState={{ disabled: off }} disabled={off} onPress={press} style={{ minHeight: 44, paddingHorizontal: 14, paddingVertical: 11, borderWidth: 1, borderColor: colors.accent, borderRadius: radius.item, opacity: off ? 0.45 : 1 }}><Text style={{ color: colors.text, fontSize: 14 }}>{label}</Text></Pressable>;
   const submit = async () => {
     if (!dialog || lock.current || pending) return;
     lock.current = true; setBusy(true); setMessage('');
