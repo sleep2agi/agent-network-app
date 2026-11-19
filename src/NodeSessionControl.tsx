@@ -64,7 +64,8 @@ export default function NodeSessionControl({ cfg, target }: { cfg: HubConfig; ta
   });
   return (
     <View testID="node-session-control" style={{ flexDirection: 'column', gap: 4, paddingHorizontal: spacing.lg, paddingVertical: 6,
-      backgroundColor: colors.card, borderBottomWidth: 1, borderBottomColor: colors.border }}>
+      // 桌面聊天页底色带角落光斑（chat-glow-gradient.ts）：这条在桌面上透明，不在光斑上切出一块白；手机仍是实底。
+      backgroundColor: touch ? colors.card : 'transparent', borderBottomWidth: 1, borderBottomColor: colors.border }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
         <Text numberOfLines={1} style={{ color: colors.textMuted, fontSize: 12, flexShrink: 0 }}>{touch ? t('sessionControl.titleShort') : t('sessionControl.title')}</Text>
         {state ? <Text testID="session-control-status" style={{ color: state.active ? colors.accent : colors.textMuted, fontSize: 12 }}>{t(state.active ? 'sessionControl.running' : 'sessionControl.idle')}</Text> : null}
