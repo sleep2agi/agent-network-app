@@ -1,3 +1,5 @@
+import { currentLanguage } from './i18n';
+
 const FILE_ID = '[A-Za-z0-9_-]{8,64}';
 const VALID_FILE_ID = new RegExp(`^${FILE_ID}$`);
 
@@ -8,6 +10,47 @@ export type ParsedAttachmentRef = {
    * MIME. The downloader can refine this from bytes; rendering must not wait. */
   mime?: string;
   size?: number;
+};
+
+/** hub 没给 `name` 时的兜底标题(#296 边界:以前退回 32 位 file_id,卡片上就是一串 hex)。
+ *  口径:图片 →「图片」,其余 →「文件」;能从 mime 推出扩展名就带上,例如「文件.pdf」。
+ *  只用 mime,不猜内容;推不出扩展名就只写「图片」/「文件」。 */
+const MIME_EXTENSION: Record<string, string> = {
+  'image/png': '.png',
+  'image/jpeg': '.jpg',
+  'image/jpg': '.jpg',
+  'image/gif': '.gif',
+  'image/webp': '.webp',
+  'image/heic': '.heic',
+  'image/svg+xml': '.svg',
+  'application/pdf': '.pdf',
+  'application/zip': '.zip',
+  'application/json': '.json',
+  'application/msword': '.doc',
+  'application/vnd.openxmlformats-officedocument.wordprocessingml.document': '.docx',
+  'application/vnd.ms-excel': '.xls',
+  'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet': '.xlsx',
+  'application/vnd.ms-powerpoint': '.ppt',
+  'application/vnd.openxmlformats-officedocument.presentationml.presentation': '.pptx',
+  'text/plain': '.txt',
+  'text/markdown': '.md',
+  'text/html': '.html',
+  'text/csv': '.csv',
+};
+
+/** 标题里不含内容的两个词,按当前语言取(界面语言切换后重新解析即生效)。 */
+const GENERIC_TITLES: Record<string, { image: string; file: string }> = {
+  zh: { image: '图片', file: '文件' },
+  en: { image: 'Image', file: 'File' },
+};
+const genericTitles = () => GENERIC_TITLES[currentLanguage()] ?? GENERIC_TITLES.en;
+
+export const attachmentDisplayName = (name: unknown, mime: unknown): string => {
+  const given = typeof name === 'string' ? name.trim() : '';
+  if (given) return given;
+  const type = typeof mime === 'string' ? mime.toLowerCase().split(';')[0].trim() : '';
+  const ext = MIME_EXTENSION[type] ?? '';
+  return (type.startsWith('image/') ? genericTitles().image : genericTitles().file) + ext;
 };
 
 /** Preserve the Hub's canonical `meta.attachments` fields rather than making
@@ -29,7 +72,7 @@ const parseMetaRefs = (raw: unknown, key: 'attachments' | 'reply_attachments'): 
         || !VALID_FILE_ID.test(value.file_id)) return [];
       return [{
         fileId: value.file_id,
-        name: typeof value.name === 'string' ? value.name : value.file_id,
+        name: attachmentDisplayName(value.name, value.mime),
         mime: typeof value.mime === 'string' ? value.mime : undefined,
         size: typeof value.size === 'number' ? value.size : undefined,
       }];
