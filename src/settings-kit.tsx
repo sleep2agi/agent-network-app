@@ -29,6 +29,13 @@ const ACCESSORY = 18;
 /** 没给 testID 的行的默认 testID(web 验收脚本按 `<id>` / `<id>-label` / `<id>-accessory` 量)。 */
 const ROW_ID = 'settings-kit-row';
 
+/** 行首图标一律用线条款：传进来的是实心名就补 -outline（Ionicons 线条款都叫 xxx-outline）。 */
+export const outlineIcon = (name: string): any => {
+  if (name.endsWith('-outline') || name.endsWith('-sharp')) return name;
+  const map = (Ionicons as unknown as { glyphMap?: Record<string, number> }).glyphMap;
+  return map && map[`${name}-outline`] !== undefined ? `${name}-outline` : name;
+};
+
 export type SettingsTone = 'default' | 'accent' | 'danger' | 'muted';
 const toneColor = (tone: SettingsTone | undefined, fallback: string): string =>
   tone === 'accent' ? colors.accent : tone === 'danger' ? colors.failed : tone === 'muted' ? colors.textMuted : fallback;
@@ -152,7 +159,9 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
         <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}>
           {/* 自带 iconColor 的色块(需求 4093 的分类色)是深浅两色共用的固定色,图形用固定白(onSolid,两档都是白);
               没给色就是主色块,图形照旧 onAccent(深色下 accent 偏亮、onAccent 是深色)。 */}
-          <View style={[styles.iconTile, { backgroundColor: iconColor ?? colors.accent }]}><Ionicons name={icon as any} size={17} color={iconColor ? colors.onSolid : colors.onAccent} /></View>
+          {/* 2026-11-19 admin「这个也有点难看」：不再一行一个饱和色块（青 / 红 / 橙 / 绿），统一成细线条中性色图标。
+             iconColor 参数保留（调用方不用改），只是不再铺底色。 */}
+          <View style={styles.iconTile}><Ionicons name={outlineIcon(icon)} size={19} color={colors.textSecondary} /></View>
         </View>
       ) : null}
       <RowLabel label={label} subtitle={subtitle} tone={tone} subtitleTone={subtitleTone} testID={`${id}-label`} centered={centered} />
@@ -415,8 +424,6 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
       onPress={onPress}
       style={({ pressed }) => [styles.profileCard, { minHeight: Math.max(76, ds(84)) }, pressed && { opacity: 0.88 }]}
     >
-      <View pointerEvents="none" style={styles.profileOrb} />
-      <View pointerEvents="none" style={styles.profileOrbSmall} />
       <View style={styles.profileAvatar}><AliasAvatar alias={name} size={52} /></View>
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
@@ -437,11 +444,11 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
           onPress={(e: any) => { e?.stopPropagation?.(); onMore(moreRef.current); }}
           style={({ pressed, hovered }: any) => [styles.profileChevron, styles.profileMore, (pressed || hovered) && styles.profileMoreHover]}
         >
-          <Ionicons name="ellipsis-horizontal" size={18} color={colors.onSolid} />
+          <Ionicons name="ellipsis-horizontal" size={18} color={colors.textMuted} />
         </Pressable>
       ) : onPress ? (
         <View style={styles.profileChevron} testID={`${id}-accessory`}>
-          <Ionicons name="chevron-forward" size={18} color={colors.onSolid} />
+          <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
         </View>
       ) : null}
     </Pressable>
@@ -520,19 +527,18 @@ const makeStyles = () => StyleSheet.create({
     flexDirection: 'row', alignItems: 'center', gap: spacing.md,
     marginHorizontal: SETTINGS_GUTTER, marginTop: spacing.md,
     paddingHorizontal: SETTINGS_ROW_PAD_X, paddingVertical: spacing.md,
-    borderRadius: radius.surface, backgroundColor: colors.solidBrand, overflow: 'hidden',
-    ...elevated('raised'),
+    // 2026-11-19 admin「这个也有点难看」：不再铺一整块饱和蓝 + 装饰圆，改成和下面分组同一种卡片底，头像和名字自己说话。
+    borderRadius: radius.surface, backgroundColor: colors.groupedRow, overflow: 'hidden',
+    borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border,
   },
-  profileOrb: { position: 'absolute', right: -48, top: -64, width: 170, height: 170, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.14)' },
-  profileOrbSmall: { position: 'absolute', right: 56, bottom: -54, width: 96, height: 96, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.08)' },
-  profileAvatar: { padding: 3, borderRadius: radius.pill, backgroundColor: 'rgba(255,255,255,0.35)', flexShrink: 0 },
-  profileName: { color: colors.onSolid, fontSize: 19, fontWeight: '600', flexShrink: 1, minWidth: 0 },
-  profilePill: { color: colors.onSolid, backgroundColor: 'rgba(255,255,255,0.22)' },
+  profileAvatar: { flexShrink: 0 },
+  profileName: { color: colors.text, fontSize: 19, fontWeight: '600', flexShrink: 1, minWidth: 0 },
+  profilePill: { color: colors.accent, backgroundColor: colors.railActiveBg },
   profileChevron: { width: ACCESSORY, height: ACCESSORY, marginLeft: 'auto', alignItems: 'center', justifyContent: 'center' },
-  profileSub: { color: colors.onSolid, opacity: 0.88, fontSize: 13, lineHeight: 18 },
-  profileWarning: { opacity: 1, fontWeight: '600' },
+  profileSub: { color: colors.textSecondary, fontSize: 13, lineHeight: 18 },
+  profileWarning: { color: colors.failed, fontWeight: '600' },
   profileMore: { borderRadius: radius.pill },
-  profileMoreHover: { backgroundColor: 'rgba(255,255,255,0.18)' },
+  profileMoreHover: { backgroundColor: colors.groupedRowPressed },
   label: { fontSize: 16 },
   subtitle: { fontSize: 13, lineHeight: 18 },
   value: { flex: 1, minWidth: 0, fontSize: 15, textAlign: 'right' },
