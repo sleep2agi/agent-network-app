@@ -129,3 +129,15 @@ ck('两处桌面输入框都按设置的发送键判定', (chatSource.match(/sho
 }
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);
+
+// admin 2026-11-19：引用条露着 `**积分不足**` —— 引用是一行纯文本,行内 Markdown 记号去掉。
+{
+  const { compactQuoteText: q, stripInlineMarkdown: strip } = await import('./chat-actions');
+  const eqq = (a: string, b: string, m: string) => { if (a !== b) throw new Error(`${m}: ${JSON.stringify(a)} !== ${JSON.stringify(b)}`); };
+  eqq(q('兑换失败给原因：**积分不足**、**库存不足**、**活动已结束**三种。', 80), '兑换失败给原因：积分不足、库存不足、活动已结束三种。', 'bold');
+  eqq(q('看 `README.md` 和 [文档](https://x.y/z)', 80), '看 README.md 和 文档', 'code + link');
+  eqq(q('# 标题\n- 一\n- 二\n> 引用', 80), '标题 一 二 引用', 'block markers');
+  eqq(q('![截图](a.png) 2*3=6 _x_', 80), '[截图] 2*3=6 _x_', 'image + lone star kept');
+  eqq(strip('~~删~~ *斜体*'), '删 斜体', 'strike + italic');
+  eqq(q('**积分不足**积分不足积分不足', 6), '积分不足积分…', 'strip before clip');
+}

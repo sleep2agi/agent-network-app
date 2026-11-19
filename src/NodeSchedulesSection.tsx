@@ -54,7 +54,7 @@ type Load =
 
 type LastRun = { key: string; run: HubScheduledRun | null; task?: HubTask | null };
 
-export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq = 0, onOpenNodePlan }: {
+export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq = 0, onOpenNodePlan, emptyCreate = true }: {
   cfg: HubConfig;
   /** 权威 node_id(nodes 行,没有再用会话上报的);null = 这个节点不能当执行节点。 */
   nodeId: string | null;
@@ -64,6 +64,8 @@ export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq 
   createSeq?: number;
   /** 点一行节点计划:去定时任务页的「节点计划」落在那一条(那里能改托管 cron)。 */
   onOpenNodePlan?: (request: ScheduleOpenRequest) => void;
+  /** 空态里画「新建」按钮。外面标题上已经有「＋ 新建」时传 false,别一屏两个新建(admin 2026-11-19 截图)。 */
+  emptyCreate?: boolean;
 }) {
   const [, setThemeTick] = useState(0);
   useEffect(() => onThemeChange(() => setThemeTick(t => t + 1)), []);
@@ -257,7 +259,7 @@ export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq 
       {failedFirstRead ? null : rows.length === 0 ? (
         <View style={[s.card, s.empty]} testID="node-schedules-empty">
           <Text style={s.emptyTitle}>{NODE_SCHEDULES_EMPTY}</Text>
-          {openCreate ? (
+          {openCreate && emptyCreate ? (
             <Pressable onPress={openCreate} accessibilityRole="button" testID="node-schedules-empty-create" style={s.primary}>
               <Text style={s.primaryText}>新建</Text>
             </Pressable>

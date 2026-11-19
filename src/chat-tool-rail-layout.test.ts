@@ -41,7 +41,7 @@ console.log('chat-tool-rail-layout: ok');
   const { readFileSync } = await import('node:fs');
   const rail = readFileSync(new URL('./ChatToolRail.tsx', import.meta.url), 'utf8');
   assert.match(rail, /\{ key: 'schedules', label: '定时任务', icon: 'time-outline' \}/);
-  assert.match(rail, /<NodeSchedulesSection cfg=\{cfg\} nodeId=\{scheduleNodeId\} editable createSeq=\{scheduleCreateSeq\} \/>/);
+  assert.match(rail, /<NodeSchedulesSection cfg=\{cfg\} nodeId=\{scheduleNodeId\} editable createSeq=\{scheduleCreateSeq\} emptyCreate=\{false\} \/>/);
   assert.match(rail, /testID="chat-tool-schedule-create"/);
   assert.match(rail, /testID="chat-tool-schedules-no-node"/);
 }
