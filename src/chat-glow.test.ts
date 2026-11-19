@@ -33,4 +33,6 @@ const list = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8'
 assert.match(list, /const listChromeBg = glass \? 'transparent'/);
 const session = readFileSync(new URL('./NodeSessionControl.tsx', import.meta.url), 'utf8');
 assert.match(session, /backgroundColor: touch \? colors\.card : 'transparent'/);
+const rail = readFileSync(new URL('./ChatToolRail.tsx', import.meta.url), 'utf8');
+assert.match(rail, /backgroundColor: glass \? 'transparent' : colors\.bg/, 'right tool rail lets the window glow through');
 console.log('chat-glow: ok');
