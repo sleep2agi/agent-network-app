@@ -2586,12 +2586,18 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        {/* #573：页头只显示文字（可切换的入口在输入框下方的模型 chip），页头保持只有一个 ⋯。 */}
-        <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-          {composerModelLine
-            ? t('chat.reportedModel', { model: composerModelLine })
-            : modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')}
-        </Text>
+        <Pressable
+          accessibilityRole={footerModel ? undefined : 'button'}
+          accessibilityLabel={footerModel ? undefined : (modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect'))}
+          onPress={footerModel ? undefined : () => setModelSheetOpen(true)}
+          hitSlop={6}
+        >
+          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+            {composerModelLine
+              ? t('chat.reportedModel', { model: composerModelLine })
+              : modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')}
+          </Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.info')}
