@@ -88,7 +88,9 @@ check(!/Alert\.alert\([^)]*\[\s*\{\s*text:\s*'图片'/.test(chat), 'no 图片/�
   check(chat.includes('onPress={onPlusPress}') && chat.includes("plusPressAction({ desktop, attachEnabled: ATTACH_ENABLED }) === 'panel'"), 'desktop + opens the file picker via plusPressAction');
   // WeChat layout (composer-row-layout.ts): ＋ lives in the right slot (ComposerRightSlot).
   check(mobile.includes("onPlus={() => plusEvent('toggle')}"), 'mobile + (right slot) toggles');
-  check(mobile.includes("onFocus={() => plusEvent('inputFocus')}"), 'input focus closes the panel');
+  // 0.2.574：#574 的「＋」首次提示要在聚焦时收起，所以 onFocus 先写一次状态再发 inputFocus；
+  // 行为不变（聚焦 = 关面板），断言的两种写法都收。
+  check(/onFocus=\{\(\) => (\{[^}]*setComposerFocused\(true\);\s*)?plusEvent\('inputFocus'\)/.test(mobile), 'input focus closes the panel');
   check(mobile.includes('plusPanelHeight(plusWindowHeight'), 'panel has the fixed height');
   check(mobile.includes('(plusMenuOpen ? 0 : composerInset)'), 'bottom inset moves from the input row to the panel');
 }
