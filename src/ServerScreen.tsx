@@ -185,7 +185,7 @@ export default function ServerScreen({
   const host = displayHubAddress(cfg.serverUrl, revealHost);
   const wide = width >= WIDE_MIN;
   const hasData = sessions.length > 0;
-  const toneColor = { good: colors.running, fair: colors.blocked, slow: colors.failed, unknown: colors.textMuted }[latencyTone(latency)];
+  const toneColor = { good: colors.running, fair: colors.blocked, slow: colors.blocked, unknown: colors.textMuted }[latencyTone(latency)];
   const otherProfiles = profiles.filter(p => p.profileId !== cfg.profileId);
   const retry = () => { setRetrying(true); void load(); };
   const { hosts, active: activeHosts, offline: offlineHosts, unreported } = hostLevels(hostRows ?? [], Date.now(), daemons);
@@ -513,7 +513,8 @@ function toneColor(tone: LevelTone, stale: boolean): string | undefined {
   if (stale) return colors.textMuted;
   if (tone === 'ok') return colors.accent;
   if (tone === 'warn') return mixHex(colors.blocked, colors.card, HOST_ALERT_SOFTEN);
-  if (tone === 'danger') return mixHex(colors.failed, colors.card, HOST_ALERT_SOFTEN);
+  // 2026-11-19 admin「一眼全是红」：机器忙不是故障，满载也用琥珀色；红色只留给真出错（节点异常 / 连接失败）。
+  if (tone === 'danger') return mixHex(colors.blocked, colors.card, 0.05);
   return undefined;
 }
 
@@ -534,7 +535,7 @@ function MeterBar({ meter, stale, testID, grow }: { meter: Meter; stale: boolean
  * 窄屏:名字一行,下面三行「标签 | 条 | 百分比 · 细节」,标签列定宽 —— 两种布局里条的左边缘逐行对齐。
  */
 function HostRow({ host: h, wide, first, onPress }: { host: HostLevel; wide: boolean; first: boolean; onPress?: () => void }) {
-  const pctColor = (m: Meter) => (h.stale ? colors.textMuted : m.tone === 'danger' ? colors.failed : colors.text);
+  const pctColor = (m: Meter) => (h.stale ? colors.textMuted : m.tone === 'danger' ? colors.blocked : colors.text);
   // 完整 hostname:桌面悬停出提示条;手机点名字展开第二行(灰字)。显示名 = hostname 时都不需要。
   const [hovered, setHovered] = useState(false);
   const [expanded, setExpanded] = useState(false);
@@ -766,7 +767,7 @@ const makeStyles = () =>
     hostRowRaised: { zIndex: 5 },
     hostNameLine: { flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0, flexShrink: 1 },
     hostNameBtn: { flexDirection: 'row', alignItems: 'center', gap: 2, minWidth: 0, flexShrink: 1 },
-    alertDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: colors.failed, flexShrink: 0 },
+    alertDot: { width: 7, height: 7, borderRadius: radius.pill, backgroundColor: colors.blocked, flexShrink: 0 },
     // 提示条落在名字下方(盖住「N 在线」那行),不出这一行的上下边界 —— 面板 overflow:hidden 会裁掉出界的部分。
     hostTip: { position: 'absolute', top: '100%', left: 0, marginTop: 2, paddingHorizontal: 8, paddingVertical: 3, borderRadius: radius.item, backgroundColor: colors.railTooltipBg, zIndex: 40 },
     hostTipText: { color: colors.railTooltipText, fontSize: 12, lineHeight: 16 },
