@@ -136,7 +136,8 @@ ck('空查询不命中任何 node_id', matchesNodeId({ node_id: 'n_a' }, '   ', 
 // 搜索框提示要写明可以搜 node_id(否则功能存在也没人知道)
 const screenSrc = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
 // 桌面搜索框窄,长占位符会被截断(只剩「搜索 agent…」),数量移到标题、占位符只留关键词。
-ck('搜索框 placeholder 提到 node_id', screenSrc.includes('agent / node_id'));
+// #573：placeholder 不再写 node_id（按 id 搜仍然支持，只是不摆在占位里）。
+ck('搜索框 placeholder 不写 node_id（按 id 仍可搜）', !screenSrc.includes('agent / node_id') && screenSrc.includes('搜索 agent`'));
 
 // 2026-11-02:搜索也认当前模型("谁在跑 deepseek")
 const withModel = [

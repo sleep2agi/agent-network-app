@@ -340,8 +340,8 @@ export function reconcileNodeFilter(options: readonly Pick<ScheduleNodeOption, '
 }
 
 export function nodeFilterLabel(options: readonly Pick<ScheduleNodeOption, 'id' | 'label'>[], nodeId: string): string {
-  if (!nodeId) return '全部节点';
-  return options.find(option => option.id === nodeId)?.label ?? '全部节点';
+  if (!nodeId) return '全部 agent';
+  return options.find(option => option.id === nodeId)?.label ?? '全部 agent';
 }
 
 /** 节点选择器里的搜索。match 默认是子串;界面可传拼音匹配。 */

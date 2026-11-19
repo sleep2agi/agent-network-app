@@ -16,7 +16,7 @@ let changes = 0;
 const stop = subscribeLanguage(() => changes++);
 setLanguagePreference('en');
 ck('instant translated text', t('language.label') === 'Language' && changes === 1);
-ck('Hub navigation uses Hub consistently in English', t('nav.server') === 'Hub settings' && t('server.current') === 'Current Hub' && t('server.management') === 'Hub management' && t('server.navLabel', { label: 'Overview' }) === 'Hub: Overview');
+ck('Hub navigation uses Hub consistently in English', t('nav.server') === 'Server' && t('server.current') === 'Current Hub' && t('server.management') === 'Hub management' && t('server.navLabel', { label: 'Overview' }) === 'Hub: Overview');
 ck('Hub and Daemon integration sidebar labels in English', t('server.integrations') === 'Hub integrations' && t('daemon.integrations') === 'Daemon integrations' && t('server.integrations.daemon') === 'Daemon');
 ck('Hub account and request copy uses Hub in English', t('login.registerCopy').includes('this Hub') && t('accounts.addCopy').includes('account or Hub') && t('password.err.network').includes('reach the Hub') && t('tags.opTimeout').startsWith('The Hub'));
 ck('language choices use system label and language self-names', t('settings.language.system') === 'Follow system' && t('settings.language.zh') === '中文' && t('settings.language.en') === 'English');
@@ -27,7 +27,7 @@ ck('chat translations have both languages and matching interpolation fields', Ob
 setLanguagePreference('system');
 refreshSystemLanguage('zh-CN');
 ck('system change updates current language', currentLanguage() === 'zh');
-ck('Hub navigation uses Hub consistently in Chinese', t('nav.server') === 'Hub 设置' && t('server.current') === '当前 Hub' && t('server.management') === 'Hub 管理' && t('server.navLabel', { label: '概览' }) === 'Hub：概览');
+ck('Hub navigation uses Hub consistently in Chinese', t('nav.server') === '服务器' && t('server.current') === '当前 Hub' && t('server.management') === 'Hub 管理' && t('server.navLabel', { label: '概览' }) === 'Hub：概览');
 ck('Hub and Daemon integration sidebar labels in Chinese', t('server.integrations') === 'Hub 域集成' && t('daemon.integrations') === 'Daemon 域集成' && t('server.integrations.daemon') === 'Daemon');
 ck('Hub account and request copy uses Hub in Chinese', t('login.registerCopy').includes('这个 Hub') && t('accounts.addCopy').includes('账号或 Hub') && t('password.err.network').startsWith('连不上 Hub') && t('tags.opTimeout').startsWith('Hub'));
 let finish!: (value: string | null) => void;

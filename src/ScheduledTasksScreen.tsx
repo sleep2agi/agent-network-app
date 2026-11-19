@@ -449,13 +449,15 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
           <View style={styles.tabs}>
             {(['hub', 'node'] as const).map(value => (
               <Pressable key={value} accessibilityRole="tab" accessibilityState={{ selected: tab === value }} onPress={() => setTab(value)} style={[styles.tabItem, tab === value && styles.tabActive]}>
-                <Text style={tab === value ? styles.tabTextActive : styles.tabText}>{value === 'hub' ? 'Hub 计划' : '节点计划'}</Text>
+                <Text style={tab === value ? styles.tabTextActive : styles.tabText}>{value === 'hub' ? 'ANet 定时' : '机器上的定时'}</Text>
               </Pressable>
             ))}
           </View>
           <View style={styles.flex} />
           {tab === 'hub' ? <Pressable style={styles.primarySmall} onPress={openCreate}><Text style={styles.primaryText}>新建</Text></Pressable> : null}
         </View>
+        {/* #573：两种定时的区别写一句人话，省得用户猜。 */}
+        <Text style={styles.tabHint}>「ANet 定时」由 ANet 按时派发；「机器上的定时」是节点所在电脑自带的计划（例如 crontab）。</Text>
         {error ? <Text style={styles.error}>{error}</Text> : null}
         {tab === 'node' ? (
           !externalLoaded ? <View style={styles.center}><ActivityIndicator color={colors.accent} /></View> : (
@@ -956,7 +958,7 @@ function ScheduleFilterBar({ testID, query, onQuery, placeholder, nodeLabel, nod
           accessibilityState={{ selected: nodeSelected }}
           testID={`${testID}-node`}
         >
-          <Text style={s.nodeButtonLabel} numberOfLines={1}>{nodeSelected ? nodeLabel : '全部节点'}</Text>
+          <Text style={s.nodeButtonLabel} numberOfLines={1}>{nodeSelected ? nodeLabel : '全部 agent'}</Text>
           {nodeSelected ? null : <Ionicons name="chevron-down" size={14} color={colors.textMuted} />}
         </Pressable>
         {nodeSelected ? (
@@ -1028,12 +1030,12 @@ function NodeFilterSheet({ visible, options, selectedId, allCount, onSelect, onC
             accessibilityState={{ selected: !selectedId, checked: !selectedId }}
             aria-checked={!selectedId}
             {...keyboardSelect('')}
-            accessibilityLabel={`全部节点，${allCount} 个计划`}
+            accessibilityLabel={`全部 agent，${allCount} 个计划`}
             onPress={() => onSelect('')}
             style={({ hovered, pressed }: any) => [s.pickerRow, (hovered || pressed) && s.pickerRowHover, !selectedId && s.pickerRowOn]}
           >
             <View style={s.pickerAllIcon}><Ionicons name="layers-outline" size={18} color={!selectedId ? colors.accent : colors.textSecondary} /></View>
-            <Text style={s.pickerLabel} numberOfLines={1}>全部节点</Text>
+            <Text style={s.pickerLabel} numberOfLines={1}>全部 agent</Text>
             <Text style={[s.pickerCount, !selectedId && s.pickerCountOn]} accessibilityLabel={`${allCount} 个计划`}>{allCount}</Text>
             {!selectedId ? <Ionicons name="checkmark" size={18} color={colors.accent} /> : <View style={s.pickerCheck} />}
           </Pressable>
@@ -1042,7 +1044,7 @@ function NodeFilterSheet({ visible, options, selectedId, allCount, onSelect, onC
           {shown.length === 0 ? <View style={s.pickerEmpty}>
             <Ionicons name="search-outline" size={24} color={colors.textMuted} />
             <Text style={s.pickerEmptyTitle}>{query.trim() ? '没有匹配的节点' : '暂无可筛选的节点'}</Text>
-            <Text style={s.pickerEmptyHint}>{query.trim() ? '试试其他名称、拼音或节点 ID，也可清除搜索。' : '节点有计划后会显示在这里，可先查看全部节点。'}</Text>
+            <Text style={s.pickerEmptyHint}>{query.trim() ? '试试其他名称、拼音或节点 ID，也可清除搜索。' : '节点有计划后会显示在这里，可先查看全部 agent。'}</Text>
           </View> : shown.map(option => {
             const selected = option.id === selectedId;
             const duplicate = (labelCounts.get(option.label) ?? 0) > 1;
@@ -1100,6 +1102,7 @@ function makeStyles() { return StyleSheet.create({
   tabs: { flexDirection: 'row', backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: 3 },
   tabItem: { paddingHorizontal: spacing.md, paddingVertical: 5, borderRadius: radius.item },
   tabActive: { backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border },
+  tabHint: { color: colors.textMuted, fontSize: 11, paddingHorizontal: 12, paddingBottom: 6 },
   tabText: { color: colors.textMuted, fontSize: fontSize.small },
   tabTextActive: { color: colors.text, fontSize: fontSize.small, fontWeight: weight.strong },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: spacing.xl }, list: { padding: spacing.lg, paddingTop: spacing.sm, paddingBottom: spacing.xl },

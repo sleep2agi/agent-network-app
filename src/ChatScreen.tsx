@@ -2215,6 +2215,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const effectiveValue = activeComposerModelValue(effectiveModel, effectiveScope);
   const reportedValue = activeComposerModelValue(reportedModel, composerModelScope);
   const footerModel = (effectiveValue?.model ?? reportedValue?.model ?? '').trim();
+  // #573：文案分「可选择」/「由节点决定」两种；只有 Hub 明确说这次切换不支持时才算固定。
+  const modelFixedByNode = switchState.kind === 'unsupported';
   const footerVariant = effectiveValue && Object.prototype.hasOwnProperty.call(effectiveValue, 'modelVariant')
     ? effectiveValue.modelVariant
     : undefined;
@@ -2584,9 +2586,18 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Text>
           ) : null}
         </View>
-        <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
-          {composerModelLine ? t('chat.reportedModel', { model: composerModelLine }) : t('chat.modelUnknown')}
-        </Text>
+        <Pressable
+          accessibilityRole={footerModel ? undefined : 'button'}
+          accessibilityLabel={footerModel ? undefined : (modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect'))}
+          onPress={footerModel ? undefined : () => setModelSheetOpen(true)}
+          hitSlop={6}
+        >
+          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+            {composerModelLine
+              ? t('chat.reportedModel', { model: composerModelLine })
+              : modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')}
+          </Text>
+        </Pressable>
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.info')}
@@ -2928,7 +2939,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   // 只对自己发出的消息成立:别人派来的任务标「已送达」等于说这条是你发的。
                   <View>
                     <Text style={styles.deliveredMark}>{t('chat.delivered')}</Text>
-                    <TaskExecutionNotice task={item} />
+                    {/* #573：对方一开始跑，就不再挂「等待对方开始」这一行。 */}
+                    {['running', 'in_progress', 'started'].includes((item.status ?? '').toLowerCase()) ? null : <TaskExecutionNotice task={item} />}
                   </View>
                 ) : null}
               </View>
@@ -3228,7 +3240,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 <Pressable accessibilityRole="button" accessibilityLabel={t('chat.modelSheetOpen')} testID="composer-model-entry" onPress={() => setModelSheetOpen(v => !v)} style={({ pressed, hovered }: any) => [styles.desktopModelPill, hovered && styles.desktopChipHover, pressed && { opacity: 0.7 }]}>
                   <Ionicons name="sparkles-outline" size={13} color={colors.textSecondary} />
                   <Text style={styles.desktopModelPillText} numberOfLines={1} testID="composer-model">
-                    {footerModel || t('chat.modelUnknown')}
+                    {footerModel || (modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect'))}
                   </Text>
                   <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
                 </Pressable>
@@ -3355,7 +3367,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         >
           <Ionicons name="cube-outline" size={12} color={colors.textMuted} />
           <Text style={styles.composerModelPillText} numberOfLines={1} ellipsizeMode="middle" testID="composer-model">
-            {footerModel || t('chat.modelUnknown')}
+            {footerModel || (modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect'))}
           </Text>
           <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>

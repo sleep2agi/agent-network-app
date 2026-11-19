@@ -757,7 +757,7 @@ registerTranslations({
   'execution.ended': ['任务已取消', 'Task cancelled'],
   'execution.consumed': ['运行时已开始 · 等待回复', 'Runtime started · awaiting reply'],
   'execution.submitted': ['已提交运行时 · 开始状态未确认', 'Submitted to runtime · start unconfirmed'],
-  'execution.received': ['Hub 已收到 · 开始状态未确认', 'Received by Hub · start unconfirmed'],
+  'execution.received': ['已送达，等待对方开始', 'Delivered, waiting for the agent to start'],
   'execution.unconfirmed': ['执行状态未确认', 'Execution unconfirmed'],
   'execution.missing': ['Hub 未找到目标节点登记', 'Hub could not find the target registration'],
   'execution.offline': ['Hub 记录目标节点离线', 'Hub reports the target offline'],
