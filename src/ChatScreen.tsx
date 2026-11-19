@@ -3214,9 +3214,33 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             <DesktopVoiceBar voice={voice} onDone={desktopVoiceDone} onCancel={desktopVoiceCancel} hint={kbdVoice ? t(voice.state.phase === 'transcribing' ? 'voice.transcribing' : voice.state.phase === 'starting' ? 'voice.preparing' : kbdVoice.mode === 'hold' ? 'voice.releaseKeys' : 'voice.pressKeys', { keys: comboChips(kbdVoice.combo, isMacKeyboard()).join(isMacKeyboard() ? '' : '+') }) : undefined} />
           ) : (
           <View style={styles.desktopToolbar} onLayout={event => setDesktopToolbarTop(event.nativeEvent.layout.y)}>
+            {/* admin 2026-11-19「下面的交互都做好一点」：附件、模型、思考档位归到左边一组（同一种圆角 chip，带图标和悬停态）；
+                右边只留运行时才出现的「停止」、快捷键提示、麦克风和发送。 */}
+            <View style={styles.desktopToolbarLeft}>
             <Pressable accessibilityLabel={t('chat.addFile')} testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
             </Pressable>
+                <Pressable accessibilityRole="button" accessibilityLabel={t('chat.modelSheetOpen')} testID="composer-model-entry" onPress={() => setModelSheetOpen(v => !v)} style={({ pressed, hovered }: any) => [styles.desktopModelPill, hovered && styles.desktopChipHover, pressed && { opacity: 0.7 }]}>
+                  <Ionicons name="sparkles-outline" size={13} color={colors.textSecondary} />
+                  <Text style={styles.desktopModelPillText} numberOfLines={1} testID="composer-model">
+                    {footerModel || t('chat.modelUnknown')}
+                  </Text>
+                  <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+                </Pressable>
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
+                  testID="composer-variant-entry"
+                  onPress={() => setModelSheetOpen(true)}
+                  style={({ pressed, hovered }: any) => [styles.desktopVariantPill, hovered && styles.desktopChipHover, pressed && { opacity: 0.7 }]}
+                >
+                  <Ionicons name="bulb-outline" size={13} color={colors.textSecondary} />
+                  <Text style={styles.desktopVariantPillText} numberOfLines={1} testID="composer-variant">
+                    {composerVariantPillLabel(footerVariant)}
+                  </Text>
+                  <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
+                </Pressable>
+            </View>
             <View style={styles.desktopToolbarRight}>
               {/* ⚡ 优先 toggle hidden since 0.2.105 (chat-entry-flags.ts). */}
               {SHOW_BOLT_ENTRY ? (
@@ -3230,25 +3254,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={[styles.priorityButtonText, sendPriority === 'high' && styles.priorityButtonTextActive]}>{t('chat.priority')}</Text>
                 </Pressable>
               ) : null}
-              <Pressable accessibilityRole="button" accessibilityLabel={t('chat.modelSheetOpen')} testID="composer-model-entry" onPress={() => setModelSheetOpen(v => !v)} style={({ pressed }) => [styles.desktopModelPill, pressed && { opacity: 0.7 }]}>
-                <Text style={styles.desktopModelPillText} numberOfLines={1} testID="composer-model">
-                  {footerModel || t('chat.modelUnknown')}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
-              </Pressable>
-              <Pressable
-                accessibilityRole="button"
-                accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
-                testID="composer-variant-entry"
-                onPress={() => setModelSheetOpen(true)}
-                style={({ pressed }) => [styles.desktopVariantPill, pressed && { opacity: 0.7 }]}
-              >
-                <Text style={styles.desktopVariantPillText} numberOfLines={1} testID="composer-variant">
-                  {composerVariantPillLabel(footerVariant)}
-                </Text>
-                <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
-              </Pressable>
-              <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} desktop onPress={pressInterrupt} />
+              {/* 「停止」只在节点在跑、或打断还在进行 / 刚有结果时出现；空闲时一直挂着一个灰按钮只是噪音。 */}
+              {interruptable(sessionStatus) || interrupt.phase !== 'idle' ? <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} desktop onPress={pressInterrupt} /> : null}
               {interruptable(sessionStatus) ? (
                 <Pressable
                   accessibilityRole="button"
@@ -3285,6 +3292,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 onPress={() => void submit()}
                 disabled={!canSend(draft, attached.length > 0, sending)}
               >
+                <Ionicons name="arrow-up" size={15} color={canSend(draft, attached.length > 0, sending) ? colors.onAccent : colors.textMuted} />
                 <Text style={[styles.desktopSendText, !canSend(draft, attached.length > 0, sending) && styles.sendTextDisabled]}>{t('chat.send')}</Text>
               </Pressable>
             </View>
@@ -3856,10 +3864,11 @@ const makeStyles = (B = bubbleLayout()) =>
   } as any,
   composerDividerGrip: { width: 36, height: 3, borderRadius: radius.pill, backgroundColor: colors.border },
   // 桌面:模型 + 档位两个下拉控件挂在发送按钮左边(和「Enter 发送」提示同侧),再往左是提示。
-  desktopModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, maxWidth: 200, flexShrink: 1, minWidth: 0, height: 26, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
-  desktopModelPillText: { fontSize: ds(11), color: colors.text, flexShrink: 1 },
-  desktopVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 26, paddingHorizontal: 8, borderRadius: radius.pill },
-  desktopVariantPillText: { fontSize: ds(11), color: colors.textMuted },
+  desktopModelPill: { flexDirection: 'row', alignItems: 'center', gap: 6, maxWidth: 220, flexShrink: 1, minWidth: 0, height: 28, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+  desktopChipHover: { backgroundColor: colors.rowHover },
+  desktopModelPillText: { fontSize: ds(12), fontWeight: '500', color: colors.text, flexShrink: 1 },
+  desktopVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 28, paddingHorizontal: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+  desktopVariantPillText: { fontSize: ds(12), fontWeight: '500', color: colors.text },
   // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
   // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
   desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: 'transparent' },
@@ -3890,7 +3899,8 @@ const makeStyles = (B = bubbleLayout()) =>
   desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, height: 38 },
   desktopToolButton: { width: 34, height: 34, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   // flexShrink + minWidth 0:右侧边栏展开后聊天区可能只有 ~430,这一行要能收窄(模型名截断),不能把 🎤 / 发送挤出去。
-  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 1, minWidth: 0 },
+  desktopToolbarLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1, minWidth: 0 },
+  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 0 },
   priorityButton: { height: 28, borderRadius: radius.item, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
@@ -3898,7 +3908,7 @@ const makeStyles = (B = bubbleLayout()) =>
   mobilePriorityButton: { width: composerControlSize(uiScale().densityFactor), height: composerControlSize(uiScale().densityFactor), borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center' },
   mobilePriorityText: { color: colors.textMuted, fontSize: 15 },
   shortcutHint: { color: colors.textMuted, fontSize: 10 },
-  desktopSend: { minWidth: ds(64), height: ds(32), borderRadius: radius.control, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
+  desktopSend: { flexDirection: 'row', gap: 5, minWidth: ds(72), height: ds(32), borderRadius: radius.pill, paddingHorizontal: spacing.lg, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.accent },
   desktopSendDisabled: { backgroundColor: colors.subtleFill },
   desktopSendText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
   input: {
