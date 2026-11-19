@@ -22,7 +22,8 @@ export default function MacTitleStrip() {
     <View
       accessibilityLabel="窗口拖动区"
       {...({ dataSet: { tauriDragRegion: '' } } as any)}
-      style={{ height: MAC_TITLE_STRIP_HEIGHT, backgroundColor: colors.bg }}
+      // 2026-11-19：透明，让最外层的整窗渐变从窗口最顶上开始（window-glow-root.tsx）。
+      style={{ height: MAC_TITLE_STRIP_HEIGHT, backgroundColor: 'transparent' }}
     />
   );
 }
