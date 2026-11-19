@@ -15,6 +15,7 @@ import MarkdownMessage from './MarkdownMessage';
 import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
 import { parseSkillDetail, parseSkillsPayload, skillBadge, skillsInfoText, skillsStatusMessage, skillsTarget, stripFrontmatter, type SkillDetail, type SkillSummary } from './node-skills';
 import { colors, radius, spacing, type, weight } from './theme';
+import { getCachedSkills, putCachedSkills, skillsCacheKey } from './skills-cache';
 
 type Phase = 'loading' | 'ready' | 'unavailable';
 const mono = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
@@ -30,10 +31,14 @@ export function NodeSkillsSection({ cfg, alias, node, session }: NodeSkillsSecti
 }
 
 function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTarget; session: Session }) {
-  const [phase, setPhase] = useState<Phase>('loading');
-  const [skills, setSkills] = useState<SkillSummary[]>([]);
-  const [roots, setRoots] = useState<string[] | null>(null);
-  const [warnings, setWarnings] = useState<string[]>([]);
+  // 先用上一次的清单秒出（skills-cache.ts），后台再向节点刷新；没有缓存才显示转圈。
+  const cacheKey = skillsCacheKey(cfg, `${target.node_id ?? ''}|${target.alias}`);
+  const cached = getCachedSkills(cacheKey);
+  const [phase, setPhase] = useState<Phase>(cached ? 'ready' : 'loading');
+  const [refreshing, setRefreshing] = useState(false);
+  const [skills, setSkills] = useState<SkillSummary[]>(cached?.skills ?? []);
+  const [roots, setRoots] = useState<string[] | null>(cached?.roots ?? null);
+  const [warnings, setWarnings] = useState<string[]>(cached?.warnings ?? []);
   const [message, setMessage] = useState('');
   const [open, setOpen] = useState<string | null>(null);
   const [detail, setDetail] = useState<SkillDetail | null>(null);
@@ -47,30 +52,37 @@ function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTar
 
   const wait = (id: string) => waitForRulesFileResult(cfg, id, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => cancelled.current });
 
-  const runList = useCallback(async () => {
-    setPhase('loading');
-    setMessage(skillsStatusMessage('pending', null));
+  const runList = useCallback(async (opts?: { background?: boolean }) => {
+    // background:已经在显示缓存清单,只在头部小字提示「更新中」;失败时保留旧清单,不把整块换成报错。
+    const background = !!opts?.background;
+    const fail = (msg: string) => { if (background) return; setPhase('unavailable'); setMessage(msg); };
+    if (background) setRefreshing(true);
+    else { setPhase('loading'); setMessage(skillsStatusMessage('pending', null)); }
+    try {
     const enq = await listNodeSkills(cfg, target);
     if (cancelled.current) return;
     const follow = requestIdToFollow(enq);
-    if (!follow) { setPhase('unavailable'); setMessage(enq.ok ? '' : enq.error); return; }
+    if (!follow) { fail(enq.ok ? '' : enq.error); return; }
     const res = await wait(follow);
     if (cancelled.current) return;
     // 过期(content_purged)/找不到/认不出的状态:说原因,不当成「0 个技能」。
     const problem = resultProblem(res);
-    if (problem !== null) { setPhase('unavailable'); setMessage(problem); return; }
+    if (problem !== null) { fail(problem); return; }
     if (!res.ok) return;
-    if (res.status !== 'done') { setPhase('unavailable'); setMessage(skillsStatusMessage(res.status, res.error, undefined, sessionRef.current)); return; }
+    if (res.status !== 'done') { fail(skillsStatusMessage(res.status, res.error, undefined, sessionRef.current)); return; }
     const view = parseSkillsPayload(res.content);
+    putCachedSkills(cacheKey, { skills: view.skills, roots: view.roots, warnings: view.warnings });
     setSkills(view.skills);
     setRoots(view.roots);
     setWarnings(view.warnings);
     setPhase('ready');
     setMessage(skillsStatusMessage('done', null, view.skills.length));
+    } finally { if (!cancelled.current) setRefreshing(false); }
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [cfg, key]);
+  }, [cfg, key, cacheKey]);
 
-  useEffect(() => { void runList(); }, [runList]);
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  useEffect(() => { void runList({ background: !!getCachedSkills(cacheKey) }); }, [runList]);
 
   const toggle = async (name: string) => {
     if (open === name) { setOpen(null); setDetail(null); return; }
@@ -103,7 +115,8 @@ function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTar
           <Text style={{ color: colors.textSecondary, fontSize: type.small }}>{phase === 'ready' ? `共 ${skills.length} 个技能` : '技能'}</Text>
           <InfoTip label="技能说明" text={skillsInfoText(phase === 'ready' ? roots : null)} />
           <View style={{ flex: 1 }} />
-          <Pressable accessibilityRole="button" style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, opacity: phase === 'loading' ? 0.4 : 1 }} disabled={phase === 'loading'} onPress={() => { setOpen(null); setDetail(null); void runList(); }}>
+          {refreshing ? <ActivityIndicator size="small" color={colors.textMuted} accessibilityLabel="正在向节点更新技能" testID="skills-refreshing" /> : null}
+          <Pressable accessibilityRole="button" style={{ height: 30, justifyContent: 'center', paddingHorizontal: spacing.md, borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, opacity: phase === 'loading' || refreshing ? 0.4 : 1 }} disabled={phase === 'loading' || refreshing} onPress={() => { setOpen(null); setDetail(null); void runList(); }}>
             <Text style={{ color: colors.textSecondary, fontSize: type.small }}>刷新</Text>
           </Pressable>
         </View>
