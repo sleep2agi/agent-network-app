@@ -19,15 +19,18 @@ import NodeTasksSection from './NodeTasksSection';
 import type { HubConfig, Session } from './api';
 import { colors, radius, spacing, type as typeScale } from './theme';
 import { useGlassChrome } from './glass-chrome';
+import NodeSchedulesSection from './NodeSchedulesSection';
 import { CHAT_TOOL_RAIL_WIDTH } from './chat-tool-rail-layout';
 
 const KEY = 'anet_chat_toolrail_v1';
-type Tool = 'tasks' | 'skills' | 'files' | 'logs';
+type Tool = 'tasks' | 'schedules' | 'skills' | 'files' | 'logs';
 export type ChatToolRailState = { open: boolean; tool: Tool; width: number };
 
 /** needSession 的工具要拿到该会话的 Session(聊天页的 controlSession)才能发请求,没有就置灰。 */
 const TOOLS: { key: Tool; label: string; icon: string; needSession?: boolean }[] = [
   { key: 'tasks', label: '任务', icon: 'checkbox-outline' },
+  // admin 2026-11-19「这里来一个定时任务的入口？」：这个 agent 要执行的定时任务，就地新建 / 编辑（同节点页的分区）。
+  { key: 'schedules', label: '定时任务', icon: 'time-outline' },
   { key: 'skills', label: '技能', icon: 'sparkles-outline' },
   { key: 'files', label: '文件', icon: 'folder-outline', needSession: true },
   { key: 'logs', label: '日志', icon: 'document-text-outline', needSession: true },
@@ -70,6 +73,9 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
   // 只读区块要一个 session 形状;聊天页没有完整的 node 上下文,退到按 alias 发。
   const stubSession = { alias, status: 'online' } as unknown as Session;
   const realSession = session ?? null;
+  // 定时任务按执行节点的 node_id 认；会话没上报 node_id 时 NodeSchedulesSection 会说明原因、不画「新建」。
+  const scheduleNodeId = (realSession as { node_id?: string | null } | null)?.node_id ?? null;
+  const [scheduleCreateSeq, setScheduleCreateSeq] = useState(0);
   return (
     <>
       {state.open ? (
@@ -81,6 +87,13 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
             <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body, fontWeight: '600' }} testID="chat-tool-title">
               {TOOLS.find(t => t.key === active)?.label ?? ''}
             </Text>
+            {active === 'schedules' && scheduleNodeId ? (
+              <Pressable accessibilityRole="button" accessibilityLabel="新建定时任务" testID="chat-tool-schedule-create" hitSlop={6}
+                onPress={() => setScheduleCreateSeq(n => n + 1)}
+                style={({ pressed }) => ({ height: 26, justifyContent: 'center', paddingHorizontal: spacing.sm, borderRadius: radius.pill, backgroundColor: colors.accent, opacity: pressed ? 0.8 : 1 })}>
+                <Text style={{ color: colors.onAccent, fontSize: typeScale.small, fontWeight: '600' }}>＋ 新建</Text>
+              </Pressable>
+            ) : null}
             <Pressable accessibilityRole="button" accessibilityLabel="关闭工具面板" testID="chat-tool-close"
               onPress={() => setState(s => ({ ...s, open: false }))} hitSlop={8} style={{ padding: 4 }}>
               <Ionicons name="close" size={16} color={colors.textMuted} />
@@ -88,6 +101,13 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
           </View>
           <ScrollView contentContainerStyle={{ padding: spacing.md }} testID="chat-tool-body">
             {active === 'tasks' ? <NodeTasksSection cfg={cfg} alias={alias} embedded /> : null}
+            {active === 'schedules' ? (
+              scheduleNodeId
+                ? <NodeSchedulesSection cfg={cfg} nodeId={scheduleNodeId} editable createSeq={scheduleCreateSeq} />
+                : <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }} testID="chat-tool-schedules-no-node">
+                    这个会话还没上报节点 id（或节点离线），暂时不能给它建定时任务；可以到左侧「定时任务」页新建。
+                  </Text>
+            ) : null}
             {active === 'skills' ? <NodeSkillsSection cfg={cfg} alias={alias} session={realSession ?? stubSession} /> : null}
             {active === 'files' && realSession ? <NodeFilesSection cfg={cfg} alias={alias} session={realSession} /> : null}
             {active === 'logs' && realSession ? <NodeLogsSection cfg={cfg} alias={alias} session={realSession} pointer /> : null}
