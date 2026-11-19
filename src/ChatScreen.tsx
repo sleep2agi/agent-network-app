@@ -2452,7 +2452,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     setPlusHintSeen(true);
     try { globalThis.localStorage?.setItem(PLUS_HINT_KEY, '1'); } catch { /* 隐私模式：本次会话内记下即可 */ }
   };
-  const showPlusHint = !desktop && !plusHintSeen && attached.length === 0;
+  // 输入框一获得焦点就收起（开始打字了，提示没用了），也避免键盘弹起时这一行再占高度。
+  const [composerFocused, setComposerFocused] = useState(false);
+  const showPlusHint = !desktop && !plusHintSeen && attached.length === 0 && !keyboardVisible && !composerFocused;
   // 桌面「＋」= 系统文件选择器(多选、任意类型),没有中间面板;手机 = 微信式 相册 / 文件 面板。
   const onPlusPress = () => {
     dismissPlusHint();
@@ -3425,6 +3427,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       </View>
       {showPlusHint ? (
         // #574：手机首次进会话提示一次「＋ 可以发图片和文件」；点一下即记成看过。
+        // 键盘弹起时不显示：横屏 + 键盘时这一行会把最后一条消息挤出可视区
+        // （test-composer-keyboard-inset 的 last 断言），收键盘后再出现。
         <Pressable accessibilityRole="button" accessibilityLabel={t('chat.plusHintFirst')} onPress={dismissPlusHint} style={styles.plusHintRow} testID="composer-plus-hint">
           <Ionicons name="add-circle-outline" size={14} color={colors.textSecondary} />
           <Text style={styles.plusHintText} numberOfLines={1}>{t('chat.plusHintFirst')}</Text>
@@ -3469,7 +3473,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onSelectionChange={onComposerSelectionChange}
           selection={forcedSelection}
           onContentSizeChange={event => onInputContentSize(event.nativeEvent.contentSize.height)}
-          onFocus={() => plusEvent('inputFocus')}
+          onFocus={() => { setComposerFocused(true); plusEvent('inputFocus'); }}
+          onBlur={() => setComposerFocused(false)}
           onKeyPress={(event) => {
             if (!desktop) return;
             const key = event.nativeEvent as typeof event.nativeEvent & {
