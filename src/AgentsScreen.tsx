@@ -49,6 +49,7 @@ import { searchCountLabel } from './registered-agents-view';
 import { useAgentDirectory } from './agent-directory-hook';
 import { registeredAgentRows, sessionIdentities } from './registered-agents';
 import { colors, onThemeChange, radius, spacing, statusColor, themeMode, type, weight } from './theme';
+import { fullTextTitleRef } from './full-text-title';
 import { useGlassChrome } from './glass-chrome';
 import { shadowOnly } from './elevation';
 import { ds, fs, listText, uiScale } from './ui-scale';
@@ -776,7 +777,7 @@ export default function AgentsScreen({
       </View>
       <View style={{ flex: 1, minWidth: 0 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
-          <Text dense selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }, { flexShrink: 1 }]} numberOfLines={1}>
+          <Text dense selectable={false} style={[styles.alias, compact && { fontSize: 13, fontWeight: '600' }, { flexShrink: 1 }]} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(item.alias) as any}>
             {pinnedAliases.includes(item.alias) ? '📌 ' : ''}
             {item.alias}
             {mutedAliases.includes(item.alias) ? ' 🔕' : ''}
@@ -834,7 +835,7 @@ export default function AgentsScreen({
             <AgentUnreadBadge badge={badge} testID={`person-unread-${p.username}`} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1}>{p.name}</Text>
+            <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(p.name) as any}>{p.name}</Text>
             {rowDraft ? draftLine(rowDraft, [styles.task, { fontSize: 11 }], `draft-preview-person-${p.username}`) : subtitle ? <Text dense selectable={false} testID={`person-subtitle-${p.username}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text> : null}
           </View>
         </Pressable>
@@ -860,7 +861,7 @@ export default function AgentsScreen({
         </View>
         <View style={rowStyles.body}>
           <View style={rowStyles.line}>
-            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: colors.text }]}>{p.name}</Text>
+            <Text dense selectable={false} numberOfLines={1} ellipsizeMode="tail" style={[rowStyles.name, { color: colors.text }]} ref={fullTextTitleRef(p.name) as any}>{p.name}</Text>
           </View>
           {subtitle || badge || rowDraft ? <View style={rowStyles.line}>
             {rowDraft
@@ -904,7 +905,7 @@ export default function AgentsScreen({
             <AgentUnreadBadge badge={badge} testID={`group-unread-${g.group_id}`} />
           </View>
           <View style={{ flex: 1, minWidth: 0 }}>
-            <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1} testID={`group-name-${g.group_id}`}>{g.name}</Text>
+            <Text dense selectable={false} style={[styles.alias, { fontSize: 13, fontWeight: '600' }]} numberOfLines={1} ellipsizeMode="tail" testID={`group-name-${g.group_id}`} ref={fullTextTitleRef(g.name) as any}>{g.name}</Text>
             {rowDraft
               ? draftLine(rowDraft, [styles.task, { fontSize: 11 }], `draft-preview-group-${g.group_id}`)
               : <Text dense selectable={false} testID={`group-subtitle-${g.group_id}`} style={[styles.task, { fontSize: 11 }]} numberOfLines={1}>{subtitle}</Text>}
@@ -926,7 +927,7 @@ export default function AgentsScreen({
         </View>
         <View style={rowStyles.body}>
           <View style={rowStyles.line}>
-            <Text dense selectable={false} numberOfLines={1} style={[rowStyles.name, { color: colors.text }]} testID={`group-name-${g.group_id}`}>{g.name}</Text>
+            <Text dense selectable={false} numberOfLines={1} ellipsizeMode="tail" style={[rowStyles.name, { color: colors.text }]} testID={`group-name-${g.group_id}`} ref={fullTextTitleRef(g.name) as any}>{g.name}</Text>
             {g.preview && timeText ? <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]} testID={`group-time-${g.group_id}`}>{timeText}</Text> : null}
           </View>
           <View style={rowStyles.line}>
