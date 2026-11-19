@@ -2751,6 +2751,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onScroll={onScroll}
           scrollEventThrottle={16}
           inverted
+          // #765：首屏同步只画最新 4 条（倒序列表 ⇒ 正好在视口内），其余按 6/批补；
+          // 默认 10 条一次画完会让「响应后 → 首条气泡」多花 50–100 ms（handoff/0.2.571-perf-chat-open.md）。
+          initialNumToRender={4}
+          maxToRenderPerBatch={6}
           data={messages}
           // 高亮(定位 / 搜索)只改 state 不改 data:不传 extraData,列表不重画格子,高亮根本画不出来(#463 量到的)。
           extraData={highlightExtra}
