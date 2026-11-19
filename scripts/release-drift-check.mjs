@@ -86,13 +86,19 @@ const GRACE_MIN = Number(process.env.RELEASE_GRACE_MINUTES ?? 60);
 const STRICT = process.env.RELEASE_DRIFT_STRICT === '1';
 const behindPatterns = [/^mirror desktop is .*, expected /, /^mirror android is .*, expected /, /^site dynamic .* != /];
 
-const release = await getJson(`https://api.github.com/repos/${REPO}/releases/latest`, 30000);
+// release 事件触发时用 event 里的 tag（github.event.release.tag_name），不要依赖 "latest"——
+// 事件到达时 latest 可能还没切换（或短暂指向上一版）。cron/dispatch 没有该 env，回退 releases/latest。
+const eventTag = String(process.env.RELEASE_TAG || '').trim();
+const releaseUrl = eventTag
+  ? `https://api.github.com/repos/${REPO}/releases/tags/${encodeURIComponent(eventTag)}`
+  : `https://api.github.com/repos/${REPO}/releases/latest`;
+const release = await getJson(releaseUrl, 30000);
 const publishedAt = Date.parse(release.published_at || '');
 const ageMin = Number.isFinite(publishedAt) ? Math.max(0, (Date.now() - publishedAt) / 60000) : Infinity;
 const inGrace = !STRICT && ageMin < GRACE_MIN;
 const version = String(release.tag_name || '').replace(/^desktop-v/, '');
-if (!version) bad.push('releases/latest has no desktop-v* tag');
-if (expected && version !== expected) bad.push(`releases/latest is ${version}, expected ${expected}`);
+if (!version) bad.push(eventTag ? `release ${eventTag} has no desktop-v* tag` : 'releases/latest has no desktop-v* tag');
+if (expected && version !== expected) bad.push(`release is ${version}, expected ${expected}`);
 if (release.draft || release.prerelease) bad.push('releases/latest is a draft or prerelease');
 rows.push(['github release', release.tag_name, `${(release.assets ?? []).length} assets`]);
 

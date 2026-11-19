@@ -80,6 +80,13 @@ export async function verifyDesktopUpdateManifest({
 } = {}) {
   const headers = token ? { authorization: `Bearer ${token}` } : {};
   const deployed = await jsonResponse(await fetchImpl(endpoint), 'deployed manifest');
+  // release 事件触发时站点可能还没刷新：目标版本与部署版本不同 ⇒ 退出 0 并说明，
+  // 不把「部署还在上一版」当成 drift（那不是产物问题）。
+  const rawTarget = String(process.env.RELEASE_VERSION || process.env.RELEASE_TAG || '').trim();
+  const targetVersion = rawTarget.replace(/^desktop-v/, '');
+  if (targetVersion && deployed?.version !== targetVersion) {
+    return { version: deployed?.version, tag: `desktop-v${deployed?.version}`, assetUrl: '', pendingDeploy: targetVersion };
+  }
   if (!/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/.test(deployed?.version ?? '')) {
     throw new Error(`deployed manifest: invalid version ${JSON.stringify(deployed?.version)}`);
   }
@@ -115,7 +122,11 @@ if (isMain) {
     endpoint: process.env.DESKTOP_UPDATE_ENDPOINT || DEFAULT_ENDPOINT,
     repository: process.env.GITHUB_REPOSITORY || DEFAULT_REPOSITORY,
     token: process.env.GITHUB_TOKEN || '',
-  }).then(({ version, tag }) => {
+  }).then(({ version, tag, pendingDeploy }) => {
+    if (pendingDeploy) {
+      console.log(`skip: deployed manifest is ${version}, target release is ${pendingDeploy} (site deploy pending)`);
+      return;
+    }
     console.log(`desktop updater manifests match: ${version} (${tag})`);
   }).catch((error) => {
     console.error(error instanceof Error ? error.message : String(error));

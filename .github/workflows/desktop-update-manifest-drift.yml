@@ -1,6 +1,11 @@
 name: desktop update manifest drift
 
 on:
+  # 事件驱动优先：release 刚 publish 就跑一次，避免只靠 cron（实测 6 小时一次会被拖到 11–13 小时）。
+  # cron 保留作兜底。release 触发时：脚本读的是「部署 manifest 对应的那个 tag」，
+  # 不依赖「最新 release」；站点若还没刷新，最坏只是与旧版本自洽通过，不会误报。
+  release:
+    types: [published]
   workflow_dispatch:
   schedule:
     - cron: '17 */6 * * *'
@@ -19,5 +24,7 @@ jobs:
       - name: Compare deployed manifest with its release asset
         env:
           GITHUB_TOKEN: ${{ github.token }}
+          # release 事件触发时带上 event tag：站点还没刷新就跳过（不误报 drift），站点刷新后 cron 兜底再比。
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
           DESKTOP_UPDATE_ENDPOINT: https://www.anet.sh/desktop/update/latest.json
         run: node scripts/verify-desktop-update-manifest.mjs
