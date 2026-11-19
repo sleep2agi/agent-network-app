@@ -57,9 +57,11 @@ export function useChatToolRail(): [ChatToolRailState, (f: (s: ChatToolRailState
   return [state, setState];
 }
 
-export default function ChatToolRail({ cfg, alias, session, state, setState }: {
+export default function ChatToolRail({ cfg, alias, session, state, setState, dockedWidth = null }: {
   cfg: HubConfig; alias: string; session?: Session | null;
   state: ChatToolRailState; setState: (f: (s: ChatToolRailState) => ChatToolRailState) => void;
+  /** 停靠时的实际面板宽度(chat-tool-rail-layout.dockedPanelWidth);null = 窗口太窄,面板浮在聊天上。 */
+  dockedWidth?: number | null;
 }) {
   // 桌面整窗渐变时图标条透明，不在右下角把光切断；展开的面板仍是实底（要读文字）。
   const glass = useGlassChrome();
@@ -71,8 +73,10 @@ export default function ChatToolRail({ cfg, alias, session, state, setState }: {
   return (
     <>
       {state.open ? (
-        <View testID="chat-tool-panel" style={{ position: 'absolute', right: CHAT_TOOL_RAIL_WIDTH, top: 0, bottom: 0, width: state.width, zIndex: 25,
-          backgroundColor: colors.bg, borderLeftWidth: 1, borderLeftColor: colors.border }}>
+        <View testID="chat-tool-panel" style={{ position: 'absolute', right: CHAT_TOOL_RAIL_WIDTH, top: 0, bottom: 0, width: dockedWidth ?? state.width, zIndex: 25,
+          // 停靠时(聊天已经让出这块宽度)且整窗渐变打开:面板透明,和左边聊天、右边图标条连成一片;
+          // 浮层(窗口太窄)时盖在聊天上面,必须实底,否则文字叠在一起。
+          backgroundColor: glass && dockedWidth !== null ? 'transparent' : colors.bg, borderLeftWidth: 1, borderLeftColor: colors.border }}>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, height: 44, borderBottomWidth: 1, borderBottomColor: colors.border }}>
             <Text style={{ flex: 1, color: colors.text, fontSize: typeScale.body, fontWeight: '600' }} testID="chat-tool-title">
               {TOOLS.find(t => t.key === active)?.label ?? ''}

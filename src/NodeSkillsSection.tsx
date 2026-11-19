@@ -136,7 +136,7 @@ function SkillsCard({ cfg, target, session }: { cfg: HubConfig; target: RulesTar
                       <Text style={{ color: colors.textSecondary, fontSize: type.caption }}>{skillBadge(sk)}</Text>
                     </View>
                     <View style={{ flex: 1 }} />
-                    <Text style={{ color: colors.textMuted, fontSize: type.small }}>{open === sk.name ? '收起' : '查看'}</Text>
+                    <Text style={{ color: colors.textMuted, fontSize: type.small, flexShrink: 0 }} numberOfLines={1}>{open === sk.name ? '收起' : '查看'}</Text>
                   </View>
                   {sk.description ? <Text style={{ color: colors.textSecondary, fontSize: type.small, lineHeight: 18 }} numberOfLines={open === sk.name ? undefined : 2}>{sk.description}</Text> : null}
                 </Pressable>

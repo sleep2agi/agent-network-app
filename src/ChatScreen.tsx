@@ -77,7 +77,7 @@ import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
 import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail, { useChatToolRail } from './ChatToolRail';
-import { chatToolRailReserve, composerShowsShortcutHint } from './chat-tool-rail-layout';
+import { chatToolRailReserve, composerShowsShortcutHint, dockedPanelWidth } from './chat-tool-rail-layout';
 import { chatCornerGlow } from './chat-glow';
 import { useGlassChrome } from './glass-chrome';
 import ChatInfoPanel from './ChatInfoPanel';
@@ -3513,7 +3513,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
-      {showToolRail ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} state={toolRail} setState={setToolRail} /> : null}
+      {showToolRail ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} state={toolRail} setState={setToolRail} dockedWidth={dockedPanelWidth(toolRail.width, rootWidth)} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}

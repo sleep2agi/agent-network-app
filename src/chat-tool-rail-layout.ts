@@ -1,14 +1,24 @@
 // 聊天右侧边栏(ChatToolRail)停靠时,聊天页要让出的右侧宽度。
 // 图标条常驻 CHAT_TOOL_RAIL_WIDTH;面板展开时再加面板宽度。纯函数,便于测试。
 export const CHAT_TOOL_RAIL_WIDTH = 44;
-/** 聊天区最少留这么宽;窗口太窄时面板不展开占位(只留图标条),避免把聊天挤没。 */
-export const CHAT_MIN_WIDTH_WITH_PANEL = 420;
+/** 聊天区最少留这么宽;窗口太窄时面板不展开占位(只留图标条),避免把聊天挤没。
+ *  2026-11-19 admin「右下角你觉得丑吗」:420 太保守,1000 宽左右的窗口面板就浮起来盖住输入框和发送。
+ *  改成 340,并让面板自己收窄到 PANEL_MIN_WIDTH 再放弃停靠。 */
+export const CHAT_MIN_WIDTH_WITH_PANEL = 340;
+export const PANEL_MIN_WIDTH = 260;
+
+/** 停靠时面板的实际宽度:优先用户拖出来的宽度,放不下就收窄;收到 PANEL_MIN_WIDTH 还放不下就返回 null(改为浮层)。 */
+export function dockedPanelWidth(desired: number, outerWidth: number): number | null {
+  if (outerWidth <= 0) return desired;
+  const room = outerWidth - CHAT_TOOL_RAIL_WIDTH - CHAT_MIN_WIDTH_WITH_PANEL;
+  const w = Math.min(desired, room);
+  return w >= PANEL_MIN_WIDTH ? w : null;
+}
 
 export function chatToolRailReserve(open: boolean, panelWidth: number, outerWidth: number): number {
   if (!open) return CHAT_TOOL_RAIL_WIDTH;
-  const withPanel = CHAT_TOOL_RAIL_WIDTH + panelWidth;
-  if (outerWidth > 0 && outerWidth - withPanel < CHAT_MIN_WIDTH_WITH_PANEL) return CHAT_TOOL_RAIL_WIDTH;
-  return withPanel;
+  const w = dockedPanelWidth(panelWidth, outerWidth);
+  return w === null ? CHAT_TOOL_RAIL_WIDTH : CHAT_TOOL_RAIL_WIDTH + w;
 }
 
 /** 桌面输入框工具条的「Enter 发送 · Shift/Ctrl+Enter 换行」提示:聊天区窄于这个宽度就不画(0 = 还没量到,照常画)。 */
