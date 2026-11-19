@@ -10,10 +10,10 @@ export function nodeIdentityNotice(session: Pick<Session, 'node_id'>, node: HubN
   if (listState === 'loading') return '正在读取节点信息…';
   if (session.node_id) {
     return listState === 'failed'
-      ? `节点列表暂时拉取失败（节点 ID ${session.node_id} 在 hub 上存在），稍后自动重试。`
-      : `hub 的节点列表里没有 ${session.node_id}（可能属于别的网络），生命周期操作不可用。`;
+      ? '节点列表暂时拉取失败（这个会话在服务器上是存在的），稍后自动重试。'
+      : '服务器上找不到这个会话（可能属于别的网络），暂不能做启动/停止操作。';
   }
-  return '该会话没有权威节点 ID，生命周期操作不可用。';
+  return '这个会话还没在服务器上登记，暂不能做启动/停止操作。';
 }
 
 /** idle 时 hub 仍带着节点最后处理的那条内容;标题要说清那是「最近」不是「当前」。 */

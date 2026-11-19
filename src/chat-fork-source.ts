@@ -31,7 +31,7 @@ const FORK_SOURCE_ERROR_TEXT: Record<string, string> = {
   fork_network_missing: '还没选定网络，无法 fork。',
   fork_session_missing: '没有读到这个节点的实时会话上报，等它上线后再试。',
   fork_session_ambiguous: '同名节点在这个网络里有多条会话上报，无法确定 fork 哪一个。',
-  fork_node_id_missing: '这个会话没有上报节点 ID，无法 fork。',
+  fork_node_id_missing: '这个会话还没上报节点信息，暂时不能 fork。',
   fork_node_not_unique: '在节点列表里找不到唯一对应的节点，无法 fork。',
   fork_requires_opencode_v2: '只有 OpenCode V2 节点支持独立 fork。',
   fork_native_session_missing: '这个节点还没有 OpenCode 会话（ses_），无法 fork。',
