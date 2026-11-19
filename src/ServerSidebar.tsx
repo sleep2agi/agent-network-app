@@ -110,8 +110,11 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
 
         <View style={styles.pendingBlock}>
           <Text style={styles.sectionLabel} testID="server-integrations-label">{t('server.integrations')}</Text>
+          {/* admin 2026-11-19「这个也丑的一逼」：SKILLS / 令牌 / Provider 在下面「Hub」组里已经有一份（打开的是同一批页面），
+              这一组只留 Runtime 支持和 Daemon，不再一屏两遍。 */}
           <PendingSegmentedTabs
             stacked
+            only={['runtime']}
             value={pendingActive}
             onChange={tab => onSelect(tab)}
             testID="server-pending-tabs"

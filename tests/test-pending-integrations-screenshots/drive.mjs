@@ -58,7 +58,8 @@ const shot = async (name) => {
 await page.evaluate(() => window.__anetLayoutSweep.setScreen({ name: 'server' }));
 await page.locator('[data-testid="server-sidebar"]').waitFor({ timeout: 15000 });
 for (const tab of ['skills', 'tokens', 'provider']) {
-  await page.locator(`[data-testid="server-pending-tabs-${tab}"]`).click();
+  // 2026-11-19 起 Hub 侧栏不再重复画这三个页签（在「Hub」组里），直接打开对应页。
+  await page.evaluate((t) => window.__anetLayoutSweep.setScreen({ name: 'serverPending', tab: t }), tab);
   await page.locator('[data-testid="hub-pending-screen"]').waitFor({ timeout: 10000 });
   await page.locator('[data-testid="backend-pending-banner"]').waitFor({ timeout: 10000 });
   await shot(`hub-pending-${tab}`);

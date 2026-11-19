@@ -127,7 +127,7 @@ ck('demo logic does not touch the hub client', !forbidden.test(logic) && !logic.
 ck('demo view does not touch the hub client', !forbidden.test(ui) && !ui.includes('console.'));
 ck('daemon management uses a settings sidebar and full pending content pane', page.includes('testID="daemon-section-tabs"') && page.includes('<BackendPendingIntegration layer="daemon"') && page.includes('showTabs={false}'));
 ck('daemon node action notes are deduplicated and hidden until selection', page.includes('new Set(actions.map(action => actionReason(action)).filter(Boolean))') && page.includes('{selected ? ('));
-ck('hub sidebar exposes SKILLS / 令牌 / Provider tabs', sidebar.includes('testID="server-pending-tabs"') && sidebar.includes('PendingSegmentedTabs'));
+ck('hub sidebar integrations group keeps only Runtime (SKILLS / 令牌 / Provider live once, under Hub)', sidebar.includes('testID="server-pending-tabs"') && sidebar.includes('PendingSegmentedTabs') && sidebar.includes("only={['runtime']}"));
 ck('hub pending screen renders tab panels', hub.includes('HubPendingScreen') && hub.includes('BackendPendingIntegration'));
 ck('node keeps its section IA and uses the scoped key manager', nodeDetail.includes("section === 'secrets'") && nodeDetail.includes('<ScopedSecretsSection') && !nodeDetail.includes('<NodeSecretPendingSection') && !nodeDetail.includes('NodeIntegrationsSection'));
 ck('pending chrome reuses theme tokens (buttons + settings-style segments)', pendingUi.includes('buttonStyle') === false && pendingUi.includes('segmentSelected') && ui.includes('buttonStyle('));

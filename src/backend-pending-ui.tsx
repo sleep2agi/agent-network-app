@@ -63,6 +63,7 @@ export function PendingSegmentedTabs({
   stacked,
   t,
   after,
+  only,
 }: {
   value: PendingTab | null;
   onChange: (tab: PendingTab) => void;
@@ -71,12 +72,15 @@ export function PendingSegmentedTabs({
   t: (key: string) => string;
   /** Stacked nav only: a row after the tabs, inside the same gap (Hub 域集成 → Daemon). */
   after?: ReactNode;
+  /** 只画这几个页签（Hub 侧栏：SKILLS / 令牌 / Provider 已在「Hub」组里，这里只留 Runtime，admin 2026-11-19「菜单重复」）。 */
+  only?: readonly PendingTab[];
 }) {
+  const items = only ? TAB_ITEMS.filter(item => only.includes(item.key)) : TAB_ITEMS;
   if (stacked) {
     return (
       <View style={styles.stacked}>
         <View style={styles.stackedTabs} accessibilityRole="tablist" testID={testID}>
-        {TAB_ITEMS.map(item => {
+        {items.map(item => {
           const on = value !== null && item.key === value;
           return (
             <Pressable
