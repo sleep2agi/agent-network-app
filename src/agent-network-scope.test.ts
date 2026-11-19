@@ -110,8 +110,8 @@ const history = async (cfg: HubConfig, alias: string) => {
   ck('AgentsScreen: the list feeds the alias → network map', /rememberAgentNetworks\(cfg, next\)/.test(agents));
   const routes = app.match(/onOpenChat=\{\(alias, networkId\) => setScreen\(\{ name: 'chat', alias, networkId \}\)\}/g) ?? [];
   ck('App: every AgentsScreen hands the row network to the chat screen', routes.length === 3
-    // The two notifiers (no row to carry) are the only alias-only chat openers left; they use the list's map.
-    && (app.match(/onOpenChat=\{alias => setScreen\(\{ name: 'chat', alias \}\)\}/g) ?? []).length === 2);
+    // The two notifiers (no row to carry) are the only chat openers without a network; #1543 后它们多带一个 messageId。
+    && (app.match(/onOpenChat=\{\(alias, messageId\) => setScreen\(\{ name: 'chat', alias,/g) ?? []).length === 2);
   const chatSites = app.match(/<ChatScreen[\s\S]*?alias=\{screen\.alias\}\s*\n\s*networkId=\{screen\.networkId\}/g) ?? [];
   ck('App: every list-opened ChatScreen receives networkId', chatSites.length === 3);
 }

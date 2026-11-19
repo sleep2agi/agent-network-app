@@ -111,7 +111,7 @@ console.log('# 接线(源码契约)');
 {
   const src = (f: string) => readFileSync(new URL(f, import.meta.url), 'utf8').replace(/\r\n?/g, '\n');
   const tray = src('./desktop-tray.ts'), listener = src('./DesktopMessageListener.tsx'), app = src('../App.tsx'), runtime = src('./notifier-runtime.ts');
-  ck('桌面托盘事件:任务 alias 先解析成任务,不当会话打开', /const task = parseTaskOpenAlias\(payload\.trim\(\)\);\s*if \(task\) \{ onOpenTask\?\.\(task\.requirementId, task\.networkId\); return; \}\s*onOpenChat\(payload\.trim\(\)\);/.test(tray));
+  ck('桌面托盘事件:任务 alias 先解析成任务,不当会话打开(#1543 在裸 alias 之前多一层 chat focus)', /const task = parseTaskOpenAlias\(payload\.trim\(\)\);\s*if \(task\) \{ onOpenTask\?\.\(task\.requirementId, task\.networkId\); return; \}\s*\/\/ #1543[^\n]*\n\s*const focus = parseChatFocusAlias\(payload\.trim\(\)\);\s*if \(focus\) \{ onOpenChat\(focus\.agent, focus\.messageId\); return; \}\s*onOpenChat\(payload\.trim\(\)\);/.test(tray));
   ck('用户流:「任务提醒」交给系统通知那边', listener.includes('if (isSystemNotice(result.notice)) emitSystemNotice(result.notice);'));
   ck('App:托盘 / 手机通知点开任务都接到 openTaskRef', app.includes('(requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen),') && app.includes('onOpenRequirement={(requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen)}'));
   ck('App:主窗口 / 双栏 / 手机三处会话都传 onOpenTask(分离聊天窗不传)', (app.match(/onOpenTask=\{\(id, net\) => openTaskRef\(id, net, cfg, setScreen\)\}/g) ?? []).length === 4);

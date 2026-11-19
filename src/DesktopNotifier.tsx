@@ -23,6 +23,7 @@ import { initialNotifyTarget, recordNotified, targetOnFocus, type NotifyTargetSt
 import { getUnreadSnapshot, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
 import { subscribeSystemNotice } from './notifier-bus';
 import { dueLogLine, dueReminderFromNotice, parseTaskOpenAlias, planDueReminder, taskOpenAlias } from './due-reminder-notify';
+import { chatFocusAlias, parseChatFocusAlias } from './notification-focus';
 
 const isTauri = () => !!(globalThis as any).__TAURI_INTERNALS__;
 
@@ -59,7 +60,8 @@ async function sendSystemNotification(alias: string, title: string, body: string
 }
 
 export default function DesktopNotifier({ onOpenChat, onOpenTask, profileKey = '' }: {
-  onOpenChat?: (alias: string) => void;
+  /** #1543 —— 第二个参数是那条主动消息的 id(没有就只打开会话)。 */
+  onOpenChat?: (alias: string, messageId?: string) => void;
   /** #499 点「任务提醒」的系统通知(网页端 Notification.onclick)→ 打开任务。桌面壳走 tray-open-chat,见 App。 */
   onOpenTask?: (requirementId: string, networkId: string | null) => void;
   profileKey?: string;
@@ -136,11 +138,17 @@ export default function DesktopNotifier({ onOpenChat, onOpenTask, profileKey = '
         if (!d.notify) continue;
         ring = ring || d.sound;
         // 正文里可能是 Markdown(链接语法 + 绝对路径),toast 只读得下一两行 → 压成纯文本。
+        // #1543 —— 桌面壳只回传 alias,所以把消息 id 编进 alias(chatFocusAlias);网页端 Notification.onclick 在下面解回来。
+        const focusAlias = group.messageId ? chatFocusAlias(group.agent, group.messageId) : group.agent;
         void sendSystemNotification(
-          group.agent,
+          focusAlias,
           notificationTitle(group.agent, group.count),
           plainTextForNotification(group.body),
-          openChat.current,
+          alias => {
+            const focus = parseChatFocusAlias(alias);
+            if (focus) openChat.current?.(focus.agent, focus.messageId);
+            else openChat.current?.(alias);
+          },
         ).then(routed => {
           if (!routed) target.current = recordNotified(target.current, group.agent, Date.now());
         }).catch(() => { /* 权限被拒/平台不支持 */ });

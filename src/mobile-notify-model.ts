@@ -131,7 +131,7 @@ export const KEEPALIVE_NOTIFICATION_TEXT = 'ANet 正在保持连接';
 
 export const NOTIFICATION_KIND = 'anet-agent-message';
 
-export type AgentBucket = { readonly count: number; readonly preview: string };
+export type AgentBucket = { readonly count: number; readonly preview: string; /** #1543 最近一条主动消息(点通知定位用) */ readonly messageId?: string };
 export type Buckets = Readonly<Record<string, AgentBucket>>;
 
 export type PostPlan = {
@@ -142,7 +142,7 @@ export type PostPlan = {
   /** true = 响铃/横幅(MESSAGE_CHANNEL);false = 静默更新(QUIET_CHANNEL)。 */
   readonly alert: boolean;
   readonly channelId: string;
-  readonly data: { kind: string; alias: string; profileKey: string };
+  readonly data: { kind: string; alias: string; profileKey: string; messageId?: string };
 };
 
 export function notificationIdentifier(profileKey: string, agent: string): string {
@@ -162,7 +162,7 @@ export function summaryBody(count: number, preview: string): string {
  */
 export function accumulate(
   buckets: Buckets,
-  groups: ReadonlyArray<{ agent: string; count: number; body: string }>,
+  groups: ReadonlyArray<{ agent: string; count: number; body: string; messageId?: string }>,
   opts: { mode: NotifyMode; profileKey: string; sound: boolean },
 ): { buckets: Buckets; posts: PostPlan[] } {
   const next: Record<string, AgentBucket> = { ...buckets };
@@ -173,7 +173,7 @@ export function accumulate(
     const prev = next[agent];
     const count = (prev?.count ?? 0) + g.count;
     const preview = g.body || prev?.preview || '';
-    next[agent] = { count, preview };
+    next[agent] = { count, preview, ...(g.messageId ? { messageId: g.messageId } : prev?.messageId ? { messageId: prev.messageId } : {}) };
     // 'new':只有桶是空的(这个 agent 此前没有未清的通知)才响;'all':每次都响。
     // 提示音关(设置里的「消息提示音」)→ 一律走静默渠道:安卓 8+ 的声音由渠道决定,
     // 单条通知的 sound 字段不起作用,所以「不响」只能换渠道。
@@ -185,7 +185,7 @@ export function accumulate(
       body: summaryBody(count, preview),
       alert,
       channelId: alert ? MESSAGE_CHANNEL_ID : QUIET_CHANNEL_ID,
-      data: { kind: NOTIFICATION_KIND, alias: agent, profileKey: opts.profileKey },
+      data: { kind: NOTIFICATION_KIND, alias: agent, profileKey: opts.profileKey, ...(next[agent].messageId ? { messageId: next[agent].messageId } : {}) },
     });
   }
   return { buckets: next, posts };
@@ -219,7 +219,7 @@ export function routeFromNotificationData(data: unknown, currentProfileKey: stri
 export const TASK_STATUS_NOTIFICATION_KIND = 'anet-task-status';
 
 /** 同上,但任务状态通知还带 taskId(点它进任务详情)。 */
-export function routeTargetFromNotificationData(data: unknown, currentProfileKey: string): { alias: string; taskId: string | null } | null {
+export function routeTargetFromNotificationData(data: unknown, currentProfileKey: string): { alias: string; taskId: string | null; messageId: string | null } | null {
   if (!data || typeof data !== 'object') return null;
   const d = data as Record<string, unknown>;
   if (d.kind !== NOTIFICATION_KIND && d.kind !== TASK_STATUS_NOTIFICATION_KIND) return null;
@@ -227,7 +227,9 @@ export function routeTargetFromNotificationData(data: unknown, currentProfileKey
   if (!alias) return null;
   if (typeof d.profileKey === 'string' && d.profileKey !== currentProfileKey) return null;
   const taskId = d.kind === TASK_STATUS_NOTIFICATION_KIND && typeof d.taskId === 'string' && d.taskId ? d.taskId : null;
-  return { alias, taskId };
+  // #1543 —— 新消息通知带最近一条主动消息的 id;任务状态通知不带(它走 taskId)。
+  const messageId = d.kind === NOTIFICATION_KIND && typeof d.messageId === 'string' && d.messageId.trim() ? d.messageId.trim() : null;
+  return { alias, taskId, messageId };
 }
 
 export type PermissionStatus = 'granted' | 'denied' | 'undetermined';
@@ -299,8 +301,8 @@ export function receiveTap(q: TapQueue, data: unknown, key: string): TapQueue {
 export function takeRoute(
   q: TapQueue,
   ready: { loggedIn: boolean; uiAttached: boolean; profileKey: string },
-): { queue: TapQueue; alias: string | null; taskId: string | null; consumed: boolean; data?: unknown } {
-  if (!q.pending || !ready.loggedIn || !ready.uiAttached) return { queue: q, alias: null, taskId: null, consumed: false };
+): { queue: TapQueue; alias: string | null; taskId: string | null; messageId: string | null; consumed: boolean; data?: unknown } {
+  if (!q.pending || !ready.loggedIn || !ready.uiAttached) return { queue: q, alias: null, taskId: null, messageId: null, consumed: false };
   const handled = new Set(q.handled);
   handled.add(q.pending.key);
   const target = routeTargetFromNotificationData(q.pending.data, ready.profileKey);
@@ -308,6 +310,7 @@ export function takeRoute(
     queue: { pending: null, handled },
     alias: target?.alias ?? null,
     taskId: target?.taskId ?? null,
+    messageId: target?.messageId ?? null,
     consumed: true,
     // #499 到期提醒的通知没有 alias(点它开任务卡片):原始 data 交回去,由调用方按自己的 kind 解析。
     data: q.pending.data,

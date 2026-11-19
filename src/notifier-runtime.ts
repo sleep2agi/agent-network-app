@@ -105,7 +105,7 @@ import {
 } from './due-reminder-notify';
 import { getUnreadSnapshot, ingestInboxMessagesBody, ingestUserMessagesBody, subscribeUnread, unreadHalvesIngested, unreadLastIngestAt } from './unread-store';
 
-type RouteHandler = (alias: string, taskId?: string | null) => void;
+type RouteHandler = (alias: string, taskId?: string | null, messageId?: string | null) => void;
 /** #499 点到期提醒的通知 → 打开那张任务卡片。 */
 type RequirementHandler = (requirementId: string, networkId: string | null) => void;
 
@@ -391,7 +391,7 @@ function deliverRoute(): void {
     if (requirementHandler) requirementHandler(due.requirementId, due.networkId);
     return;
   }
-  if (taken.alias && handler) handler(taken.alias, taken.taskId);
+  if (taken.alias && handler) handler(taken.alias, taken.taskId, taken.messageId);
 }
 
 function onTap(data: unknown, key: string): void {
