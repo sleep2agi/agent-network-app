@@ -614,6 +614,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.572:
+            - 定时任务、任务、设置、Hub、日志、节点详情、组织等页面都透出整窗背景渐变，不再是一整块白。
+            - 聊天里的引用条不再露出 ** 之类的符号；右侧定时任务为空时只保留一个「新建」。
+            - 设置页的账号卡片和各行图标更安静：不再是大块蓝色和彩色方块，改成卡片底加线条图标。
+
             What's new in 0.2.571:
             - 点新消息的系统通知，会直接跳到那条消息，不再只是打开会话。
             - macOS 窗口顶部（红黄绿灯那条）不再是一条白带，背景渐变从窗口最顶上开始。
