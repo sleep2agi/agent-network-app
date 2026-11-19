@@ -18,7 +18,7 @@ const tables: TranslationTable = {
   'nav.tasksUpdated': ['{count} 个任务有新动态', '{count} tasks updated'],
   'nav.tasksUnread': ['{label}，{count} 个任务有新动态', '{label}, {count} tasks updated'],
   'nav.settings': ['设置', 'Settings'],
-  'nav.server': ['Hub 设置', 'Hub settings'],
+  'nav.server': ['服务器', 'Server'],
   'nav.scheduled': ['定时任务', 'Schedules'],
   'chat.empty': ['选择一个 agent 开始聊天', 'Select an agent to start chatting'],
   'chat.emptyHint': ['会话显示在右侧，列表始终保留', 'Chat opens on the right; your conversation list stays visible'],
@@ -35,6 +35,9 @@ const tables: TranslationTable = {
   'chat.variantPillUnknown': ['思考档位', 'Thinking'],
   'chat.modelSheetOpen': ['查看当前模型与可用模型目录', 'Show current model and catalog'],
   'chat.modelUnknown': ['模型未知或已过期', 'Model unknown or stale'],
+  // #573：文案按「能不能换模型」分两种，不再用一个灰色报错样子。
+  'chat.modelSelect': ['选择模型', 'Select model'],
+  'chat.modelFixed': ['模型由节点决定', 'Model set by the node'],
   'server.overview': ['概览', 'Overview'],
   'server.nodes': ['节点', 'Nodes'],
   'server.create': ['新建节点', 'Create node'],

@@ -30,9 +30,10 @@ test('visible receipt changes from Hub delivery to submitted, consumed, then ter
 test('legacy unknown and target disconnection are distinct rendered outcomes', async () => {
   let tree: any;
   await act(async () => { tree = create(<Notice task={{ status: 'running' }} detail />); });
-  expect(JSON.stringify(tree.toJSON())).toContain('开始状态未确认');
+  // #573：等待开始的文案改成「已送达，等待对方开始」。
+  expect(JSON.stringify(tree.toJSON())).toContain('已送达，等待对方开始');
   await act(async () => { tree.update(<Notice task={{ status: 'running' }} detail diagnostic={{ schema_version: 1, code: 'target_no_live_sse', evidence: { task_status: 'running', runtime_consumed: false, runtime_submitted: false, target_ever_reported_runtime_evidence: false, target_session_status: 'idle', live_sse_connections: 0 } }} />); });
   expect(JSON.stringify(tree.toJSON())).toContain('Hub 未检测到目标接收连接');
-  expect(JSON.stringify(tree.toJSON())).not.toContain('开始状态未确认');
+  expect(JSON.stringify(tree.toJSON())).not.toContain('已送达，等待对方开始');
   await act(async () => tree.unmount());
 });

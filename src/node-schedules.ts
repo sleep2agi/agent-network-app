@@ -22,7 +22,7 @@ import {
 
 export type NodeScheduleSource = 'hub' | 'node';
 
-export const NODE_SCHEDULE_SOURCE_LABEL: Record<NodeScheduleSource, string> = { hub: 'Hub 计划', node: '节点计划' };
+export const NODE_SCHEDULE_SOURCE_LABEL: Record<NodeScheduleSource, string> = { hub: 'ANet 定时', node: '机器上的定时' };
 
 /** 节点页 → 定时任务页:要落在哪一条上(或直接打开新建表单)。seq 让同一条连点两次也会再生效。 */
 export type ScheduleOpenRequest =

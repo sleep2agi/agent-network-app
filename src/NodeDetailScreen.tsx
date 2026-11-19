@@ -923,7 +923,7 @@ export default function NodeDetailScreen({
         <View>
           <SectionTitle
             title="定时任务"
-            hint="这个节点要执行的计划:Hub 计划由 Hub 按时派发,节点计划是节点上报的本机计划。点一行 Hub 计划就地编辑、看最近执行。"
+            hint="这个节点要执行的计划:ANet 定时由 ANet 按时派发,机器上的定时是节点所在电脑自带的计划(例如 crontab)。点一行 ANet 定时就地编辑、看最近执行。"
             action={create ? (
               <Pressable onPress={create} accessibilityRole="button" accessibilityLabel="新建定时任务" testID="node-schedules-create" hitSlop={6}
                 style={({ pressed }) => [localStyles.headerAction, { backgroundColor: colors.accent }, pressed && { opacity: 0.8 }]}>

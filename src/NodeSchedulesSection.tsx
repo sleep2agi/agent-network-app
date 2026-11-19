@@ -320,7 +320,7 @@ function ScheduleRow({ row, last, busy, onOpen, onToggle, onDelete, stopped = fa
         disabled={!onOpen}
         accessibilityRole={onOpen ? 'button' : undefined}
         accessibilityLabel={`${row.sourceLabel},${row.name},${row.frequency}${row.last ? `,上次${row.last.label}` : ''}`}
-        accessibilityHint={onOpen ? (row.source === 'hub' ? '打开编辑器:改内容和频率、暂停、立即执行,看最近执行' : '在定时任务页查看这条节点计划') : undefined}
+        accessibilityHint={onOpen ? (row.source === 'hub' ? '打开编辑器:改内容和频率、暂停、立即执行,看最近执行' : '在定时任务页查看这条机器上的定时') : undefined}
         testID={`node-schedule-open-${id}`}
         style={(state: { pressed: boolean; hovered?: boolean }) => [s.rowMain, onOpen && (state.hovered || state.pressed) && { backgroundColor: colors.rowHover }]}
       >

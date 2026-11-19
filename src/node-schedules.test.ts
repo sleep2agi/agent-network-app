@@ -71,7 +71,7 @@ eq('node:空 node_id → null(不去撞 alias)', externalSchedulesForNode(extern
 // ── 合成行:两个来源、带来源标签、排除别人的 ───────────────────────────────
 const rows = nodeScheduleRows({ nodeId: ME, hub: hubAll, external: externalAll, nowMs: NOW, deviceTimezone: 'Asia/Shanghai' });
 eq('两个来源都在,别的节点的一条都没有', rows.map(r => r.key), ['hub:sched_mine', 'hub:sched_renamed', 'node:cron_b', 'node:sysd_a']);
-eq('来源标签', rows.map(r => r.sourceLabel), ['Hub 计划', 'Hub 计划', '节点计划', '节点计划']);
+eq('来源标签', rows.map(r => r.sourceLabel), ['ANet 定时', 'ANet 定时', '机器上的定时', '机器上的定时']);
 ck('行里没有别的节点的名字', !rows.some(r => r.name.startsWith('别人的')));
 eq('另一个节点:只有它自己的(Hub + 节点计划)', nodeScheduleRows({ nodeId: OTHER, hub: hubAll, external: externalAll, nowMs: NOW }).map(r => r.key), ['hub:sched_other', 'hub:sched_other2', 'node:cron_other']);
 eq('没有 node_id → 空表', nodeScheduleRows({ nodeId: null, hub: hubAll, external: externalAll, nowMs: NOW }), []);

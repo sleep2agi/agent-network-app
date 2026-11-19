@@ -29,7 +29,8 @@ ck('offline semantics survive effective config priority', show(scopeA, { ...snap
 ck('render scope is recreated on config and alias changes', /const composerModelScope = useMemo\(\(\) => \(\{\}\), \[cfg, alias\]\);/.test(source));
 ck('request captures the same scope used by render', source.includes('scope: composerModelScope'));
 ck('scope does not serialize credentials into keys', !source.includes('const modelScopeKey ='));
-ck('unknown and stale states are visible rather than silently disappearing', source.includes(": t('chat.modelUnknown')"));
+// #573：未知/过期不再用「模型未知或已过期」的报错样子，而是可点的「选择模型」/「模型由节点决定」。
+ck('unknown and stale states are visible rather than silently disappearing', source.includes("modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')"));
 setLanguagePreference('en');
 ck('effective variant English copy', labels.composerModelLabel({ model: 'p/m', modelVariant: 'high' }) === 'p/m · variant high');
 ck('explicit default English copy', labels.composerModelLabel({ model: 'p/m', modelVariant: null }) === 'p/m · variant default');
