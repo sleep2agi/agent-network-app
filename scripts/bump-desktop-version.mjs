@@ -165,11 +165,19 @@ if (!args.apply) {
 
 // ── apply：写文件 → 生成物 → 自检；失败回滚 ──
 const written = [];
+// 🔴 changelog-bundled.ts 是**生成物**，不在 edits 里：跑生成器前先留原文，回滚时要把它也写回，
+// 否则自检失败时会留下「版本号是旧的、生成物是新的」这种半套状态。
+const GENERATED = 'src/changelog-bundled.ts';
+let generatedBefore = null;
+try { generatedBefore = readFileSync(resolve(process.cwd(), GENERATED), 'utf8'); } catch { generatedBefore = null; }
 const restore = () => {
   for (const e of written.reverse()) {
     try { writeFileSync(resolve(process.cwd(), e.path), e.before); } catch { /* best effort */ }
   }
-  console.error('✗ 已回滚全部文件（保持原样）');
+  if (generatedBefore !== null) {
+    try { writeFileSync(resolve(process.cwd(), GENERATED), generatedBefore); } catch { /* best effort */ }
+  }
+  console.error('✗ 已回滚全部文件（含生成物，保持原样）');
 };
 for (const e of edits) {
   try {
