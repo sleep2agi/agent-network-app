@@ -13,4 +13,5 @@ for (const mode of ['light', 'dark'] as const) {
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 assert.match(chat, /desktop && chatCornerGlow\(colors\.bg, themeMode\(\)\)/, 'desktop chat root gets the glow');
 assert.match(chat, /desktop && styles\.headerOverGlow/, 'desktop header lets the glow through');
+assert.match(chat, /composerDivider: \{[\s\S]{0,200}backgroundColor: 'transparent'/, 'resize divider does not cut a band through the glow');
 console.log('chat-glow: ok');

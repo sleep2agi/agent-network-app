@@ -3840,7 +3840,8 @@ const makeStyles = (B = bubbleLayout()) =>
     height: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.bg,
+    // 透明：桌面聊天页底色带角落光斑，实底会在输入卡片上方切出一条横带（#1536 CI 截图）。
+    backgroundColor: 'transparent',
     cursor: 'ns-resize',
     // 分隔条本身不可选(拖拽期间整页禁选由 lockDocumentSelection 负责)。
     userSelect: 'none',
