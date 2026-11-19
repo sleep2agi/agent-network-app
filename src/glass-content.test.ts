@@ -9,7 +9,7 @@ assert.equal(glassContentCss([]), '');
 
 // 接线：桌面内容区用 GlassContent 包住（admin 2026-11-19「任务这边也就是一块白」）。
 const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
-assert.match(app, /<GlassContent style=\{desktopStyles\.content\}>[\s\S]*\{content\}<ShortcutToast text=\{shortcutToast\} \/>\n\s*<\/GlassContent>/);
+assert.match(app, /<GlassContent style=\{desktopStyles\.content\}>[\s\S]*\{content\}<ShortcutToast text=\{shortcutToast\} \/>\s*<\/GlassContent>/);
 const comp = readFileSync(new URL('./glass-content.tsx', import.meta.url), 'utf8');
 assert.match(comp, /backgroundColor: colors\.bg/);
 assert.match(comp, /backgroundColor: colors\.listBg/);
