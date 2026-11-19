@@ -3899,7 +3899,8 @@ const makeStyles = (B = bubbleLayout()) =>
   desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingTop: 4, height: 38 },
   desktopToolButton: { width: 34, height: 34, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   // flexShrink + minWidth 0:右侧边栏展开后聊天区可能只有 ~430,这一行要能收窄(模型名截断),不能把 🎤 / 发送挤出去。
-  desktopToolbarLeft: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexShrink: 1, minWidth: 0 },
+  // alignSelf stretch：左组和整行同高（38），录音条替换工具栏时同高同底边（test-desktop-voice-bar 量的是「＋」的父元素）。
+  desktopToolbarLeft: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', gap: spacing.sm, flexShrink: 1, minWidth: 0 },
   desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 0 },
   priorityButton: { height: 28, borderRadius: radius.item, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
