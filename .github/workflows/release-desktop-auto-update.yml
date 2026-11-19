@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.568:
+            - 桌面聊天页的角落光晕重做：浅色模式先提亮再叠色，不再发脏；深色模式改用琥珀色，避免发绿；「OpenCode 原会话」那条不再把光切断。
+
             What's new in 0.2.567:
             - 深色模式下，节点「密钥」页等处原本几乎看不见的文字（加载提示、输入框标签）恢复清晰。
             - 桌面聊天页加了角落光晕：左上角暖黄、右下角蓝，浅色和深色模式都有，不影响文字对比度。
