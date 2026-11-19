@@ -55,7 +55,7 @@ import { attachmentsFromFiles, filesFromTransfer, plusPressAction, transferHasFi
 import { addToDraft, draftCountLabel, draftImageCount, isDraftImage, MAX_DRAFT_IMAGES, oversizeMessage, remainingImageSlots, removeFromDraft, sendBlocker, willCompressBeforeUpload } from './image-draft';
 import { createUploadMemo, removeAttachmentAt, UPLOAD_CONCURRENCY, withUploadState, type UploadState } from './upload-queue';
 import type { UploadedFile } from './attach';
-import { colors, onThemeChange, radius, spacing } from './theme';
+import { colors, onThemeChange, radius, spacing, themeMode } from './theme';
 import { bubbleInk, MineBubble } from './bubble-ink';
 import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
 import NodeSessionControl from './NodeSessionControl';
@@ -78,6 +78,7 @@ import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, ou
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail, { useChatToolRail } from './ChatToolRail';
 import { chatToolRailReserve, composerShowsShortcutHint } from './chat-tool-rail-layout';
+import { chatCornerGlow } from './chat-glow';
 import ChatInfoPanel from './ChatInfoPanel';
 import NodeDepartmentPicker from './NodeDepartmentPicker';
 import { canEditDepartments, departmentDisplayLabel, type OrgLike } from './node-department-edit';
@@ -2521,7 +2522,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, iosKeyboard.style, toolRailReserve > 0 && { paddingRight: toolRailReserve }]}
+      style={[styles.root, desktop && chatCornerGlow(colors.bg, themeMode()), iosKeyboard.style, toolRailReserve > 0 && { paddingRight: toolRailReserve }]}
       testID="chat-pane"
       // Edge-to-edge Android ignores adjustResize, so behavior=undefined
       // left the keyboard covering the input (Vincent tg 738). 'padding'
@@ -2541,7 +2542,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       {iosKeyboard.probe}
       <View
         {...({ dataSet: headerChrome.dataSet } as any)}
-        style={[styles.header, headerChrome.style]}
+        style={[styles.header, desktop && styles.headerOverGlow, headerChrome.style]}
         onLayout={(event) => { const h = Math.round(event.nativeEvent.layout.height); setHeaderHeight(c => (c === h ? c : h)); }}
         testID="chat-header"
       >
@@ -3573,6 +3574,8 @@ const makeStyles = (B = bubbleLayout()) =>
     borderBottomColor: colors.border,
     backgroundColor: colors.card,
   },
+  // 桌面聊天页底色带角落光斑（chat-glow.ts）：头部和输入区外围透明，让光透出来；卡片本身仍是实底。
+  headerOverGlow: { backgroundColor: 'transparent' },
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
@@ -3837,7 +3840,8 @@ const makeStyles = (B = bubbleLayout()) =>
     height: 6,
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: colors.bg,
+    // 透明：桌面聊天页底色带角落光斑，实底会在输入卡片上方切出一条横带（#1536 CI 截图）。
+    backgroundColor: 'transparent',
     cursor: 'ns-resize',
     // 分隔条本身不可选(拖拽期间整页禁选由 lockDocumentSelection 负责)。
     userSelect: 'none',
@@ -3850,7 +3854,7 @@ const makeStyles = (B = bubbleLayout()) =>
   desktopVariantPillText: { fontSize: ds(11), color: colors.textMuted },
   // 2026-09-29 Vincent 截图(0.2.137 Windows):输入区原是一整块贴边白板。现在是悬浮圆角卡片 ——
   // 左右下三边等距 COMPOSER_CARD_INSET,工具栏在卡片里;高度随内容长(composer-resize.ts)。
-  desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: colors.bg },
+  desktopComposerWrap: { paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: COMPOSER_CARD_INSET, backgroundColor: 'transparent' },
   desktopComposer: {
     backgroundColor: colors.card,
     borderRadius: radius.surface,
