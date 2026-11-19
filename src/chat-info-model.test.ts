@@ -100,8 +100,7 @@ const panel = read('ChatInfoPanel.tsx');
   }
   const header = chat.slice(open, end);
   const pressables = header.match(/<Pressable\b/g)?.length ?? 0;
-  // #573：模型未知时标题里的型号变成「选择模型」入口（多了第 3 个 Pressable）；有模型名时仍是 2 个。
-  check(pressables === 2 || pressables === 3, `header has back + ⋯ (+ 可选模型入口) (${pressables} Pressables)`);
+  check(pressables === 2, `header has back + ⋯ only (${pressables} Pressables; back is phone-only)`);
   check(/accessibilityLabel=\{t\('chat.info'\)\}[\s\S]*?onPress=\{\(\) => setInfoOpen\(true\)\}[\s\S]*?testID="chat-header-more"/.test(header), '⋯ opens translated 聊天信息');
   check(/name="ellipsis-horizontal"/.test(header), '⋯ uses ellipsis-horizontal');
   for (const gone of ['搜索聊天记录', 'chat-mute-toggle', '置顶会话', '查看节点信息', 'settings-outline', 'notifications-outline', 'pin-outline']) {
