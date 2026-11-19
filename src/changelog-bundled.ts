@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.570:",
+  "- Agent 发来的附件如果没带文件名，卡片不再显示一长串文件编号，改成按类型给出可读标题（图片显示「图片」，其他显示「文件」，能识别扩展名时带上，例如「文件.pdf」）；附件的大小、打开与下载行为不变。",
+  "- 桌面主窗口换成整窗一层柔和渐变（左上暖桃、右下淡紫蓝），侧栏、会话列表和聊天连成一片；浅色和深色模式都有。",
+  "- 输入框下方的工具条整理：模型和思考档位改成左侧同款圆角按钮，「停止」只在节点运行时出现，发送按钮更醒目。",
+  "- 主题强调色换成和新背景同色系的蓝（按钮、链接、选中状态）。",
+  "",
   "What's new in 0.2.569:",
   "- Agent 主动发来的消息带附件时（原型图、报告、截图），桌面和手机都会在消息下面画附件卡片：图片能点开看大图，文件能直接下载。",
   "- 只有附件、没有文字的那种消息也不会再整条消失。",
