@@ -18,6 +18,8 @@ permissions:
 
 jobs:
   drift:
+    # 非桌面 release（预发布/别的 tag）不跑：drift 脚本只认 desktop-v*，否则会误红「has no desktop-v* tag」。
+    if: github.event_name != 'release' || startsWith(github.event.release.tag_name, 'desktop-v')
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
