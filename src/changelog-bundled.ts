@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.574:",
+  "- 手机输入框的「＋」第一次会提示「点「＋」可以发图片和文件」，点一下或开始输入就不再出现；深色模式下「已送达」「等待对方开始」这类小字更清楚了。",
+  "- 长名称不再被硬切：会话列表、人员、群名和聊天页头的名字超出宽度时显示省略号，桌面把鼠标停上去能看到完整名字。",
+  "- 定时任务页改为说人话：筛选从「节点」改成 agent，空态是「还没有 agent，先新建一个。」，机器上的定时空态也不再提「节点计划」。",
+  "- 聊天和节点页里不再随手露出 node_id：会话没登记、别的网络、不能 fork 这几种情况都改成能看懂的一句话。",
+  "",
   "What's new in 0.2.573:",
   "- 组织页换成「活的组织图」（桌面）：部门是一团团的簇，agent 是一个个点，最近 10 分钟谁给谁派了活一眼能看到；点部门往里看，点头像直接进聊天。",
   "- 聊天右侧「任务」分成「派给它的」和「项管」两页：重复的定时任务合成一行，项管表里分给它的卡片也能直接看到。",
