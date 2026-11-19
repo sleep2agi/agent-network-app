@@ -76,6 +76,7 @@ import { installSystemThemeFollower } from './src/system-color-scheme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import MacTitleStrip from './src/mac-title-strip';
 import WindowGlowRoot from './src/window-glow-root';
+import GlassContent from './src/glass-content';
 import WinTitleBar from './src/win-title-bar';
 import PopoutWindowControls from './src/popout-window-controls';
 import { applyWindowBackground } from './src/window-background';
@@ -1547,7 +1548,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
           <AgentsScreen cfg={cfg} compact selectedAlias={screen.name === 'chat' || screen.name === 'nodeInfo' ? screen.alias : undefined} pinnedAliases={pinnedAliases} onTogglePin={togglePin} mutedAliases={mutedAliases} onToggleMute={toggleMute} onOpenChatWindow={alias => { void openRememberedChatWindow(alias, cfg.profileId, cfg.username || maskedHubHost(cfg.serverUrl)); }} onOpenChat={(alias, networkId) => setScreen({ name: 'chat', alias, networkId })} onOpenPerson={p => setScreen(dmScreenFor(p))} selectedPerson={screen.name === 'dm' ? screen.alias : undefined} onOpenGroup={g => setScreen(groupScreenFor(g))} selectedGroup={screen.name === 'group' ? screen.alias : undefined} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'nodeDetail', alias })} />
         )}
       </View> : null}
-      <View style={desktopStyles.content}>
+      <GlassContent style={desktopStyles.content}>
         {/* #653 弱密码横幅:右侧内容栏顶上;点了打开设置窗口的「修改密码」(没有桌面壳时嵌在主窗口)。 */}
         {pinCarry ? (
           <View testID="pin-carry-banner" style={{ flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 12, paddingVertical: 8, backgroundColor: colors.subtleFill }}>
@@ -1574,7 +1575,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
           <WeakPasswordBanner cfg={cfg} desktop onOpen={() => { void openSettingsWindow('account', 'changePassword').then(opened => { if (!opened) { requestSettingsDetail('changePassword'); setScreen({ name: 'settings' }); } }); }} />
         ) : null}
         {content}<ShortcutToast text={shortcutToast} />
-      </View>
+      </GlassContent>
     </View>
     </GlassChromeProvider>
   );
