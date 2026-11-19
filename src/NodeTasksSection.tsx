@@ -15,7 +15,7 @@ import { fetchTasks, type HubConfig } from './api';
 import AliasAvatar from './AliasAvatar';
 import MarkdownMessage, { WRAP_ANYWHERE } from './MarkdownMessage';
 import { type NodeTaskRow } from './node-tasks';
-import { priorityPill, relativeTime, splitStale, taskPreview, type PillTone } from './node-task-view';
+import { collapseRepeats, quietPriorityPill, relativeTime, senderLabel, splitStale, taskPreview, type PillTone } from './node-task-view';
 import { groupNodeTasks, type NodeTaskGroups } from './node-task-groups';
 import { colors, onThemeChange, radius, spacing, type as typeScale, weight } from './theme';
 import { usePoll } from './usePoll';
@@ -43,11 +43,13 @@ function Pill({ label, tone }: { label: string; tone: PillTone }) {
   );
 }
 
-function TaskRow({ row, index, kind, now }: { row: NodeTaskRow; index: number; kind: RowKind; now: Date }) {
+function TaskRow({ row, index, kind, now }: { row: NodeTaskRow & { repeat?: number }; index: number; kind: RowKind; now: Date }) {
   const [expanded, setExpanded] = useState(false);
   const when = relativeTime(kind === 'running' || kind === 'stale' ? row.lastActivity ?? row.since : row.since, now);
   const preview = taskPreview(row.content || row.summary, row.from);
-  const pill = priorityPill(row.priority);
+  const pill = quietPriorityPill(row.priority);
+  const who = senderLabel(row.from);
+  const repeat = row.repeat ?? 1;
   const failed = kind === 'done' && ['failed', 'timeout', 'expired'].includes(row.status);
   const muted = kind === 'stale' || kind === 'self';
   return (
@@ -55,7 +57,7 @@ function TaskRow({ row, index, kind, now }: { row: NodeTaskRow; index: number; k
       onPress={() => setExpanded(v => !v)}
       accessibilityRole="button"
       accessibilityState={{ expanded }}
-      accessibilityLabel={`来自 ${row.from}:${preview}`}
+      accessibilityLabel={`来自 ${who}:${preview}`}
       style={(state: { pressed: boolean; hovered?: boolean }) => [
         { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, marginHorizontal: -spacing.sm, borderRadius: radius.control },
         (state.hovered || expanded) && { backgroundColor: colors.rowHover },
@@ -67,8 +69,8 @@ function TaskRow({ row, index, kind, now }: { row: NodeTaskRow; index: number; k
       </View>
       <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
-          <Text style={{ color: muted ? colors.textMuted : colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.strong }} numberOfLines={1}>{row.from}</Text>
-          {when ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{when}{TIME_SUFFIX[kind]}</Text> : null}
+          <Text style={{ color: muted ? colors.textMuted : colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.strong }} numberOfLines={1}>{who}</Text>
+          {when ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{repeat > 1 ? `最近 ${repeat} 次 · 最后一次` : ''}{when}{TIME_SUFFIX[kind]}</Text> : null}
           {pill ? <Pill label={pill.label} tone={pill.tone} /> : null}
           {failed ? <Pill label="失败" tone="danger" /> : null}
         </View>
@@ -157,12 +159,15 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
       ) : null}
       {g ? (
         <View style={{ gap: spacing.md }}>
-          <Group title="进行中" count={split.active.length}>
-            {split.active.length ? split.active.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="running" now={now} />) : empty(split.stale.length ? '最近一天没有在动的任务' : '没有正在进行的任务')}
-          </Group>
+          {/* admin 2026-11-19：没有进行中的任务时不占一整张卡，只留一行灰字。 */}
+          {split.active.length ? (
+            <Group title="进行中" count={split.active.length}>
+              {split.active.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="running" now={now} />)}
+            </Group>
+          ) : <Text style={{ color: colors.textMuted, fontSize: typeScale.small }} testID="node-tasks-idle">{split.stale.length ? '最近一天没有在动的任务' : '现在没有正在进行的任务'}</Text>}
           {g.queue.length ? (
             <Group title="排队" count={g.queue.length} hint="按创建时间展示，当前没有精确执行名次">
-              {g.queue.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="queue" now={now} />)}
+              {collapseRepeats(g.queue).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="queue" now={now} />)}
             </Group>
           ) : null}
           {split.stale.length ? (
@@ -178,7 +183,7 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
             </Group>
           ) : null}
           <Group title="最近完成" count={g.recent.length} collapsible defaultOpen>
-            {g.recent.length ? g.recent.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="done" now={now} />) : empty('最近没有结束的任务')}
+            {g.recent.length ? collapseRepeats(g.recent).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="done" now={now} />) : empty('最近没有结束的任务')}
           </Group>
           {g.selfOpen.length ? (
             <Group
