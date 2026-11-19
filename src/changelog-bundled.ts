@@ -5,6 +5,12 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.573:",
+  "- 组织页换成「活的组织图」（桌面）：部门是一团团的簇，agent 是一个个点，最近 10 分钟谁给谁派了活一眼能看到；点部门往里看，点头像直接进聊天。",
+  "- 聊天右侧「任务」分成「派给它的」和「项管」两页：重复的定时任务合成一行，项管表里分给它的卡片也能直接看到。",
+  "- Hub 页更清爽：机器忙用琥珀色，不再满屏红；左侧菜单不再重复列出 SKILLS / 令牌 / Provider。",
+  "- 界面不再露出内部用语：模型显示「选择模型」并可直接点开切换，任务显示「已送达，等待对方开始」，筛选显示「全部 agent」，「Hub 设置」改名「服务器」。",
+  "",
   "What's new in 0.2.572:",
   "- 定时任务、任务、设置、Hub、日志、节点详情、组织等页面都透出整窗背景渐变，不再是一整块白。",
   "- 聊天里的引用条不再露出 ** 之类的符号；右侧定时任务为空时只保留一个「新建」。",
