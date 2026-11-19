@@ -35,3 +35,13 @@ assert.match(chat, /rootWidth - toolRailReserve/);
 assert.match(chat, /state=\{toolRail\} setState=\{setToolRail\}/);
 
 console.log('chat-tool-rail-layout: ok');
+
+// admin 2026-11-19「这里来一个定时任务的入口？」：右侧图标条有「定时任务」，面板里复用节点页的分区，可就地新建。
+{
+  const { readFileSync } = await import('node:fs');
+  const rail = readFileSync(new URL('./ChatToolRail.tsx', import.meta.url), 'utf8');
+  assert.match(rail, /\{ key: 'schedules', label: '定时任务', icon: 'time-outline' \}/);
+  assert.match(rail, /<NodeSchedulesSection cfg=\{cfg\} nodeId=\{scheduleNodeId\} editable createSeq=\{scheduleCreateSeq\} \/>/);
+  assert.match(rail, /testID="chat-tool-schedule-create"/);
+  assert.match(rail, /testID="chat-tool-schedules-no-node"/);
+}
