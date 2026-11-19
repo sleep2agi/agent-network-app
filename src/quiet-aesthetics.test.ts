@@ -15,7 +15,8 @@ for (const mode of ['light', 'dark'] as const) {
   ck(`${mode}: the solid brand block keeps the blue (settings profile card)`, t.solidBrand.toLowerCase() === (mode === 'light' ? '#375ada' : '#3a55d0') && t.onSolid === '#ffffff');
 }
 const settings = read('./settings-kit.tsx');
-ck('settings profile card and icon tiles use solidBrand / onSolid, not the chat bubble', settings.includes('backgroundColor: colors.solidBrand') && !/colors\.(bubbleMine|onBubbleMine)/.test(settings));
+// 2026-11-19 admin「这个也有点难看」：身份卡不再铺实底品牌蓝，图标不再是彩色方块 —— 卡片底 + 线条中性色图标。
+ck('settings profile card is a quiet card (groupedRow) and row icons are neutral outlines, not brand-blue blocks', settings.includes('backgroundColor: colors.groupedRow, overflow: \'hidden\'') && !settings.includes('backgroundColor: colors.solidBrand') && settings.includes('color={colors.textSecondary} /></View>') && !/colors\.(bubbleMine|onBubbleMine)/.test(settings));
 const chat = read('./ChatScreen.tsx');
 ck('agent → other node bubble is the same quiet card as replies', chat.includes('agentSentBubble: { backgroundColor: colors.card }'));
 
