@@ -115,6 +115,7 @@ import { closeImageWindowFor, openImageWindow } from './image-window';
 import { selectedTextWithin } from './message-plain-text';
 import { cleanAttachmentDebugText, hideGridImageLines, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs, stripAttachmentPlaceholder } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
+import { fullTextTitleRef } from './full-text-title';
 import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
 import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
@@ -2570,7 +2571,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         </AvatarStatusRing>
         {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
         <View style={styles.headerTitleCol} testID="chat-header-title">
-          <Text style={styles.title} numberOfLines={1}>
+          <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
             {alias}
           </Text>
           {subtitle ? (
