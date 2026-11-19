@@ -94,8 +94,8 @@ const browser = await chromium.launch({ executablePath: findChromium() });
 
 // 主题 token(src/theme.ts 的原值)。告警色 = 原 token 向 card 线性混合 SOFTEN(与 theme.ts mixHex 同一公式,这里独立再算一遍)。
 const TOKENS = {
-  light: { accent: '#1b65db', tonalBg: '#edf3fe', subtleFill: '#f0f1f3', card: '#ffffff', running: '#15803d', failed: '#dc2626', blocked: '#d97706', muted: '#636a75', rowHover: '#f1f3f5' },
-  dark: { accent: '#5e9bff', tonalBg: '#172a48', subtleFill: '#1e1e22', card: '#18181b', running: '#22c55e', failed: '#ef4444', blocked: '#f59e0b', muted: '#8b8b95', rowHover: '#1b1b1f' },
+  light: { accent: '#375ada', tonalBg: '#eef1fd', subtleFill: '#f0f1f3', card: '#ffffff', running: '#15803d', failed: '#dc2626', blocked: '#d97706', muted: '#636a75', rowHover: '#f1f3f5' },
+  dark: { accent: '#7c93ff', tonalBg: '#1c2347', subtleFill: '#1e1e22', card: '#18181b', running: '#22c55e', failed: '#ef4444', blocked: '#f59e0b', muted: '#8b8b95', rowHover: '#1b1b1f' },
 };
 const SOFTEN = 0.22;
 const hexRgb = (h) => [0, 2, 4].map(i => Number.parseInt(h.slice(1).slice(i, i + 2), 16));

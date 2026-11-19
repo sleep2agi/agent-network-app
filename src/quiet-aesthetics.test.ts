@@ -12,7 +12,7 @@ for (const mode of ['light', 'dark'] as const) {
   const t = ACCENT[mode];
   const lum = (hex: string) => { const n = (i: number) => Number.parseInt(hex.slice(1 + i * 2, 3 + i * 2), 16); return Math.max(n(0), n(1), n(2)) - Math.min(n(0), n(1), n(2)); };
   ck(`${mode}: my bubble is a neutral grey, not the accent`, t.bubbleMine.toLowerCase() !== t.accent.toLowerCase() && lum(t.bubbleMine) <= 8);
-  ck(`${mode}: the solid brand block keeps the blue (settings profile card)`, t.solidBrand.toLowerCase() === (mode === 'light' ? '#1b65db' : '#2563d9') && t.onSolid === '#ffffff');
+  ck(`${mode}: the solid brand block keeps the blue (settings profile card)`, t.solidBrand.toLowerCase() === (mode === 'light' ? '#375ada' : '#3a55d0') && t.onSolid === '#ffffff');
 }
 const settings = read('./settings-kit.tsx');
 ck('settings profile card and icon tiles use solidBrand / onSolid, not the chat bubble', settings.includes('backgroundColor: colors.solidBrand') && !/colors\.(bubbleMine|onBubbleMine)/.test(settings));

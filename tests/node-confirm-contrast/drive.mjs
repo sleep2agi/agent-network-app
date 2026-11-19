@@ -73,7 +73,7 @@ try {
       const ratio = contrast(style.color, style.background);
       const expectedBackground = action === 'delete_node'
         ? (theme === 'light' ? 'rgb(255, 255, 255)' : 'rgb(24, 24, 27)')
-        : (theme === 'light' ? 'rgb(27, 101, 219)' : 'rgb(94, 155, 255)');
+        : (theme === 'light' ? 'rgb(55, 90, 218)' : 'rgb(124, 147, 255)');
       assert.equal(style.background, expectedBackground, `actual rendered theme must be ${theme}`);
       await page.screenshot({ path: join(out, `${theme}-${action}.png`) });
       assert.ok(ratio >= 4.5, `confirm text contrast ${theme}/${action}: ${ratio.toFixed(2)} < 4.5; ${JSON.stringify(style)}`);
