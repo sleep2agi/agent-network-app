@@ -50,7 +50,7 @@ function Page({cfg,daemonId,nodeId,nodeRuntimeVersion,nodeSecretsCapable}:Props)
       <Text style={{color:colors.textMuted}}>{t('scopedSecrets.nodeUnsupported')}</Text>
     </View>:<>
       <Button title={t('scopedSecrets.refresh')} testID="scoped-secret-refresh" disabled={busy} press={()=>void run()}/>
-      {busy?<View style={{flexDirection:'row',gap:spacing.sm}}><ActivityIndicator/><Text>{t(independent
+      {busy?<View style={{flexDirection:'row',gap:spacing.sm,alignItems:'center'}}><ActivityIndicator color={colors.textMuted}/><Text style={{color:colors.textMuted}}>{t(independent
         ? writing?'scopedSecrets.nodeSaving':'scopedSecrets.nodeLoading'
         : writing?'scopedSecrets.saving':'scopedSecrets.loading')}</Text></View>:null}
       {snapshot?<View style={{borderWidth:1,borderColor:colors.border,borderRadius:radius.md,padding:spacing.md,gap:spacing.sm}}>
