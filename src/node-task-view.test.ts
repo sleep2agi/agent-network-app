@@ -59,3 +59,13 @@ check('urgent/high/low 有标签', priorityPill('urgent')?.tone === 'danger' && 
 
 console.log(`node task view: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);
+
+{
+  const { collapseRepeats, senderLabel, quietPriorityPill } = await import('./node-task-view');
+  const r = (from: string, content: string) => ({ from, content, summary: '' });
+  const c = collapseRepeats([r('scheduler', '每次收到这条，按顺序做'), r('scheduler', '每次收到这条，按顺序做 '), r('admin', '你好'), r('scheduler', '每次收到这条，按顺序做')]);
+  if (c.length !== 3 || c[0].repeat !== 2 || c[1].repeat !== 1 || c[2].repeat !== 1) throw new Error('collapseRepeats');
+  if (senderLabel('scheduler') !== '定时任务' || senderLabel('admin') !== 'admin' || senderLabel('') !== '系统') throw new Error('senderLabel');
+  if (quietPriorityPill('high') !== null || quietPriorityPill('urgent')?.label !== '紧急') throw new Error('quietPriorityPill');
+  console.log('node-task-view quiet: ok');
+}

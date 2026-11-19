@@ -15,11 +15,11 @@ import { Ionicons } from './icons';
 import NodeFilesSection from './NodeFilesSection';
 import NodeLogsSection from './NodeLogsSection';
 import NodeSkillsSection from './NodeSkillsSection';
-import NodeTasksSection from './NodeTasksSection';
 import type { HubConfig, Session } from './api';
 import { colors, radius, spacing, type as typeScale } from './theme';
 import { useGlassChrome } from './glass-chrome';
 import NodeSchedulesSection from './NodeSchedulesSection';
+import RailTasksPanel from './RailTasksPanel';
 import { CHAT_TOOL_RAIL_WIDTH } from './chat-tool-rail-layout';
 
 const KEY = 'anet_chat_toolrail_v1';
@@ -100,7 +100,7 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: spacing.md }} testID="chat-tool-body">
-            {active === 'tasks' ? <NodeTasksSection cfg={cfg} alias={alias} embedded /> : null}
+            {active === 'tasks' ? <RailTasksPanel cfg={cfg} alias={alias} nodeId={(realSession as { node_id?: string | null } | null)?.node_id ?? null} /> : null}
             {active === 'schedules' ? (
               scheduleNodeId
                 ? <NodeSchedulesSection cfg={cfg} nodeId={scheduleNodeId} editable createSeq={scheduleCreateSeq} emptyCreate={false} />

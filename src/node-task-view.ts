@@ -110,3 +110,30 @@ export function priorityPill(priority?: string): { label: string; tone: PillTone
     default: return null;
   }
 }
+
+// admin 2026-11-19「这个任务的界面也很丑」：同一条定时任务每 3 分钟一行，一屏全是一模一样的内容。
+/** 相邻的「同一发件人 + 同样内容」合成一行，带上次数；保留最新那一条（rows 已按时间倒序）。 */
+export function collapseRepeats<T extends { from: string; content: string; summary: string }>(rows: readonly T[]): (T & { repeat: number })[] {
+  const out: (T & { repeat: number })[] = [];
+  const key = (r: T) => `${r.from}\u0000${(r.content || r.summary).replace(/\s+/g, ' ').trim().slice(0, 200)}`;
+  for (const r of rows) {
+    const last = out[out.length - 1];
+    if (last && key(last) === key(r)) { last.repeat++; continue; }
+    out.push({ ...r, repeat: 1 });
+  }
+  return out;
+}
+
+/** 发件人显示名：scheduler / 系统派活说人话。 */
+export function senderLabel(from: string): string {
+  const f = (from || '').trim();
+  if (f === 'scheduler') return '定时任务';
+  if (!f || f === 'api' || f === 'system') return '系统';
+  return f;
+}
+
+/** 面板里只给「紧急」挂标，高 / 低优先不再满屏橙色。 */
+export function quietPriorityPill(priority?: string): { label: string; tone: PillTone } | null {
+  const p = priorityPill(priority);
+  return p && p.tone === 'danger' ? p : null;
+}
