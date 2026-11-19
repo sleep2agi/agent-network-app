@@ -26,6 +26,7 @@ import {
   type TextStyle,
 } from 'react-native';
 import { scaleTextStyle, uiScale, type TextStyleLike } from './ui-scale';
+import { colors } from './theme';
 
 const InsideText = createContext(false);
 
@@ -50,7 +51,10 @@ export type ScaledTextProps = TextProps & {
 
 export const Text = forwardRef<RNText, ScaledTextProps>(function Text({ style, dense = false, fixedSize = false, ...rest }, ref) {
   const nested = useContext(InsideText);
-  const node = <RNText ref={ref} {...rest} allowFontScaling={false} style={scaled(style, dense, nested, fixedSize)} />;
+  // 顶层文字默认用主题正文色：RN 的 Text 没写 color 时是黑色，深色模式下几乎看不见
+  // （admin 2026-11-19 截图：节点「密钥」页的「正在读取…」和输入框标签）。
+  // 嵌套的 Text 不加默认色，继续继承外层颜色（行内高亮、链接等靠这个）。
+  const node = <RNText ref={ref} {...rest} allowFontScaling={false} style={scaled(nested ? style : [{ color: colors.text }, style], dense, nested, fixedSize)} />;
   return nested ? node : <InsideText.Provider value={true}>{node}</InsideText.Provider>;
 });
 
