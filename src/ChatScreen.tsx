@@ -3216,7 +3216,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <View style={styles.desktopToolbar} onLayout={event => setDesktopToolbarTop(event.nativeEvent.layout.y)}>
             {/* admin 2026-11-19「下面的交互都做好一点」：附件、模型、思考档位归到左边一组（同一种圆角 chip，带图标和悬停态）；
                 右边只留运行时才出现的「停止」、快捷键提示、麦克风和发送。 */}
-            <View style={styles.desktopToolbarLeft}>
             <Pressable accessibilityLabel={t('chat.addFile')} testID="composer-desktop-plus" style={({ pressed }) => [styles.desktopToolButton, pressed && { opacity: 0.6 }]} onPress={onPlusPress} hitSlop={6}>
                 <Ionicons name="add-circle-outline" size={24} color={colors.textSecondary} />
             </Pressable>
@@ -3240,7 +3239,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </Text>
                   <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
                 </Pressable>
-            </View>
+            {/* 左侧（＋ / 模型 / 思考档位）与右侧之间的弹性空白：＋ 仍是工具栏这一整行的直接子元素，
+                录音条替换工具栏时 drive 以它的父元素（整行）量高度和左右边缘。 */}
+            <View style={styles.desktopToolbarSpacer} />
             <View style={styles.desktopToolbarRight}>
               {/* ⚡ 优先 toggle hidden since 0.2.105 (chat-entry-flags.ts). */}
               {SHOW_BOLT_ENTRY ? (
@@ -3896,13 +3897,11 @@ const makeStyles = (B = bubbleLayout()) =>
     textAlignVertical: 'top',
     outlineStyle: 'none',
   } as any,
-  // 顶部 4px 内边距放在左右两组里而不是整行：左组 stretch 后正好 38 高（含内边距），录音条替换时同高同底边。
-  desktopToolbar: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', height: 38 },
+  desktopToolbar: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingTop: 4, height: 38 },
+  desktopToolbarSpacer: { flex: 1, minWidth: 0 },
   desktopToolButton: { width: 34, height: 34, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center', marginLeft: -6 },
   // flexShrink + minWidth 0:右侧边栏展开后聊天区可能只有 ~430,这一行要能收窄(模型名截断),不能把 🎤 / 发送挤出去。
-  // alignSelf stretch：左组和整行同高（38），录音条替换工具栏时同高同底边（test-desktop-voice-bar 量的是「＋」的父元素）。
-  desktopToolbarLeft: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingTop: 4, gap: spacing.sm, flexShrink: 1, minWidth: 0 },
-  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', alignSelf: 'stretch', paddingTop: 4, gap: spacing.md, flexShrink: 0 },
+  desktopToolbarRight: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flexShrink: 0 },
   priorityButton: { height: 28, borderRadius: radius.item, borderWidth: 1, borderColor: 'transparent', paddingHorizontal: spacing.sm, alignItems: 'center', justifyContent: 'center' },
   priorityButtonActive: { borderColor: colors.failed, backgroundColor: colors.inputBg },
   priorityButtonText: { color: colors.textMuted, fontSize: 11, fontWeight: '600' },
