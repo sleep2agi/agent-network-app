@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.567:",
+  "- 深色模式下，节点「密钥」页等处原本几乎看不见的文字（加载提示、输入框标签）恢复清晰。",
+  "- 桌面聊天页加了角落光晕：左上角暖黄、右下角蓝，浅色和深色模式都有，不影响文字对比度。",
+  "",
   "What's new in 0.2.566:",
   "- 复制节点（fork）默认不带对话历史、和源节点共用项目目录；选共用目录时会明确提示两个 agent 改同一目录会互相覆盖。新节点放不进源节点部门时会直接告诉你。",
   "",
