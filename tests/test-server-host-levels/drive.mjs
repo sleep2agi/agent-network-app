@@ -185,10 +185,12 @@ for (const layout of ['desktop', 'phone']) {
     // alert dot
     const dots = await page.$$eval('[data-testid^="server-host-alert-"]', els => els.map(e => ({ id: e.getAttribute('data-testid'), bg: getComputedStyle(e).backgroundColor, w: e.getBoundingClientRect().width })));
     ck(`${tag}: 只有 host-b 有红点`, dots.length === 1 && dots[0].id === 'server-host-alert-host-b', JSON.stringify(dots));
-    ck(`${tag}: 红点是 failed 色`, dots[0]?.bg === rgb(TOKENS[theme].failed) && dots[0]?.w >= 6, JSON.stringify(dots));
+    // 2026-11-19 admin「一眼全是红」:机器忙不是故障 → 告警点用琥珀(blocked),红色只给真出错。
+    ck(`${tag}: 告警点是琥珀(blocked)色`, dots[0]?.bg === rgb(TOKENS[theme].blocked) && dots[0]?.w >= 6, JSON.stringify(dots));
     // tone
     const bMem = await fillOf(page, 'server-host-bar-mem-host-b');
-    ck(`${tag}: host-b 内存条 = failed(淡)色`, bMem.color === C.failed, JSON.stringify(bMem));
+    // danger 档也是琥珀,只比 warn 淡得少(向 card 淡 5%)。
+    ck(`${tag}: host-b 内存条 = 琥珀(danger 档)`, bMem.color === mixRgb(TOKENS[theme].blocked, TOKENS[theme].card, 0.05), JSON.stringify(bMem));
     const bCpu = await fillOf(page, 'server-host-bar-cpu-host-b');
     ck(`${tag}: host-b CPU 88% = blocked(淡)色`, bCpu.color === C.blocked, JSON.stringify(bCpu));
     const eDisk = await fillOf(page, 'server-host-bar-disk-host-e');
