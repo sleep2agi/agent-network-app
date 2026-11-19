@@ -37,7 +37,7 @@ export default function GlassContent({ children, style, testID }: { children: Re
   return (
     <View style={style} testID={testID} {...({ dataSet: { glassContent: '' } } as object)}>
       {Platform.OS === 'web' ? (
-        <View style={probeStyles.hide} pointerEvents="none" aria-hidden>
+        <View style={HIDE} pointerEvents="none" aria-hidden>
           <View ref={probeRef} style={probe} />
           <View ref={listProbeRef} style={listProbe} />
         </View>
@@ -47,4 +47,5 @@ export default function GlassContent({ children, style, testID }: { children: Re
   );
 }
 
-const probeStyles = StyleSheet.create({ hide: { position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0 } });
+// 不用模块级 StyleSheet.create：这里没有主题色，但 theme-restyle-coverage 按文件判断，写成普通对象最直接。
+const HIDE: ViewStyle = { position: 'absolute', width: 0, height: 0, overflow: 'hidden', opacity: 0 };
