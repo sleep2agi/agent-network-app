@@ -75,6 +75,7 @@ import { colors, onThemeChange, parseStoredThemePreference, setThemeMode, setThe
 import { installSystemThemeFollower } from './src/system-color-scheme';
 import { installWebScrollbarTheme } from './src/web-scrollbar';
 import MacTitleStrip from './src/mac-title-strip';
+import WindowGlowRoot from './src/window-glow-root';
 import WinTitleBar from './src/win-title-bar';
 import PopoutWindowControls from './src/popout-window-controls';
 import { applyWindowBackground } from './src/window-background';
@@ -117,7 +118,6 @@ import UpdatePromptFixtureScreen, { readUpdatePromptFixture } from './src/Update
 import { chooseAppLayout, LIST_PANE_DEFAULT_WIDTH, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
 import TwoPaneDivider from './src/TwoPaneDivider';
 import { GlassChromeProvider } from './src/glass-chrome';
-import { chatCornerGlow } from './src/chat-glow';
 import { loadListPaneWidth, loadRailLabels, onRailLabelsChange, railLabelsNow, saveListPaneWidth, type RailLabels } from './src/agent-list-prefs';
 import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
@@ -375,7 +375,7 @@ export default function App() {
   return (
     <SafeAreaProvider>
       <SimulatedSafeArea>
-        <View style={{ flex: 1 }}>
+        <WindowGlowRoot>
           <MacTitleStrip />
           <WinTitleBar />
           {/* 渲染期抛错:显示「出错了 · 重新加载」并记诊断,而不是整个 app 闪退(fatal-boundary.ts)。 */}
@@ -384,7 +384,7 @@ export default function App() {
           </FatalBoundary>
           {/* 分离聊天窗(Windows):页头兼当标题栏,– □ × 浮在右上角 —— 见 src/popout-window-controls.tsx */}
           <PopoutWindowControls />
-        </View>
+        </WindowGlowRoot>
         {updatePromptMode ? <DesktopUpdatePrompt manualOnly={updatePromptMode === 'manual'} /> : null}
         {Platform.OS === 'android' ? <AndroidUpdatePrompt /> : null}
       </SimulatedSafeArea>
@@ -912,7 +912,8 @@ function AppRoot() {
 
   if (desktop && cfg && screen.name !== 'login') {
     return (
-      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]}>
+      // 桌面主窗口这层让出底色：最外层的整窗渐变（window-glow-root.tsx）才能从窗口最顶上（含 macOS 红黄绿灯那条）透出来。
+      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset, { backgroundColor: 'transparent' }]}>
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} onProfileEdited={reloadEditedProfile} />
         <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
@@ -1488,7 +1489,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     <GlassChromeProvider value={true}>
     {/* admin 2026-11-19「左侧也需要一样的」「学学这个配色」：整窗一层渐变（chat-glow-gradient.ts），
         侧栏 / 会话列表 / 内容区底色都让出来，光连成一片。 */}
-    <View style={[desktopStyles.shell, chatCornerGlow(colors.bg, themeMode())]} testID="desktop-shell">
+    <View style={[desktopStyles.shell, { backgroundColor: 'transparent' }]} testID="desktop-shell">
       <View style={desktopStyles.rail} testID="desktop-rail">
         {/* The rail carries the theme mark, not the plated app icon. Scheme 16's
             plate is bright blue; at 36px it still reads as a tile and collides

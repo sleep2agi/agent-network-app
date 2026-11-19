@@ -34,7 +34,8 @@ ck('非法 hex 回落到深色(宁黑勿白)', JSON.stringify(hexToRgb('white'))
 {
   const mac = norm('./mac-title-strip.tsx');
   ck('MacTitleStrip 订阅主题(否则主题翻了它不重画)', mac.includes('useSyncExternalStore(onThemeChange, themeMode, themeMode)'));
-  ck('MacTitleStrip 底色来自调色板不是字面量', mac.includes('backgroundColor: colors.bg') && !/backgroundColor:\s*'#/.test(mac));
+  // 2026-11-19 起拖动带透明，底下是最外层的整窗渐变（window-glow-root.tsx）；仍不允许写死颜色字面量。
+  ck('MacTitleStrip 透明、不写死颜色（底由整窗渐变提供）', mac.includes("backgroundColor: 'transparent'") && !/backgroundColor:\s*'#/.test(mac));
   const win = norm('./win-title-bar.tsx');
   ck('WinTitleBar 订阅主题', win.includes('useSyncExternalStore(onThemeChange, themeMode, themeMode)'));
   ck('WinTitleBar 底色来自调色板不是字面量', /backgroundColor:\s*colors\.(railBg|bg)/.test(win) && !/backgroundColor:\s*'#/.test(win));
