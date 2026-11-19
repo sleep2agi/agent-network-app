@@ -112,7 +112,7 @@ import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from 
 import { conversationGallery, imagePreviewSurface, imageWindowPayload } from './image-window-model';
 import { closeImageWindowFor, openImageWindow } from './image-window';
 import { selectedTextWithin } from './message-plain-text';
-import { cleanAttachmentDebugText, hideGridImageLines, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
+import { cleanAttachmentDebugText, hideGridImageLines, parseAttachmentRefs, parseMetaAttachmentRefs, parseMetaReplyAttachmentRefs, stripAttachmentPlaceholder } from './attachment-display';
 import { attachmentCacheScope } from './attach-download';
 import ActualRecipientNotice from './ActualRecipientNotice';
 import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } from './actual-recipient';
@@ -283,6 +283,12 @@ const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[
 const replyAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[] => {
   const out: AttachmentView[] = [];
   const push = makePusher(serverUrl, out);
+  // #296 —— 主动消息(app#160,来自 hub user_inbox)没有「提问者」那一半,它带的
+  // meta.attachments 就是 agent 自己的附件:画在回复侧。普通任务里的 meta.attachments
+  // 仍属提问者(见下面 #1823 的说明),不能用这条。
+  if ((item as any)._proactive) {
+    for (const a of parseMetaAttachmentRefs((item as any).meta_json)) push(a.fileId, a.name, a.mime, a.size);
+  }
   // #1823 —— hub ≥ 0.9.0-preview.50 把回复附件放在 meta_json.reply_attachments;
   // 旧 hub 把它们并进 attachments(会画到提问者气泡),这里不去猜,只认新键。
   for (const a of parseMetaReplyAttachmentRefs((item as any).meta_json)) push(a.fileId, a.name, a.mime, a.size);
@@ -2773,6 +2779,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             const sentQuoted = parseQuoted(item.content);
             const sentGridNames = sentAttachmentViews(item, cfg.serverUrl).filter(gridRenderable).map(a => a.name);
             const replyQuoted = parseQuoted(item.result ?? item.reply ?? '');
+            // #296 —— 主动消息的附件画在回复侧;先算出来,正文占位才有东西可压。
+            const replyViews = replyAttachmentViews(item, cfg.serverUrl);
             // 2026-09-17 Vincent:「Agent 节点回复人类也要这个引用啊」—— 回复没自带引用行时,
             // 挂一条指向它所回的那条请求的引用条,点击定位原文。
             const replyQuote = replyQuoted.quote ? null : replyQuoteFor(item, currentUsername, byTaskId);
@@ -2867,8 +2875,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
-                          <MarkdownMessage>{cleanAttachmentDebugText(replyQuoted.body)}</MarkdownMessage>
-                          {renderAttachments(replyAttachmentViews(item, cfg.serverUrl))}
+                          <MarkdownMessage>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>
+                          {renderAttachments(replyViews)}
                           {item._taskNotice && onOpenTask ? (
                             <Pressable
                               accessibilityRole="link"

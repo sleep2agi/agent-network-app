@@ -39,6 +39,14 @@ const parseMetaRefs = (raw: unknown, key: 'attachments' | 'reply_attachments'): 
   }
 };
 
+/** #296 —— 主动消息只有附件时,气泡正文用「[图片]」/「[文件]」占位(否则那条消息连气泡都不存在);
+ *  真画出附件卡片之后这行占位就是噪音。只认这两个与预览同源的字面量,正文别的任何内容都原样保留。 */
+export const stripAttachmentPlaceholder = (text: string, hasAttachmentCards: boolean): string => {
+  if (!hasAttachmentCards) return text;
+  const trimmed = text.trim();
+  return trimmed === '[图片]' || trimmed === '[文件]' ? '' : text;
+};
+
 /** Normalize both structured-link compatibility text and the legacy node
  * reply form into attachment records. New tasks use `meta.attachments`, but
  * task replies are still stored in a plain-text database column.
