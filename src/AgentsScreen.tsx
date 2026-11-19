@@ -49,6 +49,7 @@ import { searchCountLabel } from './registered-agents-view';
 import { useAgentDirectory } from './agent-directory-hook';
 import { registeredAgentRows, sessionIdentities } from './registered-agents';
 import { colors, onThemeChange, radius, spacing, statusColor, themeMode, type, weight } from './theme';
+import { useGlassChrome } from './glass-chrome';
 import { shadowOnly } from './elevation';
 import { ds, fs, listText, uiScale } from './ui-scale';
 import { denserRowPitch, publishListFirstRowTop } from './list-rail-align';
@@ -158,6 +159,7 @@ export default function AgentsScreen({
   filter?: AgentListFilter | null;
 }) {
   const { t } = useTranslation();
+  const glass = useGlassChrome();
   // #632 草稿(微信同款):有没发出去的字的会话,行上用红色「[草稿]」+ 开头几个字代替最后一条消息预览。
   // 正开着的那个会话不画(双栏里一边打字一边看自己的草稿行跳没有意义)。
   useDraftsVersion();
@@ -1001,12 +1003,14 @@ export default function AgentsScreen({
     );
   };
 
+  // 桌面整窗渐变（glass-chrome.tsx）：列表各条底色让出来，光才连得上；手机 / 非桌面仍是实底。
+  const listChromeBg = glass ? 'transparent' : compact ? colors.listBg : colors.bg;
   return (
-    <View style={{ flex: 1, backgroundColor: compact ? colors.listBg : colors.bg }}>
+    <View style={{ flex: 1, backgroundColor: listChromeBg }}>
       {/* Everything above the list (head + filter bar): its height is where the first group header starts. */}
       <View onLayout={alignFirstRow ? e => { listYRef.current = e.nativeEvent.layout.y + e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}>
       {compact ? (
-        <View testID="agents-list-head" style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: compact ? colors.listBg : colors.bg }}>
+        <View testID="agents-list-head" style={{ paddingHorizontal: compact ? spacing.sm : spacing.lg, paddingTop: compact ? spacing.sm : spacing.lg, backgroundColor: listChromeBg }}>
         <View style={styles.listHeaderRow}>
           <Text style={styles.listHeader}>
             {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} 个 agent${headerViewSuffix(viewGroupBy)}`}
@@ -1065,7 +1069,7 @@ export default function AgentsScreen({
       ) : null}
       {showTabs ? (
         // 飞书 / 微信的位置:搜索框下面、列表上面,左缘对齐行的头像(手机 = 行的 padX;桌面侧栏 = 列表内边距 + 行内边距)。
-        <View testID="conversation-tabs-bar" style={[rowStyles.tabsBar, compact ? rowStyles.tabsBarCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}>
+        <View testID="conversation-tabs-bar" style={[rowStyles.tabsBar, compact ? rowStyles.tabsBarCompact : null, { backgroundColor: listChromeBg }]}>
           <View testID="conversation-tabs" accessibilityRole="tablist" accessibilityLabel={t('chat.tabsLabel')} style={[rowStyles.tabsTrack, { backgroundColor: colors.subtleFill }]}>
             {CONVERSATION_TABS.map(k => {
               const on = tab === k;
@@ -1096,7 +1100,7 @@ export default function AgentsScreen({
         </View>
       ) : null}
       {filtering ? (
-        <View testID="agent-filter-bar" style={[rowStyles.filterBar, { backgroundColor: compact ? colors.listBg : colors.bg }]}>
+        <View testID="agent-filter-bar" style={[rowStyles.filterBar, { backgroundColor: listChromeBg }]}>
           {(['all', 'online', 'working', 'error', 'offline'] as const).map(k => {
             const on = k === 'all' ? !activeFilter?.status : activeFilter?.status === k;
             return (
@@ -1151,7 +1155,7 @@ export default function AgentsScreen({
           accessibilityState={section.collapsible ? { expanded: !section.collapsed } : undefined}
           // admin 2026-10-26「军团里面能分组吗…有明显的划分区，有点小发光，就是要震撼」:
           // 每个团之间一条发丝分隔线(第一组不画),标题前缀一条 brand 色的微光竖条。
-          style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg },
+          style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: listChromeBg },
             // 子部门不画分隔线(和父部门是一块),只缩进;顶层部门之间才分隔。
             section !== shownSections[0] && layout.depth === 0 ? { borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border } : null,
             layout.depth ? { paddingLeft: ds(AGENT_ROW_PAD_X) + layout.depth * DEPT_INDENT, paddingTop: 4 } : null]}
@@ -1307,7 +1311,7 @@ export default function AgentsScreen({
             accessibilityRole={query.trim() ? 'header' : 'button'}
             accessibilityLabel={`${t('group.title')} ${groupsMatched.length}${query.trim() ? '' : groupsCollapsed ? ',已折叠' : ',已展开'}`}
             accessibilityState={query.trim() ? undefined : { expanded: !groupsCollapsed }}
-            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: listChromeBg }]}
           >
             {query.trim() ? null : <Ionicons name={groupsCollapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />}
             <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>{t('group.title')}</Text>
@@ -1356,7 +1360,7 @@ export default function AgentsScreen({
             accessibilityRole={peopleShown.collapsible ? 'button' : 'header'}
             accessibilityLabel={`${t('people.title')} ${peopleShown.total}${peopleShown.collapsible ? (peopleShown.collapsed ? ',已折叠' : ',已展开') : ''}`}
             accessibilityState={peopleShown.collapsible ? { expanded: !peopleShown.collapsed } : undefined}
-            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: listChromeBg }]}
           >
             {peopleShown.collapsible ? (
               <Ionicons name={peopleShown.collapsed ? 'chevron-forward' : 'chevron-down'} size={12} color={colors.textMuted} />
@@ -1367,7 +1371,7 @@ export default function AgentsScreen({
           {peopleGroups ? peopleGroups.map((g, gi) => (
             <View key={g.key ?? '__none'} testID={`people-dept-${g.key ?? 'none'}`}>
               <View onLayout={gi === 0 && alignFirstRow ? e => { peopleGroupHeadHRef.current = e.nativeEvent.layout.height; publishFirstRowTop(); } : undefined}
-                style={{ paddingHorizontal: compact ? 12 : 16, paddingTop: 6, paddingBottom: 2, backgroundColor: compact ? colors.listBg : colors.bg }}>
+                style={{ paddingHorizontal: compact ? 12 : 16, paddingTop: 6, paddingBottom: 2, backgroundColor: listChromeBg }}>
                 <Text selectable={false} numberOfLines={1} style={{ color: colors.textMuted, fontSize: 11 }} testID={`people-dept-title-${g.key ?? 'none'}`}>{g.title ?? t('people.noDept')}</Text>
               </View>
               {g.people.map((p, i) => (
@@ -1394,7 +1398,7 @@ export default function AgentsScreen({
             accessibilityState={{ expanded: showHidden }}
             accessibilityLabel={`已隐藏的对话 ${hiddenSessions.length} 个,${showHidden ? '已展开' : '已折叠'}`}
             onPress={() => setShowHidden(v => !v)}
-            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: compact ? colors.listBg : colors.bg }]}
+            style={[rowStyles.group, compact ? rowStyles.groupCompact : null, { backgroundColor: listChromeBg }]}
           >
             <Ionicons name={showHidden ? 'chevron-down' : 'chevron-forward'} size={12} color={colors.textMuted} />
             <Text selectable={false} numberOfLines={1} style={[rowStyles.groupTitle, { color: colors.textMuted }]}>已隐藏的对话</Text>

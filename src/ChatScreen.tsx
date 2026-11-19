@@ -79,6 +79,7 @@ import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-deliver
 import ChatToolRail, { useChatToolRail } from './ChatToolRail';
 import { chatToolRailReserve, composerShowsShortcutHint } from './chat-tool-rail-layout';
 import { chatCornerGlow } from './chat-glow';
+import { useGlassChrome } from './glass-chrome';
 import ChatInfoPanel from './ChatInfoPanel';
 import NodeDepartmentPicker from './NodeDepartmentPicker';
 import { canEditDepartments, departmentDisplayLabel, type OrgLike } from './node-department-edit';
@@ -571,6 +572,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [forkOpenScope, setForkOpenScope] = useState<object | null>(null);
   // 右侧边栏(ChatToolRail)停靠:root 的 paddingRight 让出它的宽度,气泡区随之变窄。
   // root 的 onLayout 量到的是含 padding 的外宽,paneWidth 要扣掉侧栏才是聊天区真实宽度。
+  // 桌面主窗口整窗渐变时（glass-chrome.tsx）聊天页不再自带光斑，底色让给窗口；独立弹出的聊天窗仍自带。
+  const glass = useGlassChrome();
   const [rootWidth, setRootWidth] = useState(0);
   const [toolRail, setToolRail] = useChatToolRail();
   const showToolRail = desktop && SHOW_CHAT_TOOL_RAIL;
@@ -2528,7 +2531,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, desktop && chatCornerGlow(colors.bg, themeMode()), iosKeyboard.style, toolRailReserve > 0 && { paddingRight: toolRailReserve }]}
+      style={[styles.root, glass ? { backgroundColor: 'transparent' } : desktop && chatCornerGlow(colors.bg, themeMode()), iosKeyboard.style, toolRailReserve > 0 && { paddingRight: toolRailReserve }]}
       testID="chat-pane"
       // Edge-to-edge Android ignores adjustResize, so behavior=undefined
       // left the keyboard covering the input (Vincent tg 738). 'padding'

@@ -42,7 +42,7 @@ const src = source.replace(/\r\n?/g, '\n');
 check('rail active state is an accent-tinted pill token', src.includes('railButtonActive: { backgroundColor: colors.railActiveBg }'));
 check('rail hover/focus state has its own surface', src.includes('railButtonHover: { backgroundColor: colors.railHover }') && src.includes("surface === 'hover' && styles.railButtonHover"));
 check('rail buttons go through the shared RailButton with hover tooltip', src.includes('function RailButton(') && src.includes('railTooltipVisible(hovered ? tab.key : null, tab.key, true)'));
-check('rail is 64 wide (× 界面密度) with a hairline divider', src.includes('rail: { width: ds(64), backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth'));
+check('rail is 64 wide (× 界面密度) with a hairline divider', src.includes("rail: { width: ds(64), backgroundColor: 'transparent', borderRightWidth: StyleSheet.hairlineWidth") /* 2026-11-19 整窗渐变：侧栏让出底色（chat-glow.test.ts） */);
 check('rail badge is a pill not inline text', src.includes("railBadge: { position: 'absolute'"));
 check('server workspace has a dedicated sidebar', source.includes('<ServerSidebar cfg={cfg}') && source.includes('serverSectionForScreen(screen)'));
 check('server workspace exposes node inventory', source.includes("screen.name === 'serverNodes'") && source.includes("name: 'serverNodeDetail'"));

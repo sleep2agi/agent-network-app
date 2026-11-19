@@ -18,6 +18,7 @@ import NodeSkillsSection from './NodeSkillsSection';
 import NodeTasksSection from './NodeTasksSection';
 import type { HubConfig, Session } from './api';
 import { colors, radius, spacing, type as typeScale } from './theme';
+import { useGlassChrome } from './glass-chrome';
 import { CHAT_TOOL_RAIL_WIDTH } from './chat-tool-rail-layout';
 
 const KEY = 'anet_chat_toolrail_v1';
@@ -60,6 +61,8 @@ export default function ChatToolRail({ cfg, alias, session, state, setState }: {
   cfg: HubConfig; alias: string; session?: Session | null;
   state: ChatToolRailState; setState: (f: (s: ChatToolRailState) => ChatToolRailState) => void;
 }) {
+  // 桌面整窗渐变时图标条透明，不在右下角把光切断；展开的面板仍是实底（要读文字）。
+  const glass = useGlassChrome();
   const pick = (tool: Tool) => setState(s => (s.open && s.tool === tool ? { ...s, open: false } : { ...s, open: true, tool }));
   const active = state.open ? state.tool : null;
   // 只读区块要一个 session 形状;聊天页没有完整的 node 上下文,退到按 alias 发。
@@ -101,7 +104,7 @@ export default function ChatToolRail({ cfg, alias, session, state, setState }: {
         所以这里改成绝对定位：不参与列流、不占高度、永远贴右边。
         zIndex 低于工具面板（面板是 25），面板浮在它左侧（right: 44）。
       */}
-      <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20, width: CHAT_TOOL_RAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
+      <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20, width: CHAT_TOOL_RAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: glass ? 'transparent' : colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
         {TOOLS.map(t => {
           const on = active === t.key;
           const disabled = !!t.needSession && !realSession;

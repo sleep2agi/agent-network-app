@@ -1,22 +1,38 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { chatCornerGlowGradient, GLOW_BLUE, GLOW_YELLOW } from './chat-glow-gradient';
+import { chatCornerGlowGradient, GLOW_COOL, GLOW_WARM } from './chat-glow-gradient';
 
-// admin 2026-11-19：左上角黄色发光、右下角蓝色发光；v1 浅色发脏，v2 加白色提亮层、深色用琥珀。
+// admin 2026-11-19：光斑 → 「太丑」→「左侧也需要一样的」「学学这个配色」（参考图：左上暖桃、右下淡紫蓝）。
 const light = chatCornerGlowGradient('light');
 const dark = chatCornerGlowGradient('dark');
-assert.match(light, new RegExp(`rgba\\(${GLOW_YELLOW.light}, 0\\.4\\) 0%`), 'light: saturated yellow');
-assert.match(light, /rgba\(255, 255, 255, 0\.95\)/, 'light: white lift under the glows (no muddy beige on grey)');
-assert.ok(light.indexOf(GLOW_YELLOW.light) < light.indexOf('255, 255, 255'), 'yellow layer sits above its white lift');
-assert.match(light, /at 0% 0%/); assert.match(light, /at 100% 100%/);
-assert.ok(!dark.includes('255, 255, 255'), 'dark: no white lift');
-assert.ok(dark.includes(GLOW_YELLOW.dark) && GLOW_YELLOW.dark !== GLOW_YELLOW.light, 'dark: amber instead of pure yellow (pure yellow on black turns olive)');
-assert.ok(dark.includes(GLOW_BLUE.dark));
+assert.ok(light.includes(GLOW_WARM.light) && light.includes(GLOW_COOL.light), 'light: warm peach + soft periwinkle');
+assert.match(light, /at 8% 10%/, 'warm wash anchored top-left');
+assert.match(light, /at 94% 92%/, 'cool wash anchored bottom-right');
+assert.ok(light.indexOf(GLOW_WARM.light) < light.indexOf(GLOW_COOL.light));
+assert.match(light, /ellipse 75% 80%/, 'large soft washes, not small corner spots');
+assert.ok(!light.includes('255, 214, 10'), 'no saturated yellow (v1/v2 looked muddy)');
+assert.ok(dark.includes(GLOW_WARM.dark) && dark.includes(GLOW_COOL.dark));
+assert.ok(!dark.includes('255, 255, 255'));
 
+// 整窗一层：桌面 shell 带渐变并打开 glass；侧栏 / 列表 / 内容区透明。
+const app = readFileSync(new URL('../App.tsx', import.meta.url), 'utf8');
+assert.match(app, /<GlassChromeProvider value=\{true\}>/);
+assert.match(app, /style=\{\[desktopStyles\.shell, chatCornerGlow\(colors\.bg, themeMode\(\)\)\]\}/);
+assert.match(app, /rail: \{ width: ds\(64\), backgroundColor: 'transparent'/);
+assert.match(app, /conversations: \{[^}]*backgroundColor: 'transparent' \}/);
+assert.match(app, /content: \{ flex: 1, minWidth: 0, backgroundColor: 'transparent' \}/);
+
+// 嵌在主窗口里的聊天 / 私信 / 列表让出底色；独立弹出的聊天窗仍自带光斑。
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
-assert.match(chat, /desktop && chatCornerGlow\(colors\.bg, themeMode\(\)\)/, 'desktop chat root gets the glow');
-assert.match(chat, /desktop && styles\.headerOverGlow/, 'desktop header lets the glow through');
-assert.match(chat, /composerDivider: \{[\s\S]{0,200}backgroundColor: 'transparent'/, 'resize divider does not cut a band through the glow');
+assert.match(chat, /glass \? \{ backgroundColor: 'transparent' \} : desktop && chatCornerGlow\(colors\.bg, themeMode\(\)\)/);
+assert.match(chat, /desktop && styles\.headerOverGlow/);
+assert.match(chat, /composerDivider: \{[\s\S]{0,300}backgroundColor: 'transparent'/);
+const dm = readFileSync(new URL('./DmChatScreen.tsx', import.meta.url), 'utf8');
+assert.match(dm, /glass && \{ backgroundColor: 'transparent' \}/);
+const list = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
+assert.match(list, /const listChromeBg = glass \? 'transparent'/);
 const session = readFileSync(new URL('./NodeSessionControl.tsx', import.meta.url), 'utf8');
-assert.match(session, /backgroundColor: touch \? colors\.card : 'transparent'/, 'desktop session strip lets the glow through');
+assert.match(session, /backgroundColor: touch \? colors\.card : 'transparent'/);
+const rail = readFileSync(new URL('./ChatToolRail.tsx', import.meta.url), 'utf8');
+assert.match(rail, /backgroundColor: glass \? 'transparent' : colors\.bg/, 'right tool rail lets the window glow through');
 console.log('chat-glow: ok');
