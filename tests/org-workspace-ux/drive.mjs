@@ -163,16 +163,20 @@ const open = async (theme, ctx0) => {
   await page.waitForTimeout(300);
   record('⑦「← 组织」回来,还停在 TM基建', await page.locator('[data-testid="agent-org-dept-d_k5"]').getAttribute('aria-selected') === 'true' && await page.locator('[data-testid="org-agent-detail"]').count() === 0, null);
   await page.locator('[data-testid="agent-org-nav-chart"]').click();
-  await page.locator('[data-testid="org-showcase-hero"]').waitFor();
+  // 2026-11-19 桌面架构图换成「活的组织图」(LiveOrgMap,#1563):部门是簇、agent 是点、近 10 分钟派活是线。
+  await page.locator('[data-testid="live-org-map"]').waitFor();
+  await page.locator('[data-cluster]').first().waitFor({ timeout: 10000 });
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/org-chart-light.png` });
-  await page.screenshot({ path: `${OUT}/org-chart-light-full.png`, fullPage: true });
-  const statAgents = await page.locator('[data-testid="org-showcase-stat-agents"]').innerText();
-  const cols = await page.locator('[data-testid^="org-showcase-col-"]').count();
-  record('⑧ 架构图:横幅 + Agent 总数', /\d/.test(statAgents) && statAgents.includes('Agent'), statAgents);
-  record('⑧ 架构图:每个根部门一栏(TMAI / A 站 / ANet)', cols === 3, cols);
-  record('⑧ 架构图:子部门挂在根部门下', await page.locator('[data-testid="org-showcase-col-d_tmai"] [data-testid="org-showcase-dept-d_k5"]').count() === 1, null);
-  record('⑧ 架构图:未归属是最后一张虚线卡', await page.locator('[data-testid="org-showcase-unassigned"]').count() === 1, null);
+  const summary = await page.locator('[data-testid="live-org-summary"]').innerText();
+  const clusters = await page.locator('[data-cluster]').evaluateAll(els => els.map(e => e.getAttribute('data-cluster')));
+  record('⑧ 架构图:一行总结(在跑 / Agent / 派活)', /\d+ 在跑/.test(summary) && summary.includes('个 Agent') && summary.includes('派活'), summary);
+  record('⑧ 架构图:每个根部门一团簇(TMAI / A 站 / ANet)', ['d_tmai', 'd_a', 'd_anet'].filter(id => clusters.includes(id)).length >= 2 && clusters.length >= 3, clusters);
+  record('⑧ 架构图:未归属单独一团', clusters.includes('__unassigned__'), clusters);
+  await page.locator('[data-cluster="d_tmai"]').click();
+  await page.locator('[data-testid="live-org-trail"]').waitFor({ timeout: 5000 });
+  const drilled = await page.locator('[data-cluster]').evaluateAll(els => els.map(e => e.getAttribute('data-cluster')));
+  record('⑧ 架构图:点 TMAI 往里看,子部门成簇', drilled.includes('d_k5'), drilled);
   // ⑩ 部门详情的「成员」页签
   await page.locator('[data-testid="agent-org-dept-d_k5"]').click();
   await page.waitForTimeout(300);
@@ -193,31 +197,23 @@ const open = async (theme, ctx0) => {
   record('⑩「成员与权限」里不再嵌部门树', await page.locator('[data-testid="org-group"]').count() === 0 && await page.locator('[data-testid="user-management"]').count() === 1, null);
   await page.locator('[data-testid="agent-org-nav-chart"]').click();
   await page.waitForTimeout(300);
-  // ⑨ 下钻(管理员「点击这里能下钻吗」)
-  await page.locator('[data-testid="org-showcase-dept-d_tmai"]').click();
+  // ⑨ 下钻(管理员「点击这里能下钻吗」):活的组织图里点有下级的部门簇往里看,面包屑回到整个组织。
+  await page.locator('[data-cluster="d_tmai"]').click();
+  await page.locator('[data-testid="live-org-trail"]').waitFor({ timeout: 5000 });
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/org-chart-drill.png` });
-  record('⑨ 点根部门卡 → 以它为根:面包屑「组织 › TMAI」,下级部门成栏', await page.locator('[data-testid="org-showcase-crumb-d_tmai"]').count() === 1 && await page.locator('[data-testid="org-showcase-col-d_k5"]').count() === 1 && await page.locator('[data-testid="org-showcase-col-d_tmai"]').count() === 0, null);
-  const fitView = await page.evaluate(() => {
-    const root = document.querySelector('[data-testid="org-showcase-root"]').getBoundingClientRect();
-    const card = document.querySelector('[data-testid="org-showcase-chart"]').getBoundingClientRect();
-    const cols = [...document.querySelectorAll('[data-testid^="org-showcase-col-"]')].map(e => e.getBoundingClientRect());
-    return { rootIn: root.left >= card.left && root.right <= card.right, colsIn: cols.every(c => c.right <= card.right + 1), grid: !!document.querySelector('[data-testid="org-showcase-grid"]') };
+  const inTmai = await page.locator('[data-cluster]').evaluateAll(els => els.map(e => e.getAttribute('data-cluster')));
+  record('⑨ 点 TMAI → 面包屑「整个组织 / TMAI」,下级部门各成一簇', (await page.locator('[data-testid="live-org-trail"]').innerText()).includes('TMAI') && inTmai.includes('d_k5') && !inTmai.includes('d_tmai'), inTmai);
+  const fit = await page.evaluate(() => {
+    const canvas = document.querySelector('[data-testid="live-org-canvas"]').getBoundingClientRect();
+    const boxes = [...document.querySelectorAll('[data-cluster] > circle:first-child')].map(e => e.getBoundingClientRect());
+    return boxes.length > 0 && boxes.every(b => b.left >= canvas.left - 1 && b.right <= canvas.right + 1 && b.top >= canvas.top - 1 && b.bottom <= canvas.bottom + 1);
   });
-  record('⑨ 9 个下级部门放不下一行 → 换网格,根节点和每张卡都在视野里', fitView.rootIn && fitView.colsIn && fitView.grid, fitView);
-  record('⑨ 下钻后概览跟着换(标题 TMAI)', (await page.locator('[data-testid="org-showcase-hero"]').innerText()).includes('TMAI'), null);
-  await page.locator('[data-testid="org-showcase-dept-d_k5"]').click();
+  record('⑨ 9 个下级部门的簇都在画布里', fit, null);
+  await page.locator('[data-testid="live-org-trail"]').getByText('整个组织').click();
   await page.waitForTimeout(300);
-  await page.screenshot({ path: `${OUT}/org-chart-leaf.png` });
-  record('⑨ 没有下级的部门 → Agent 卡片墙', await page.locator('[data-testid="org-showcase-agents"]').count() === 1 && await page.locator('[data-testid="org-showcase-agent-n_100"]').count() === 1, null);
-  await page.locator('[data-testid="org-showcase-crumb-root"]').click();
-  await page.waitForTimeout(300);
-  record('⑨ 面包屑「组织」回到最上层', await page.locator('[data-testid="org-showcase-col-d_tmai"]').count() === 1, null);
-  await page.locator('[data-testid="org-showcase-dept-d_anet"]').click();
-  await page.waitForTimeout(200);
-  await page.locator('[data-testid="org-showcase-open-list"]').click();
-  await page.waitForTimeout(300);
-  record('⑨「在列表中查看」→ 列表视图选中该部门', await page.locator('[data-testid="agent-org-dept-d_anet"]').getAttribute('aria-selected') === 'true' && await page.locator('[data-testid="org-showcase"]').count() === 0, null);
+  const top = await page.locator('[data-cluster]').evaluateAll(els => els.map(e => e.getAttribute('data-cluster')));
+  record('⑨「整个组织」回到最上层', top.includes('d_tmai'), top);
   record('无页面报错', errors.length === 0, errors);
   await ctx.close();
 }
@@ -227,7 +223,7 @@ const open = async (theme, ctx0) => {
   await page.waitForTimeout(300);
   await page.screenshot({ path: `${OUT}/org-dark.png` });
   await page.locator('[data-testid="agent-org-nav-chart"]').click();
-  await page.locator('[data-testid="org-showcase-hero"]').waitFor();
+  await page.locator('[data-testid="live-org-map"]').waitFor();
   await page.waitForTimeout(500);
   await page.screenshot({ path: `${OUT}/org-chart-dark.png` });
   record('暗色无页面报错', errors.length === 0, errors);
