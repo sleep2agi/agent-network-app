@@ -22,6 +22,7 @@ import { buttonStyle, buttonTextStyle } from './elevation';
 import { useTranslation } from './i18n-react';
 import './i18n-agent-org';
 import OrgShowcase from './OrgShowcase';
+import LiveOrgMap from './LiveOrgMap';
 import { attentionAgents, needsAttention, phoneDeptFacts, phoneLevel, phoneSearch } from './org-phone-list';
 import { isRunning } from './org-showcase-model';
 import { peekOrg, recallOrg, rememberOrg } from './swr-cache';
@@ -310,7 +311,10 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                   <Text style={styles.phoneBackText}>{t('agentOrg.back')}</Text>
                 </Pressable>
               ) : null}
-              <OrgShowcase compact={!!p.phone} data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />
+              {/* admin 2026-11-19「这个感觉很 normal」「组织架构还没改版上线」：桌面（web）换成活的组织图；手机原生保持概览。 */}
+              {!p.phone && Platform.OS === 'web'
+                ? <LiveOrgMap cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} />
+                : <OrgShowcase compact={!!p.phone} data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />}
             </View>
           ) : p.fill && view === 'members' && p.renderMembers ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-members">
