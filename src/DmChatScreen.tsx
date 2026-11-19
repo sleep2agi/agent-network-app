@@ -35,6 +35,7 @@ import { openImageWindow } from './image-window';
 import { dmAttachmentViews, localAttachmentViews, type DmAttachmentView } from './dm-attachment-model';
 import { usePoll } from './usePoll';
 import { colors, onThemeChange, radius, spacing } from './theme';
+import { useGlassChrome } from './glass-chrome';
 import { bubbleInk, MineBubble, useBubbleInk } from './bubble-ink';
 import { ds, uiScale } from './ui-scale';
 import { elevated } from './elevation';
@@ -88,6 +89,7 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   /** 任务通知私信(meta.task_notice):气泡下「查看任务 ›」打开那张任务。不传 = 不画。 */
   onOpenTask?: (requirementId: string) => void;
 }) {
+  const glass = useGlassChrome();
   useTranslation();
   const peer: Human = peerProp ?? { user_id: '', username: group?.name ?? '' };
   const isGroup = !!group;
@@ -463,7 +465,7 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   const data = useMemo(() => messages, [messages]);
   return (
     <KeyboardAvoidingView
-      style={[styles.root, iosKeyboard.style]}
+      style={[styles.root, glass && { backgroundColor: 'transparent' }, iosKeyboard.style]}
       testID="dm-pane"
       behavior={iosKeyboard.handled ? undefined : 'padding'}
       enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}

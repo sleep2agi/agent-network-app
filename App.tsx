@@ -116,6 +116,8 @@ import NotifySettingsFixtureScreen, { readNotifyFixture } from './src/NotifySett
 import UpdatePromptFixtureScreen, { readUpdatePromptFixture } from './src/UpdatePromptFixtureScreen';
 import { chooseAppLayout, LIST_PANE_DEFAULT_WIDTH, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
 import TwoPaneDivider from './src/TwoPaneDivider';
+import { GlassChromeProvider } from './src/glass-chrome';
+import { chatCornerGlow } from './src/chat-glow';
 import { loadListPaneWidth, loadRailLabels, onRailLabelsChange, railLabelsNow, saveListPaneWidth, type RailLabels } from './src/agent-list-prefs';
 import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
@@ -1480,7 +1482,10 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   );
 
   return (
-    <View style={desktopStyles.shell}>
+    <GlassChromeProvider value={true}>
+    {/* admin 2026-11-19「左侧也需要一样的」「学学这个配色」：整窗一层渐变（chat-glow-gradient.ts），
+        侧栏 / 会话列表 / 内容区底色都让出来，光连成一片。 */}
+    <View style={[desktopStyles.shell, chatCornerGlow(colors.bg, themeMode())]} testID="desktop-shell">
       <View style={desktopStyles.rail} testID="desktop-rail">
         {/* The rail carries the theme mark, not the plated app icon. Scheme 16's
             plate is bright blue; at 36px it still reads as a tile and collides
@@ -1567,6 +1572,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
         {content}<ShortcutToast text={shortcutToast} />
       </View>
     </View>
+    </GlassChromeProvider>
   );
 }
 
@@ -1637,7 +1643,7 @@ const makeDesktopStyles = () => StyleSheet.create({
   shell: { flex: 1, flexDirection: 'row', backgroundColor: colors.bg },
   // 微信/飞书式 rail:64 宽、比列表深一档的底、右侧发丝线;按钮 40×40 等距 12;
   // 激活 = 10 圆角淡 accent 底;悬停/聚焦 = 浅底;提示条挂在右侧。
-  rail: { width: ds(64), backgroundColor: colors.railBg, borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: ds(14), paddingBottom: ds(10), zIndex: 10, overflow: 'visible' },
+  rail: { width: ds(64), backgroundColor: 'transparent', borderRightWidth: StyleSheet.hairlineWidth, borderRightColor: colors.border, alignItems: 'center', paddingTop: ds(14), paddingBottom: ds(10), zIndex: 10, overflow: 'visible' },
   railBrand: { width: ds(36), height: ds(36), alignItems: 'center', justifyContent: 'center' },
   railBrandMark: { width: ds(22), height: ds(22) },
   railTabs: { flex: 1, paddingTop: ds(18), gap: ds(12), alignItems: 'center' },
@@ -1657,8 +1663,8 @@ const makeDesktopStyles = () => StyleSheet.create({
   railVersionText: { color: colors.textMuted, fontSize: 10, textAlign: 'center' },
   // 任务页左栏只是筛选,不需要会话列表那么宽:窄一些,看板三列拿到更多宽度。
   taskSidebar: { width: ds(220) },
-  conversations: { width: ds(310), borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: themeMode() === 'light' ? '#fafafb' : colors.bg },
-  content: { flex: 1, minWidth: 0, backgroundColor: themeMode() === 'light' ? '#f2f4f7' : colors.bg },
+  conversations: { width: ds(310), borderRightWidth: 1, borderRightColor: colors.border, backgroundColor: 'transparent' },
+  content: { flex: 1, minWidth: 0, backgroundColor: 'transparent' },
   empty: { flex: 1, alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   emptyTitle: { color: colors.textSecondary, fontSize: 16, fontWeight: '600' },
   emptyHint: { color: colors.textMuted, fontSize: 12 },
