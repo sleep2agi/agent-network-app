@@ -1,7 +1,7 @@
 // 管理员 2026-11-15「移到一级啊」+「设置里面可以设置一级是否显示和展示」:桌面左侧一级栏。
 //
 // 渲染态 web export + 页内 Hub fixture(不起 hub、不碰生产)。断言:
-//   ① 一级栏有「组织」,排在 Hub 设置后面;点它 → 主窗口整页是组织与权限(部门树在),没有会话侧栏
+//   ① 一级栏有「组织」,排在「服务器」(原 Hub 设置)后面;点它 → 主窗口整页是组织与权限(部门树在),没有会话侧栏
 //   ② 设置里关掉的入口(本机 localStorage anet.desktopRailHidden)不在一级栏;Agent / 设置关不掉
 import { mkdirSync } from 'node:fs';
 import { serveExport, initScript, findChromium } from '../test-layout-sweep/harness.mjs';
@@ -55,7 +55,7 @@ const open = async (hidden) => {
 {
   const { ctx, page, errors } = await open(null);
   const tabs = await railTabs(page);
-  record('① 一级栏有「组织」,紧跟在 Hub 设置后面', tabs.indexOf('组织') > 0 && tabs.indexOf('组织') === tabs.indexOf('Hub 设置') + 1, tabs);
+  record('① 一级栏有「组织」,紧跟在「服务器」后面', tabs.indexOf('组织') > 0 && tabs.indexOf('组织') === tabs.indexOf('服务器') + 1, tabs);
   await page.getByRole('tab', { name: '组织', exact: true }).click();
   await page.locator('[data-testid="org-workspace"]').waitFor();
   await page.getByText('前端', { exact: true }).first().waitFor({ timeout: 8000 }).catch(() => {});

@@ -133,7 +133,9 @@ for (const L of LAYOUTS) {
     const hb = hm.header;
     await page.screenshot({ path: `${OUT}/${tag}-1-header.png`, clip: { x: Math.max(0, hb.x), y: Math.max(0, hb.y), width: Math.min(hb.w, L.w), height: hb.h } });
     await page.screenshot({ path: `${OUT}/${tag}-1-chat.png` });
-    check(tag, 'header has exactly one right-side action (⋯)', hm.rightActions.length === 1 && hm.rightActions[0] === '聊天信息', JSON.stringify(hm.rightActions));
+    // #573：模型未知时标题里多了「选择模型」入口（可点开切换）——它不算「⋯」那类操作，过滤后再要求恰好一个。
+    const rightActions = hm.rightActions.filter(name => name !== '选择模型');
+    check(tag, 'header has exactly one right-side action (⋯)', rightActions.length === 1 && rightActions[0] === '聊天信息', JSON.stringify(hm.rightActions));
     check(tag, '⋯ vertically centred with the name block (±1px)', Math.abs(hm.moreCy - hm.titleCy) <= 1 && Math.abs(hm.iconCy - hm.titleCy) <= 1, `button Δ=${r1(hm.moreCy - hm.titleCy)} icon Δ=${r1(hm.iconCy - hm.titleCy)}`);
     check(tag, 'right padding (to the ⋯ button) equals left padding (±1px)', Math.abs(hm.padLeft - hm.padRight) <= 1, `L=${r1(hm.padLeft)} R=${r1(hm.padRight)} first=${hm.firstChild}`);
     if (L.name === 'desktop') check(tag, 'floating window 📌 is not on the chat screen', hm.floatingWindowPin === 0, `${hm.floatingWindowPin}`);
