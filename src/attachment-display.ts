@@ -1,3 +1,5 @@
+import { currentLanguage } from './i18n';
+
 const FILE_ID = '[A-Za-z0-9_-]{8,64}';
 const VALID_FILE_ID = new RegExp(`^${FILE_ID}$`);
 
@@ -36,12 +38,19 @@ const MIME_EXTENSION: Record<string, string> = {
   'text/csv': '.csv',
 };
 
+/** 标题里不含内容的两个词,按当前语言取(界面语言切换后重新解析即生效)。 */
+const GENERIC_TITLES: Record<string, { image: string; file: string }> = {
+  zh: { image: '图片', file: '文件' },
+  en: { image: 'Image', file: 'File' },
+};
+const genericTitles = () => GENERIC_TITLES[currentLanguage()] ?? GENERIC_TITLES.en;
+
 export const attachmentDisplayName = (name: unknown, mime: unknown): string => {
   const given = typeof name === 'string' ? name.trim() : '';
   if (given) return given;
   const type = typeof mime === 'string' ? mime.toLowerCase().split(';')[0].trim() : '';
   const ext = MIME_EXTENSION[type] ?? '';
-  return (type.startsWith('image/') ? '图片' : '文件') + ext;
+  return (type.startsWith('image/') ? genericTitles().image : genericTitles().file) + ext;
 };
 
 /** Preserve the Hub's canonical `meta.attachments` fields rather than making
