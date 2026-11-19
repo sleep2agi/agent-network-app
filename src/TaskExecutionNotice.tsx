@@ -19,9 +19,9 @@ export default function TaskExecutionNotice({ task, diagnostic, detail = false }
     : state === 'evidenceAbsent' || state === 'unconfirmed' ? 'evidenceHint'
     : ['missing', 'offline', 'disconnected'].includes(state) ? 'connectionHint' : null;
   return <View testID={`task-execution-${state}`} style={{ gap: spacing.xs }}>
-    <Text style={{ color: state === 'failed' ? colors.failed : colors.textMuted, fontSize: detail ? 14 : 11 }}>
+    <Text style={{ color: state === 'failed' ? colors.failed : colors.textSecondary, fontSize: detail ? 14 : 11 }}>
       {t(`execution.${state}`)}
     </Text>
-    {detail && hint ? <Text style={{ color: colors.textMuted, fontSize: 13 }}>{t(`execution.${hint}`)}</Text> : null}
+    {detail && hint ? <Text style={{ color: colors.textSecondary, fontSize: 13 }}>{t(`execution.${hint}`)}</Text> : null}
   </View>;
 }

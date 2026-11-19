@@ -2443,8 +2443,19 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     else setBtwLaunch(current => ({ id: (current?.id ?? 0) + 1 }));
   };
   const plusItems = plusPanelItems({ os: Platform.OS, desktop, attachEnabled: ATTACH_ENABLED });
+  // #574：手机首次进会话时提示一次「＋ 可以发图片和文件」；点掉、点 ＋ 或发过附件后都记成看过。
+  const PLUS_HINT_KEY = 'anet_composer_plus_hint_v1';
+  const [plusHintSeen, setPlusHintSeen] = useState(() => {
+    try { return globalThis.localStorage?.getItem(PLUS_HINT_KEY) === '1'; } catch { return true; }
+  });
+  const dismissPlusHint = () => {
+    setPlusHintSeen(true);
+    try { globalThis.localStorage?.setItem(PLUS_HINT_KEY, '1'); } catch { /* 隐私模式：本次会话内记下即可 */ }
+  };
+  const showPlusHint = !desktop && !plusHintSeen && attached.length === 0;
   // 桌面「＋」= 系统文件选择器(多选、任意类型),没有中间面板;手机 = 微信式 相册 / 文件 面板。
   const onPlusPress = () => {
+    dismissPlusHint();
     if (plusPressAction({ desktop, attachEnabled: ATTACH_ENABLED }) === 'panel') { plusEvent('toggle'); return; }
     pickFiles()
       .then(appendAttachments)
@@ -3412,6 +3423,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 />
               ) : null}
       </View>
+      {showPlusHint ? (
+        // #574：手机首次进会话提示一次「＋ 可以发图片和文件」；点一下即记成看过。
+        <Pressable accessibilityRole="button" accessibilityLabel={t('chat.plusHintFirst')} onPress={dismissPlusHint} style={styles.plusHintRow} testID="composer-plus-hint">
+          <Ionicons name="add-circle-outline" size={14} color={colors.textSecondary} />
+          <Text style={styles.plusHintText} numberOfLines={1}>{t('chat.plusHintFirst')}</Text>
+        </Pressable>
+      ) : null}
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
@@ -3702,8 +3720,10 @@ const makeStyles = (B = bubbleLayout()) =>
   quoteStripText: { flex: 1, color: colors.textMuted, fontSize: 12 },
   quoteStripClose: { padding: 2 },
   restoredNote: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
-  deliveredMark: { color: colors.textMuted, fontSize: 10, marginTop: 2, alignSelf: 'flex-end' },
-  pendingMark: { color: colors.textMuted, fontSize: 10, alignSelf: 'flex-end' },
+  deliveredMark: { color: colors.textSecondary, fontSize: 11, marginTop: 2, alignSelf: 'flex-end' },
+  pendingMark: { color: colors.textSecondary, fontSize: 11, alignSelf: 'flex-end' },
+  plusHintRow: { flexDirection: 'row', alignItems: 'center', gap: 4, paddingHorizontal: spacing.md, paddingBottom: 4 },
+  plusHintText: { color: colors.textSecondary, fontSize: 11 },
   typingRow: {
     flexDirection: 'row',
     alignItems: 'center',
