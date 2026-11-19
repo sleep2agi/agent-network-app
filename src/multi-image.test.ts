@@ -235,7 +235,8 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').
   check(/onPress=\{\(\) => removeAttachment\(item\.uri\)\}/.test(chat), 'draft thumbnails have ✕');
   check(/if \(gridViews\.length < 2\)/.test(chat) && chat.includes('testID="chat-image-grid"'), '≥2 images render as a grid; single image path unchanged');
   check((chat.match(/renderAttachments\(sentAttachmentViews\(item, cfg\.serverUrl\), item(?:, true|, !agentSent)?\)/g) ?? []).length === 2, 'both sent-bubble variants use the grid renderer');
-  check(/renderAttachments\(replyAttachmentViews\(item, cfg\.serverUrl\)\)/.test(chat), 'agent replies with several images also use the grid');
+  // #296：回复气泡改成「先算 replyViews 再画」（占位正文要知道有没有卡片），两种写法都认 —— 判据是「回复侧用同一个 renderAttachments」。
+  check((/renderAttachments\(replyAttachmentViews\(item, cfg\.serverUrl\)\)/.test(chat) || /const replyViews = replyAttachmentViews\(item, cfg\.serverUrl\);/.test(chat)) && /renderAttachments\(replyViews\)/.test(chat), 'agent replies with several images also use the grid');
   check(/imageGrid:[^\n]*maxWidth: 3 \* 84 \+ 2 \* 4/.test(chat), 'grid is 3 columns wide');
   check(/removeFailedAttachment\(item, a\.localIndex!\)/.test(chat), 'a failed tile can be removed from the failed message');
   check((chat.match(/hideGridImageLines\(cleanAttachmentDebugText\(sentQuoted\.body[^\n]*sentGridNames\)/g) ?? []).length === 2, 'both sent bubbles drop the redundant 📎 lines when a grid is shown');
