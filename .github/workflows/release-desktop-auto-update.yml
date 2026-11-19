@@ -614,6 +614,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.569:
+            - Agent 主动发来的消息带附件时（原型图、报告、截图），桌面和手机都会在消息下面画附件卡片：图片能点开看大图，文件能直接下载。
+            - 只有附件、没有文字的那种消息也不会再整条消失。
+
             What's new in 0.2.568:
             - 桌面聊天页的角落光晕重做：浅色模式先提亮再叠色，不再发脏；深色模式改用琥珀色，避免发绿；「OpenCode 原会话」那条不再把光切断。
 
