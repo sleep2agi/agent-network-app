@@ -142,7 +142,7 @@ type Screen =
   | { name: 'serverNodes'; filter?: AgentListFilter }
   | { name: 'serverNodeDetail'; alias: string }
   | { name: 'settings' }
-  | { name: 'chat'; alias: string; focusTaskId?: string; networkId?: string; daemonMgmt?: boolean }  // daemonMgmt: Hub 概览点机器进守护进程管理(角色未 hydrate 时也显示管理页)
+  | { name: 'chat'; alias: string; focusTaskId?: string; networkId?: string; daemonMgmt?: boolean; /** #1543 通知点进来的:找不到那条就安静停在最新,不弹提示 */ focusSilent?: boolean }  // daemonMgmt: Hub 概览点机器进守护进程管理(角色未 hydrate 时也显示管理页)
   | { name: 'dm'; alias: string; userId: string; displayName?: string | null; avatarUrl?: string | null }  // 人与人私信(hub#2086);alias = 对方用户名
   | { name: 'group'; alias: string; groupName?: string }  // 群聊(RFC-042,Hub ≥ .93);alias = group_id
   | { name: 'nodeInfo'; alias: string; daemonMgmt?: boolean }
@@ -583,7 +583,7 @@ function AppRoot() {
   useEffect(() => {
     if (!cfg || !trayWindow) return;
     return bindDesktopTray(
-      alias => setScreen({ name: 'chat', alias }),
+      (alias, messageId) => setScreen({ name: 'chat', alias, ...(messageId ? { focusTaskId: messageId, focusSilent: true } : {}) }),
       () => { void dismissAllForConfig(cfg); },
       // #499 到期提醒的系统通知把任务编码进 alias(due-reminder-notify.taskOpenAlias):点它打开任务,不是会话。
       (requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen),
@@ -916,7 +916,7 @@ function AppRoot() {
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         <DesktopWorkspace cfg={cfg} screen={screen} setScreen={setScreen} onLogout={removeActiveProfile} onLocalDataDeleted={finishLocalDataDeletion} onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }} onSwitchProfile={activateProfile} onReauthProfile={requestProfileReauth} onProfileEdited={reloadEditedProfile} />
         <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
-        {trayWindow ? <DesktopNotifier onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)} profileKey={notifyProfileKey(cfg)} /> : null}
+        {trayWindow ? <DesktopNotifier onOpenChat={(alias, messageId) => setScreen({ name: 'chat', alias, ...(messageId ? { focusTaskId: messageId, focusSilent: true } : {}) })} onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)} profileKey={notifyProfileKey(cfg)} /> : null}
         <LastCrashChip cfg={cfg} />
       </SafeAreaView>
     );
@@ -930,7 +930,7 @@ function AppRoot() {
       />
       {screen.name !== 'login' && cfg ? <DesktopMessageListener cfg={cfg} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} /> : null}
       {/* 0.2.107 手机系统通知:登出(cfg=null)也要挂着,好让运行时停掉轮询和前台服务。 */}
-      {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={alias => setScreen({ name: 'chat', alias })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenRequirement={(requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen)} /> : null}
+      {Platform.OS === 'android' || Platform.OS === 'ios' ? <MobileNotifier cfg={cfg} onOpenChat={(alias, messageId) => setScreen({ name: 'chat', alias, ...(messageId ? { focusTaskId: messageId, focusSilent: true } : {}) })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenRequirement={(requirementId, networkId) => openTaskRef(requirementId, networkId, cfg, setScreen)} /> : null}
       {screen.name === 'login' || !cfg ? (
         tauriDesktop && !reauthProfile && !showRemoteLogin ? (
           <FirstRunScreen
@@ -1060,6 +1060,7 @@ function AppRoot() {
                         onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
                         onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                         focusTaskId={screen.focusTaskId}
+                        focusSilent={screen.focusSilent}
                         pinned={mobilePins.includes(screen.alias)}
                         onTogglePin={() => toggleMobilePin(screen.alias)}
                         muted={mutedAliases.includes(screen.alias)}
@@ -1097,6 +1098,7 @@ function AppRoot() {
                   onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
                   onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                   focusTaskId={screen.focusTaskId}
+                  focusSilent={screen.focusSilent}
                   pinned={mobilePins.includes(screen.alias)}
                   onTogglePin={() => toggleMobilePin(screen.alias)}
                   muted={mutedAliases.includes(screen.alias)}
@@ -1428,6 +1430,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
       focusTaskId={screen.focusTaskId}
+      focusSilent={screen.focusSilent}
       pinned={pinnedAliases.includes(screen.alias)}
       onTogglePin={() => togglePin(screen.alias)}
       muted={mutedAliases.includes(screen.alias)}

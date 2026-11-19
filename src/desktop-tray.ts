@@ -3,6 +3,7 @@
 // 只在 Tauri 主窗口生效(分离聊天窗/工作区窗不接托盘)。
 
 import { parseTaskOpenAlias } from './due-reminder-notify';
+import { parseChatFocusAlias } from './notification-focus';
 import { createTrayPusher, trayModelFrom, type TrayModel } from './tray-menu-model';
 import { getUnreadSnapshot, subscribeUnread, type UnreadStoreSnapshot } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
@@ -53,7 +54,7 @@ export async function dismissAllUnread(deps: {
 
 /** 挂上托盘同步 + 菜单点击回调;返回卸载函数。 */
 export function bindDesktopTray(
-  onOpenChat: (alias: string) => void,
+  onOpenChat: (alias: string, messageId?: string) => void,
   onDismissAll?: () => void,
   /** #499 「任务提醒」的系统通知点开(alias 是 due-reminder-notify.taskOpenAlias 编出来的)→ 打开任务。 */
   onOpenTask?: (requirementId: string, networkId: string | null) => void,
@@ -85,6 +86,9 @@ export function bindDesktopTray(
       if (typeof payload !== 'string' || !payload.trim()) return;
       const task = parseTaskOpenAlias(payload.trim());
       if (task) { onOpenTask?.(task.requirementId, task.networkId); return; }
+      // #1543 —— 新消息通知把消息 id 编在 alias 里;解不出来就是托盘菜单那行的裸 alias。
+      const focus = parseChatFocusAlias(payload.trim());
+      if (focus) { onOpenChat(focus.agent, focus.messageId); return; }
       onOpenChat(payload.trim());
     });
     const stopDismiss = await events.listen('tray-dismiss-all', () => { onDismissAll?.(); });

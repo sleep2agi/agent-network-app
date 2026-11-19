@@ -317,6 +317,8 @@ interface Props {
   onOpenVoiceSettings?: () => void;
   /** 「去会话」带来的那条(task_id):打开后定位并高亮;不在已加载的那页就往前拉(message-focus.ts),拉到头没有就提示。 */
   focusTaskId?: string;
+  /** #1543 —— 定位是「点通知」带来的:找不到那条就安静停在最新,不弹「找不到」提示。 */
+  focusSilent?: boolean;
   /** 分离聊天窗:页头兼当标题栏(拖动 / 双击最大化 + 给窗口控件让位,window-shell.ts popoutChatChrome)。主窗 / 手机不传。 */
   windowChrome?: PopoutChrome;
   /** #499 负责 Agent 发的到期提醒:气泡下「查看任务 ›」打开那张任务(同顶部提示)。不传 = 不画(分离聊天窗没有任务页)。 */
@@ -339,7 +341,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, daemonMgmt = false }: Props) {
+export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, focusSilent = false, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, daemonMgmt = false }: Props) {
   useTranslation();
   // #769: everything below is agent-scoped — use THIS agent's network, not the account's current one.
   const cfg = useMemo(() => cfgForAgent(accountCfg, alias, networkId), [accountCfg, alias, networkId]);
@@ -1619,7 +1621,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     const step = nextFocusStep({ index: messages.findIndex(m => msgKey(m) === focusTarget), ready: conversationReady, hasOlder, loading: loadingOlder, limit: limitRef.current });
     if (step.kind === 'wait') return;
     if (step.kind === 'locate') { setFocusTarget(null); setTimeout(() => locateKey(focusTarget, 'top'), 0); return; }
-    if (step.kind === 'missing') { setFocusTarget(null); setComposerNotice(t('chat.focusNotFound')); return; }
+    // #1543:通知里那条已经被翻页挤出/删掉时,退回「只打开会话」,不弹提示。
+    if (step.kind === 'missing') { setFocusTarget(null); if (!focusSilent) setComposerNotice(t('chat.focusNotFound')); return; }
     setLoadingOlder(true);
     limitRef.current = step.limit;
     void load(step.limit).finally(() => setLoadingOlder(false));

@@ -145,11 +145,15 @@ export function incomingFromSnapshot(snap: { serverBody: unknown; replyRows: rea
 }
 
 /** 同一轮多条新消息只响一次铃、按 agent 合并成一条通知(飞书也是按会话合并)。 */
-export function groupByAgent(rows: readonly Incoming[]): Array<{ agent: string; count: number; body: string }> {
-  const map = new Map<string, { agent: string; count: number; body: string }>();
+export function groupByAgent(rows: readonly Incoming[]): Array<{ agent: string; count: number; body: string; messageId?: string }> {
+  const map = new Map<string, { agent: string; count: number; body: string; messageId?: string }>();
   for (const r of rows) {
+    // #1543 —— 只有 user_inbox 的主动消息(`u:<message_id>`)能对应到会话里的那条(主动项的 task_id = message_id);
+    // inbox 回复行(`i:<id>`)的 id 不是会话里的 key,不带出去,免得点通知定位到别的地方。
+    const messageId = r.id.startsWith('u:') ? r.id.slice(2) : undefined;
     const g = map.get(r.agent);
-    if (g) { g.count++; g.body = r.body || g.body; } else map.set(r.agent, { agent: r.agent, count: 1, body: r.body });
+    if (g) { g.count++; g.body = r.body || g.body; if (messageId) g.messageId = messageId; }
+    else map.set(r.agent, { agent: r.agent, count: 1, body: r.body, ...(messageId ? { messageId } : {}) });
   }
   return [...map.values()];
 }

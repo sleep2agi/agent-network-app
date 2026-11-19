@@ -7,7 +7,8 @@ import { attachNotifierUi, setNotifierConfig } from './notifier-runtime';
 
 export default function MobileNotifier({ cfg, onOpenChat, onOpenTask, onOpenRequirement }: {
   cfg: HubConfig | null;
-  onOpenChat: (alias: string) => void;
+  /** #1543 —— 第二个参数是那条主动消息的 id;没有就只打开会话。 */
+  onOpenChat: (alias: string, messageId?: string) => void;
   onOpenTask?: (taskId: string) => void;
   /** #499 点「任务提醒」的到期提醒通知 → 打开那张任务卡片。 */
   onOpenRequirement?: (requirementId: string, networkId: string | null) => void;
@@ -20,9 +21,9 @@ export default function MobileNotifier({ cfg, onOpenChat, onOpenTask, onOpenRequ
   const openRequirement = useRef(onOpenRequirement);
   openRequirement.current = onOpenRequirement;
   useEffect(() => { void setNotifierConfig(cfg).catch(() => { /* 通知是附带功能 */ }); }, [cfg?.profileId, cfg?.serverUrl, cfg?.token, cfg?.username, cfg?.networkId]);
-  useEffect(() => attachNotifierUi((alias, taskId) => {
+  useEffect(() => attachNotifierUi((alias, taskId, messageId) => {
     if (taskId && openTask.current) openTask.current(taskId);
-    else open.current(alias);
+    else open.current(alias, messageId ?? undefined);
   }, (requirementId, networkId) => openRequirement.current?.(requirementId, networkId)), []);
   return null;
 }
