@@ -998,19 +998,19 @@ function NodeFilterSheet({ visible, options, selectedId, allCount, onSelect, onC
       <View style={s.pickerBody}>
         <View style={s.pickerSearchWrap}>
           <View style={s.pickerHelper}>
-            <Text style={s.pickerHint}>选择节点，查看对应计划</Text>
-            <Text style={s.pickerHint}>{options.length} 个节点</Text>
+            <Text style={s.pickerHint}>选择 agent，查看对应计划</Text>
+            <Text style={s.pickerHint}>{options.length} 个 agent</Text>
           </View>
           <View style={s.pickerSearchField}>
             <Ionicons name="search-outline" size={16} color={colors.textMuted} />
             <TextInput
               value={query}
               onChangeText={setQuery}
-              placeholder="搜索名称、拼音或节点 ID"
+              placeholder="搜索名称或拼音"
               placeholderTextColor={colors.textMuted}
               autoCapitalize="none"
               autoCorrect={false}
-              accessibilityLabel="搜索节点"
+              accessibilityLabel="搜索 agent"
               style={[s.searchInput, { outlineStyle: 'none' } as object]}
               testID="schedule-node-picker-search"
             />
@@ -1043,8 +1043,8 @@ function NodeFilterSheet({ visible, options, selectedId, allCount, onSelect, onC
         <ScrollView style={s.pickerScroll} keyboardShouldPersistTaps="handled" contentContainerStyle={s.pickerList}>
           {shown.length === 0 ? <View style={s.pickerEmpty}>
             <Ionicons name="search-outline" size={24} color={colors.textMuted} />
-            <Text style={s.pickerEmptyTitle}>{query.trim() ? '没有匹配的节点' : '暂无可筛选的节点'}</Text>
-            <Text style={s.pickerEmptyHint}>{query.trim() ? '试试其他名称、拼音或节点 ID，也可清除搜索。' : '节点有计划后会显示在这里，可先查看全部 agent。'}</Text>
+            <Text style={s.pickerEmptyTitle}>{query.trim() ? '没有匹配的 agent' : '暂无可筛选的 agent'}</Text>
+            <Text style={s.pickerEmptyHint}>{query.trim() ? '试试其他名称或拼音，也可清除搜索。' : '还没有 agent，先新建一个。'}</Text>
           </View> : shown.map(option => {
             const selected = option.id === selectedId;
             const duplicate = (labelCounts.get(option.label) ?? 0) > 1;

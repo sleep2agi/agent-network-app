@@ -431,6 +431,6 @@ export function externalEnabledChips(
 }
 
 export function externalEmptyState(reportedNodes: number, narrowed: boolean): { title: string; body: string } {
-  if (narrowed && reportedNodes > 0) return { title: '没有匹配的节点计划', body: '试试别的关键词，或清除节点和状态筛选。' };
-  return { title: '暂无节点计划', body: '节点升级后会自动上报本机 crontab 等计划。' };
+  if (narrowed && reportedNodes > 0) return { title: '没有匹配的机器上的定时', body: '试试别的关键词，或清除节点和状态筛选。' };
+  return { title: '暂无机器上的定时', body: 'agent 所在电脑升级后会自动上报 crontab 等计划。' };
 }

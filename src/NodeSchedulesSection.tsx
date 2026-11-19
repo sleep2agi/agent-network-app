@@ -229,7 +229,7 @@ export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq 
   if (!nodeId) {
     return (
       <View style={[s.card, s.padded]} testID="node-schedules-no-id">
-        <Text style={s.muted}>这个会话没有权威节点 ID(没有 nodes 记录),不能作为定时任务的执行节点。</Text>
+        <Text style={s.muted}>这个会话还没在服务器上登记，暂时不能挂定时任务。</Text>
       </View>
     );
   }
