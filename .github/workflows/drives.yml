@@ -129,12 +129,25 @@ jobs:
         with:
           name: web-export
           path: web-export
+      # Chromium 下载（~167 MB）按 Playwright 版本缓存，别每个 shard 每次都重下。
+      - if: env.RUN_DRIVES == 'true'
+        uses: actions/cache@v4
+        with:
+          path: ~/.cache/ms-playwright
+          key: ms-playwright-1.58.2-chromium-${{ runner.os }}
       # Same Playwright as the suites' Docker images (mcr.microsoft.com/playwright:v1.58.2-noble).
+      # 2026-11-19：Ubuntu 软件源整下午 503，--with-deps 装系统字体失败（exit 100），shard 全红只能手动重跑。
+      # 现在失败自动重试 3 次（间隔 30 秒），偶发的源抽风不再让 PR 卡住。
       - name: Playwright + Chromium
         if: env.RUN_DRIVES == 'true'
         run: |
           npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.58.2
-          /tmp/pw/node_modules/.bin/playwright install --with-deps chromium
+          for attempt in 1 2 3; do
+            if /tmp/pw/node_modules/.bin/playwright install --with-deps chromium; then exit 0; fi
+            echo "::warning::playwright install failed (attempt $attempt/3), retrying in 30s"
+            sleep 30
+          done
+          exit 1
       - name: Run shard
         if: env.RUN_DRIVES == 'true'
         env:
