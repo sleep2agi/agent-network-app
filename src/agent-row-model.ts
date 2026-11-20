@@ -176,6 +176,10 @@ export interface AgentRowModel {
   time: string;
   /** Which event `preview` / `time` describe (null ⇒ no activity data; no time). */
   source: ActivitySource;
+  /** 这行的第二行画的是 hub 的 session.task(agent 在做的事),不是一条消息 —— 渲染时要标出来,
+   *  否则状态一变看起来就像「来了新消息但聊天面板没显示」(2026-11-20)。`source` 只在有时间时非空,
+   *  这个字段与时间无关。 */
+  showingTask: boolean;
   /** ms of that event (0 when unknown) — the value `sortByActivity` orders by. */
   activityAt: number;
   pinned: boolean;
@@ -196,8 +200,11 @@ export function rowActivity(
   taskAt = 0,
 ): { preview: string; source: ActivitySource; at: number } {
   if (latest?.text) return { preview: latest.text, source: 'message', at: latest.at };
+  // 2026-11-20（负责人定）：session.task 是节点**自己上报**的当前任务/进度，协同时甚至
+  // 就是本机 TUI 里打的提示词 —— 别的用户不该看到正文。这里只保留「这条活动的来源与时间」，
+  // 正文一律不回传（行上只画状态词，如「工作中」）。
   const task = previewText(session.task);
-  if (task) return { preview: task, source: taskAt > 0 ? 'task' : null, at: taskAt > 0 ? taskAt : 0 };
+  if (task) return { preview: '', source: taskAt > 0 ? 'task' : null, at: taskAt > 0 ? taskAt : 0 };
   if (latest) return { preview: '', source: 'message', at: latest.at };
   return { preview: '', source: null, at: 0 };
 }
@@ -218,6 +225,7 @@ export function agentRowModel(
     preview: act.preview,
     time: act.at ? formatRowTime(act.at, opts.nowMs) : '',
     source: act.source,
+    showingTask: !opts.latest?.text && !!previewText(session.task),
     activityAt: act.at,
     pinned: !!opts.pinned,
   };

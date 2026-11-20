@@ -813,11 +813,11 @@ export default function NodeDetailScreen({
         <View>
           <SectionTitle title={taskSectionTitle(s.status)} />
           <View style={[card, { paddingVertical: spacing.md }]}>
-            {s.task && s.task.trim().length > 0 ? (
-              <Text style={{ color: colors.text, fontSize: typeScale.body, lineHeight: 20 }} selectable>{s.task}</Text>
-            ) : (
-              <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>节点还没有上报任务。完整记录见「任务」分区。</Text>
-            )}
+            {/* 2026-11-20（负责人定）：session.task 是节点自己上报的进度，协同时可能是本机 TUI 的提示词，
+                别的用户不该看到正文；这里只留状态说明，运行记录去「任务」分区看。 */}
+            <Text testID="node-task-hidden" style={{ color: colors.textMuted, fontSize: typeScale.small }}>
+              {s.task && s.task.trim().length > 0 ? '节点在忙；任务内容不在客户端展示，运行记录见「任务」分区。' : '节点还没有上报任务。完整记录见「任务」分区。'}
+            </Text>
           </View>
         </View>
         {/* R2 avatar editor (pool picker + custom URL; pre-disclosure for session-only) */}

@@ -81,7 +81,7 @@ ck('garbage body → empty map', Object.keys(latestMessageByAgent({ serverBody: 
 const heartbeat = { alias: '节点A', status: 'idle', task: '在跑 CI', updated_at: new Date(now).toISOString() } as any;
 const noMsg = agentRowModel(heartbeat, { nowMs: now });
 ck('no message → time column empty even though updated_at is "now" (heartbeat)', noMsg.time === '', noMsg.time);
-ck('no message → preview falls back to the reported task', noMsg.preview === '在跑 CI');
+ck('no message → preview stays empty (session.task text is never exposed)', noMsg.preview === '' && noMsg.showingTask === true, JSON.stringify(noMsg));
 const withMsg = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 26, 14, 2), text: '好的，已经处理' }, nowMs: now, pinned: true });
 ck('message → preview is its text, time is its time', withMsg.preview === '好的，已经处理' && withMsg.time === '14:02');
 ck('pinned flag carried', withMsg.pinned && !noMsg.pinned);
@@ -91,15 +91,15 @@ ck('model status is rowStatus(status)', JSON.stringify(agentRowModel({ alias: 'w
 // ── preview ↔ time pairing (0.2.114: every row whose preview has a source gets that source's time) ──
 const taskAt = at(2026, 9, 26, 8, 13);
 const taskRow = agentRowModel(heartbeat, { taskAt, nowMs: now });
-ck('task text preview → time is that task\'s time', taskRow.preview === '在跑 CI' && taskRow.time === '08:13' && taskRow.source === 'task', JSON.stringify(taskRow));
+ck('task activity → time is that task\'s time, text hidden', taskRow.preview === '' && taskRow.time === '08:13' && taskRow.source === 'task', JSON.stringify(taskRow));
 const msgWins = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '旧消息' }, taskAt, nowMs: now });
 ck('message preview → message time, never the task time', msgWins.preview === '旧消息' && msgWins.time === '周四' && msgWins.source === 'message', JSON.stringify(msgWins));
 const emptyMsg = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '' }, taskAt, nowMs: now });
-ck('message with no text → preview is the task, and so is the time', emptyMsg.preview === '在跑 CI' && emptyMsg.time === '08:13' && emptyMsg.source === 'task', JSON.stringify(emptyMsg));
+ck('message with no text → task time, text still hidden', emptyMsg.preview === '' && emptyMsg.time === '08:13' && emptyMsg.source === 'task', JSON.stringify(emptyMsg));
 const emptyMsgNoTask = agentRowModel({ alias: 'q', status: 'idle' }, { latest: { at: at(2026, 9, 24, 9), text: '' }, nowMs: now });
 ck('message with no text and no task → no preview, message time', emptyMsgNoTask.preview === '' && emptyMsgNoTask.time === '周四');
 const unmatchedEmptyMsg = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '' }, taskAt: 0, nowMs: now });
-ck('task text preview with no task time never borrows a (textless) message time', unmatchedEmptyMsg.preview === '在跑 CI' && unmatchedEmptyMsg.time === '', JSON.stringify(unmatchedEmptyMsg));
+ck('task activity with no task time never borrows a (textless) message time', unmatchedEmptyMsg.preview === '' && unmatchedEmptyMsg.time === '', JSON.stringify(unmatchedEmptyMsg));
 const unmatched = agentRowModel(heartbeat, { taskAt: 0, nowMs: now });
 ck('task text with no task row behind it → no time (not a borrowed one)', unmatched.time === '' && unmatched.source === null && unmatched.activityAt === 0);
 ck('no data at all → no preview, no time', (() => { const m = agentRowModel({ alias: 'z', status: 'idle' }, { taskAt, nowMs: now }); return m.preview === '' && m.time === '' && m.activityAt === 0; })());
@@ -108,7 +108,7 @@ const hb1 = agentRowModel({ ...heartbeat, updated_at: new Date(now - 3600_000).t
 const hb2 = agentRowModel({ ...heartbeat, updated_at: new Date(now).toISOString() }, { taskAt, nowMs: now });
 ck('heartbeat (updated_at moves) → same time and activityAt', hb1.time === hb2.time && hb1.activityAt === hb2.activityAt && hb2.time === '08:13');
 ck('activityAt is the shown event\'s ms', taskRow.activityAt === taskAt && msgWins.activityAt === at(2026, 9, 24, 9));
-ck('rowActivity is what agentRowModel shows', JSON.stringify(rowActivity(heartbeat, undefined, taskAt)) === JSON.stringify({ preview: '在跑 CI', source: 'task', at: taskAt }));
+ck('rowActivity is what agentRowModel shows (preview empty: text hidden)', JSON.stringify(rowActivity(heartbeat, undefined, taskAt)) === JSON.stringify({ preview: '', source: 'task', at: taskAt }));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

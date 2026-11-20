@@ -8,8 +8,8 @@
 //
 // desktop 1440×900 和 phone 390×844(安卓 UA),各一个干净的浏览器上下文:
 //   inm       第一次状态读不带 If-None-Match;之后的读带上一次的 ETag,至少有一次 304
-//   kept      304 之后列表还在(三个示例节点都画着),不是空白
-//   changed   改一个节点的进度 ⇒ 下一次读回 200(新 ETag)⇒ 列表上出现新进度
+//   kept      304 之后列表还在(示例节点还画着),不是空白;任务正文按隐私口径不展示
+//   changed   改一个节点的进度 ⇒ 下一次读回 200(新 ETag)⇒ 列表仍在(正文仍不展示)
 //   bytes     304 的读 0 字节正文;打印全程节省的字节
 // Exit 1 on any failure.
 import { mkdirSync } from 'node:fs';
@@ -58,7 +58,7 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
     const light = (await reads()).filter(r => r.url.includes('light=1'));
     const after304 = light.findIndex(r => r.status === 304);
     if (OUT) await page.screenshot({ path: `${OUT}/${name}-after-304.png` });
-    const kept = (await visible('示例-A')) && (await visible('示例-B')) && (await visible('示例进度第一版'));
+    const kept = (await visible('示例-A')) && (await visible('示例-B')) && !(await visible('示例进度第一版'));
     record(name, 'inm + 304 + list kept', {
       firstPlain: light[0]?.inm === null,
       laterConditional: light.slice(1).length > 0 && light.slice(1).every(r => r.inm !== null),
@@ -69,12 +69,13 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
     await page.evaluate(() => { window.__driveSessions[1].task = '示例进度第二版'; });
     const n0 = (await reads()).length;
     await page.waitForFunction((n) => (window.__statusReads || []).slice(n).some(r => r.url.includes('light=1') && r.status === 200), n0, { timeout: 25000 }).catch(() => {});
-    await page.getByText('示例进度第二版').first().waitFor({ timeout: 5000 }).catch(() => {});
-    const changed = await visible('示例进度第二版');
+    // 任务正文不再展示(2026-11-20 隐私收敛)：只要求列表还在、且新正文不外泄。
+    await page.waitForTimeout(1500);
+    const changed = await visible('示例-B');
     if (OUT) await page.screenshot({ path: `${OUT}/${name}-changed.png` });
     const all = await reads();
     const saved = all.filter(r => r.status === 304).length;
-    record(name, 'changed data → 200 → list updates', { changed, noStale: !(await visible('示例进度第一版')) }, { reads304: saved, readsTotal: all.length, bodyBytesSent: all.reduce((a, r) => a + r.bytes, 0) });
+    record(name, 'changed data → 200 → list kept, task text never shown', { changed, noTaskText: !(await visible('示例进度第一版')) && !(await visible('示例进度第二版')) }, { reads304: saved, readsTotal: all.length, bodyBytesSent: all.reduce((a, r) => a + r.bytes, 0) });
   } catch (e) {
     record(name, 'run', { ran: false }, { error: String(e).split('\n')[0] });
   }

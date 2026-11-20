@@ -76,7 +76,7 @@ import {
 } from './unread-store';
 import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
-import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity } from './agent-row-model';
+import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity, rowStatus } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
 import { GROUP_BY_CYCLE, GROUP_CHIP_VISUAL_HEIGHT, GROUP_OPTION_MIN_HEIGHT, GROUP_TOGGLE_HIT_SLOP, effectiveGroupBy as effectiveGroupByFor, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, groupUnlockHint, headerViewSuffix, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
@@ -786,9 +786,11 @@ export default function AgentsScreen({
           {/* #460 降级:App Server 断开 / TUI 不在 / 需要重新登录 —— Hub 会拒收发给它的新任务。不知道时不画。 */}
           <DegradedBadge info={nodeDegraded(item)} testID={`agent-degraded-${item.alias}`} />
         </View>
-        {rowDraft ? draftLine(rowDraft, [styles.task, compact && { fontSize: 11 }], `draft-preview-${item.alias}`) : item.task ? (
+        {rowDraft ? draftLine(rowDraft, [styles.task, compact && { fontSize: 11 }], `draft-preview-${item.alias}`) : rowStatus(item.status).label ? (
+          // 桌面紧凑行:没有消息时只画状态词(工作中/异常/阻塞),**不再画 session.task 正文**
+          // —— 那是节点自报的任务/进度,协同时可能是本机 TUI 的提示词,别人不该看到。
           <Text dense selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
-            {item.task}
+            {rowStatus(item.status).label}
           </Text>
         ) : null}
       </View>
@@ -998,6 +1000,7 @@ export default function AgentsScreen({
             ) : null}
             {rowDraft
               ? draftLine(rowDraft, [rowStyles.preview, { color: colors.textMuted }], `draft-preview-${item.alias}`)
+              // 没有消息时 preview 为空(不再回传 session.task 正文);状态词由上面的 label 画。
               : <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>}
             <AgentUnreadBadge inline badge={badge} testID={`unread-badge-${item.alias}`} />
           </View> : null}
