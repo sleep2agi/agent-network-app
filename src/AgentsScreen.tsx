@@ -787,8 +787,9 @@ export default function AgentsScreen({
           <DegradedBadge info={nodeDegraded(item)} testID={`agent-degraded-${item.alias}`} />
         </View>
         {rowDraft ? draftLine(rowDraft, [styles.task, compact && { fontSize: 11 }], `draft-preview-${item.alias}`) : item.task ? (
+          // 桌面紧凑行只显示「当前任务」,同样加前缀:它是 hub 状态,不是一条消息。
           <Text dense selectable={false} style={[styles.task, compact && { fontSize: 11 }]} numberOfLines={1}>
-            {item.task}
+            {t('chat.statusDoing', { text: item.task })}
           </Text>
         ) : null}
       </View>
@@ -998,7 +999,9 @@ export default function AgentsScreen({
             ) : null}
             {rowDraft
               ? draftLine(rowDraft, [rowStyles.preview, { color: colors.textMuted }], `draft-preview-${item.alias}`)
-              : <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>}
+              // 预览来自 agent 的「当前任务」(hub session.task)而不是一条消息时,加「在做：」前缀:
+              // 这行会随任何人给它派活而变化,和聊天面板里的消息不是同一套数据(2026-11-20 排查)。
+              : <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.source === 'task' ? t('chat.statusDoing', { text: model.preview }) : model.preview}</Text>}
             <AgentUnreadBadge inline badge={badge} testID={`unread-badge-${item.alias}`} />
           </View> : null}
         </View>
