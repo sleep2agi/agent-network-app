@@ -23,6 +23,7 @@ import { getUnreadSnapshot, subscribeUnread } from './unread-store';
 import { agentUnreadCounts } from './agent-unread-counts';
 import { useTranslation } from './i18n-react';
 import { useTaskUnreadCount } from './task-unread-store';
+import { mobileGlowActive } from './glow-mode';
 
 export interface MobileNavTab {
   key: string;
@@ -136,7 +137,10 @@ export default function MobileNavRail({ tabs, active, onSelect, insetLeft, inset
 
   return (
     <View
-      style={[s.rail, { width: mobileRailWidth(uiScale().densityFactor) + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom }, iconsOnly && { width: railWidth + insetLeft }]}
+      style={[s.rail, { width: mobileRailWidth(uiScale().densityFactor) + insetLeft, paddingLeft: insetLeft, paddingBottom: 8 + insetBottom }, iconsOnly && { width: railWidth + insetLeft },
+        // admin 2026-11-20 折叠屏：整窗渐变生效时左侧 rail 不该是一条实色带（桌面 rail 本来就是透明的），
+        // 右边线也降到 40%，否则光在 x=64 处被硬切一刀。
+        mobileGlowActive() && { backgroundColor: 'transparent', borderRightColor: colors.border + '66' }]}
       testID="mobile-nav-rail"
       accessibilityRole="tablist"
     >

@@ -16,6 +16,7 @@ import UserManagementPanel from './UserManagementPanel';
 import OrgDeptPeople from './OrgDeptPeople';
 import { fetchAuthMe } from './user-admin-api';
 import { canManageUsers, type AuthMe } from './user-admin';
+import { mobileGlowActive } from './glow-mode';
 
 export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled }: { cfg: HubConfig; phone?: boolean; onOpenScheduled?: (request: ScheduleOpenRequest) => void }) {
   useTranslation();
@@ -38,9 +39,9 @@ export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled }: { 
   const scope = `${cfg.serverUrl}|${authMe?.user?.user_id ?? ''}|${networkId ?? ''}`;
   const networkName = (authMe as any)?.networks?.find((n: any) => n.network_id === networkId)?.network_name || networkId || '';
   return (
-    <View style={styles.shell} testID="org-workspace">
+    <View style={[styles.shell, mobileGlowActive() && { backgroundColor: 'transparent' }]} testID="org-workspace">
       {/* 管理员 2026-11-15「做的更好一下」:左边整条侧栏(标题「组织」+「成员与权限」+ 部门树),右边内容;不再套标题行和页签。 */}
-      <View style={[styles.root, openAlias ? styles.hidden : null]}>
+      <View style={[styles.root, openAlias ? styles.hidden : null, mobileGlowActive() && { backgroundColor: 'transparent' }]}>
         {phone ? (
           // 手机底栏「组织」(管理员 2026-11-16):单列,整页滚;成员与权限仍在「设置 → 组织与权限」。
           <ScrollView testID="org-workspace-phone" style={{ flex: 1 }} contentContainerStyle={{ paddingBottom: spacing.md }} keyboardShouldPersistTaps="handled">

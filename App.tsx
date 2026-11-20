@@ -1038,7 +1038,9 @@ function AppRoot() {
                 // `screen` value the phone stack uses, so folding back just re-reads it.
                 // Safe-area insets: the rail takes the left one, navContent the right one.
                 <View style={styles.twoPane} testID="android-two-pane">
-                  <View style={[styles.twoPaneList, { width: paneListWidth, paddingBottom: tabBarInset }]} testID="two-pane-list">
+                  {/* admin 2026-11-20 折叠屏：1px 分栏线在 glow 下是唯一的实色竖线（「线本身看着就是一条实色描边」）
+                      → 光晕生效时降到 40% 透明，左右两栏的渐变在视觉上连起来；拖动时仍有 accent 线指示落点。 */}
+                  <View style={[styles.twoPaneList, { width: paneListWidth, paddingBottom: tabBarInset }, mobileGlowActive() && { borderRightColor: colors.border + '66' }]} testID="two-pane-list">
                     <AgentsScreen
                       cfg={cfg}
                       filter={screen.name === 'agents' ? screen.filter : undefined}

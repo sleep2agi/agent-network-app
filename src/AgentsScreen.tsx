@@ -1032,7 +1032,7 @@ export default function AgentsScreen({
         ) : null}
       </View>
       ) : (
-        <View testID="agents-list-head" style={[rowStyles.head, { backgroundColor: colors.bg }]}>
+        <View testID="agents-list-head" style={[rowStyles.head, { backgroundColor: listChromeBg }]}>
           <View style={rowStyles.headRow}>
             {/* 与紧凑布局保持一致：一旦有查询词就必须显示搜索框，否则清不掉筛选 */}
             {sessions.length > 10 || query ? (
