@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.584:",
+  "- 节点详情里为 Antigravity（agy）补上登录入口：节点上报能力后，可直接在 App 内完成 Google 登录（打开授权链接、粘贴授权码），授权码只发给这台节点、不经过对话模型。",
+  "",
   "What's new in 0.2.583:",
   "- 节点概览页：Antigravity（agy）登录状态读不到时（凭据在系统 keyring），现在会显示可一键复制的登录命令 `agy acp --login`，并提示「已登录可忽略」，不再是一片空白。",
   "",
