@@ -18,13 +18,15 @@ const taskOnly = agentRowModel({ alias: 'A', status: 'working', task: '在做某
 ck('没消息时退回任务文本、来源 task', taskOnly.preview === '在做某件事' && taskOnly.source === 'task', taskOnly);
 const taskNoTime = agentRowModel({ alias: 'A', status: 'working', task: '在做某件事' });
 ck('任务文本但没有时间时来源 null（仍显示文本）', taskNoTime.preview === '在做某件事' && taskNoTime.source === null, taskNoTime);
+ck('来源有没有时间都要标成「在做」', taskNoTime.showingTask === true && taskOnly.showingTask === true, taskNoTime);
+ck('有消息时不算「在做」', withMsg.showingTask === false, withMsg);
 
-// 2) 渲染层：任务来源要加「在做：」前缀（手机行 + 桌面紧凑行）。
+// 2) 渲染层：任务来源要加「任务：」前缀（手机行 + 桌面紧凑行）。
 const screen = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
-ck('手机行按来源区分渲染', /model\.source === 'task' \? t\('chat\.statusDoing'/.test(screen));
-ck('桌面紧凑行同样加前缀', /t\('chat\.statusDoing', \{ text: item\.task \}\)/.test(screen));
+ck('手机行按来源区分渲染', /model\.showingTask \? t\('chat\.taskPreview'/.test(screen));
+ck('桌面紧凑行同样加前缀', /t\('chat\.taskPreview', \{ text: item\.task \}\)/.test(screen));
 const i18n = readFileSync(new URL('./i18n-chat.ts', import.meta.url), 'utf8');
-ck('文案存在', /'chat\.statusDoing': \['在做：\{text\}'/.test(i18n));
+ck('文案存在', /'chat\.taskPreview': \['任务：\{text\}'/.test(i18n));
 
 // 3) 主动消息（user_inbox，agent 主动发的）必须进侧栏「最新消息」，否则面板有、侧栏没有。
 const latest = latestMessageByAgent({ serverBody: { messages: [

@@ -248,7 +248,7 @@ export const chatTranslations = {
   'chat.latest': ['回到最新', 'Jump to latest'],
   'chat.statusWorking': ['工作中', 'Working'],
   // 侧栏第二行:这条是 agent 当前在做的事(hub session.task),不是一条消息 —— 前缀区分开,别让人以为消息没到。
-  'chat.statusDoing': ['在做：{text}', 'Doing: {text}'],
+  'chat.taskPreview': ['任务：{text}', 'Task: {text}'],
   'chat.statusOffline': ['离线', 'Offline'],
   'chat.statusOnline': ['在线', 'Online'],
   'chat.messagePlaceholder': ['发消息给 {alias}…', 'Message {alias}…'],

@@ -176,6 +176,10 @@ export interface AgentRowModel {
   time: string;
   /** Which event `preview` / `time` describe (null ⇒ no activity data; no time). */
   source: ActivitySource;
+  /** 这行的第二行画的是 hub 的 session.task(agent 在做的事),不是一条消息 —— 渲染时要标出来,
+   *  否则状态一变看起来就像「来了新消息但聊天面板没显示」(2026-11-20)。`source` 只在有时间时非空,
+   *  这个字段与时间无关。 */
+  showingTask: boolean;
   /** ms of that event (0 when unknown) — the value `sortByActivity` orders by. */
   activityAt: number;
   pinned: boolean;
@@ -218,6 +222,7 @@ export function agentRowModel(
     preview: act.preview,
     time: act.at ? formatRowTime(act.at, opts.nowMs) : '',
     source: act.source,
+    showingTask: !opts.latest?.text && !!previewText(session.task),
     activityAt: act.at,
     pinned: !!opts.pinned,
   };
