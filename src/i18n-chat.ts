@@ -198,6 +198,9 @@ export const chatTranslations = {
   'chat.closeFullEditor': ['收起全屏编辑', 'Close full-screen editor'],
   'chat.closeInfo': ['关闭聊天信息', 'Close chat info'],
   'chat.nodeInfo': ['查看节点信息:{alias}', 'View node info: {alias}'],
+  // #4863 行已经有 detail(路径/未归属),标签本身也要能翻译 —— 之前没这一条,Row() 的
+  // t('chat.info.'+key) 找不到键,admin 2026-11-20 截图里这一行直接显示原始键名 "chat.info.department"。
+  'chat.info.department': ['所属部门', 'Department'],
   'chat.info.search': ['查找聊天内容', 'Search chat'],
   'chat.info.btw': ['BTW 旁路提问', 'BTW side question'],
   'chat.info.pin': ['置顶聊天', 'Pin chat'],

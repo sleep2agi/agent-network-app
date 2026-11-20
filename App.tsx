@@ -893,20 +893,29 @@ function AppRoot() {
 
   if (settingsWindow && cfg && screen.name !== 'login') {
     return (
-      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]} testID="dedicated-settings-window">
+      // admin 2026-11-20「这个设置弹窗…跟主主题根本不一样」：这是独立的原生窗口,不在
+      // DesktopWorkspace.content 里,没被 588fade1 的 GlassContent 罩到 —— SafeAreaView 和
+      // SettingsScreen 各自的根容器都铺了一层不透明 colors.bg,把 WindowGlowRoot 的整窗渐变
+      // 完全盖死,所以看着像一块纯色的原生系统设置,跟主窗口的暖桃/淡紫蓝渐变脱节。
+      // 做法跟主窗口一致:这层让出透明底,GlassContent 把 SettingsScreen 内部同样刷 colors.bg /
+      // colors.listBg 的根容器也挖透明,渐变才能从最外层透上来;分组卡片(colors.card /
+      // colors.groupedRow)不受影响,看着还是清楚的卡片。
+      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset, { backgroundColor: 'transparent' }]} testID="dedicated-settings-window">
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
-        <SettingsScreen
-          key={settingsViewKey}
-          cfg={cfg}
-          // 独立设置窗不传 onClose:关窗走窗口自己的标题栏(Windows 原生 ×、macOS 红灯),
-          // 侧栏左上角再画一个 ✕ 就是第二个关闭键(Vincent 2026-09-29「怎么有两个×」)。
-          onLogout={removeActiveProfile}
-          onLocalDataDeleted={finishLocalDataDeletion}
-          onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
-          onSwitchProfile={activateProfile}
-          onReauthProfile={requestProfileReauth}
-          onProfileEdited={reloadEditedProfile}
-        />
+        <GlassContent style={{ flex: 1 }}>
+          <SettingsScreen
+            key={settingsViewKey}
+            cfg={cfg}
+            // 独立设置窗不传 onClose:关窗走窗口自己的标题栏(Windows 原生 ×、macOS 红灯),
+            // 侧栏左上角再画一个 ✕ 就是第二个关闭键(Vincent 2026-09-29「怎么有两个×」)。
+            onLogout={removeActiveProfile}
+            onLocalDataDeleted={finishLocalDataDeletion}
+            onAddAccount={() => { setReauthProfile(null); setScreen({ name: 'login' }); }}
+            onSwitchProfile={activateProfile}
+            onReauthProfile={requestProfileReauth}
+            onProfileEdited={reloadEditedProfile}
+          />
+        </GlassContent>
       </SafeAreaView>
     );
   }
