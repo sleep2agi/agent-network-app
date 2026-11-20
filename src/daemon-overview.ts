@@ -149,6 +149,9 @@ export const RUNTIME_GUIDE: Record<string, RuntimeGuide> = {
   'grok-build-acp': { labelKey: 'daemon.overview.runtime.grok-build-acp', install: null, login: 'grok login', docsUrl: ANET_RUNTIME_DOCS },
   'grok-build-cli': { labelKey: 'daemon.overview.runtime.grok-build-cli', install: null, login: 'grok login', docsUrl: ANET_RUNTIME_DOCS },
   'opencode-cli': { labelKey: 'daemon.overview.runtime.opencode-cli', install: 'npm install -g opencode-ai', login: 'anet opencode auth-login', docsUrl: ANET_RUNTIME_DOCS },
+  // 2026-11-20 — agy 之前完全没进这张表：节点概览里既没有安装也没有登录指引。
+  // 版本钉 1.5.13（验收版本），登录是 `agy acp --login`（SSH 下会打印授权 URL + 接受粘贴 code）。
+  'antigravity-acp': { labelKey: 'daemon.overview.runtime.antigravity-acp', install: 'curl -fsSL https://antigravity.google/cli/install.sh | bash', login: 'agy acp --login', docsUrl: ANET_RUNTIME_DOCS },
 };
 
 const RUNTIME_ORDER = Object.keys(RUNTIME_GUIDE);
