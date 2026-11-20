@@ -362,6 +362,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // i18n-allow: legacy sender fallback participates in quote/forward identity, not translatable UI.
   const [currentUsername, setCurrentUsername] = useState('我');
   const [loaded, setLoaded] = useState(false);
+  // admin 2026-11-20 截图：会话打开后骨架一直不消（首屏读没回来，poll 在非前台时根本不跑）。
+  // 8 秒还没 loaded 就给一个可点的重试，不再干等。
+  const [loadStalled, setLoadStalled] = useState(false);
   const [conversationReady, setConversationReady] = useState(false);
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
@@ -769,6 +772,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       requestGate.close(token);
     };
   }, [load, alias, conversationKeyFor]);
+
+  // 首屏 8 秒没画出来 → 显示「重试」（轮询在非前台/刚唤醒时不跑，手动重试必须能救回来）。
+  useEffect(() => {
+    if (loaded) { setLoadStalled(false); return; }
+    const timer = setTimeout(() => setLoadStalled(true), 8000);
+    return () => clearTimeout(timer);
+  }, [loaded, alias]);
 
   // #518: echoes follow the outbox. Another ChatScreen instance (before a remount / a sidebar switch)
   // may finish the send that owns an echo shown here; re-derive 发送中 / 已送达 / 未送达 when it does.
@@ -2770,6 +2780,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           {[0.62, 0.44, 0.7, 0.36, 0.55].map((w, i) => (
             <View key={i} style={[styles.skeletonBubble, { width: bubbleCap ? Math.round(w * bubbleCap.maxWidth) : `${Math.round(w * 100)}%`, alignSelf: i % 2 ? 'flex-end' : 'flex-start' }]} />
           ))}
+          {loadStalled ? (
+            <Pressable
+              testID="chat-load-retry"
+              accessibilityRole="button"
+              onPress={() => { setLoadStalled(false); void load(limitRef.current); }}
+              style={({ pressed }) => [styles.loadRetry, pressed && { opacity: 0.7 }]}
+            >
+              <Text style={styles.loadRetryText}>{t('chat.loadStalledRetry')}</Text>
+            </Pressable>
+          ) : null}
         </View>
       ) : (
         <FlatList
@@ -3624,6 +3644,8 @@ const makeStyles = (B = bubbleLayout()) =>
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   historySkeleton: { flex: 1, justifyContent: 'flex-end', padding: spacing.lg, gap: spacing.md },
   skeletonBubble: { height: 36, borderRadius: radius.surface, backgroundColor: colors.subtleFill },
+  loadRetry: { alignSelf: 'center', marginTop: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
+  loadRetryText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   header: {
     flexDirection: 'row',
     alignItems: 'center',
