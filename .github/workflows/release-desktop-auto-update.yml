@@ -614,6 +614,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.575:
+            - 独立设置窗口现在也透出和主窗口一样的整窗渐变，不再是单独一块原生系统设置的样子。
+            - 聊天信息面板「所属部门」这一行补上了翻译，不会再显示成一串内部键名。
+            - 整窗光晕统一成暖黄色调，去掉了右下角的冷蓝。
+
             What's new in 0.2.574:
             - 手机输入框的「＋」第一次会提示「点「＋」可以发图片和文件」，点一下或开始输入就不再出现；深色模式下「已送达」「等待对方开始」这类小字更清楚了。
             - 长名称不再被硬切：会话列表、人员、群名和聊天页头的名字超出宽度时显示省略号，桌面把鼠标停上去能看到完整名字。
