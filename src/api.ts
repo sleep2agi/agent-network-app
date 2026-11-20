@@ -2014,6 +2014,17 @@ export type RulesFileOutcome =
   | RulesFileResult
   | { ok: false; error: string; unsupported?: true; transient?: boolean };
 
+/** 2026-11-20 — agy 登录（设计稿 handoff/agy-login-channel-design.md）。三个 hub MCP 工具：
+ *  start_agy_login / submit_agy_login_code / get_rules_file_result。仅用户令牌可用。 */
+export const startAgyLogin = (cfg: HubConfig, nodeId?: string, alias?: string) =>
+  callHubTool(cfg, 'start_agy_login', { ...(nodeId ? { node_id: nodeId } : {}), ...(alias ? { alias } : {}), ...(cfg.networkId ? { network_id: cfg.networkId } : {}) });
+
+export const submitAgyLoginCode = (cfg: HubConfig, requestId: string, loginId: string, code: string) =>
+  callHubTool(cfg, 'submit_agy_login_code', { request_id: requestId, login_id: loginId, code, ...(cfg.networkId ? { network_id: cfg.networkId } : {}) });
+
+export const fetchAgyLoginResult = (cfg: HubConfig, requestId: string) =>
+  callHubTool(cfg, 'get_rules_file_result', { request_id: requestId, ...(cfg.networkId ? { network_id: cfg.networkId } : {}) });
+
 const callHubTool = async (cfg: HubConfig, name: string, args: Record<string, unknown>): Promise<
   | { kind: 'payload'; payload: any }
   | { kind: 'unsupported'; error: string }

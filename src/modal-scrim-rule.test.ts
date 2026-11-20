@@ -115,7 +115,8 @@ for (const f of files) {
 // 2026-10-02 +1:OrgChart 手机「成员与部门」全屏页(避让层里只有页面,底部面板和它的遮罩画在避让层外面)。
 // 2026-10-08 +1:AgentTeams 手机「Agent 组织」全屏页(#766,同 OrgChart:底部面板和遮罩画在避让层外面)。
 // 个数变了 ⇒ 有人新加 / 删了带键盘避让的弹窗:先按上面三条过一遍,再改这个数。
-const EXPECTED_AVOIDERS = 11;
+// 2026-11-20 — agy 登录弹层（AgyLoginCard）有输入框，包了 ModalKeyboardAvoider → 12 处。
+const EXPECTED_AVOIDERS = 12;
 ck(`取集:src 下 <ModalKeyboardAvoider> 共 ${avoiders} 处(审过的是 ${EXPECTED_AVOIDERS})`, avoiders === EXPECTED_AVOIDERS);
 ck(`遮罩都画在避让层外面${bad.length ? ` —— ${bad.join('; ')}` : ''}`, bad.length === 0);
 

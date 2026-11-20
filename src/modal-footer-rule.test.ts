@@ -35,6 +35,7 @@ type Kind = 'dialog' | 'sheet' | 'menu' | 'fullscreen' | 'drawer' | 'frame';
 type Keyboard = 'avoider' | `followup: ${string}` | `n/a: ${string}`;
 const AUDIT: Record<string, { count: number; kinds: Kind[]; input?: boolean; keyboard?: Keyboard; note: string }> = {
   'DialogFrame.tsx': { count: 1, kinds: ['frame'], keyboard: 'avoider', input: true, note: '规则本体' },
+  'AgyLoginCard.tsx': { count: 1, kinds: ['dialog'], keyboard: 'avoider', input: true, note: 'agy 登录弹层(2026-11-20):居中卡片,内容固定(链接 + 一行授权码 + 两个按钮),用 ModalKeyboardAvoider 避免键盘顶住输入框;安全区四边由 useModalSafePadding(fullScreen) 补' },
   'RemoveSheet.tsx': { count: 1, kinds: ['sheet'], note: '手机「移出网络」「删除分组」确认:固定内容的底部 sheet(说明 + 两个按钮),不需要滚动(#417 从 UserManagementPanel 挪出来)' },
   'TaskCreateDialog.tsx': { count: 1, kinds: ['dialog', 'sheet'], keyboard: 'avoider', input: true, note: '面板 maxHeight 100% / 92%,表单 ScrollView 可收缩(本次 BUG 修复)' },
   'AccountRowActions.tsx': { count: 2, kinds: ['menu', 'sheet'], keyboard: 'n/a: 两个 <Modal 都没有输入框(桌面 ⋯ 锚定菜单 / 手机账号 ⋯ 底部动作面板,固定几行);文件里的 TextInput 在编辑弹窗里,编辑弹窗是 DialogFrame(自带键盘避让)', note: '⋯ 菜单高度按条目数算、夹进窗口(#427);动作面板高度由固定行数决定,取消在最底;编辑走 DialogFrame' },
