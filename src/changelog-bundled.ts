@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.581:",
+  "- 打开会话时如果首屏一直没加载出来（窗口不在前台或读取失败），骨架下方会在 8 秒后出现「加载有点慢，点一下重试」，点一下即可立即重试，不用切会话碰运气。",
+  "",
   "What's new in 0.2.580:",
   "- 整窗渐变重做：手机上把两处暖色光斑烘焙成一张整窗图（和桌面同构图），设置子页（关于/账号/通知/外观/语音/快捷键等）全部接上渐变，标题栏不再是一条实色带。",
   "- Antigravity（agy）模型列表换成 27 个真实可用模型（Gemini 4 系列 / Claude 5.5 / gpt-oss，含各思考档位），模型真正会切换生效。",
