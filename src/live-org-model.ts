@@ -66,7 +66,7 @@ export function packClusters(sizes: readonly { id: string; r: number }[], width:
   return out;
 }
 
-export function buildClusters(depts: readonly LiveDept[], agents: readonly LiveAgent[], root: string | null, width: number, height: number, labels: { unassigned: string; direct: string }): Cluster[] {
+export function buildClusters(depts: readonly LiveDept[], agents: readonly LiveAgent[], root: string | null, width: number, height: number, labels: { unassigned: string; direct: string }, radiusBoost = 0): Cluster[] {
   const byId = new Map(depts.map(d => [d.id, d]));
   const hues = hueTable(depts);
   const groups = new Map<string, LiveAgent[]>();
@@ -77,7 +77,8 @@ export function buildClusters(depts: readonly LiveDept[], agents: readonly LiveA
   }
   // 当前层级下没有人的子部门也画一个小簇，别让结构凭空消失。
   for (const d of depts) if (d.parent_id === root && !groups.has(d.id)) groups.set(d.id, []);
-  const sizes = [...groups.entries()].map(([id, list]) => ({ id, r: 22 + Math.sqrt(Math.max(1, list.length)) * 11 }));
+  // radiusBoost：手机上簇和点是可点目标，太小时既不好看也不好点（桌面默认 0，行为不变）。
+  const sizes = [...groups.entries()].map(([id, list]) => ({ id, r: 22 + radiusBoost + Math.sqrt(Math.max(1, list.length)) * 11 }));
   const pos = packClusters(sizes, width, height);
   return [...groups.entries()].map(([id, list]) => {
     const p = pos.get(id)!;
@@ -161,4 +162,25 @@ export function clusterTintHex(hue: number, dark: boolean, lift = 0): string {
 /** 呼吸：有 agent 在跑的簇才动，3 秒一轮，半径最多 ±2%。phase ∈ [0,1)。 */
 export function breathRadius(r: number, phase: number): number {
   return r * (1 + 0.02 * Math.sin(phase * Math.PI * 2));
+}
+
+/**
+ * 原生窄屏：把摆好的簇整体放大/居中到画布的 88%（packClusters 的放大上限 2.2 在竖屏上偏小，
+ * 簇会挤在上半屏）。纯几何，不改 hue/agents。
+ */
+export function fitClustersToCanvas<T extends { x: number; y: number; r: number }>(items: readonly T[], width: number, height: number, fill = 0.88): T[] {
+  if (!items.length || width <= 0 || height <= 0) return [...items];
+  const minX = Math.min(...items.map(c => c.x - c.r));
+  const maxX = Math.max(...items.map(c => c.x + c.r));
+  const minY = Math.min(...items.map(c => c.y - c.r - 8));
+  const maxY = Math.max(...items.map(c => c.y + c.r + 18));
+  const spanX = Math.max(1, maxX - minX), spanY = Math.max(1, maxY - minY);
+  const k = Math.min(2.4, (width * fill) / spanX, (height * fill) / spanY);
+  const cx = (minX + maxX) / 2, cy = (minY + maxY) / 2;
+  return items.map(c => ({
+    ...c,
+    x: width / 2 + (c.x - cx) * k,
+    y: height / 2 + (c.y - cy) * k,
+    r: c.r * k,
+  }));
 }

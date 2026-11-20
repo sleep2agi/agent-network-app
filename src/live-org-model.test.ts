@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildClusters, buildEdges, breathRadius, bucketOf, clusterTintHex, CORE, deptHue, hueTable, packClusters, UNASSIGNED, type LiveAgent, type LiveDept } from './live-org-model';
+import { buildClusters, buildEdges, breathRadius, bucketOf, clusterTintHex, CORE, deptHue, fitClustersToCanvas, hueTable, packClusters, UNASSIGNED, type LiveAgent, type LiveDept } from './live-org-model';
 
 const depts: LiveDept[] = [
   { id: 'tmai', name: 'TMAI', parent_id: null, sort: 0 },
@@ -73,4 +73,18 @@ console.log('live-org-model: ok');
   assert.ok(Math.abs(breathRadius(50, 0) - 50) < 0.001 && Math.abs(breathRadius(50, 0.5) - 50) < 0.001, '呼吸：0 与半周期回到原半径');
   assert.ok(Math.abs(breathRadius(50, 0.25) - 51) < 0.01 && Math.abs(breathRadius(50, 0.75) - 49) < 0.01, '呼吸：最大偏移 ±2%');
   console.log('live-org-model native tint/breath: ok');
+}
+
+// ── 原生窄屏：簇放大居中 ──
+{
+  const items = [{ x: 100, y: 100, r: 20 }, { x: 200, y: 100, r: 20 }];
+  const fitted = fitClustersToCanvas(items, 400, 800, 0.88);
+  const minX = Math.min(...fitted.map(c => c.x - c.r));
+  const maxX = Math.max(...fitted.map(c => c.x + c.r));
+  assert.ok(minX >= 0 && maxX <= 400, '放大后仍在画布内');
+  assert.ok(Math.abs((minX + maxX) / 2 - 200) < 1, '水平居中');
+  const cy = fitted.reduce((s, c) => s + c.y, 0) / fitted.length;
+  assert.ok(Math.abs(cy - 400) < 30, '垂直大致居中');
+  assert.deepEqual(fitClustersToCanvas([], 400, 800), [], '空输入不炸');
+  console.log('live-org-model fit: ok');
 }

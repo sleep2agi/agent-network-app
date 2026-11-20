@@ -14,7 +14,7 @@ import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 import { Text } from './ui-text';
 import { fetchScopedStatus, fetchTasks, type HubConfig, type HubTask } from './api';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
-import { buildClusters, buildEdges, breathRadius, clusterTintHex, corePosition, edgeEnds, dotPositions, dotRadius, CORE, UNASSIGNED, type Cluster, type LiveAgent } from './live-org-model';
+import { buildClusters, buildEdges, breathRadius, clusterTintHex, corePosition, edgeEnds, fitClustersToCanvas, dotPositions, dotRadius, CORE, UNASSIGNED, type Cluster, type LiveAgent } from './live-org-model';
 import { colors, radius, spacing, themeMode, type as typeScale, weight } from './theme';
 
 const WINDOW_MS = 10 * 60_000;
@@ -61,7 +61,7 @@ export default function LiveOrgMapNative(p: {
   }), [p.placed, status]);
 
   const W = size.w, H = Math.max(0, size.h);
-  const clusters = useMemo(() => (W > 0 && H > 0 ? buildClusters(p.data.departments, agents, root, W, H, { unassigned: '未归属', direct: '直属' }) : []), [p.data.departments, agents, root, W, H]);
+  const clusters = useMemo(() => (W > 0 && H > 0 ? fitClustersToCanvas(buildClusters(p.data.departments, agents, root, W, H, { unassigned: '未归属', direct: '直属' }, 12), W, H) : []), [p.data.departments, agents, root, W, H]);
   const flow = useMemo(() => buildEdges(tasks, clusters, now, WINDOW_MS, TASK_LIMIT), [tasks, clusters, now]);
   const online = agents.filter(a => a.online).length;
   const dark = themeMode() === 'dark';
