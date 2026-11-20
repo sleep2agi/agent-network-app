@@ -1,6 +1,27 @@
 export type SecretScope = { networkId: string; daemonId: string | null; nodeId: string | null };
+/** #4827 —— agent 举手的待填密钥（hub 的 list 响应里 `pending`；30 分钟 TTL）。 */
+export type PendingSecretRequest = { key: string; label?: string; requested_at?: string; by_node_id?: string };
 export type SecretSnapshot = { network_id: string; daemon_node_id: string | null; node_id: string | null;
-  revision: number; activation: 'next_start'; keys: { key: string; source: 'daemon' | 'node' }[] };
+  revision: number; activation: 'next_start'; keys: { key: string; source: 'daemon' | 'node' }[];
+  /** 只来自 list 调用；写操作后可能仍是上一拍的值（下一次刷新会更新）。 */
+  pending?: PendingSecretRequest[] };
+
+/** 只收形状对的行，最多 8 条；坏行丢弃而不是整份拒绝。 */
+export function normalizePendingSecretRequests(v: unknown): PendingSecretRequest[] | undefined {
+  if (!Array.isArray(v)) return undefined;
+  const out: PendingSecretRequest[] = [];
+  for (const row of v) {
+    if (!row || typeof row !== 'object') continue;
+    const r = row as Record<string, unknown>;
+    const key = typeof r.key === 'string' ? r.key.trim() : '';
+    if (!/^[A-Z_][A-Z0-9_]{0,127}$/.test(key)) continue;
+    out.push({ key, ...(typeof r.label === 'string' && r.label ? { label: r.label } : {}),
+      ...(typeof r.requested_at === 'string' ? { requested_at: r.requested_at } : {}),
+      ...(typeof r.by_node_id === 'string' ? { by_node_id: r.by_node_id } : {}) });
+    if (out.length >= 8) break;
+  }
+  return out.length ? out : undefined;
+}
 export type SecretResult = { kind: 'ready'; snapshot: SecretSnapshot } | { kind: 'unconfirmed' | 'cancelled' | 'forbidden' | 'unsupported' | 'invalid' };
 export type SecretWrite = { action: 'put' | 'delete'; key: string; value?: string; revision: number };
 // Only known release versions preflight here; custom/unknown builds still use Hub capability readback.
@@ -54,7 +75,8 @@ export async function manageSecrets(scope: SecretScope, rpc: Rpc, signal: AbortS
         if (!snapshot || (write && (snapshot.revision !== write.revision+1
           || (write.action==='put' && !snapshot.keys.some(k=>k.key===write.key&&owns(k.source)))
           || (write.action==='delete' && snapshot.keys.some(k=>k.key===write.key&&owns(k.source)))))) return {kind:'unconfirmed'};
-        return {kind:'ready',snapshot};
+        const pending = normalizePendingSecretRequests((request as any)?.pending);
+        return {kind:'ready',snapshot: pending ? { ...snapshot, pending } : snapshot};
       }
       if (r.status!=='pending') return {kind:'unconfirmed'};
       await new Promise<void>(resolve=>{
