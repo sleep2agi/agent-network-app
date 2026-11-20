@@ -213,6 +213,14 @@ type LoadState =
   | { kind: 'not_found' } // alias no longer in the fleet
   | { kind: 'error' };    // fetch itself failed (network / auth / server)
 
+/** 2026-11-20 — agy 登录能力：daemon 报在 config_snapshot 里；两种投影都认（列表/详情/会话）。 */
+function agyLoginCapable(node: any, session: any): boolean {
+  return node?.agy_login_capable === true
+    || node?.config_snapshot?.agy_login_capable === true
+    || session?.agy_login_capable === true
+    || session?.config_snapshot?.agy_login_capable === true;
+}
+
 export default function NodeDetailScreen({
   cfg,
   alias,
@@ -862,8 +870,8 @@ export default function NodeDetailScreen({
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
         {node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} runtimeVersion={s.version} /> : null}
         {/* 2026-11-20 — agy 登录：只在节点上报 agy_login_capable 时出现；否则继续用概览页的「复制命令」卡片。 */}
-        {node?.runtime === 'antigravity-acp' && (s as any)?.config_snapshot?.agy_login_capable === true ? (
-          <AgyLoginCard cfg={cfg} alias={s.alias} />
+        {node?.runtime === 'antigravity-acp' && agyLoginCapable(node, s) ? (
+          <AgyLoginCard cfg={cfg} alias={s.alias} onDone={() => { void load(); }} />
         ) : null}
         {node && daemonProviderNodeRuntime(node.runtime) ? (
           <NodeDaemonProviderSection cfg={cfg} node={node} onManageBinding={() => setActiveSection('overview')} />
