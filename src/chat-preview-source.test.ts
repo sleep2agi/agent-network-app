@@ -15,18 +15,19 @@ const now = Date.parse('2026-11-20T07:00:00Z');
 const withMsg = agentRowModel({ alias: 'A', status: 'working', task: '在做某件事' }, { latest: { at: now, text: '新消息' }, taskAt: now - 1000 });
 ck('有消息时预览取消息、来源 message', withMsg.preview === '新消息' && withMsg.source === 'message', withMsg);
 const taskOnly = agentRowModel({ alias: 'A', status: 'working', task: '在做某件事' }, { taskAt: now });
-ck('没消息时退回任务文本、来源 task', taskOnly.preview === '在做某件事' && taskOnly.source === 'task', taskOnly);
+ck('没消息时不回传 session.task 正文（来源仍标 task）', taskOnly.preview === '' && taskOnly.source === 'task' && taskOnly.showingTask === true, taskOnly);
 const taskNoTime = agentRowModel({ alias: 'A', status: 'working', task: '在做某件事' });
-ck('任务文本但没有时间时来源 null（仍显示文本）', taskNoTime.preview === '在做某件事' && taskNoTime.source === null, taskNoTime);
-ck('来源有没有时间都要标成「在做」', taskNoTime.showingTask === true && taskOnly.showingTask === true, taskNoTime);
+ck('任务没有时间时来源 null，正文同样不回传', taskNoTime.preview === '' && taskNoTime.source === null && taskNoTime.showingTask === true, taskNoTime);
 ck('有消息时不算「在做」', withMsg.showingTask === false, withMsg);
 
 // 2) 渲染层：任务来源要加「任务：」前缀（手机行 + 桌面紧凑行）。
 const screen = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
-ck('手机行按来源区分渲染', /model\.showingTask \? t\('chat\.taskPreview'/.test(screen));
-ck('桌面紧凑行同样加前缀', /t\('chat\.taskPreview', \{ text: item\.task \}\)/.test(screen));
+ck('手机行不再画 session.task 正文', !/showingTask \?/.test(screen) && /\{model\.preview\}/.test(screen) && !/'chat\.taskPreview'/.test(screen));
+ck('桌面紧凑行只画状态词', /rowStatus\(item\.status\)\.label/.test(screen) && !/text: item\.task/.test(screen));
 const i18n = readFileSync(new URL('./i18n-chat.ts', import.meta.url), 'utf8');
-ck('文案存在', /'chat\.taskPreview': \['任务：\{text\}'/.test(i18n));
+ck('「任务：{text}」文案已移除', !/'chat\.taskPreview'/.test(i18n));
+const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
+ck('节点详情也不渲染 s.task 正文', !/selectable>\{s\.task\}</.test(detail) && /node-task-hidden/.test(detail));
 
 // 3) 主动消息（user_inbox，agent 主动发的）必须进侧栏「最新消息」，否则面板有、侧栏没有。
 const latest = latestMessageByAgent({ serverBody: { messages: [

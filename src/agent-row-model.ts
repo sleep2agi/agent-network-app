@@ -200,8 +200,11 @@ export function rowActivity(
   taskAt = 0,
 ): { preview: string; source: ActivitySource; at: number } {
   if (latest?.text) return { preview: latest.text, source: 'message', at: latest.at };
+  // 2026-11-20（负责人定）：session.task 是节点**自己上报**的当前任务/进度，协同时甚至
+  // 就是本机 TUI 里打的提示词 —— 别的用户不该看到正文。这里只保留「这条活动的来源与时间」，
+  // 正文一律不回传（行上只画状态词，如「工作中」）。
   const task = previewText(session.task);
-  if (task) return { preview: task, source: taskAt > 0 ? 'task' : null, at: taskAt > 0 ? taskAt : 0 };
+  if (task) return { preview: '', source: taskAt > 0 ? 'task' : null, at: taskAt > 0 ? taskAt : 0 };
   if (latest) return { preview: '', source: 'message', at: latest.at };
   return { preview: '', source: null, at: 0 };
 }
