@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { buildClusters, buildEdges, bucketOf, CORE, deptHue, hueTable, packClusters, UNASSIGNED, type LiveAgent, type LiveDept } from './live-org-model';
+import { buildClusters, buildEdges, breathRadius, bucketOf, clusterTintHex, CORE, deptHue, hueTable, packClusters, UNASSIGNED, type LiveAgent, type LiveDept } from './live-org-model';
 
 const depts: LiveDept[] = [
   { id: 'tmai', name: 'TMAI', parent_id: null, sort: 0 },
@@ -62,4 +62,15 @@ console.log('live-org-model: ok');
   const e = edgeEnds({ x: 0, y: 0, r: 10 }, { x: 100, y: 0, r: 20 });
   assert.equal(e.x1, 13); assert.equal(e.x2, 77);
   console.log('live-org-model edges: ok');
+}
+
+// ── 原生版共用：色簇颜色 + 呼吸（2026-11-20 安卓组织图）──
+{
+  assert.ok(clusterTintHex(210, true).includes('64%') && clusterTintHex(210, false).includes('50%'), '色簇：深色比浅色亮');
+  assert.equal(clusterTintHex(-1, true), '#8b8b95', '色簇：未归属用灰');
+  assert.equal(clusterTintHex(-1, false), '#8b8b95', '色簇：未归属用灰（浅色）');
+  assert.ok(clusterTintHex(30, true, 99).includes('92%') && clusterTintHex(30, false, 99).includes('78%'), '色簇：lift 有上限');
+  assert.ok(Math.abs(breathRadius(50, 0) - 50) < 0.001 && Math.abs(breathRadius(50, 0.5) - 50) < 0.001, '呼吸：0 与半周期回到原半径');
+  assert.ok(Math.abs(breathRadius(50, 0.25) - 51) < 0.01 && Math.abs(breathRadius(50, 0.75) - 49) < 0.01, '呼吸：最大偏移 ±2%');
+  console.log('live-org-model native tint/breath: ok');
 }

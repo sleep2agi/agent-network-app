@@ -148,3 +148,17 @@ export function dotPositions(n: number, r: number): { x: number; y: number }[] {
   }
   return out;
 }
+
+// ── 原生（安卓/折叠屏）版共用的小几何：颜色与呼吸 ────────────────────────────
+// 与桌面 LiveOrgMap 的 tint/动效口径一致；放在纯函数文件里方便单测（不引 react-native）。
+
+/** 部门色簇：hue → 深浅各一档颜色；hue < 0（未归属）用灰色。 */
+export function clusterTintHex(hue: number, dark: boolean, lift = 0): string {
+  if (hue < 0) return '#8b8b95';
+  return dark ? `hsl(${hue} 88% ${Math.min(92, 64 + lift)}%)` : `hsl(${hue} 62% ${Math.min(78, 50 + lift)}%)`;
+}
+
+/** 呼吸：有 agent 在跑的簇才动，3 秒一轮，半径最多 ±2%。phase ∈ [0,1)。 */
+export function breathRadius(r: number, phase: number): number {
+  return r * (1 + 0.02 * Math.sin(phase * Math.PI * 2));
+}
