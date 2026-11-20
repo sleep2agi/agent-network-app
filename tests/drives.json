@@ -632,6 +632,10 @@
     "task-tag-collapse/drive.mjs": {
       "kind": "stub",
       "secs": 30
+    },
+    "test-dark-contrast/drive.mjs": {
+      "kind": "stub",
+      "secs": 40
     }
   }
 }
