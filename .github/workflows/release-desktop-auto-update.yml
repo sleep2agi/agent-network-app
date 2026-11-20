@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.577:
+            - 折叠屏/平板宽度（≥700dp）下，安卓组织图现在带右侧详情栏：当前部门的 agent 列表（在线/离线）和最近派活一眼看到；窄屏（<700dp）还是单屏聚焦簇图，没有变化。
+
             What's new in 0.2.576:
             - 手机（安卓和折叠屏）也能看到和电脑一样的整窗暖黄渐变了：左上和右下各一团暖光，中间留白，不再是纯黑/纯白底。
             - 安卓和折叠屏的组织页换成「活的组织图」：部门是一团团的簇、agent 是一个个点，谁在跑一眼看到，近 10 分钟谁给谁派活用曲线连起来；点部门钻进去看下一层，点 agent 直接进聊天。
