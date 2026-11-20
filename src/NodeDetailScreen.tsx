@@ -88,6 +88,7 @@ import { nodeIdentityNotice, taskSectionTitle } from './node-identity';
 import NodeRulesSection from './NodeRulesSection';
 import { rulesFileTarget } from './node-rules';
 import NodeModelSection from './NodeModelSection';
+import AgyLoginCard from './AgyLoginCard';
 import NodeCodexExecutionSection from './NodeCodexExecutionSection';
 import NodeCodexReasoningSection from './NodeCodexReasoningSection';
 import { NodeCodexProviderSection } from './CodexProviderFields';
@@ -860,6 +861,10 @@ export default function NodeDetailScreen({
         ) : null}
         {/* RFC-024 —— 不经 LLM 直接改模型;需要权威 node_id。 */}
         {node && !daemonProviderNodeRuntime(node.runtime) ? <NodeModelSection cfg={cfg} node={node} runtimeVersion={s.version} /> : null}
+        {/* 2026-11-20 — agy 登录：只在节点上报 agy_login_capable 时出现；否则继续用概览页的「复制命令」卡片。 */}
+        {node?.runtime === 'antigravity-acp' && (s as any)?.config_snapshot?.agy_login_capable === true ? (
+          <AgyLoginCard cfg={cfg} alias={s.alias} />
+        ) : null}
         {node && daemonProviderNodeRuntime(node.runtime) ? (
           <NodeDaemonProviderSection cfg={cfg} node={node} onManageBinding={() => setActiveSection('overview')} />
         ) : null}
