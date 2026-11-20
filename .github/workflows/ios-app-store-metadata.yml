@@ -58,6 +58,9 @@ jobs:
     steps:
       # #2097 回归门：本文件**不得**再出现凭据型 dispatch 输入，也不得在 dry-run 回显 notes。
       # 放在第一步，万一有人改回来，这次 dispatch 会立刻红，而不是等安全审计发现。
+      # 注意：guard 依赖仓库内的 scripts/…，必须先 checkout，否则 runner 上找不到文件，
+      # 每次 dispatch 都会在第一步就红（提审链因此从 2026-10-25 起一直没跑通）。
+      - uses: actions/checkout@v4
       - name: Guard — no credential-bearing dispatch inputs
         shell: bash
         run: node scripts/check-ios-metadata-no-credential-inputs.mjs
