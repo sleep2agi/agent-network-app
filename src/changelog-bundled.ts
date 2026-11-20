@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.576:",
+  "- 手机（安卓和折叠屏）也能看到和电脑一样的整窗暖黄渐变了：左上和右下各一团暖光，中间留白，不再是纯黑/纯白底。",
+  "- 安卓和折叠屏的组织页换成「活的组织图」：部门是一团团的簇、agent 是一个个点，谁在跑一眼看到，近 10 分钟谁给谁派活用曲线连起来；点部门钻进去看下一层，点 agent 直接进聊天。",
+  "- 组织图只在进入和钻取时轻轻呼吸一下，平时不动，不抢注意力。",
+  "",
   "What's new in 0.2.575:",
   "- 独立设置窗口现在也透出和主窗口一样的整窗渐变，不再是单独一块原生系统设置的样子。",
   "- 聊天信息面板「所属部门」这一行补上了翻译，不会再显示成一串内部键名。",
