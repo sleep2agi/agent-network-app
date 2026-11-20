@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.578:",
+  "- 新建节点时可以选择「Antigravity（ACP）」了：走 Google Antigravity CLI 的 ACP 模式，和 Grok 一样是正常运行时，不是实验性共存。",
+  "- 节点侧会检查 Antigravity CLI 的版本（验收版 1.5.13），不一致会直接说明原因，不让它自己偷偷升级；没装或版本不对时，向导里会显示「未检测/缺什么」。",
+  "- 已知限制（照实写）：这台机器没配 Google 账号也能跑，走的是 Antigravity 的免费额度 —— 免费额度是 Google 侧的策略，随时可能变；真出问题会在任务里报错（节点回报失败、日志有原因），不会卡住节点创建。要长期稳定用，仍建议先在节点机器上登录（登录入口还没做，下一版补）。",
+  "",
   "What's new in 0.2.577:",
   "- 折叠屏/平板宽度（≥700dp）下，安卓组织图现在带右侧详情栏：当前部门的 agent 列表（在线/离线）和最近派活一眼看到；窄屏（<700dp）还是单屏聚焦簇图，没有变化。",
   "",
