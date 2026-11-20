@@ -23,6 +23,7 @@ import {
   type HubConfig,
   type HubNode,
   type NodeConfigRead,
+  type OpenCodeCatalogPoll,
 } from './api';
 import { catalogErrorText, isOpenCodeV2Node, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
 import { nodeProviderDaemon } from './node-provider-target';
@@ -58,6 +59,23 @@ interface Props {
 
 const CATALOG_POLL_MS = 1000;
 const CATALOG_MAX_POLLS = 15;
+// #4976 —— 单次排队 / 单次轮询各自的上限。轮询本身最多 15 秒，这两个兜住「请求发出去
+// 但对端不返回 / 网络挂住」的情况：到点按 unavailable 落终态，而不是永远 loading。
+const CATALOG_QUEUE_TIMEOUT_MS = 8000;
+const CATALOG_POLL_TIMEOUT_MS = 6000;
+
+/** 超时或异常都返回 null（调用方统一落 unavailable），成功才给回真实结果。 */
+async function raceCatalogTimeout<T>(promise: Promise<T>, ms: number): Promise<T | null> {
+  let timer: ReturnType<typeof setTimeout> | null = null;
+  try {
+    return await Promise.race([
+      promise,
+      new Promise<null>(resolve => { timer = setTimeout(() => resolve(null), ms); }),
+    ]);
+  } finally {
+    if (timer) clearTimeout(timer);
+  }
+}
 /** 写后读回：心跳间隔内等 model_effective（约 6s）。 */
 const READBACK_POLLS = 4;
 const READBACK_POLL_MS = 1500;
@@ -79,6 +97,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     loading: true,
     error: null,
   });
+  // #4976 —— 终态是错误时必须能重来一次（超时/节点暂时没回），不要求用户关掉面板重开。
+  const [catalogAttempt, setCatalogAttempt] = useState(0);
   // undefined = 正在读；null = Hub 没这个接口/读失败；对象 = 真实读回。
   const [config, setConfig] = useState<NodeConfigRead | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -175,14 +195,24 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       return () => { live = false; };
     }
     void (async () => {
-      const queued = await queueOpenCodeCatalog(cfgRef.current, { nodeId: node.node_id, daemonNodeId });
+      // #4976 —— 面板不允许「永久转圈」：排队和每一次轮询都套一层超时，异常也归到
+      // 可读终态（节点清单没有 → unavailable 原因 + 重试入口），别让 UI 停在 loading。
+      let queued: OpenCodeCatalogPoll | null = null;
+      try {
+        queued = await raceCatalogTimeout(queueOpenCodeCatalog(cfgRef.current, { nodeId: node.node_id, daemonNodeId }), CATALOG_QUEUE_TIMEOUT_MS);
+      } catch { queued = null; }
       if (!live) return;
+      if (!queued) { failWith('unavailable'); return; }
       if (!queued.ok) { failWith(queued.error); return; }
       for (let i = 0; i < CATALOG_MAX_POLLS; i++) {
         await new Promise(resolve => setTimeout(resolve, CATALOG_POLL_MS));
         if (!live) return;
-        const polled = await pollOpenCodeCatalog(cfgRef.current, queued.request_id);
+        let polled: OpenCodeCatalogPoll | null = null;
+        try {
+          polled = await raceCatalogTimeout(pollOpenCodeCatalog(cfgRef.current, queued.request_id), CATALOG_POLL_TIMEOUT_MS);
+        } catch { polled = null; }
         if (!live) return;
+        if (!polled) { failWith('unavailable'); return; }
         if (!polled.ok) { failWith(polled.error); return; }
         if (polled.status === 'ready') {
           // #4610：快照优先（更新鲜），但快照没给档位的模型用 Hub 自报的档位补上 ——
@@ -195,7 +225,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       if (live) failWith('unavailable');
     })();
     return () => { live = false; };
-  }, [node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, (node?.opencode_catalog ?? []).join('|'), (node?.opencode_catalog_variants ?? []).join('|'), cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
+  }, [catalogAttempt, node?.node_id, node?.runtime, node?.lifecycle_daemon_node_id, node?.adoption?.status, node?.adoption?.daemon_node_id, (node?.opencode_catalog ?? []).join('|'), (node?.opencode_catalog_variants ?? []).join('|'), cfg.serverUrl, cfg.networkId, cfg.profileId, cfg.token]);
 
   const view = paletteView({
     snapshot: catalog.snapshot,
@@ -555,6 +585,14 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       {view.status === 'error' ? (
         <View style={styles.errorBox} testID="model-palette-error">
           <Text style={styles.errorText}>{view.errorText}</Text>
+          <Pressable
+            testID="model-palette-retry"
+            accessibilityRole="button"
+            onPress={() => setCatalogAttempt(n => n + 1)}
+            style={styles.retryButton}
+          >
+            <Text style={styles.retryLabel}>{t('chat.modelPicker.retry')}</Text>
+          </Pressable>
         </View>
       ) : view.status === 'loading' ? (
         <View style={styles.statusRow} testID="model-palette-loading">
@@ -741,6 +779,9 @@ const makeStyles = () => ({
   searchInput: { flex: 1, fontSize: ds(13), color: colors.text, paddingVertical: 0 },
   statusRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, padding: 12 },
   statusText: { fontSize: ds(12), color: colors.textMuted },
+  // #4976 —— 错误终态给一个明确的「重试」，别只留一段红字。
+  retryButton: { alignSelf: 'flex-start' as const, marginTop: 8, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.item, backgroundColor: colors.inputBg },
+  retryLabel: { fontSize: ds(12), color: colors.accent },
   group: { paddingTop: 10 },
   groupHeader: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, paddingHorizontal: 10, paddingVertical: 6 },
   groupName: { fontSize: ds(12), color: colors.textMuted, maxWidth: '80%' as const },
