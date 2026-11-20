@@ -144,6 +144,7 @@ const otherScan = { ...scan, nodeId: 'node_other' };
 const mismatch = buildDaemonOverview(base({ sessions: [hostSession], daemonVersion: '2.5.0', localScan: otherScan, scanned: true }));
 ck('a scan of a different daemon is not applied', mismatch.scanMismatch && !mismatch.localInstall && mismatch.tools.find(row => row.key === 'anet')?.state === 'unreported' && mismatch.tools.find(row => row.key === 'agentNode')?.version === '2.5.0');
 
+ck('agy 的 unknown 登录态会露出登录命令（源码断言）', /row\.id === 'antigravity-acp' && row\.state === 'unknown'/.test(readFileSync(new URL('./daemon-overview.ts', import.meta.url), 'utf8')));
 ck('agy 也有安装/登录指引（之前整条缺失）', RUNTIME_GUIDE['antigravity-acp'].install?.includes('antigravity.google/cli/install.sh') === true && RUNTIME_GUIDE['antigravity-acp'].login === 'agy acp --login');
 ck('install and runtime docs are the anet.sh guides', RUNTIME_GUIDE['claude-code-cli'].install === 'npm install -g @anthropic-ai/claude-code' && RUNTIME_GUIDE['claude-code-cli'].login === 'claude auth login' && RUNTIME_GUIDE['grok-build-acp'].install === null && RUNTIME_GUIDE['grok-build-acp'].docsUrl === ANET_RUNTIME_DOCS);
 

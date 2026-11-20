@@ -372,6 +372,20 @@ function sortRuntimes(rows: RuntimeRow[]): RuntimeRow[] {
 }
 
 function gapForRuntime(row: RuntimeRow): OverviewGap | null {
+  // 2026-11-20 — agy 的凭据在 keyring，daemon 只能报 auth=unknown（不猜）。这种情况不拦
+  // 「已登录」的人，但要把登录命令摆出来：否则用户在这页看不到任何可做的事。
+  if (row.id === 'antigravity-acp' && row.state === 'unknown' && RUNTIME_GUIDE[row.id]?.login) {
+    return {
+      id: row.id,
+      labelKey: row.labelKey || row.id,
+      stateKey: STATE_KEY[row.state],
+      reason: row.reason,
+      noteKey: 'daemon.overview.agyLoginHint',
+      primary: 'copy-fix',
+      command: RUNTIME_GUIDE[row.id].login,
+      docsUrl: RUNTIME_GUIDE[row.id].docsUrl === ANET_INSTALL_DOCS ? anetInstallDocs() : RUNTIME_GUIDE[row.id].docsUrl,
+    };
+  }
   if (row.state !== 'missing_cli' && row.state !== 'not_logged_in' && row.state !== 'no_network') return null;
   const guide = RUNTIME_GUIDE[row.id];
   // 这一格对 claude-agent-sdk 指的是**安装文档**（那里才有精确配对命令），按当前语言解析。
