@@ -7,8 +7,8 @@
 // （assets/glow-warm-*.png / glow-cool-*.png，颜色与 alpha 都照 GLOW_*/ALPHA 烘焙）。
 //
 // 这个模块只算「两张图放在哪、多大」，纯函数（不 import react-native），方便单测：
-//   · 尺寸按窗口短边算，折叠屏展开/分屏时不会把光晕拉成一整团；
-//   · 锚点仍按百分比（8%/10%、94%/92%），和桌面同一个构图。
+//   · 半径按窗口宽/高各自的百分比算（与桌面 CSS 的 ellipse 同口径）；
+//   · 锚点按百分比（8%/10%、94%/92%），和桌面同一个构图。
 export type GlowMode = 'light' | 'dark';
 
 /** 与 chat-glow-gradient.ts 的 EXTENT 对齐（radial 的椭圆半径，占元素宽/高的比例）。 */
@@ -19,9 +19,12 @@ const ANCHOR = { topLeft: { x: 0.08, y: 0.10 }, bottomRight: { x: 0.94, y: 0.92 
 export interface GlowBox { left: number; top: number; width: number; height: number }
 export interface GlowLayout { topLeft: GlowBox; bottomRight: GlowBox }
 
-const box = (anchor: { x: number; y: number }, extent: { x: number; y: number }, w: number, h: number, unit: number): GlowBox => {
-  const width = unit * 2 * extent.x;
-  const height = unit * 2 * extent.y;
+// 2026-11-20 admin 折叠屏实测：按「短边」算会在宽窗里只盖住左边，右边是纯底色，
+// 两栏之间一条硬接缝（「一半有一半没有」）。改成和桌面 CSS 同一口径：半径按窗口
+// **宽/高各自**的百分比算（ellipse 75% 80% at 8% 10%），宽窗里光晕跟着变宽，连续。
+const box = (anchor: { x: number; y: number }, extent: { x: number; y: number }, w: number, h: number): GlowBox => {
+  const width = w * 2 * extent.x;
+  const height = h * 2 * extent.y;
   return {
     width,
     height,
@@ -35,15 +38,14 @@ const box = (anchor: { x: number; y: number }, extent: { x: number; y: number },
  * @param width  窗口宽（dp）
  * @param height 窗口高（dp）
  * @param mode   浅色/深色（决定半径与层级，图本身也分浅深两张）
- * @param unit   光晕基准尺寸；默认取短边，让折叠屏展开/分屏时保持同一个观感
+ * @param unit   已废弃（保留参数只为兼容旧调用/测试）；宽高各自缩放，不再有统一 base
  */
-export function mobileGlowLayout(width: number, height: number, mode: GlowMode, unit?: number): GlowLayout {
+export function mobileGlowLayout(width: number, height: number, mode: GlowMode, _unit?: number): GlowLayout {
   const w = Math.max(1, width || 1);
   const h = Math.max(1, height || 1);
-  const base = unit && unit > 0 ? unit : Math.min(w, h);
   const extent = EXTENT[mode];
   return {
-    topLeft: box(ANCHOR.topLeft, extent, w, h, base),
-    bottomRight: box(ANCHOR.bottomRight, extent, w, h, base),
+    topLeft: box(ANCHOR.topLeft, extent, w, h),
+    bottomRight: box(ANCHOR.bottomRight, extent, w, h),
   };
 }
