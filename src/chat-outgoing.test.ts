@@ -42,6 +42,10 @@ const B = '基建牛';
 ck('outgoing: alias -> other', isOutgoingRow({ from_name: A, to_name: B }, A));
 ck('inbound is not outgoing', !isOutgoingRow({ from_name: B, to_name: A }, A));
 ck('self row is not outgoing', !isOutgoingRow({ from_name: A, to_name: A }, A));
+// #4731：Hub 自动回链的 `[via X 子任务结果]` 只是正文前缀，绝不能参与方向判定。
+ck('#4731 [via …] 前缀不影响方向', isOutgoingRow({ from_name: A, to_name: B, content: '[via 通信客户端欧 子任务结果] x' }, A)
+  && !isOutgoingRow({ from_name: B, to_name: A, content: '[via 通信客户端欧 子任务结果] x' }, A));
+ck('#4731 方向只看 from/to，即使正文里出现对方名字', isOutgoingRow({ from_name: A, to_name: B, content: '[via B 子任务结果] 由 B 转述' }, A));
 
 // 5) 出站行的回复要署名给收件人（不能继续写成本 agent 自己说的话）
 ck('reply author is the recipient', outgoingReplyAuthor({ from_name: A, to_name: B }, A) === B);

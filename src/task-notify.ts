@@ -32,9 +32,21 @@ export function taskOutcome(status: unknown): TaskOutcome | null {
   return null;
 }
 
-/** 任务标题 = 正文第一行(去空白),最多 TASK_TITLE_MAX 字。 */
+/**
+ * Hub 的自动回链会在 agent 回复正文最前面加一段 `[via <谁> 子任务结果]`（server 侧 auto-chain）。
+ * 它不是用户写的标题,也不是这条任务的方向;标题/来源必须取 from_name → to_name。
+ * 这里只做一件事:把这个 marker 从**标题取样**里剥掉,正文本身不动。
+ */
+const AUTO_CHAIN_MARKER = /^\s*\[via[^\]]*\]\s*/i;
+
+export function stripAutoChainMarker(content: string): string {
+  return content.replace(AUTO_CHAIN_MARKER, '');
+}
+
+/** 任务标题 = 正文第一行(去空白),最多 TASK_TITLE_MAX 字。自动回链 marker 不算标题。 */
 export function taskTitle(content: unknown, max = TASK_TITLE_MAX): string {
-  const first = typeof content === 'string' ? (content.split('\n').find(l => l.trim()) ?? '').trim().replace(/\s+/g, ' ') : '';
+  const body = typeof content === 'string' ? stripAutoChainMarker(content) : '';
+  const first = body.split('\n').find(l => l.trim())?.trim().replace(/\s+/g, ' ') ?? '';
   const chars = Array.from(first);
   return chars.length > max ? chars.slice(0, max).join('') + '…' : first;
 }
