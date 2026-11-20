@@ -73,7 +73,9 @@ const phoneRow = agents.slice(agents.indexOf('const renderPhoneRow = (item: Sess
 ck('phone row: long-press (touch only) opens the menu at the press point', phoneRow.includes('onLongPress={pointer ? undefined : rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}') && agents.includes('const pointer = pointerUi();'));
 ck('phone row: tap still opens the chat', phoneRow.includes('onPress={() => openChat(item.alias, item.network_id)}'));
 ck('phone row: web right-click target (data-agent-alias) only when there is a menu', phoneRow.includes('{...(rowMenu ? ({ dataSet: { agentAlias: item.alias } } as any) : {})}'));
-ck('phone row: the pressed row keeps its pressed tint while its menu is open', phoneRow.includes('pressed || menuFor?.alias === item.alias ? colors.rowHover : colors.bg'));
+// 0.2.575：手机整窗渐变开启时行底让出来（mobileGlowActive() ? 'transparent'），按下/菜单态仍给 rowHover。
+ck('phone row: the pressed row keeps its pressed tint while its menu is open',
+  /pressed \|\| menuFor\?\.alias === item\.alias \? colors\.rowHover : (mobileGlowActive\(\) \? 'transparent' : colors\.bg)/.test(phoneRow));
 const deskRow = agents.slice(agents.indexOf('const renderCompactRow = (item: Session) => {'), agents.indexOf('const renderPhoneRow'));
 ck('desktop row: still no long-press (mouse), right-click target kept', deskRow.includes('onLongPress={pointer ? undefined') && deskRow.includes('dataSet: { agentAlias: item.alias }'));
 const ctxStart = agents.indexOf('const handleContextMenu = (event: any) => {');

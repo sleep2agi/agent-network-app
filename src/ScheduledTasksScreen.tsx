@@ -71,6 +71,7 @@ import { elevated } from './elevation';
 import './i18n-schedules';
 // 编辑器(表单 + 外壳 + 确认框)与节点页共用:ScheduleEditor.tsx。
 import ScheduleEditor, { CancelScheduleModal, DEVICE_TIMEZONE, Label, ScheduleModal, StatusPill, fmt, scheduleStyleDefs } from './ScheduleEditor';
+import { mobileGlowActive } from './glow-mode';
 
 export { scheduleDialogSize } from './ScheduleEditor';
 
@@ -442,7 +443,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
   );
 
   return (
-    <View style={styles.root} onLayout={e => setMeasuredWidth(e.nativeEvent.layout.width)}>
+    <View style={[styles.root, mobileGlowActive() && { backgroundColor: 'transparent' }]} onLayout={e => setMeasuredWidth(e.nativeEvent.layout.width)}>
       {!wide && selected ? detail : <>
         <View style={styles.header} testID="screen-header">
           <Text style={styles.title} numberOfLines={1}>定时任务</Text>

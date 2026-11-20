@@ -50,6 +50,7 @@ import { useAgentDirectory } from './agent-directory-hook';
 import { registeredAgentRows, sessionIdentities } from './registered-agents';
 import { colors, onThemeChange, radius, spacing, statusColor, themeMode, type, weight } from './theme';
 import { fullTextTitleRef } from './full-text-title';
+import { mobileGlowActive } from './glow-mode';
 import { useGlassChrome } from './glass-chrome';
 import { shadowOnly } from './elevation';
 import { ds, fs, listText, uiScale } from './ui-scale';
@@ -949,7 +950,8 @@ export default function AgentsScreen({
     const model = agentRowModel(item, { latest: latestByAgent[item.alias], taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs });
     const selected = selectedAlias === item.alias;
     const rowDraft = draftFor({ kind: 'node', alias: item.alias }, selected);
-    const rowBg = selected ? colors.rowActive : colors.bg;
+    // 手机上整窗渐变时行底色让出来（选中/按下仍给一档，否则光被一行行盖掉）。
+    const rowBg = selected ? colors.rowActive : mobileGlowActive() ? 'transparent' : colors.bg;
     const badge = rowBadge(item.alias);
     return (
       <Pressable
@@ -961,7 +963,7 @@ export default function AgentsScreen({
         style={({ pressed }) => [
           rowStyles.row,
           // 菜单开着时,被按住的那一行保持按下态的底色(微信同款:看得出菜单是对哪一行的)。
-          { backgroundColor: selected ? colors.rowActive : pressed || menuFor?.alias === item.alias ? colors.rowHover : colors.bg },
+          { backgroundColor: selected ? colors.rowActive : pressed || menuFor?.alias === item.alias ? colors.rowHover : mobileGlowActive() ? 'transparent' : colors.bg },
         ]}
         onPress={() => openChat(item.alias, item.network_id)}
         onLongPress={pointer ? undefined : rowMenu ? e => openRowMenu(item.alias, e.nativeEvent.pageX, e.nativeEvent.pageY) : () => onOpenNodeDetail(item.alias)}
@@ -1005,7 +1007,7 @@ export default function AgentsScreen({
   };
 
   // 桌面整窗渐变（glass-chrome.tsx）：列表各条底色让出来，光才连得上；手机 / 非桌面仍是实底。
-  const listChromeBg = glass ? 'transparent' : compact ? colors.listBg : colors.bg;
+  const listChromeBg = glass || mobileGlowActive() ? 'transparent' : compact ? colors.listBg : colors.bg;
   return (
     <View style={{ flex: 1, backgroundColor: listChromeBg }}>
       {/* Everything above the list (head + filter bar): its height is where the first group header starts. */}

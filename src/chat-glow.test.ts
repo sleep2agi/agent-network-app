@@ -23,7 +23,10 @@ assert.match(app, /<WindowGlowRoot>[\s\S]{0,80}<MacTitleStrip \/>/, 'glow sits o
 assert.match(app, /style=\{\[desktopStyles\.shell, \{ backgroundColor: 'transparent' \}\]\}/);
 const root = readFileSync(new URL('./window-glow-root.tsx', import.meta.url), 'utf8');
 assert.match(root, /useSyncExternalStore\(onThemeChange, themeMode, themeMode\)/, 'root follows theme changes');
-assert.match(root, /Platform\.OS === 'web' \? chatCornerGlow/);
+// 0.2.575：原生（安卓/iOS）改走预生成 PNG 的 MobileWindowGlow；web 仍用 CSS 渐变。
+assert.match(root, /mobileGlowActive\(\)/, 'root 用统一判定决定原生/网页分支');
+assert.match(root, /return <MobileWindowGlow>/, '原生用 MobileWindowGlow');
+assert.match(root, /chatCornerGlow\(colors\.bg, mode\)/, 'web 分支仍是 CSS 渐变');
 const strip = readFileSync(new URL('./mac-title-strip.tsx', import.meta.url), 'utf8');
 assert.match(strip, /height: MAC_TITLE_STRIP_HEIGHT, backgroundColor: 'transparent'/, 'macOS drag strip no longer paints a white band');
 assert.match(app, /rail: \{ width: ds\(64\), backgroundColor: 'transparent'/);
@@ -32,13 +35,13 @@ assert.match(app, /content: \{ flex: 1, minWidth: 0, backgroundColor: 'transpare
 
 // 嵌在主窗口里的聊天 / 私信 / 列表让出底色；独立弹出的聊天窗仍自带光斑。
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
-assert.match(chat, /glass \? \{ backgroundColor: 'transparent' \} : desktop && chatCornerGlow\(colors\.bg, themeMode\(\)\)/);
+assert.match(chat, /glass \|\| mobileGlowActive\(\) \? \{ backgroundColor: 'transparent' \} : desktop && chatCornerGlow\(colors\.bg, themeMode\(\)\)/);
 assert.match(chat, /desktop && styles\.headerOverGlow/);
 assert.match(chat, /composerDivider: \{[\s\S]{0,300}backgroundColor: 'transparent'/);
 const dm = readFileSync(new URL('./DmChatScreen.tsx', import.meta.url), 'utf8');
-assert.match(dm, /glass && \{ backgroundColor: 'transparent' \}/);
+assert.match(dm, /\(glass \|\| mobileGlowActive\(\)\) && \{ backgroundColor: 'transparent' \}/);
 const list = readFileSync(new URL('./AgentsScreen.tsx', import.meta.url), 'utf8');
-assert.match(list, /const listChromeBg = glass \? 'transparent'/);
+assert.match(list, /const listChromeBg = glass \|\| mobileGlowActive\(\) \? 'transparent'/);
 const session = readFileSync(new URL('./NodeSessionControl.tsx', import.meta.url), 'utf8');
 assert.match(session, /backgroundColor: touch \? colors\.card : 'transparent'/);
 const rail = readFileSync(new URL('./ChatToolRail.tsx', import.meta.url), 'utf8');
