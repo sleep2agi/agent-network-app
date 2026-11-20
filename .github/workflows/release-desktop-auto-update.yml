@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.585:
+            - Agent 在会话里「举手要密钥」时，节点密钥页会出现一张加密输入卡：填完即写进那台节点的 secrets.env，值只发给节点、不经过对话模型；已配置过的 key 不会再提示。
+
             What's new in 0.2.584:
             - 节点详情里为 Antigravity（agy）补上登录入口：节点上报能力后，可直接在 App 内完成 Google 登录（打开授权链接、粘贴授权码），授权码只发给这台节点、不经过对话模型。
 
