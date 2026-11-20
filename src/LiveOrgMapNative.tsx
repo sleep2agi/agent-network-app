@@ -7,9 +7,9 @@
 //           不做持续流光/粒子（负责人 2026-11-20 定的「安静设计」口径）。
 //   · 交互 —— 点簇钻进去（有子部门才可钻），点 agent 点头像进聊天。
 //
-// 主形态先做单屏聚焦（<700dp）；≥700dp 的双栏（右侧详情）是第二阶段，这里预留 detail 插槽。
+// 形态：<700dp 单屏聚焦（主形态）；≥700dp 单屏 + 右侧详情栏（部门 agent 列表 + 最近派活）。
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { Animated, Easing, Platform, Pressable, View, type LayoutChangeEvent } from 'react-native';
+import { Animated, Easing, Platform, Pressable, StyleSheet, useWindowDimensions, View, type LayoutChangeEvent } from 'react-native';
 import Svg, { Circle, Path, Text as SvgText } from 'react-native-svg';
 import { Text } from './ui-text';
 import { fetchScopedStatus, fetchTasks, type HubConfig, type HubTask } from './api';
@@ -31,6 +31,9 @@ export default function LiveOrgMapNative(p: {
   onOpenAgent?: (alias: string) => void;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
+  // 断点看**窗口**宽度，不看画布宽度：画布一旦被右栏挤窄，用画布宽度判定会「出现右栏→画布变窄→
+  // 又变回单屏→画布变宽」来回抖。
+  const win = useWindowDimensions();
   const [root, setRoot] = useState<string | null>(null);
   const [status, setStatus] = useState<ReadonlyMap<string, string>>(new Map());
   const [tasks, setTasks] = useState<HubTask[]>([]);
@@ -69,6 +72,15 @@ export default function LiveOrgMapNative(p: {
   const core = useMemo(() => corePosition(clusters, W, H), [clusters, W, H]);
   const maxCount = Math.max(1, ...flow.edges.map(e => e.count));
   const countLabel = flow.truncated ? `≥${flow.total}` : String(flow.total);
+  // ≥700dp：单屏 + 右侧详情栏（负责人 2026-11-20 定：<700 只单屏，600 时右栏会把簇压到 300 宽）。
+  const wide = win.width >= 700;
+  const detailAgents = clusters.flatMap(c => c.agents);
+  const recent = flow.edges.slice(0, 3).map(e => ({
+    key: `${e.from}>${e.to}`,
+    from: e.from === CORE ? '组织核心' : byId.get(e.from)?.name ?? e.from,
+    to: e.to === CORE ? '组织核心' : byId.get(e.to)?.name ?? e.to,
+    count: e.count,
+  }));
 
   // 呼吸相位：只在原生跑（web 上也有这个组件是为了截图，动效照旧）。
   const phase = useRef(new Animated.Value(0)).current;
@@ -92,6 +104,8 @@ export default function LiveOrgMapNative(p: {
 
   return (
     <View style={{ flex: 1, minHeight: 0, paddingHorizontal: spacing.lg, paddingTop: spacing.lg }} testID="live-org-map-native">
+      <View style={{ flex: 1, minHeight: 0, flexDirection: wide ? 'row' : 'column', gap: spacing.lg }}>
+      <View style={{ flex: 1, minHeight: 0 }}>
       <View style={{ flexDirection: 'row', alignItems: 'baseline', gap: spacing.md, flexWrap: 'wrap' }}>
         <Text style={{ fontSize: 20, fontWeight: weight.strong, color: colors.text }}>组织在运转</Text>
         <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} testID="live-org-native-summary">
@@ -99,7 +113,7 @@ export default function LiveOrgMapNative(p: {
         </Text>
       </View>
 
-      <View style={{ flex: 1, minHeight: 320 }} onLayout={onLayout} testID="live-org-native-canvas">
+      <View style={{ flex: wide ? 1 : 1, minHeight: 320 }} onLayout={onLayout} testID="live-org-native-canvas">
         {W > 0 && H > 0 ? (
           <Svg width={W} height={H} viewBox={`0 0 ${W} ${H}`}>
             {/* 派活线：静态虚线（不做持续流光） */}
@@ -201,6 +215,33 @@ export default function LiveOrgMapNative(p: {
             }))}
           </Svg>
         ) : null}
+      </View>
+
+      </View>
+      {wide ? (
+        <View style={{ width: 300 }} testID="live-org-native-detail">
+          <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong, marginBottom: spacing.sm }} numberOfLines={1}>
+            {`${root ? (p.data.departments.find(d => d.id === root)?.name ?? '部门') : '整个组织'} · ${detailAgents.length} 个 Agent`}
+          </Text>
+          {detailAgents.slice(0, 6).map(a => (
+            <Pressable key={a.alias} accessibilityRole="button" onPress={() => p.onOpenAgent?.(a.alias)} testID={`live-org-native-agent-${a.alias}`}
+              style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingVertical: 7, paddingHorizontal: spacing.sm, borderRadius: radius.control, backgroundColor: colors.card, borderWidth: StyleSheet.hairlineWidth, borderColor: colors.border, marginBottom: 6 }}>
+              <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: a.online ? colors.running : colors.textMuted }} />
+              <Text style={{ color: colors.text, fontSize: typeScale.small, flex: 1 }} numberOfLines={1}>{a.alias}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 10 }}>{a.online ? '在跑' : '离线'}</Text>
+            </Pressable>
+          ))}
+          <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong, marginTop: spacing.md, marginBottom: spacing.sm }}>最近派活</Text>
+          {recent.length === 0 ? (
+            <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>近 10 分钟没有派活</Text>
+          ) : recent.map(r => (
+            <View key={r.key} style={{ paddingVertical: 6 }}>
+              <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }} numberOfLines={1}>{`${r.from} → ${r.to}`}</Text>
+              <Text style={{ color: colors.textMuted, fontSize: 10 }}>{`${r.count} 次`}</Text>
+            </View>
+          ))}
+        </View>
+      ) : null}
       </View>
 
       {root ? (
