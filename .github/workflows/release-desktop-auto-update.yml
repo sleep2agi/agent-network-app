@@ -614,6 +614,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.589:
+            - 聊天输入框的「/」菜单不再串号：读不到当前节点的技能时，会清空旧的候选并说明原因，不会再列着别的节点的技能。
+            - 用中文输入法打字时，按 Enter/Tab 只会确认输入法候选，不会再被「/」菜单抢走。
+
             What's new in 0.2.588:
             - 内部质量：修掉「更早消息」自动化用例的偶发失败（不再靠列表惯性踩点），以后判断回归更可信。
 
