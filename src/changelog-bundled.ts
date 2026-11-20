@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.579:",
+  "- 侧栏与节点详情不再显示节点自己上报的任务/进度正文，只保留「工作中 / 异常 / 阻塞」状态词：别人看到的是状态，不是节点本机的提示词。",
+  "- 折叠屏 / 平板宽窗：整窗暖色渐变覆盖左右两栏（之前只有左边有光、右边纯色，中间一条硬接缝）；组织页接入同一套渐变；两栏之间的 1px 分界线在渐变生效时降到 40% 透明。",
+  "",
   "What's new in 0.2.578:",
   "- 新建节点时可以选择「Antigravity（ACP）」了：走 Google Antigravity CLI 的 ACP 模式，和 Grok 一样是正常运行时，不是实验性共存。",
   "- 节点侧会检查 Antigravity CLI 的版本（验收版 1.5.13），不一致会直接说明原因，不让它自己偷偷升级；没装或版本不对时，向导里会显示「未检测/缺什么」。",
