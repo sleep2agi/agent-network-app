@@ -19,10 +19,10 @@ const uri = (m: number): string => {
     return a.localUri ?? a.uri;
   } catch { return ''; }
 };
-// 两角同一张暖黄（admin 2026-11-20 去掉右下冷蓝）；浅深各一张。
+// v3（2026-11-20）：一张整窗图，两个角的光斑都烘焙在里面（桌面 CSS 同构图），stretch 到整窗。
 const GLOW = {
-  light: uri(require('../assets/glow-warm-light.png')),
-  dark: uri(require('../assets/glow-warm-dark.png')),
+  light: uri(require('../assets/glow-full-light.png')),
+  dark: uri(require('../assets/glow-full-dark.png')),
 } as const;
 
 export default function MobileWindowGlow({ children }: { children: ReactNode }) {
@@ -34,8 +34,7 @@ export default function MobileWindowGlow({ children }: { children: ReactNode }) 
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }} testID="mobile-window-glow">
       <View pointerEvents="none" style={StyleSheet.absoluteFill}>
-        <Image source={{ uri: image }} resizeMode="stretch" style={[styles.layer, layout.topLeft]} testID="mobile-glow-top-left" />
-        <Image source={{ uri: image }} resizeMode="stretch" style={[styles.layer, layout.bottomRight]} testID="mobile-glow-bottom-right" />
+        <Image source={{ uri: image }} resizeMode="stretch" style={[styles.layer, layout]} testID="mobile-glow-layer" />
       </View>
       <View style={{ flex: 1 }}>{children}</View>
     </View>

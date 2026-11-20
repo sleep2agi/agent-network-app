@@ -626,7 +626,7 @@ export default function SettingsScreen({
   const openDetailKey = subPage && settingsBackTarget(subPage, detail) === 'detail' ? detail : null;
   const headerAction = headerOverride?.action;
   const phoneHeader = (
-    <View style={styles.phoneHeader} testID="settings-subpage-header">
+    <View style={[styles.phoneHeader, mobileGlowActive() && { backgroundColor: 'transparent' }]} testID="settings-subpage-header">
       <Pressable testID="settings-back" accessibilityRole="button" accessibilityLabel={tr('settings.copy.7')} onPress={goBack} hitSlop={8} style={({ pressed }) => [styles.phoneHeaderSide, openDetailKey && headerAction && styles.phoneHeaderBackWide, pressed && { opacity: 0.6 }]}>
         <Ionicons name="chevron-back" size={24} color={colors.text} />
       </Pressable>
@@ -1607,6 +1607,7 @@ const makeStyles = () =>
   rootPhone: { backgroundColor: colors.bg },
   phoneScroll: { flex: 1 },
   phoneListContent: { paddingBottom: spacing.xl * 2 },
+  // glow 生效时标题栏让出底色（与页面其它部分连成一片，不再是一条实色带）。
   phoneHeader: { flexDirection: 'row', alignItems: 'center', minHeight: 48, paddingHorizontal: spacing.xs, backgroundColor: colors.bg },
   phoneHeaderSide: { width: 44, height: 44, alignItems: 'center', justifyContent: 'center' },
   phoneHeaderTitle: { flex: 1, color: colors.text, fontSize: 17, fontWeight: '600', textAlign: 'center' },
