@@ -33,8 +33,10 @@ export default function MobileWindowGlow({ children }: { children: ReactNode }) 
   const image = GLOW[mode];
   return (
     <View style={{ flex: 1, backgroundColor: colors.bg }} testID="mobile-window-glow">
-      <Image source={{ uri: image }} resizeMode="stretch" pointerEvents="none" style={[styles.layer, layout.topLeft]} testID="mobile-glow-top-left" />
-      <Image source={{ uri: image }} resizeMode="stretch" pointerEvents="none" style={[styles.layer, layout.bottomRight]} testID="mobile-glow-bottom-right" />
+      <View pointerEvents="none" style={StyleSheet.absoluteFill}>
+        <Image source={{ uri: image }} resizeMode="stretch" style={[styles.layer, layout.topLeft]} testID="mobile-glow-top-left" />
+        <Image source={{ uri: image }} resizeMode="stretch" style={[styles.layer, layout.bottomRight]} testID="mobile-glow-bottom-right" />
+      </View>
       <View style={{ flex: 1 }}>{children}</View>
     </View>
   );
