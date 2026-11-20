@@ -409,20 +409,22 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         const enq = await listNodeSkills(cfg, target);
         const follow = requestIdToFollow(enq);
         if (!follow) {
-          if (live) setSlashSkillNote(enq.ok ? t("chat.slash.failed") : enq.error);
+          // #886：读不到就**清掉旧节点的候选**再报原因，别把上一个会话的技能留在列表里。
+          if (live) { setSlashSkills([]); setSlashSkillNote(enq.ok ? t("chat.slash.failed") : enq.error); }
           return;
         }
         const result = await waitForRulesFileResult(cfg, follow, { nextDelayMs: nextPollDelayMs, isTerminal, isCancelled: () => !live });
         if (!live) return;
         const problem = resultProblem(result);
         if (problem !== null || !result.ok || result.status !== 'done') {
+          setSlashSkills([]);
           setSlashSkillNote(problem || (!result.ok ? result.error : t("chat.slash.failed")));
           return;
         }
         setSlashSkills(parseSkillsPayload(result.content).skills);
         setSlashSkillNote('');
       } catch (error) {
-        if (live) setSlashSkillNote(error instanceof Error ? error.message : t("chat.slash.failed"));
+        if (live) { setSlashSkills([]); setSlashSkillNote(error instanceof Error ? error.message : t("chat.slash.failed")); }
       }
     })();
     return () => { live = false; };
@@ -446,8 +448,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     setSuggestIndex(0);
     mainComposerRef.current?.focus?.();
   };
-  const onSuggestKey = (event: { key?: string; preventDefault?: () => void; nativeEvent?: { key?: string } }) => {
+  const onSuggestKey = (event: { key?: string; preventDefault?: () => void; nativeEvent?: { key?: string; isComposing?: boolean } }) => {
     if (!suggestOpen || suggestRows.length === 0) return false;
+    // #886：中文输入法正在组字时，Enter/Tab 是在确认候选，不是选菜单 —— 一律不拦。
+    if (event.nativeEvent?.isComposing) return false;
     const key = event.key || event.nativeEvent?.key;
     if (key === 'ArrowDown' || key === 'ArrowUp') {
       event.preventDefault?.();
