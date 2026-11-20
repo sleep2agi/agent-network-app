@@ -8,6 +8,7 @@ import {
   onTaskFinished,
   PAIR_GRACE_MS,
   pickTaskFinishes,
+  stripAutoChainMarker,
   takeExpiredMarks,
   taskLabel,
   taskOutcome,
@@ -26,6 +27,11 @@ ck('failed / expired / timeout = 失败', taskOutcome('failed') === 'failed' && 
 ck('进行中 / 取消 / 空 = 非终态(不提醒)', taskOutcome('running') === null && taskOutcome('delivered') === null && taskOutcome('cancelled') === null && taskOutcome(undefined) === null);
 ck('标题 = 第一行,截断带省略号', taskTitle('\n  第一行  内容 \n第二行') === '第一行 内容' && taskTitle('x'.repeat(50)).endsWith('…') && Array.from(taskTitle('x'.repeat(50))).length === 41);
 ck('标签文案', taskLabel({ agent: 'A', outcome: 'done', title: 't' }) === '✅ A 完成了任务:t' && taskLabel({ agent: 'A', outcome: 'failed', title: '' }) === '❌ A 任务失败');
+// #4731：Hub 自动回链加在正文最前面的 `[via … 子任务结果]` 不是标题,也不是方向。
+ck('#4731 标题不吃 [via …] marker', taskTitle('[via 通信客户端欧 子任务结果] 这个不是bug') === '这个不是bug');
+ck('#4731 marker 与正文分两行时也不吃', taskTitle('[via 通信牛 子任务结果]\n第二行才是正文') === '第二行才是正文');
+ck('#4731 stripAutoChainMarker 只剥开头那一段', stripAutoChainMarker('[via X 子任务结果] 正文 [via Y]') === '正文 [via Y]');
+ck('#4731 正文里的 [via …] 不动（只影响标题取样）', taskTitle('普通开头 [via X] 后面') === '普通开头 [via X] 后面');
 
 // 首份列表:只登记,哪怕里面有刚完成的。
 let r = pickTaskFinishes(initialTaskSeen(), [T('1', 'running'), T('2', 'replied', { completed_at: ts(NOW) })], 'admin', NOW);
