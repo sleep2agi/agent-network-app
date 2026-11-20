@@ -247,6 +247,7 @@ export const chatTranslations = {
   'chat.newMessages': ['{count} 条新消息', '{count} new messages'],
   'chat.latest': ['回到最新', 'Jump to latest'],
   'chat.statusWorking': ['工作中', 'Working'],
+  'chat.loadStalledRetry': ['加载有点慢，点一下重试', 'Loading is slow — tap to retry'],
   'chat.statusOffline': ['离线', 'Offline'],
   'chat.statusOnline': ['在线', 'Online'],
   'chat.messagePlaceholder': ['发消息给 {alias}…', 'Message {alias}…'],
