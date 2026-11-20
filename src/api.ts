@@ -2016,6 +2016,19 @@ export type RulesFileOutcome =
 
 /** 2026-11-20 — agy 登录（设计稿 handoff/agy-login-channel-design.md）。三个 hub MCP 工具：
  *  start_agy_login / submit_agy_login_code / get_rules_file_result。仅用户令牌可用。 */
+/** #4827 —— 节点密钥页的「agent 举手」：GET /api/nodes/:id/secrets 只回 pending（字段缺省 = 无）。
+ *  MCP 的 node_secret_list 走请求/轮询，轮询端点不带 pending，所以单独读这条 REST。 */
+export const fetchNodeSecretRequests = async (cfg: HubConfig, nodeId: string): Promise<{ key: string; label?: string }[]> => {
+  const qs = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+  try {
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/nodes/${encodeURIComponent(nodeId)}/secrets${qs}`, { headers: headers(cfg), signal }));
+    if (!res.ok) return [];
+    const body: any = await res.json();
+    const rows = Array.isArray(body?.pending) ? body.pending : [];
+    return rows.filter((r: any) => typeof r?.key === 'string').map((r: any) => ({ key: r.key, ...(typeof r.label === 'string' && r.label ? { label: r.label } : {}) }));
+  } catch { return []; }
+};
+
 export const startAgyLogin = (cfg: HubConfig, nodeId?: string, alias?: string) =>
   callHubTool(cfg, 'start_agy_login', { ...(nodeId ? { node_id: nodeId } : {}), ...(alias ? { alias } : {}), ...(cfg.networkId ? { network_id: cfg.networkId } : {}) });
 

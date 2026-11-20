@@ -3,7 +3,9 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import type { HubConfig } from './api';
 import { scopedSecrets } from './scoped-secrets-api';
+import { fetchNodeSecretRequests } from './api';
 import { nodeSecretsNeedsUpgrade, validSecretInput, type SecretSnapshot, type SecretWrite } from './scoped-secrets';
+import SecretRequestCard from './SecretRequestCard';
 import { useTranslation } from './i18n-react';
 import './i18n-scoped-secrets';
 import './i18n-provider-management';
@@ -17,6 +19,10 @@ export default function ScopedSecretsSection(props:Props) {
 function Page({cfg,daemonId,nodeId,nodeRuntimeVersion,nodeSecretsCapable}:Props) {
   const {t}=useTranslation();const [snapshot,setSnapshot]=useState<SecretSnapshot|null>(null),[key,setKey]=useState(''),[value,setValue]=useState('');
   const [busy,setBusy]=useState(false),[writing,setWriting]=useState(false),[notice,setNotice]=useState(''),[deleting,setDeleting]=useState<string|null>(null);
+  // #4827 —— agent 举手要的 key：卡片级 saving/saved 状态（写完整份刷新后由 pending 消失体现）。
+  const [requestSaving,setRequestSaving]=useState<string|null>(null);
+  // #4827 —— REST GET /secrets 只回 pending（字段缺省 = 无）；MCP 轮询端点不带它。
+  const [pendingRest,setPendingRest]=useState<{key:string;label?:string}[]>([]);
   const active=useRef<AbortController|null>(null), mounted=useRef(true);
   const supported=!!(daemonId||nodeId) && !!cfg.networkId;
   const independent=!!nodeId && !daemonId;
@@ -29,7 +35,9 @@ function Page({cfg,daemonId,nodeId,nodeRuntimeVersion,nodeSecretsCapable}:Props)
     if(!supported||upgradeRequired||active.current)return;
     const ctrl=new AbortController();active.current=ctrl;setBusy(true);setWriting(!!write);setNotice('');setDeleting(null);
     if(write){setValue('');setSnapshot(null);}
+    const pendingRead = nodeId ? fetchNodeSecretRequests(cfg, nodeId) : Promise.resolve([]);
     const result=await scopedSecrets(cfg,{networkId:cfg.networkId!,daemonId:daemonId??null,nodeId:nodeId??null},ctrl.signal,write);
+    void pendingRead.then(rows=>{if(mounted.current)setPendingRest(rows);});
     if(!mounted.current||ctrl.signal.aborted)return;
     if(result.kind==='ready') {setSnapshot(result.snapshot);if(write)setNotice(t(independent
       ? write.action==='put'?'scopedSecrets.nodeSaved':'scopedSecrets.nodeDeleted'
@@ -53,6 +61,14 @@ function Page({cfg,daemonId,nodeId,nodeRuntimeVersion,nodeSecretsCapable}:Props)
       {busy?<View style={{flexDirection:'row',gap:spacing.sm,alignItems:'center'}}><ActivityIndicator color={colors.textMuted}/><Text style={{color:colors.textMuted}}>{t(independent
         ? writing?'scopedSecrets.nodeSaving':'scopedSecrets.nodeLoading'
         : writing?'scopedSecrets.saving':'scopedSecrets.loading')}</Text></View>:null}
+      {[...pendingRest,...(snapshot?.pending??[])].filter((p,i,all)=>all.findIndex(x=>x.key===p.key)===i)
+        .filter(p=>!snapshot?.keys.some(k=>k.key===p.key&&k.source===(nodeId?'node':'daemon'))).map(p=><SecretRequestCard
+        key={p.key}
+        testID={`secret-request-${p.key}`}
+        request={{key:p.key,...(p.label?{label:p.label}:{})}}
+        phase={requestSaving===p.key?'saving':'idle'}
+        onSave={v=>{setRequestSaving(p.key);void run({action:'put',key:p.key,value:v,revision:snapshot!.revision}).finally(()=>setRequestSaving(null));}}
+      />)}
       {snapshot?<View style={{borderWidth:1,borderColor:colors.border,borderRadius:radius.md,padding:spacing.md,gap:spacing.sm}}>
         {!snapshot.keys.length?<Text style={{color:colors.textMuted}}>{t('scopedSecrets.empty')}</Text>:snapshot.keys.map(item=><View key={item.key} style={{gap:spacing.xs}}>
           <Text style={{color:colors.text}}>{item.key}</Text><Text style={{color:colors.textMuted,fontSize:type.small}}>{t(item.source==='node'?'scopedSecrets.sourceNode':nodeId?'scopedSecrets.sourceDaemon':'scopedSecrets.sourceOwnDaemon')}</Text>
