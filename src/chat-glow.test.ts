@@ -1,17 +1,19 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { chatCornerGlowGradient, GLOW_COOL, GLOW_WARM } from './chat-glow-gradient';
+import { chatCornerGlowGradient, GLOW_WARM } from './chat-glow-gradient';
 
-// admin 2026-11-19：光斑 → 「太丑」→「左侧也需要一样的」「学学这个配色」（参考图：左上暖桃、右下淡紫蓝）。
+// admin 2026-11-19：光斑 → 「太丑」→「左侧也需要一样的」「学学这个配色」。
+// admin 2026-11-20：「右下角还是有点丑，算了，统一用左上角这个暖黄色吧」→ v5 两角同色,只去掉了冷蓝。
 const light = chatCornerGlowGradient('light');
 const dark = chatCornerGlowGradient('dark');
-assert.ok(light.includes(GLOW_WARM.light) && light.includes(GLOW_COOL.light), 'light: warm peach + soft periwinkle');
+assert.ok(light.includes(GLOW_WARM.light), 'light: warm peach in both washes');
 assert.match(light, /at 8% 10%/, 'warm wash anchored top-left');
-assert.match(light, /at 94% 92%/, 'cool wash anchored bottom-right');
-assert.ok(light.indexOf(GLOW_WARM.light) < light.indexOf(GLOW_COOL.light));
+assert.match(light, /at 94% 92%/, 'second warm wash anchored bottom-right (same hue, no more cool blue)');
+// Each wash() repeats its rgb triplet 3× (0% / 40% / 72% stops); two washes ⇒ 6, not a second color's triplets mixed in.
+assert.equal(light.split(GLOW_WARM.light).length - 1, 6, 'both corners use the warm rgb triplet, not a second color');
 assert.match(light, /ellipse 75% 80%/, 'large soft washes, not small corner spots');
 assert.ok(!light.includes('255, 214, 10'), 'no saturated yellow (v1/v2 looked muddy)');
-assert.ok(dark.includes(GLOW_WARM.dark) && dark.includes(GLOW_COOL.dark));
+assert.ok(dark.includes(GLOW_WARM.dark));
 assert.ok(!dark.includes('255, 255, 255'));
 
 // 整窗一层：桌面 shell 带渐变并打开 glass；侧栏 / 列表 / 内容区透明。
