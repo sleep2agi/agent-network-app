@@ -16,6 +16,8 @@ export const RUNTIME_MODEL_SUGGESTIONS: Record<string, string[]> = {
   'codex-app-server': [],
   'grok-build-cli': [],
   'opencode-cli': ['opencode/mimo-v2.6-flash-free', 'opencode/north-mini-code-free'],
+  // agy 正常 ACP：Google 登录，模型 slug 以 `agy models` 为准（只放验收过的）。
+  'antigravity-acp': ['gemini-4-neon-high', 'gemini-3.8-flash-medium'],
 };
 
 /** Suggested model ids for a runtime; unknown/missing runtime → []. */

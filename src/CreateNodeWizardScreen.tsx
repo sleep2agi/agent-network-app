@@ -97,6 +97,10 @@ const RUNTIMES: WizardRuntime[] = [
   //  provider/model」(2026-09-07 Mac mini 真跑抓到)。这里给 OpenCode 自带的免费模型(不需要任何 key,
   //  DEV 上 opencode-指挥狗 / opencode测试1号 就用它们);要用别的 provider 走 anet opencode auth-login。
   { id: 'opencode-cli', label: 'OpenCode', models: ['opencode/mimo-v2.6-flash-free', 'opencode/north-mini-code-free'] },
+  // 2026-11-20 —— Antigravity CLI（agy）。正常 ACP runtime（不是实验性共存、也不走 headless）：
+  // 节点侧钉 v1.5.13、用 Google 登录（`agy acp --login`），模型 slug 以 `agy models` 为准，
+  // 这里只放验收时确认过的两个。#199 的「7 个」因此变 8 个。
+  { id: 'antigravity-acp', label: 'Antigravity（ACP）', models: ['gemini-4-neon-high', 'gemini-3.8-flash-medium'] },
 ];
 const PERMISSION_MODES = ['default', 'acceptEdits', 'plan', 'bypassPermissions'];
 
