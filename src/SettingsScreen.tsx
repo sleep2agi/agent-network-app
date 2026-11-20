@@ -78,6 +78,7 @@ import AgentOrgScreen from './AgentOrgScreen';
 import OrgAccessPage from './OrgAccessPage';
 import { tabForSettingsRow } from './org-access-model';
 import { ManageDepartmentPhone } from './ManageDepartment';
+import { mobileGlowActive } from './glow-mode';
 import { managedDepartmentIds } from './org-model';
 import { canManageUsers, type AuthMe } from './user-admin';
 import { useLoginSessions } from './useLoginSessions';
@@ -875,7 +876,7 @@ export default function SettingsScreen({
     : null;
 
   return (
-    <View style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone]}>
+    <View style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone, mobileGlowActive() && { backgroundColor: 'transparent' }]}>
       {compact ? (subPage ? phoneHeader : listHeader) : sidebar}
       {compact ? (subPage ? phoneSubPage : phoneList) : (
       <View style={styles.pane} testID="settings-pane">

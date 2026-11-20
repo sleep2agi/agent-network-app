@@ -20,6 +20,7 @@ import { formatTime } from './time';
 import { usePoll } from './usePoll';
 import RequirementBoard from './RequirementBoard';
 import { buttonStyle, buttonTextStyle } from './elevation';
+import { mobileGlowActive } from './glow-mode';
 
 // Tasks tab. The page itself (header, 列表 / 看板 of the requirement pool) is
 // RequirementBoard; this file owns the 派发记录 section — a scoped list of hub
@@ -125,7 +126,7 @@ function DispatchLog({
     // moves both simultaneously; witnessed-red on the constant reds
     // the assertion. See tasks-filter.test.ts + POLL_LIST_MS in
     // tasks-filter.ts (single source of truth).
-    <View style={styles.root} testID={`tasks-screen-poll-list-ms-${POLL_LIST_MS}`}>
+    <View style={[styles.root, mobileGlowActive() && { backgroundColor: 'transparent' }]} testID={`tasks-screen-poll-list-ms-${POLL_LIST_MS}`}>
       {/* Segmented filter — horizontal scroll for narrow phones */}
       <ScrollView
         horizontal

@@ -118,6 +118,7 @@ import NotifySettingsFixtureScreen, { readNotifyFixture } from './src/NotifySett
 import UpdatePromptFixtureScreen, { readUpdatePromptFixture } from './src/UpdatePromptFixtureScreen';
 import { chooseAppLayout, LIST_PANE_DEFAULT_WIDTH, paneSelectionFor, twoPaneListWidth } from './src/wide-layout';
 import TwoPaneDivider from './src/TwoPaneDivider';
+import { mobileGlowActive } from './src/glow-mode';
 import { GlassChromeProvider } from './src/glass-chrome';
 import { loadListPaneWidth, loadRailLabels, onRailLabelsChange, railLabelsNow, saveListPaneWidth, type RailLabels } from './src/agent-list-prefs';
 import { bumpLayoutGeneration } from './src/layout-handoff';
@@ -862,7 +863,7 @@ function AppRoot() {
     // 页头兼当标题栏(Vincent 2026-09-30「上面那个还是挺多余的」):Windows 无原生标题栏、macOS 红黄绿灯进页头。
     const windowChrome = popoutChatChrome(Platform.OS);
     return (
-      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]} testID="dedicated-chat-window">
+      <SafeAreaView key={workspaceKey} style={[styles.root, rootInset, mobileGlowActive() && { backgroundColor: 'transparent' }]} testID="dedicated-chat-window">
         <StatusBar barStyle={theme === 'light' ? 'dark-content' : 'light-content'} backgroundColor={colors.bg} />
         {screen.name === 'chat' ? (
           <ChatScreen
@@ -925,7 +926,7 @@ function AppRoot() {
   }
 
   return (
-    <SafeAreaView key={workspaceKey} style={[styles.root, rootInset]}>
+    <SafeAreaView key={workspaceKey} style={[styles.root, rootInset, mobileGlowActive() && { backgroundColor: 'transparent' }]}>
       <StatusBar
         barStyle={theme === 'light' ? 'dark-content' : 'light-content'}
         backgroundColor={colors.bg}

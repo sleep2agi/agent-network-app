@@ -78,6 +78,7 @@ import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, ou
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail, { useChatToolRail } from './ChatToolRail';
 import { chatToolRailReserve, composerShowsShortcutHint, dockedPanelWidth } from './chat-tool-rail-layout';
+import { mobileGlowActive } from './glow-mode';
 import { chatCornerGlow } from './chat-glow';
 import { useGlassChrome } from './glass-chrome';
 import ChatInfoPanel from './ChatInfoPanel';
@@ -2550,7 +2551,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   return (
     <KeyboardAvoidingView
-      style={[styles.root, glass ? { backgroundColor: 'transparent' } : desktop && chatCornerGlow(colors.bg, themeMode()), iosKeyboard.style, toolRailReserve > 0 && { paddingRight: toolRailReserve }]}
+      style={[styles.root, glass || mobileGlowActive() ? { backgroundColor: 'transparent' } : desktop && chatCornerGlow(colors.bg, themeMode()), iosKeyboard.style, toolRailReserve > 0 && { paddingRight: toolRailReserve }]}
       testID="chat-pane"
       // Edge-to-edge Android ignores adjustResize, so behavior=undefined
       // left the keyboard covering the input (Vincent tg 738). 'padding'

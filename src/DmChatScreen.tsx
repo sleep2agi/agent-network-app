@@ -36,6 +36,7 @@ import { dmAttachmentViews, localAttachmentViews, type DmAttachmentView } from '
 import { usePoll } from './usePoll';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { useGlassChrome } from './glass-chrome';
+import { mobileGlowActive } from './glow-mode';
 import { bubbleInk, MineBubble, useBubbleInk } from './bubble-ink';
 import { ds, uiScale } from './ui-scale';
 import { elevated } from './elevation';
@@ -465,7 +466,7 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   const data = useMemo(() => messages, [messages]);
   return (
     <KeyboardAvoidingView
-      style={[styles.root, glass && { backgroundColor: 'transparent' }, iosKeyboard.style]}
+      style={[styles.root, (glass || mobileGlowActive()) && { backgroundColor: 'transparent' }, iosKeyboard.style]}
       testID="dm-pane"
       behavior={iosKeyboard.handled ? undefined : 'padding'}
       enabled={keyboardAvoidEnabled(Platform.OS, keyboardVisible)}
