@@ -138,6 +138,7 @@ export const daemonTranslations = {
   'daemon.overview.runtime.grok-build-cli': ['Grok（TUI 共存）', 'Grok (TUI co-presence)'],
   'daemon.overview.runtime.opencode-cli': ['OpenCode', 'OpenCode'],
   'daemon.overview.runtime.antigravity-acp': ['Antigravity（agy）', 'Antigravity (agy)'],
+  'daemon.overview.agyLoginHint': ['登录状态读不到（凭据在系统 keyring）。如果还没登录，运行这条命令；已登录可忽略。', 'Sign-in state is not readable (credentials live in the OS keyring). If you have not signed in, run this command; otherwise ignore.'],
   'daemon.overview.state.ready': ['就绪', 'Ready'],
   'daemon.overview.state.missing_cli': ['未安装', 'Not installed'],
   'daemon.overview.state.not_logged_in': ['未登录', 'Not signed in'],
