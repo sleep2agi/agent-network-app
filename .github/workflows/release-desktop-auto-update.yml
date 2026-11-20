@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.582:
+            - 节点概览页补上 Antigravity（agy）的安装与登录指引：装 `agy` 用官方安装脚本，登录用 `agy acp --login`（SSH 下会打印授权链接）。
+
             What's new in 0.2.581:
             - 打开会话时如果首屏一直没加载出来（窗口不在前台或读取失败），骨架下方会在 8 秒后出现「加载有点慢，点一下重试」，点一下即可立即重试，不用切会话碰运气。
 
