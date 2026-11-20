@@ -90,7 +90,7 @@ ck('node_not_found is translated', catalogErrorText('node_not_found') !== 'node_
   ck('read-only gate needs explicit evidence, not a missing runtime',
     src.includes("generation === 'v1' || (!!node.runtime && !v2)"));
   const early = src.indexOf('if (reportedSnapshot) setCatalog({ snapshot: reportedSnapshot, loading: false, error: null });');
-  ck('reported catalogue renders before the daemon relay is queued', early > 0 && early < src.indexOf('await queueOpenCodeCatalog('));
+  ck('reported catalogue renders before the daemon relay is queued', early > 0 && early < src.indexOf('queueOpenCodeCatalog('));
 }
 
 console.log(`composer-model-palette-fallback: ${passed}/${total}`);
