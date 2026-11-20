@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.588:",
+  "- 内部质量：修掉「更早消息」自动化用例的偶发失败（不再靠列表惯性踩点），以后判断回归更可信。",
+  "",
   "What's new in 0.2.587:",
   "- 模型选择面板不再卡在「正在读取这台节点的模型目录…」：读取超时或出错会直接显示原因，并给出「重试」，不用关掉面板重开。",
   "",
