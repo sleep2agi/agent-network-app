@@ -130,8 +130,16 @@ for (const [name, V] of Object.entries(VIEWPORTS)) {
       await page.waitForFunction((n) => document.querySelectorAll('[data-testid^="chat-item-"]').length > n, before, { timeout: 8000 });
       await page.waitForTimeout(300);
       const a1 = await box(page, anchorText);
+      // #1557 —— 桌面暗色偶发 cursorRead 失败（改动前就有）：`onEndReached` 的触发时机随内容高度变化，
+      // 单靠「等到 loading 出现」并不能保证那次带 before 的请求一定已经被记账。这里显式再往上推几格，
+      // 直到读到 before 请求为止（有界），把断言从「赌时序」改成「驱动到条件成立」。
+      let olderRead = (await reads(page)).find(x => x.before);
+      for (let i = 0; i < 20 && !olderRead; i++) {
+        await page.mouse.wheel(0, -500);
+        await page.waitForTimeout(120);
+        olderRead = (await reads(page)).find(x => x.before);
+      }
       const r = await reads(page);
-      const olderRead = r.find(x => x.before);
       if (OUT) await page.screenshot({ path: `${OUT}/${name}-${theme}-older-loaded.png` });
       record(where, 'older', {
         loadingShown: sawLoading,
