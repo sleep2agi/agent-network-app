@@ -54,6 +54,7 @@ import { opencodeFlagsOf,
   generationOf,
 } from './node-info';
 import { nodeProviderDaemon } from './node-provider-target';
+import NodeRuntimeSwitchCard from './NodeRuntimeSwitchCard';
 import { colors, spacing, radius } from './theme';
 
 /**
@@ -774,6 +775,8 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
           </View>
         ) : null}
       </View>
+      {/* 运行时切换：进阶位置，避免与常规模型切换混在一起（admin 2026-11-21）。 */}
+      <NodeRuntimeSwitchCard cfg={cfg} node={node} />
     </View>
   );
 }
