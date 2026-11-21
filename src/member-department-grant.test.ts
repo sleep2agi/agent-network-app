@@ -1,6 +1,6 @@
 // #3665 —— 管理员「范围」纯逻辑（等通信欧的 grants 接口，先把不该变的语义钉住）。
 //   run: bun src/member-department-grant.test.ts
-import { departmentGrantPayload, departmentOptions, departmentScopeErrorText, scopeFromGrants, validateDepartmentScope } from './member-department-grant';
+import { departmentGrantPayload, departmentOptions, departmentScopeErrorText, filterGrantableDepartments, mergeUserGrants, scopeFromGrants, validateDepartmentScope } from './member-department-grant';
 
 let passed = 0;
 let total = 0;
@@ -24,5 +24,15 @@ ck('level=readonly 不算「仅某部门」的管理授权', scopeFromGrants([{ 
 ck('部门选项去空、去重、保序',
   JSON.stringify(departmentOptions([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }, { id: 'a', name: 'A2' }, { id: '', name: 'X' }])) === JSON.stringify([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }]));
 
+ck('整份替换：全部 → 去掉 manage_nodes，其它 capability 保留',
+  JSON.stringify(mergeUserGrants([{ capability: 'manage_nodes', scope_kind: 'department', scope_id: 'dep_1', level: 'edit' }, { capability: 'other', scope_kind: 'network', scope_id: '', level: 'read' }], { mode: 'all' }))
+  === JSON.stringify([{ capability: 'other', scope_kind: 'network', scope_id: '', level: 'read' }]));
+ck('整份替换：仅某部门 → 替换成一条 department/edit',
+  JSON.stringify(mergeUserGrants([{ capability: 'manage_nodes', scope_kind: 'network', scope_id: '', level: 'edit' }], { mode: 'department', departmentId: 'dep_9' }))
+  === JSON.stringify([{ capability: 'manage_nodes', scope_kind: 'department', scope_id: 'dep_9', level: 'edit' }]));
+ck('部门负责人：候选只给自己子树内的部门',
+  JSON.stringify(filterGrantableDepartments([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], ['b']).map(n => n.id)) === JSON.stringify(['b']));
+ck('不是负责人（allowed 空）→ 不过滤',
+  filterGrantableDepartments([{ id: 'a', name: 'A' }, { id: 'b', name: 'B' }], []).length === 2);
 console.log(`${passed}/${total} passed`);
 if (passed !== total) process.exit(1);

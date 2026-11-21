@@ -693,6 +693,46 @@ export const putMachineAlias = async (cfg: HubConfig, hostname: string, alias: s
   }
 };
 
+/** #3665 —— 人的「范围管理授权」：GET/PUT /api/users/:user_id/grants（整份替换）。
+ *  body { grants: [{ capability:'manage_nodes', scope_kind:'network'|'department', scope_id, level:'read'|'edit' }] }。
+ *  谁能授：network owner/admin 任意；部门负责人只在自己子树内（接口层 403 permission_denied）。 */
+export type UserGrantRow = { capability: string; scope_kind: string; scope_id: string; level: string; granted_by?: string | null; created_at?: string };
+export type UserGrantsRead = { ok: true; user_id: string; grants: UserGrantRow[]; capabilities?: string[]; scopes?: string[]; levels?: string[] } | { ok: false; error: string; status?: number };
+
+export const fetchUserGrants = async (cfg: HubConfig, userId: string): Promise<UserGrantsRead> => {
+  try {
+    const q = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/users/${encodeURIComponent(userId)}/grants${q}`, { method: 'GET', headers: headers(cfg), signal }));
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return { ok: false, error: String(body?.error ?? `HTTP ${res.status}`), status: res.status };
+    return {
+      ok: true,
+      user_id: String(body?.user_id ?? userId),
+      grants: Array.isArray(body?.grants) ? body.grants : [],
+      capabilities: Array.isArray(body?.capabilities) ? body.capabilities : undefined,
+      scopes: Array.isArray(body?.scopes) ? body.scopes : undefined,
+      levels: Array.isArray(body?.levels) ? body.levels : undefined,
+    };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
+export const putUserGrants = async (cfg: HubConfig, userId: string, grants: UserGrantRow[]): Promise<{ ok: true; grants: UserGrantRow[] } | { ok: false; error: string; status?: number }> => {
+  try {
+    const q = cfg.networkId ? `?network_id=${encodeURIComponent(cfg.networkId)}` : '';
+    const res = await withTimeout(signal => appFetch(`${cfg.serverUrl}/api/users/${encodeURIComponent(userId)}/grants${q}`, {
+      method: 'PUT', headers: headers(cfg), signal,
+      body: JSON.stringify({ grants: grants.map(g => ({ capability: g.capability, scope_kind: g.scope_kind, scope_id: g.scope_id, level: g.level })) }),
+    }));
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return { ok: false, error: String(body?.error ?? `HTTP ${res.status}`), status: res.status };
+    return { ok: true, grants: Array.isArray(body?.grants) ? body.grants : [] };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
 /** 白名单 PUT 被拒时 Hub 给的全部信息:error 码之外,node_permission_denied 带 reason + hint,其它带 message。 */
 export interface NodeAllowlistFailure { ok: false; error: string; status?: number; reason?: string; hint?: string; message?: string }
 
