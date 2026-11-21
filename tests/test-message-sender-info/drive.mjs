@@ -18,6 +18,10 @@ try {
     await page.addInitScript(() => {
       window.__chatTasksFixture = [{ task_id: 'sender-card', from_name: '示例-B', from_node_id: 'n_sweep_b', to_name: '示例-A', content: '来自另一节点的消息', result: '当前节点回复', status: 'replied', created_at: new Date().toISOString() }];
       window.__routeOverride = u => {
+        if (u.pathname === '/api/nodes') return { nodes: [
+          { node_id: 'n_sweep_a', alias: '示例-A', department_id: null },
+          { node_id: 'n_sweep_b', alias: '示例-B', node_name: '发送方显示名', department_id: null },
+        ] };
         if (u.pathname.endsWith('/members')) return { members: [{ user_id: 'user-tester', username: 'tester', role: 'admin' }] };
         if (u.pathname.endsWith('/departments')) return { departments: [], members: [] };
         return undefined;
@@ -25,9 +29,13 @@ try {
     });
     await page.goto(web.url);
     await page.locator('[data-agent-alias="示例-A"]').first().click({ timeout: 30000 });
-    await page.getByTestId('chat-sender-avatar-foreign').first().click({ timeout: 15000 });
+    const sourceAvatar = page.getByTestId('chat-sender-avatar-foreign').first();
+    await sourceAvatar.waitFor({ timeout: 15000 });
+    const sourceImage = await sourceAvatar.locator('img').getAttribute('src');
+    await sourceAvatar.click();
     const card = page.getByTestId('chat-sender-identity');
-    await card.getByText('示例-B', { exact: true }).waitFor();
+    await card.getByText('发送方显示名', { exact: true }).waitFor();
+    assert.equal(await card.locator('img').getAttribute('src'), sourceImage, 'display name must not change avatar identity');
     const message = page.getByTestId('chat-sender-message');
     await message.waitFor({ timeout: 15000 });
     assert.equal(await page.getByTestId('chat-info-row-search').count(), 0);

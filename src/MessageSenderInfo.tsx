@@ -55,10 +55,13 @@ export default function MessageSenderInfo({ cfg, networkId, author, currentAlias
     ? { label: t('chat.sender.message'), onPress: () => { onClose(); onMessage({ alias: target.alias, networkId: target.networkId }); } }
     : undefined;
   const name = loaded?.name || author.label || t('chat.sender.title');
+  // Avatar lookup is keyed by alias/username, not the mutable display name.
+  const avatarAlias = target?.kind === 'node' ? target.alias
+    : target?.kind === 'user' ? target.username : author.label || '';
   return <ChatInfoPanel
     visible presentation={presentation} groups={[]} alias={name}
     paneWidth={paneWidth} headerHeight={headerHeight} onClose={onClose} onRow={() => {}}
-    identity={{ avatar: <AliasAvatar alias={name} size={48} />, name,
+    identity={{ avatar: <AliasAvatar alias={avatarAlias} size={48} />, name,
       details: loaded?.details || [t(failed ? 'chat.sender.unavailable' : 'chat.sender.loading')], message }}
   />;
 }
