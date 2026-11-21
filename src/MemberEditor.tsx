@@ -21,6 +21,7 @@ import { SettingsButton, SettingsCardContent, SettingsChoiceRow, SettingsGroup, 
 import type { SettingsHeaderOverride } from './settings-model';
 import DialogFrame from './DialogFrame';
 import RemoveSheet from './RemoveSheet';
+import MemberAdminScope from './MemberAdminScope';
 import TaskAccessSection, { TaskProjectsPage, useTaskAccessState } from './TaskAccessSection';
 import { CheckBox, LabeledSwitch, SectionLabel, Segmented } from './MemberEditorKit';
 import { useAgentPicker, type AgentPickerState } from './agent-picker-state';
@@ -160,12 +161,16 @@ export function MemberDialog({ cfg, me, networkId, member, agentGroups, onClose,
       {twoCol ? (
         <View style={styles.cols} testID="member-cols">
           <ScrollView style={styles.colL} contentContainerStyle={styles.colContent} testID="member-col-left">{left}</ScrollView>
-          <View style={[styles.colR, styles.colContent]} testID="member-col-right"><AccessColumn ed={ed} /></View>
+          <View style={[styles.colR, styles.colContent]} testID="member-col-right">
+            <AccessColumn ed={ed} />
+            {ed.role === 'admin' ? <MemberAdminScope cfg={cfg} networkId={networkId} userId={member.user_id} me={me} /> : null}
+          </View>
         </View>
       ) : (
         <View style={[styles.single, styles.colContent]} testID="member-col-single">
           {left}
           {ed.accessEditable ? <AccessColumn ed={ed} /> : <AdminNote role={ed.role} />}
+          {ed.role === 'admin' ? <MemberAdminScope cfg={cfg} networkId={networkId} userId={member.user_id} me={me} /> : null}
         </View>
       )}
     </DialogFrame>
