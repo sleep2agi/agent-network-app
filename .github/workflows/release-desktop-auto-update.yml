@@ -614,6 +614,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.599:
+            - 节点详情的「模型与运行时」里新增「进阶：切换运行时」：可以直接在 App 里改运行时（默认收起，避免误触）。
+            - 会明确提示：改完需要重启节点才生效；换运行时可能需要重新配置认证。
+
             What's new in 0.2.598:
             - 在 App 里给 ACP 节点（Antigravity / Grok）改模型时，输入框会先填上当前配置的模型，不用自己记模型名。
 
