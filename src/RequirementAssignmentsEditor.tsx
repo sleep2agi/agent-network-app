@@ -68,7 +68,7 @@ export default function RequirementAssignmentsEditor({ cfg, item, onSaved, field
     return () => { dead = true; };
   }, [cfg.serverUrl, cfg.token, cfg.networkId, supported, reload, sharedDirectory]);
 
-  // 找不到的成员显示「未知成员（末 6 位）」,永远不把裸 id 当名字(owner 0.2.141 截图)。
+  // 找不到的成员显示「未知成员」,永远不把裸 id 当名字(owner 0.2.141 截图)。
   const label = (ref: RequirementPersonRef) => {
     const person = people.find(row => personKey(row) === personKey(ref));
     // 分两个角色的 Hub 上负责人 / 参与人只会是人类,不再标「（人类）」;旧 Hub 人和 Agent 混着,照旧标种类。
