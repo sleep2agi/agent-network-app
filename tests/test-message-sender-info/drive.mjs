@@ -72,6 +72,12 @@ try {
     };
     await closeCard();
     await page.getByTestId('chat-header').getByText('示例-A', { exact: true }).first().waitFor();
+    // Change profile targets without leaving the conversation: no stale sender action.
+    await page.getByTestId('chat-sender-avatar-reply').first().click();
+    await card.getByText('示例-A', { exact: true }).waitFor();
+    assert.equal(await message.count(), 0, 'current node profile must not offer a redundant chat jump');
+    assert.equal(await card.getByText('发送方显示名', { exact: true }).count(), 0);
+    await closeCard();
     await page.evaluate(() => { window.__senderDirectoryFailure = true; });
     await sourceAvatar.click();
     await card.getByText('无法确认发送方身份，请关闭后重试', { exact: true }).waitFor();
@@ -84,7 +90,7 @@ try {
     await page.getByTestId('chat-header').getByText('示例-B', { exact: true }).first().waitFor({ timeout: 10000 });
     assert.equal(await card.count(), 0);
     assert.deepEqual(errors, []);
-    console.log(`PASS ${width} ${theme}: identity, close preserves chat, directory error, reopen recovery, message navigation`);
+    console.log(`PASS ${width} ${theme}: identity, close preserves chat, target switch, self has no message action, directory error, reopen recovery, message navigation`);
     await ctx.close();
   }
 } finally {
