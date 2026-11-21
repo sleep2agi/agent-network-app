@@ -3,6 +3,6 @@
 export function glassContentCss(classNames: readonly string[]): string {
   return classNames
     .filter(c => /^r-[A-Za-z0-9_-]+$/.test(c))
-    .map(c => `[data-glass-content] .${c}{background-color:transparent !important}`)
+    .map(c => `[data-glass-content] .${c}:not([data-glass-opaque]){background-color:transparent !important}`)
     .join('\n');
 }

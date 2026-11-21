@@ -99,7 +99,7 @@ const checks: Array<[string, boolean]> = [
   ['foreign requests are labelled sender → agent',
     screen.includes('{`${sender.alias} → ${alias}`}')],
   ['foreign requests show the sender avatar on the left',
-    /styles\.foreignRow\]\}>\s*<AliasAvatar alias=\{sender\.alias\} size=\{36\} \/>/.test(screen)],
+    /styles\.foreignRow\]\}>\s*<Pressable\b[^\n]*testID="chat-sender-avatar-foreign"[^\n]*>\s*<AliasAvatar alias=\{sender\.alias\} size=\{36\} \/>\s*<\/Pressable>/.test(screen)],
   ['the identity lookup retries instead of giving up once',
     screen.includes('nextIdentityRetryDelay(')],
   ['the delivered marker is gated on ownership',

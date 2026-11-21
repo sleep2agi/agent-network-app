@@ -4,7 +4,7 @@
 //            Esc(web)、点左侧遮罩、安卓返回键关闭。
 //   page   — 手机单栏:推进来的一整页(Modal,自己的窗口 ⇒ useModalSafePadding),‹ / 系统返回关闭;
 //            web 导出里再压一条 history,让浏览器「后退」也只关这一页。
-import { useEffect, useMemo, useRef } from 'react';
+import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
 import { Text } from './ui-text';
 import { useTranslation } from './i18n-react';
@@ -32,6 +32,7 @@ export default function ChatInfoPanel({
   headerHeight,
   onClose,
   onRow,
+  identity,
 }: {
   visible: boolean;
   presentation: ChatInfoPresentation;
@@ -43,6 +44,13 @@ export default function ChatInfoPanel({
   headerHeight?: number;
   onClose: () => void;
   onRow: (row: ChatInfoRow) => void;
+  /** Sender profile mode: omit conversation actions entirely. Labels are localized by the caller. */
+  identity?: {
+    avatar: ReactNode;
+    name: string;
+    details: string[];
+    message?: { label: string; onPress: () => void };
+  };
 }) {
   const safe = useModalSafePadding('fullScreen');
   const { t } = useTranslation();
@@ -89,7 +97,35 @@ export default function ChatInfoPanel({
 
   const body = (
     <ScrollView style={styles.scroll} contentContainerStyle={styles.scrollContent} testID="chat-info-list">
-      {groups.map((rows, gi) => (
+      {identity ? (
+        <>
+          <View style={styles.group} testID="chat-sender-identity">
+            <View style={[styles.row, styles.profileRow]}>
+              {identity.avatar}
+              <View style={styles.profileText}>
+                <Text style={styles.profileName} numberOfLines={1}>{identity.name}</Text>
+                {identity.details.map((detail, index) => (
+                  <Text key={index} style={styles.profileSub}>{detail}</Text>
+                ))}
+              </View>
+            </View>
+          </View>
+          {identity.message ? (
+            <View style={styles.group}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={identity.message.label}
+                onPress={identity.message.onPress}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                testID="chat-sender-message"
+              >
+                <Text style={styles.label}>{identity.message.label}</Text>
+                <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          ) : null}
+        </>
+      ) : groups.map((rows, gi) => (
         <View key={rows[0]?.key ?? gi} style={styles.group}>
           {rows.map((row, ri) => (
             <View key={row.key}>
@@ -113,9 +149,9 @@ export default function ChatInfoPanel({
           accessibilityLabel={t('chat.closeInfo')}
           testID="chat-info-backdrop"
         />
-        <View ref={drawerRef} style={[styles.drawer, { width: chatInfoDrawerWidth(paneWidth) }]} testID="chat-info-panel" accessibilityViewIsModal>
+        <View ref={drawerRef} style={[styles.drawer, { width: chatInfoDrawerWidth(paneWidth) }]} testID="chat-info-panel" accessibilityViewIsModal {...({ dataSet: { glassOpaque: 'true' } } as any)}>
           <View style={[styles.header, headerHeight ? { minHeight: headerHeight } : null]} testID="chat-info-header">
-            <Text style={styles.headerTitle} testID="chat-info-title">{t('chat.info')}</Text>
+            <Text style={styles.headerTitle} testID="chat-info-title">{t(identity ? 'chat.sender.title' : 'chat.info')}</Text>
           </View>
           {body}
         </View>
@@ -130,7 +166,7 @@ export default function ChatInfoPanel({
           <Pressable onPress={onClose} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} style={styles.back} testID="chat-info-back">
             <Ionicons name="chevron-back" size={24} color={colors.text} />
           </Pressable>
-          <Text style={styles.headerTitle} testID="chat-info-title">{t('chat.info')}</Text>
+          <Text style={styles.headerTitle} testID="chat-info-title">{t(identity ? 'chat.sender.title' : 'chat.info')}</Text>
           {/* Balances the back button so the title sits in the true centre. */}
           <View style={styles.back} />
         </View>

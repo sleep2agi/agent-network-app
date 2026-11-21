@@ -82,6 +82,8 @@ import { mobileGlowActive } from './glow-mode';
 import { chatCornerGlow } from './chat-glow';
 import { useGlassChrome } from './glass-chrome';
 import ChatInfoPanel from './ChatInfoPanel';
+import MessageSenderInfo from './MessageSenderInfo';
+import { messageAvatarAuthor } from './message-avatar-target';
 import NodeDepartmentPicker from './NodeDepartmentPicker';
 import { canEditDepartments, departmentDisplayLabel, type OrgLike } from './node-department-edit';
 import { fetchOrg } from './org-api';
@@ -331,6 +333,8 @@ interface Props {
   onCreateNode?: (daemon: HostSupervisorDaemon) => void;
   /** 守护进程管理页里点托管节点的「对话」。 */
   onOpenManagedChat?: (alias: string) => void;
+  /** Sender profile's message action; keep the resolved network with its alias. */
+  onOpenSenderChat?: (target: { alias: string; networkId: string }) => void;
   /** #769: 点开这个会话的那一行所在网络。发送 / 历史 / 已读 / 附件都打到它,不是账号当前网络。 */
   networkId?: string;
   /** Hub 概览点机器进守护进程管理:角色尚未从 /api/nodes 确认时也显示管理页与设置入口。 */
@@ -345,7 +349,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, focusSilent = false, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, daemonMgmt = false }: Props) {
+export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, focusSilent = false, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, onOpenSenderChat, daemonMgmt = false }: Props) {
   useTranslation();
   // #769: everything below is agent-scoped — use THIS agent's network, not the account's current one.
   const cfg = useMemo(() => cfgForAgent(accountCfg, alias, networkId), [accountCfg, alias, networkId]);
@@ -363,6 +367,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const byTaskId = useMemo(() => new Map(messages.map(m => [msgKey(m), m] as const)), [messages]);
   // i18n-allow: legacy sender fallback participates in quote/forward identity, not translatable UI.
   const [currentUsername, setCurrentUsername] = useState('我');
+  const [currentUserId, setCurrentUserId] = useState<string | undefined>();
+  const [senderProfile, setSenderProfile] = useState<{ nodeId?: string; userId?: string; label?: string } | null>(null);
+  useEffect(() => { setSenderProfile(null); }, [alias, cfg.networkId, cfg.serverUrl, cfg.profileId, cfg.token]);
+  useEffect(() => { setCurrentUserId(undefined); }, [cfg.serverUrl, cfg.profileId, cfg.token]);
   const [loaded, setLoaded] = useState(false);
   // admin 2026-11-20 截图：会话打开后骨架一直不消（首屏读没回来，poll 在非前台时根本不跑）。
   // 8 秒还没 loaded 就给一个可点的重试，不再干等。
@@ -817,6 +825,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         .then(data => {
           const username = data?.user?.username;
           if (!alive) return;
+          setCurrentUserId(data?.user?.user_id);
           if (typeof username === 'string' && username.trim()) { setCurrentUsername(username.trim()); return; }
           schedule();
         })
@@ -2929,13 +2938,17 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                       ) : null}
                     </Pressable>
                   </View>
-                  <AliasAvatar alias={sender.alias} size={36} />
+                  <Pressable accessibilityRole="button" accessibilityLabel={sender.alias} testID="chat-sender-avatar-mine" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'sent', outgoing, currentAlias: alias, currentUserId, row: item }))}>
+                    <AliasAvatar alias={sender.alias} size={36} />
+                  </Pressable>
                 </View>
                 ) : (
                 // 0.2.72 Vincent:别的节点派给这个 agent 的任务不是「我」说的 ——
                 // 放在收到侧,头像用发送方,作者行写「发送方 → 本 agent」。
                 <View style={[styles.messageRow, styles.foreignRow]}>
-                  <AliasAvatar alias={sender.alias} size={36} />
+                  <Pressable accessibilityRole="button" accessibilityLabel={sender.alias} testID="chat-sender-avatar-foreign" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'sent', outgoing, currentAlias: alias, currentUserId, row: item }))}>
+                    <AliasAvatar alias={sender.alias} size={36} />
+                  </Pressable>
                   <View style={[styles.messageContent, bubbleCap]}>
                     <ChatMetaLine name={`${sender.alias} → ${alias}`} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-foreign" />
                     <Pressable
@@ -2962,7 +2975,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 ) : null}
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
-                    <AliasAvatar alias={alias} size={36} />
+                    <Pressable accessibilityRole="button" accessibilityLabel={outgoing ? outgoingReplyAuthor(item, alias) : alias} testID="chat-sender-avatar-reply" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'reply', outgoing, currentAlias: alias, currentUserId, row: item }))}>
+                      <AliasAvatar alias={outgoing ? outgoingReplyAuthor(item, alias) : alias} size={36} />
+                    </Pressable>
                     <View style={[styles.messageContent, bubbleCap, item.late ? { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.sm } : null]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
                       <ChatMetaLine name={`${outgoing ? outgoingReplyAuthor(item, alias) : alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
@@ -3646,6 +3661,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         onClose={() => setInfoOpen(false)}
         onRow={onInfoRow}
       />
+      {senderProfile ? <MessageSenderInfo
+        cfg={cfg} networkId={cfg.networkId ?? ''} author={senderProfile} currentAlias={alias}
+        presentation={chatInfoPresentation({ desktop, hideBack })} paneWidth={paneWidth} headerHeight={headerHeight}
+        onClose={() => setSenderProfile(null)} onMessage={onOpenSenderChat}
+      /> : null}
       {deptPickerOpen && deptInfo ? (
         <NodeDepartmentPicker
           cfg={cfg}
