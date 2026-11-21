@@ -96,6 +96,21 @@ async function prepare() {
     await api('DELETE', `/certificates/${encodeURIComponent(c.id)}`);
   }
 
+  // 2026-11-21 硬闸（负责人 定）：存在「本 CI 认不出来的 current IOS_DISTRIBUTION 证书」时**停下来报错**，
+  // 绝不自动吊销。原因：吊销不可逆，会废掉别人本机 Xcode 里挂这张证书的 profile；而这张证书
+  // 属于谁（个人还是团队）我们并不知道 —— 这是需要人决定的事，不能让 CI 自己选。
+  // 触发场景：0.2.590 的 ios-ipa 409 ENTITY_ERROR（You already have a current iOS Distribution
+  // certificate or a pending certificate request）。
+  if (keep.length > 0) {
+    const lines = keep.map(c => `  - id=${c.id} type=${c.type ?? '?'} subject=${c.subject ?? '?'} expires=${c.expiresAt?.toISOString?.() ?? '?'}`);
+    console.error('::error::refusing to create a new IOS_DISTRIBUTION certificate: this account already has current certificate(s) this CI cannot reuse.');
+    console.error('  CI generates a fresh key per run, so it cannot reuse an existing certificate (no private key available).');
+    console.error('  Revoking is IRREVERSIBLE and would break Xcode profiles that use it — a human must decide.');
+    console.error(lines.join('\n'));
+    console.error('  Options: (A2) store a long-lived distribution .p12 + password in secrets and reuse it; (B) revoke one of the above after owner sign-off.');
+    process.exit(3);
+  }
+
   const certificate = await api('POST', '/certificates', {
     data: {
       type: 'certificates',
