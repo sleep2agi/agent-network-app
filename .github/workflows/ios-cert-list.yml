@@ -72,7 +72,6 @@ jobs:
             id: c.id,
             name: c.attributes?.name ?? null,
             type: c.attributes?.certificateType ?? null,
-            created: c.attributes?.expirationDate ? undefined : undefined,
             csrCreated: c.attributes?.createdDate ?? null,
             expires: c.attributes?.expirationDate ?? null,
             serial: c.attributes?.serialNumber ?? null,
