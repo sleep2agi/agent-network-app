@@ -248,8 +248,11 @@ export default function NodeSchedulesSection({ cfg, nodeId, editable, createSeq 
   return (
     <View style={{ gap: spacing.sm }}>
       {state.kind === 'error' ? (
-        <View style={[s.inline, { justifyContent: 'space-between' }]} testID="node-schedules-error">
-          <Text style={[s.error, { flex: 1 }]}>读取失败:{state.message}{state.stale ? '(下面是上一次的结果)' : ''}</Text>
+        // admin 2026-11-21「右侧有点丑」:之前是裸红字 + 浮在外面的重试按钮,还把原始 path(/api/...、network_id)
+        // 直接拼进了报错文案里(违反第一性原理②「说人话」)。改成和 CreateNodeWizardScreen 的 warnCard 同一套
+        // 卡片样式(边框+圆角,不填满底色),文案也在 api.ts 里去掉了 path;重试按钮挪进卡片内,不再孤悬在外。
+        <View style={s.errorCard} testID="node-schedules-error">
+          <Text style={s.errorText}>读取失败:{state.message}{state.stale ? '(下面是上一次的结果)' : ''}</Text>
           <Pressable onPress={() => { setState({ kind: 'loading' }); void load(); }} hitSlop={8} accessibilityRole="button" testID="node-schedules-retry" style={s.retry}>
             <Text style={s.retryText}>重试</Text>
           </Pressable>
@@ -381,6 +384,10 @@ const makeStyles = () => StyleSheet.create({
   inline: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm },
   muted: { color: colors.textMuted, fontSize: typeScale.body },
   error: { color: colors.failed, fontSize: typeScale.small },
+  // 和 CreateNodeWizardScreen 的 warnCard 同一套样式:边框卡片,不是满版红底(这一条是「暂时读不到,下面是旧结果」,
+  // 不是红色警报级别的失败)。
+  errorCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', gap: spacing.sm, backgroundColor: colors.card, borderColor: colors.blocked, borderWidth: 1, borderRadius: radius.surface, padding: spacing.md },
+  errorText: { flex: 1, color: colors.text, fontSize: typeScale.small, lineHeight: 18 },
   retry: { ...buttonStyle('secondary') },
   retryText: { ...buttonTextStyle('secondary') },
   empty: { alignItems: 'center', paddingVertical: spacing.xl * 1.5, paddingHorizontal: spacing.lg, gap: spacing.md },
