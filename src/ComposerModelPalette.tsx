@@ -105,6 +105,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const [acpSaving, setAcpSaving] = useState(false);
   const [acpNotice, setAcpNotice] = useState<string | null>(null);
   const [acpError, setAcpError] = useState<string | null>(null);
+  const [acpPrefilled, setAcpPrefilled] = useState(false);
   // #4976 跟进：loading 超过 4 秒就换成「还剩多少秒会出结果」，别让人对着同一句话干等。
   const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
   useEffect(() => {
@@ -115,6 +116,13 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   }, [catalog.loading, catalogAttempt]);
   // undefined = 正在读；null = Hub 没这个接口/读失败；对象 = 真实读回。
   const [config, setConfig] = useState<NodeConfigRead | null | undefined>(undefined);
+  // ACP 面板：配置读到后把当前模型填进输入框（只填一次，别覆盖用户正在改的内容）。
+  useEffect(() => {
+    if (acpPrefilled || config === undefined) return;
+    const current = (config?.model ?? '').trim();
+    if (current) setAcpDraft(current);
+    setAcpPrefilled(true);
+  }, [config, acpPrefilled]);
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
