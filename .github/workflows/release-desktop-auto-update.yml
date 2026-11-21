@@ -614,6 +614,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.602:
+            ### 修复
+
+            - **范围授权错误提示更易懂**：成员管理中的范围授权读取、保存失败时，常见错误显示中文说明，例如部门不存在、没有授权权限或未选择部门，方便判断下一步操作。
+
             What's new in 0.2.601:
             ### 修复
 
