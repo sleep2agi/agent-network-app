@@ -97,3 +97,29 @@ export function filterGrantableDepartments(
   const set = new Set(allowed);
   return all.filter(n => set.has(n.id));
 }
+
+/** Hub 的范围授权错误码 → 用户能看懂的一句话（实测生产 .288 契约）。
+ *  未列出的码原样返回，方便报障时对得上日志。 */
+export function grantErrorText(code: string | null | undefined): string {
+  switch (code) {
+    case 'permission_denied':
+      return '你没有权限授这个部门（部门负责人只能授自己负责的部门）。';
+    case 'department_not_found':
+      return '这个部门不存在（可能已被删除）。';
+    case 'invalid_scope':
+    case 'invalid_scope_kind':
+      return 'Hub 不认识这个范围类型（客户端与 Hub 版本可能不一致）。';
+    case 'scope_id_required':
+      return '选了「仅某部门」但没有选部门。';
+    case 'invalid_grants':
+      return '请求格式不对（客户端的范围授权数据没通过 Hub 校验）。';
+    case 'user_not_found':
+      return '这个成员已经不在网络里了。';
+    case 'network_id_required':
+      return 'Hub 没认出当前网络，请切换网络后重试。';
+    case 'unsupported':
+      return '当前 Hub 还不支持范围授权。';
+    default:
+      return String(code ?? '').trim() || '保存失败，请重试。';
+  }
+}
