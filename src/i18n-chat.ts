@@ -1,5 +1,11 @@
 import { registerTranslations } from './i18n';
 export const chatTranslations = {
+  'chat.sender.title': ['身份信息', 'Sender info'],
+  'chat.sender.loading': ['正在读取身份信息…', 'Loading sender info…'],
+  'chat.sender.unavailable': ['无法确认发送方身份，请关闭后重试', 'Unable to identify the sender. Close and try again.'],
+  'chat.sender.message': ['发消息', 'Message'],
+  'chat.sender.noDepartment': ['未归属部门', 'No department'],
+  'chat.sender.unknownDepartment': ['部门信息暂不可用', 'Department info unavailable'],
   // #4130 follow-up —— 聊天页「选模型」命令面板（浮层搜索 + provider 分组）。
   'chat.modelPicker.search': ['搜索模型', 'Search models'],
   'chat.modelPicker.close': ['关闭', 'Close'],

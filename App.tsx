@@ -873,6 +873,7 @@ function AppRoot() {
             onBack={() => {}}
             onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias, daemonMgmt: screen.daemonMgmt })}
             onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias })}
+            onOpenSenderChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })}
             desktop
             windowChrome={windowChrome}
           />
@@ -1072,6 +1073,7 @@ function AppRoot() {
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                         onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId, daemonMgmt: screen.daemonMgmt } })}
                         onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
+                        onOpenSenderChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })}
                         onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                         focusTaskId={screen.focusTaskId}
                         focusSilent={screen.focusSilent}
@@ -1110,6 +1112,7 @@ function AppRoot() {
                   onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                   onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId, daemonMgmt: screen.daemonMgmt } })}
                   onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
+                  onOpenSenderChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })}
                   onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
                   focusTaskId={screen.focusTaskId}
                   focusSilent={screen.focusSilent}
@@ -1441,6 +1444,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
       onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}
       onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId, daemonMgmt: screen.daemonMgmt } })}
       onOpenManagedChat={managedAlias => setScreen({ name: 'chat', alias: managedAlias, networkId: screen.networkId })}
+      onOpenSenderChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })}
       onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }}
       onOpenTask={(id, net) => openTaskRef(id, net, cfg, setScreen)}
       focusTaskId={screen.focusTaskId}
