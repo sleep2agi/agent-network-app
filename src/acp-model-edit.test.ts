@@ -29,5 +29,6 @@ ck('界面明说需要重启 + 未读回', palette.includes("t('chat.modelPicker
 ck('有输入框与保存按钮的 testID', palette.includes('model-palette-acp-input') && palette.includes('model-palette-acp-save'));
 
 ck('同时显示节点配置值与运行时上报值（避免「保存没生效」的误读）', palette.includes('model-palette-acp-configured') && palette.includes("t('chat.modelPicker.acpConfigured'"));
+ck('进入面板时把当前配置模型填进输入框（只填一次，不覆盖改动）', palette.includes('acpPrefilled') && palette.includes('if (current) setAcpDraft(current)'));
 console.log(`${passed}/${total} passed`);
 if (passed !== total) process.exit(1);
