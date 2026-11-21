@@ -18,6 +18,7 @@ try {
     await page.addInitScript(() => {
       window.__chatTasksFixture = [{ task_id: 'sender-card', from_name: '示例-B', from_node_id: 'n_sweep_b', to_name: '示例-A', content: '来自另一节点的消息', result: '当前节点回复', status: 'replied', created_at: new Date().toISOString() }];
       window.__routeOverride = u => {
+        if (window.__senderDirectoryFailure && u.pathname.endsWith('/members')) return { ok: false, error: 'permission_denied' };
         if (u.pathname === '/api/nodes') return { nodes: [
           { node_id: 'n_sweep_a', alias: '示例-A', department_id: null },
           { node_id: 'n_sweep_b', alias: '示例-B', node_name: '发送方显示名', department_id: null },
@@ -46,11 +47,26 @@ try {
       });
     }
     await page.screenshot({ path: `${OUT}/${width}-${theme}-sender.png` });
+    const closeCard = async () => {
+      if (width === 390) await page.getByTestId('chat-info-back').click();
+      else await page.keyboard.press('Escape');
+      await card.waitFor({ state: 'detached' });
+    };
+    await closeCard();
+    await page.getByTestId('chat-header').getByText('示例-A', { exact: true }).first().waitFor();
+    await page.evaluate(() => { window.__senderDirectoryFailure = true; });
+    await sourceAvatar.click();
+    await card.getByText('无法确认发送方身份，请关闭后重试', { exact: true }).waitFor();
+    assert.equal(await message.count(), 0, 'directory failure must not expose a guessed navigation target');
+    await closeCard();
+    await page.evaluate(() => { window.__senderDirectoryFailure = false; });
+    await sourceAvatar.click();
+    await card.getByText('发送方显示名', { exact: true }).waitFor();
     await message.click();
     await page.getByTestId('chat-header').getByText('示例-B', { exact: true }).first().waitFor({ timeout: 10000 });
     assert.equal(await card.count(), 0);
     assert.deepEqual(errors, []);
-    console.log(`PASS ${width} ${theme}: sender identity, no conversation tools, message navigation`);
+    console.log(`PASS ${width} ${theme}: identity, close preserves chat, directory error, reopen recovery, message navigation`);
     await ctx.close();
   }
 } finally {
