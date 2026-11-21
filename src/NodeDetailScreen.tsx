@@ -747,8 +747,6 @@ export default function NodeDetailScreen({
             </View>
           ) : null}
         </View>
-        {/* Hub #3711 —— 机器别名（按 hostname）。只读页（聊天里的节点信息）不出现编辑入口。 */}
-        {!readOnly && node?.hostname ? <MachineAliasCard cfg={cfg} hostname={node.hostname} /> : null}
         {/* board #694 —— 重启 / 停止放在主人看的地方:概览。置灰也画出来,底下一句原因 + 下一步(收编 / 没有 daemon)。
             只读页(聊天里的「节点信息」)也在:重启 / 停止是主人在这里要的;删除 / 启动仍只在节点详情的「危险操作」里。 */}
         {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
@@ -769,6 +767,9 @@ export default function NodeDetailScreen({
             />
           </View>
         ) : null}
+        {/* Hub #3711 —— 机器别名（按 hostname）。放在「重启/停止」之后：那张卡是主人上来就要点的，
+            手机上别被一张低频设置卡挤到首屏之外。只读页（聊天里的节点信息）不出现编辑入口。 */}
+        {!readOnly && node?.hostname ? <MachineAliasCard cfg={cfg} hostname={node.hostname} /> : null}
         {!readOnly ? (
           <View>
             <SectionTitle title={t('nodeClone.title')} hint={t('nodeClone.sectionHint')} />
