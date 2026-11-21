@@ -17,6 +17,8 @@ jobs:
   list:
     name: list iOS distribution certificates (GET only)
     runs-on: ubuntu-latest
+    # ASC 凭据是 environment 级 secret（ios-build 也声明了同一个）；不声明会读到空串。
+    environment: macos-signing
     timeout-minutes: 5
     steps:
       - name: Say what this job does (and does not) touch
