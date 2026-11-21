@@ -45,7 +45,9 @@
 // "field absent" apart from "screen broken" (lead 71ee862d
 // verification bullet).
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { machineAliasLabel } from './machine-alias';
+import { machineAliasFor, subscribeMachineAliases } from './machine-alias-store';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import NodeAdoptionControls from './NodeAdoptionControls';
 import { versionPairHint } from './node-version-pair';
@@ -284,6 +286,11 @@ export default function NodeDetailScreen({
     return () => releaseOnUnmount(sectionHandoffKey, activeSectionRef.current, mountedGeneration);
   }, [sectionHandoffKey]);
   const [showMoreFacts, setShowMoreFacts] = useState(false);
+  // Hub #3711 —— 机器别名可能在详情页里被改（下方卡片），概览里那一行要跟着刷新。
+  // 注意：这个 hook 必须和其它 hook 放在同一段（之前放在 facts 旁边，早退分支会让 hook 数量变化 → React #310）。
+  const [machineAliasTick, setMachineAliasTick] = useState(0);
+  useEffect(() => subscribeMachineAliases(() => setMachineAliasTick(v => v + 1)), []);
+
   // 规则文件草稿没保存时,切分区 / 返回之前先问(草稿只活在 NodeRulesSection 里,一卸载就没了)。
   const [rulesDirty, setRulesDirty] = useState(false);
   const [pendingLeave, setPendingLeave] = useState<null | (() => void)>(null);
@@ -538,8 +545,12 @@ export default function NodeDetailScreen({
     void load();
   };
 
+  // tick 只用于触发重渲染；值本身不参与计算（s 在这里才可用，别把这段挪到 hook 区）。
+  void machineAliasTick;
+  const machineName = machineAliasLabel(node?.hostname ?? s.hostname, machineAliasFor(cfg, node?.hostname ?? s.hostname) ?? null);
   const facts: NodeInfoFact[] = [
     ...nodeInfoFacts(s, node, cfg.serverUrl),
+    ...(machineName ? [{ label: '机器', value: machineName }] : []),
     { label: '所属部门', value: department ?? (hasDepartments && node ? '未分配' : undefined) },
     { label: '最后更新', value: formatTime(s.updated_at) },
     { label: '生命周期', value: node?.lifecycle_state },
