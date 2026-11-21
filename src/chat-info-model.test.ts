@@ -101,9 +101,15 @@ const panel = read('ChatInfoPanel.tsx');
   const header = chat.slice(open, end);
   const pressables = header.match(/<Pressable\b/g)?.length ?? 0;
   // #573：模型未知时标题里的型号变成「选择模型」入口（多了第 3 个 Pressable）；有模型名时仍是 2 个。
-  check(pressables === 2 || pressables === 3, `header has back + ⋯ (+ 可选模型入口) (${pressables} Pressables)`);
+  // admin 2026-11-21「点击节点进去就能快速调整组织」：头像+名字那一块本来就不是可点的，这条要求
+  // 加了第三个（手机上第四个）—— 不是新按钮，是把本来就该看起来能点的头像/名字变成真的能点，
+  // 和 ⋯ 打开同一个聊天信息面板（「所属部门」已经是那个面板的第一行，#4863）。
+  check(pressables === 3 || pressables === 4, `header has back + 头像/名字 + ⋯ (+ 可选模型入口) (${pressables} Pressables)`);
   check(/accessibilityLabel=\{t\('chat.info'\)\}[\s\S]*?onPress=\{\(\) => setInfoOpen\(true\)\}[\s\S]*?testID="chat-header-more"/.test(header), '⋯ opens translated 聊天信息');
   check(/name="ellipsis-horizontal"/.test(header), '⋯ uses ellipsis-horizontal');
+  check(/testID="chat-header-identity"[\s\S]*?onPress=\{onOpenNodeSettings \? \(\) => setInfoOpen\(true\) : undefined\}/.test(header)
+    || /onPress=\{onOpenNodeSettings \? \(\) => setInfoOpen\(true\) : undefined\}[\s\S]*?testID="chat-header-identity"/.test(header),
+    '头像/名字点开同一个聊天信息面板，没有节点上下文时不可点（disabled，不是假装能点）');
   for (const gone of ['搜索聊天记录', 'chat-mute-toggle', '置顶会话', '查看节点信息', 'settings-outline', 'notifications-outline', 'pin-outline']) {
     check(!header.includes(gone), `old header control gone: ${gone}`);
   }

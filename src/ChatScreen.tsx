@@ -2597,27 +2597,40 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             <Text style={styles.back}>‹</Text>
           </Pressable>
         ) : null}
-        <AvatarStatusRing status={sessionStatus} processing={processing} size={ds(32)} testID="chat-header-ring">
-          <AliasAvatar alias={alias} size={32} />
-        </AvatarStatusRing>
-        {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
-        <View style={styles.headerTitleCol} testID="chat-header-title">
-          <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
-            {alias}
-          </Text>
-          {subtitle ? (
-            <Text
-              style={[
-                styles.subtitle,
-                processing && { color: colors.accent },
-                sessionStatus === 'offline' && !processing && { color: colors.textMuted },
-              ]}
-              numberOfLines={1}
-            >
-              {subtitle}
+        {/* admin 2026-11-21「点击节点进去就能快速调整组织」：「所属部门」早就是聊天信息面板打开后
+            的第一行（#4863），但那一行藏在 ⋯ 里，admin 下意识点的是头像/名字本身——两边都指向
+            同一个已有面板，不新开一条路径，也不违反「页头右侧只剩 ⋯」的既有克制（没往右边加按钮，
+            只是把本来就该看起来能点的头像+名字变成真的能点）。 */}
+        <Pressable
+          onPress={onOpenNodeSettings ? () => setInfoOpen(true) : undefined}
+          disabled={!onOpenNodeSettings}
+          accessibilityRole={onOpenNodeSettings ? 'button' : undefined}
+          accessibilityLabel={onOpenNodeSettings ? t('chat.info') : undefined}
+          style={styles.headerIdentity}
+          testID="chat-header-identity"
+        >
+          <AvatarStatusRing status={sessionStatus} processing={processing} size={ds(32)} testID="chat-header-ring">
+            <AliasAvatar alias={alias} size={32} />
+          </AvatarStatusRing>
+          {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
+          <View style={styles.headerTitleCol} testID="chat-header-title">
+            <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
+              {alias}
             </Text>
-          ) : null}
-        </View>
+            {subtitle ? (
+              <Text
+                style={[
+                  styles.subtitle,
+                  processing && { color: colors.accent },
+                  sessionStatus === 'offline' && !processing && { color: colors.textMuted },
+                ]}
+                numberOfLines={1}
+              >
+                {subtitle}
+              </Text>
+            ) : null}
+          </View>
+        </Pressable>
         <Pressable
           accessibilityRole={footerModel ? undefined : 'button'}
           accessibilityLabel={footerModel ? undefined : (modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect'))}
@@ -3693,6 +3706,9 @@ const makeStyles = (B = bubbleLayout()) =>
     borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
     fontSize: ds(11), overflow: 'hidden',
   },
+  // 头像+名字这一整块现在是一个可点的整体（见 chat-header-identity）：行容器接过原来
+  // headerTitleCol 的 flex:1，自己内部再给名字列同样的 flex:1，布局比例和点不动时完全一样。
+  headerIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, minWidth: 0 },
   headerTitleCol: { flex: 1, minWidth: 0 },
   beginning: {
     color: colors.textMuted,
