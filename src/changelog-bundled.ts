@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.596:",
+  "- 模型面板里把「节点配置的模型」和「运行时上报的模型」分开显示：保存后还没重启时，一眼能看出「配置已经改了，重启才生效」。",
+  "",
   "What's new in 0.2.595:",
   "- Antigravity / Grok 这类 ACP 节点，现在可以直接在 App 的「选择模型」面板里输入模型名并保存（不用再开终端跑 anet node edit）。",
   "- 保存后需要重启节点才生效；面板会明确说明「这里只确认配置写入，没有做运行时读回」。",
