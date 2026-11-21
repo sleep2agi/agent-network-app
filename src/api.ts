@@ -1729,6 +1729,8 @@ export interface NodeConfigRead {
   alias?: string;
   config_revision: number;
   model: string | null;
+  /** admin 2026-11-21：当前配置里的运行时（旧 Hub 缺省 ⇒ undefined，不猜）。 */
+  runtime?: string | null;
   flags?: Record<string, unknown>;
   config_update_capable: boolean;
   opencode_agent_config_capable?: boolean;
@@ -1813,7 +1815,7 @@ export interface UpdateNodeConfigRequest {
   nodeId: string;
   baseRevision: number;
   /** #4099：modelVariant 省略=不改档、null=清除、string=选档（序列化见 node-variant-patch.buildConfigPatch）。 */
-  patch: { model?: string; flags?: Record<string, unknown>; modelVariant?: string | null; agent?: string };
+  patch: { model?: string; flags?: Record<string, unknown>; modelVariant?: string | null; agent?: string; /** admin 2026-11-21：运行时切换（与 CLI `node edit --runtime` 同一字段）。 */ runtime?: string };
 }
 
 export type UpdateNodeConfigResult =
@@ -1829,6 +1831,7 @@ export const updateNodeConfig = async (cfg: HubConfig, req: UpdateNodeConfigRequ
     patch.agent = req.patch.agent;
   }
   if (typeof req.patch.model === 'string') patch.model = req.patch.model;
+  if (typeof req.patch.runtime === 'string' && req.patch.runtime.trim()) patch.runtime = req.patch.runtime.trim();
   if (req.patch.flags && typeof req.patch.flags === 'object') patch.flags = req.patch.flags;
   // #4099：只有显式给出 modelVariant 才写（省略=不改档，null=清除）—— 语义集中在 buildConfigPatch
   if (Object.prototype.hasOwnProperty.call(req.patch, 'modelVariant')) {
