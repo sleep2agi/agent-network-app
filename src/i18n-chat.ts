@@ -6,6 +6,7 @@ export const chatTranslations = {
   'chat.modelPicker.runtimeReadOnly': ['这个节点的 runtime 是 {runtime}，模型由节点自己的配置决定，不能在聊天里切换。', 'This node runs {runtime}; its model comes from the node’s own config and cannot be switched from chat.'],
   'chat.modelPicker.searchLabel': ['搜索模型目录', 'Search the model catalog'],
   'chat.modelPicker.loading': ['正在读取这台节点的模型目录…', 'Reading this node’s model catalog…'],
+  'chat.modelPicker.loadingSlow': ['节点还没有返回…再等最多 {s} 秒，超时会给出原因和「重试」', 'The node hasn’t answered yet… up to {s}s more, then you’ll get the reason and a retry'],
   'chat.modelPicker.retry': ['重试', 'Retry'],
   'chat.modelPicker.switching': ['正在切换模型…', 'Switching model…'],
   'chat.modelPicker.empty': ['没有匹配的模型', 'No matching models'],
