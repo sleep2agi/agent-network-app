@@ -27,6 +27,14 @@ export function validateRuntimeSwitch(input: string, current: string | null | un
   return { ok: true, value };
 }
 
+/** 这个运行时如果已知登录命令，一并提示（换运行时后可能要重新登录）。 */
+export function runtimeLoginHint(runtimeId: string): string | null {
+  const id = String(runtimeId ?? '').trim();
+  if (!id) return null;
+  const login = RUNTIME_GUIDE[id]?.login ?? null;
+  return login && String(login).trim() ? String(login).trim() : null;
+}
+
 /** 写入节点配置时用的最小 patch（与 CLI `anet node edit --runtime` 同一字段）。 */
 export function patchForRuntime(value: string): { runtime: string } {
   return { runtime: String(value ?? '').trim() };
