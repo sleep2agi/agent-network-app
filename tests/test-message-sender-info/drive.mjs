@@ -17,6 +17,7 @@ try {
     await page.addInitScript(initScript, { theme });
     await page.addInitScript(() => {
       window.__chatTasksFixture = [{ task_id: 'sender-card', from_name: '示例-B', from_node_id: 'n_sweep_b', to_name: '示例-A', content: '来自另一节点的消息', result: '当前节点回复', status: 'replied', created_at: new Date().toISOString() }];
+      window.__chatTasksFixture.push({ task_id: 'human-card', from_name: 'tester', to_name: '示例-A', content: '人类发送方消息', status: 'delivered', created_at: new Date().toISOString() });
       window.__routeOverride = u => {
         if (window.__senderDirectoryFailure && u.pathname.endsWith('/members')) return { ok: false, error: 'permission_denied' };
         if (u.pathname === '/api/nodes') return { nodes: [
@@ -72,6 +73,11 @@ try {
     };
     await closeCard();
     await page.getByTestId('chat-header').getByText('示例-A', { exact: true }).first().waitFor();
+    await page.getByTestId('chat-sender-avatar-mine').first().click();
+    await card.getByText('tester', { exact: true }).waitFor();
+    await card.getByText('管理员', { exact: true }).waitFor();
+    assert.equal(await message.count(), 0, 'human sender profile is read-only in this release');
+    await closeCard();
     // Change profile targets without leaving the conversation: no stale sender action.
     await page.getByTestId('chat-sender-avatar-reply').first().click();
     await card.getByText('示例-A', { exact: true }).waitFor();
