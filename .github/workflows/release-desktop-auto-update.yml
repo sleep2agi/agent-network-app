@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.600:
+            - 「进阶：切换运行时」里，选到已知运行时会顺手显示它的登录命令（例如 antigravity 的 `agy acp --login`），并提醒换过去之后可能要在这台机器上重新登录。
+
             What's new in 0.2.599:
             - 节点详情的「模型与运行时」里新增「进阶：切换运行时」：可以直接在 App 里改运行时（默认收起，避免误触）。
             - 会明确提示：改完需要重启节点才生效；换运行时可能需要重新配置认证。
