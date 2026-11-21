@@ -587,6 +587,10 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         <Text style={styles.source} testID="model-palette-acp-note">
           {t('chat.modelPicker.acpHint', { runtime: node?.runtime || t('chat.modelUnknown') })}
         </Text>
+        {/* 配置值 vs 运行时上报值分开写：写进去但还没重启时，两个值会不一样，别让人误会保存没生效。 */}
+        <Text style={styles.source} testID="model-palette-acp-configured">
+          {t('chat.modelPicker.acpConfigured', { value: (config?.model ?? '').trim() || t('chat.modelUnknown') })}
+        </Text>
         <TextInput
           testID="model-palette-acp-input"
           value={acpDraft}

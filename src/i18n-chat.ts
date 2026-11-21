@@ -9,6 +9,7 @@ export const chatTranslations = {
   'chat.modelPicker.loadingSlow': ['节点还没有返回…再等最多 {s} 秒，超时会给出原因和「重试」', 'The node hasn’t answered yet… up to {s}s more, then you’ll get the reason and a retry'],
   'chat.modelPicker.retry': ['重试', 'Retry'],
   'chat.modelPicker.acpHint': ['这个节点是 ACP 运行时（{runtime}），没有模型目录可读：直接输入模型 id 后保存。**需要重启节点才会生效**；这里只确认配置写入，不做运行时读回校验。', 'This node runs an ACP runtime ({runtime}) with no model catalog to read: type a model id and save. **The node must restart to apply it**; this only confirms the config write, not a runtime readback.'],
+  'chat.modelPicker.acpConfigured': ['当前节点配置：{value}（下方是运行时上报值）', 'Node config: {value} (runtime value shown above)'],
   'chat.modelPicker.acpSave': ['保存到节点配置', 'Save to node config'],
   'chat.modelPicker.acpSaving': ['保存中…', 'Saving…'],
   'chat.modelPicker.acpSaved': ['已写入节点配置：{value}（重启节点后生效；未做读回校验）', 'Written to node config: {value} (applies after the node restarts; not read back)'],
