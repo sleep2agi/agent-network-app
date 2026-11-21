@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.598:
+            - 在 App 里给 ACP 节点（Antigravity / Grok）改模型时，输入框会先填上当前配置的模型，不用自己记模型名。
+
             What's new in 0.2.597:
             - 节点详情的「概览」里多了一行「机器」：显示这台机器在 Hub 上设的别名（没设就是 hostname），和节点列表里看到的一致。
 
