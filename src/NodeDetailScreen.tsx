@@ -286,6 +286,11 @@ export default function NodeDetailScreen({
     return () => releaseOnUnmount(sectionHandoffKey, activeSectionRef.current, mountedGeneration);
   }, [sectionHandoffKey]);
   const [showMoreFacts, setShowMoreFacts] = useState(false);
+  // Hub #3711 —— 机器别名可能在详情页里被改（下方卡片），概览里那一行要跟着刷新。
+  // 注意：这个 hook 必须和其它 hook 放在同一段（之前放在 facts 旁边，早退分支会让 hook 数量变化 → React #310）。
+  const [machineAliasTick, setMachineAliasTick] = useState(0);
+  useEffect(() => subscribeMachineAliases(() => setMachineAliasTick(v => v + 1)), []);
+
   // 规则文件草稿没保存时,切分区 / 返回之前先问(草稿只活在 NodeRulesSection 里,一卸载就没了)。
   const [rulesDirty, setRulesDirty] = useState(false);
   const [pendingLeave, setPendingLeave] = useState<null | (() => void)>(null);
@@ -540,10 +545,7 @@ export default function NodeDetailScreen({
     void load();
   };
 
-  // Hub #3711 —— 机器别名可能在详情页里被改（下方卡片），facts 里那一行要跟着刷新。
-  const [machineAliasTick, setMachineAliasTick] = useState(0);
-  useEffect(() => subscribeMachineAliases(() => setMachineAliasTick(v => v + 1)), []);
-  // machineAliasTick 只用来在缓存更新后触发重渲染（值本身不参与计算）。
+  // tick 只用于触发重渲染；值本身不参与计算（s 在这里才可用，别把这段挪到 hook 区）。
   void machineAliasTick;
   const machineName = machineAliasLabel(node?.hostname ?? s.hostname, machineAliasFor(cfg, node?.hostname ?? s.hostname) ?? null);
   const facts: NodeInfoFact[] = [
