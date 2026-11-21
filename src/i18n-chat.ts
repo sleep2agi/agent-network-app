@@ -8,6 +8,7 @@ export const chatTranslations = {
   'chat.modelPicker.loading': ['正在读取这台节点的模型目录…', 'Reading this node’s model catalog…'],
   'chat.modelPicker.loadingSlow': ['节点还没有返回…再等最多 {s} 秒，超时会给出原因和「重试」', 'The node hasn’t answered yet… up to {s}s more, then you’ll get the reason and a retry'],
   'chat.modelPicker.retry': ['重试', 'Retry'],
+  'chat.slash.skillNote': ['技能是写给 Agent 的提示，不是 Runtime 原生命令；发送后由 Agent 决定怎么用。', 'Skills are instructions for the agent — not native runtime commands. The agent decides how to use them.'],
   'chat.modelPicker.switching': ['正在切换模型…', 'Switching model…'],
   'chat.modelPicker.empty': ['没有匹配的模型', 'No matching models'],
   'chat.modelPicker.emptyHint': ['换个关键词试试。目录只来自这台节点的 OpenCode 服务器。', 'Try another keyword. The catalog comes only from this node’s OpenCode server.'],

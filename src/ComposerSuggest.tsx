@@ -13,9 +13,11 @@ export function ComposerSuggest(props: {
   rows: SuggestRow[];
   active: number;
   empty: string;
+  /** 选中的候选里含节点技能时的一句边界说明：#886「技能发送先区分调用提示和原生执行」。 */
+  note?: string;
   onPick: (index: number) => void;
 }) {
-  const { rows, active, empty, onPick } = props;
+  const { rows, active, empty, note, onPick } = props;
   return (
     <View style={styles.box} testID="composer-suggest">
       <ScrollView keyboardShouldPersistTaps="handled" style={styles.scroll}>
@@ -37,6 +39,7 @@ export function ComposerSuggest(props: {
           );
         })}
       </ScrollView>
+      {note ? <Text style={styles.note} testID="composer-suggest-note">{note}</Text> : null}
     </View>
   );
 }
@@ -54,6 +57,7 @@ const makeStyles = () => StyleSheet.create({
   },
   scroll: { maxHeight: 240 },
   group: { color: colors.textMuted, fontSize: 12, paddingHorizontal: spacing.md, paddingTop: spacing.sm },
+  note: { color: colors.textMuted, fontSize: 11, lineHeight: 15, paddingHorizontal: spacing.md, paddingVertical: spacing.xs, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
   row: { paddingHorizontal: spacing.md, paddingVertical: spacing.sm },
   rowActive: { backgroundColor: "rgba(127,127,127,0.12)" },
   label: { color: colors.text, fontSize: 15 },

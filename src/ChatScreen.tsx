@@ -378,11 +378,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   const slashRows = useMemo(() => slashMenuOpen(draft) ? slashCandidates(draft, slashSkills).map(item => ({
     id: item.id,
+    kind: item.group,
     group: item.group === "command" ? t("chat.slash.commands") : t("chat.slash.skills"),
     label: item.label,
     description: item.description,
     insert: item.insert,
   })) : [], [draft, slashSkills]);
+  // #886 —— 列表里出现技能时给一句边界：技能是给 Agent 的提示，不是 Runtime 原生命令。
+  const slashSkillBoundaryNote = useMemo(() => slashRows.some(row => row.kind === 'skill') ? t('chat.slash.skillNote') : undefined, [slashRows]);
   const mentionRows = useMemo(() => mentionMenuOpen(draft) ? mentionCandidates(draft, mentionAgents).map(item => ({
     id: `agent:${item.alias}`,
     group: t("chat.mention.agents"),
@@ -3231,6 +3234,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             rows={suggestRows}
             active={suggestIndex}
             empty={slashMenuOpen(draft) ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
+            note={slashSkillBoundaryNote}
             onPick={pickSuggest}
           />
         ) : null}
@@ -3388,6 +3392,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             rows={suggestRows}
             active={suggestIndex}
             empty={slashMenuOpen(draft) ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
+            note={slashSkillBoundaryNote}
             onPick={pickSuggest}
           />
         ) : null}
