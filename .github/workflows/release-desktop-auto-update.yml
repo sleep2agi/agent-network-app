@@ -614,6 +614,15 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.603:
+            ### 新增
+
+            - **消息头像打开身份信息**：点击聊天消息中的发送方头像，查看姓名、角色和部门；其他 Agent 的身份面板提供「发消息」入口。人类发送方仅展示身份信息。
+
+            ### 修复
+
+            - 浅色聊天信息抽屉保持不透明，避免底层输入框透出。
+
             What's new in 0.2.602:
             ### 修复
 
