@@ -171,6 +171,8 @@ const makeStyles = () =>
     lineHeight: 12,
   },
   alias: { color: colors.text, fontSize: 15, fontWeight: '600' },
+  // Hub #3711 —— 机器别名：名字后面一小段弱化文字，不加边框/不加按钮。
+  machineChip: { color: colors.textMuted, fontSize: 11, flexShrink: 1 },
   task: { color: colors.textSecondary, fontSize: 12, marginTop: 2 },
   status: { color: colors.textMuted, fontSize: 11 },
 });

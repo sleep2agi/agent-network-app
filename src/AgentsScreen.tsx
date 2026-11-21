@@ -22,6 +22,8 @@ import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import HumanAvatar from './HumanAvatar';
 import { consumeAgentSearchFocus, subscribeAgentSearchFocus } from './shortcuts-store';
+import { machineAliasLabel, uniqueHostnames } from './machine-alias';
+import { ensureMachineAliases, machineAliasFor, subscribeMachineAliases } from './machine-alias-store';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
 import './i18n-users';
@@ -174,6 +176,16 @@ export default function AgentsScreen({
     </Text>
   );
   const [sessions, setSessions] = useState<Session[]>(preview?.sessions ?? []);
+  // Hub #3711 —— 机器别名：同一台机器的多个节点按 hostname 去重后各查一次。
+  const [machineAliasTick, setMachineAliasTick] = useState(0);
+  useEffect(() => subscribeMachineAliases(() => setMachineAliasTick(v => v + 1)), []);
+  useEffect(() => { ensureMachineAliases(cfg, uniqueHostnames(sessions.map(row => row.hostname))); }, [cfg, sessions, machineAliasTick]);
+  const machineLineFor = (row: Session) => {
+    const alias = machineAliasFor(cfg, row.hostname);
+    const label = machineAliasLabel(row.hostname, alias ?? null);
+    // 没有任何机器信息（老 Hub 没带 hostname）就不画，不留空行。
+    return label && label !== row.alias ? label : '';
+  };
   // #725: registered nodes with no session are a separate read-only block. They are
   // NOT list rows: the list is Session-shaped and a synthetic status would look online.
   const agentDirectory = useAgentDirectory(cfg, !preview);
@@ -783,6 +795,11 @@ export default function AgentsScreen({
             {item.alias}
             {mutedAliases.includes(item.alias) ? ' 🔕' : ''}
           </Text>
+          {machineLineFor(item) ? (
+            <Text dense selectable={false} numberOfLines={1} style={[styles.machineChip, compact && { fontSize: 10 }]} testID={`agent-machine-${item.alias}`}>
+              {machineLineFor(item)}
+            </Text>
+          ) : null}
           {/* #460 降级:App Server 断开 / TUI 不在 / 需要重新登录 —— Hub 会拒收发给它的新任务。不知道时不画。 */}
           <DegradedBadge info={nodeDegraded(item)} testID={`agent-degraded-${item.alias}`} />
         </View>
@@ -991,6 +1008,11 @@ export default function AgentsScreen({
             {mutedAliases.includes(item.alias) ? <Ionicons name="notifications-off-outline" size={12} color={colors.textMuted} accessibilityLabel="消息免打扰" style={rowStyles.pin} testID={`agent-muted-${item.alias}`} /> : null}
             {/* #460 降级徽标(Hub 会拒收新任务);不知道时不画。 */}
             <DegradedBadge info={nodeDegraded(item)} testID={`agent-degraded-${item.alias}`} />
+            {machineLineFor(item) ? (
+              <Text dense selectable={false} numberOfLines={1} style={[rowStyles.machine, { color: colors.textMuted }]} testID={`agent-machine-${item.alias}`}>
+                {machineLineFor(item)}
+              </Text>
+            ) : null}
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
           </View>
           {/* No second line when there is nothing to say (and no badge): the name then centres. */}
@@ -1488,6 +1510,8 @@ function ToggleGroupBy({ groupBy, onPress, prefixFallback = false }: { groupBy: 
 }
 
 const makeRowStyles = () => ({
+  // Hub #3711 —— 机器别名：行内一小段弱化文字，不抢名字。
+  machine: { fontSize: type.small, flexShrink: 1 },
   head: { paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.sm, paddingBottom: spacing.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: ds(36) },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(36), borderRadius: radius.control, paddingHorizontal: ds(10) },
