@@ -646,6 +646,53 @@ export const putNodePermissionMode = async (
   }
 };
 
+/** Hub #3711 —— 机器别名（按 hostname 维度，不是节点别名）。
+ *  GET /api/machines/:hostname → { ok, hostname, alias: string|null, updated_at, nodes_on_host }
+ *  人/节点令牌都能读；alias=null 表示没设置，UI 回落显示 hostname。
+ *  PUT 仅用户令牌（节点令牌 403 user_token_required）；1–64 字、禁控制字符、trim；非法 400 invalid_machine_alias。 */
+export type MachineAlias = { hostname: string; alias: string | null; nodes_on_host?: number; updated_at?: string | null };
+
+export const fetchMachineAlias = async (cfg: HubConfig, hostname: string): Promise<MachineAlias | null> => {
+  const host = hostname.trim();
+  if (!host) return null;
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/machines/${encodeURIComponent(host)}`, { method: 'GET', headers: headers(cfg), signal }),
+    );
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return null;
+    return {
+      hostname: String(body?.hostname ?? host),
+      alias: typeof body?.alias === 'string' && body.alias.trim() ? body.alias.trim() : null,
+      nodes_on_host: typeof body?.nodes_on_host === 'number' ? body.nodes_on_host : undefined,
+      updated_at: typeof body?.updated_at === 'string' ? body.updated_at : null,
+    };
+  } catch {
+    return null;
+  }
+};
+
+export type PutMachineAliasResult =
+  | { ok: true; alias: string | null }
+  | { ok: false; error: string; status?: number };
+
+export const putMachineAlias = async (cfg: HubConfig, hostname: string, alias: string): Promise<PutMachineAliasResult> => {
+  const host = hostname.trim();
+  if (!host) return { ok: false, error: 'missing_hostname' };
+  try {
+    const res = await withTimeout(signal =>
+      appFetch(`${cfg.serverUrl}/api/machines/${encodeURIComponent(host)}`, {
+        method: 'PUT', headers: headers(cfg), signal, body: JSON.stringify({ alias }),
+      }),
+    );
+    const body = (await res.json().catch(() => ({}))) as any;
+    if (!res.ok || body?.ok === false) return { ok: false, error: String(body?.error ?? `HTTP ${res.status}`), status: res.status };
+    return { ok: true, alias: typeof body?.alias === 'string' && body.alias.trim() ? body.alias.trim() : null };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : String(e) };
+  }
+};
+
 /** 白名单 PUT 被拒时 Hub 给的全部信息:error 码之外,node_permission_denied 带 reason + hint,其它带 message。 */
 export interface NodeAllowlistFailure { ok: false; error: string; status?: number; reason?: string; hint?: string; message?: string }
 

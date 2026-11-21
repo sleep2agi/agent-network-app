@@ -62,6 +62,7 @@ import { layoutGeneration, releaseOnUnmount, takeHandoff } from './layout-handof
 import { takeNodeSectionRequest } from './node-section-request';
 import { ActivityIndicator, BackHandler, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
 import { Text, TextInput } from './ui-text';
+import MachineAliasCard from './MachineAliasCard';
 import { Ionicons } from './icons';
 
 import AliasAvatar from './AliasAvatar';
@@ -766,6 +767,9 @@ export default function NodeDetailScreen({
             />
           </View>
         ) : null}
+        {/* Hub #3711 —— 机器别名（按 hostname）。放在「重启/停止」之后：那张卡是主人上来就要点的，
+            手机上别被一张低频设置卡挤到首屏之外。只读页（聊天里的节点信息）不出现编辑入口。 */}
+        {!readOnly && node?.hostname ? <MachineAliasCard cfg={cfg} hostname={node.hostname} /> : null}
         {!readOnly ? (
           <View>
             <SectionTitle title={t('nodeClone.title')} hint={t('nodeClone.sectionHint')} />
