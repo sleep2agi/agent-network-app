@@ -1,0 +1,89 @@
+name: iOS certificates (read-only list)
+
+# 2026-11-21 —— ios-build #437 在「Prepare ephemeral App Store distribution signing」报
+#   POST /certificates 409 ENTITY_ERROR: You already have a current iOS Distribution certificate or a pending certificate request.
+# Apple 的 iOS Distribution 证书上限是 3 张。要判断吊销哪张必须先看见 3 张的 ID/类型/创建/到期时间。
+#
+# 本工作流**只读**：只调 `GET /v1/certificates`，不 PUT、不 DELETE、不签任何东西。
+# 存证方式：把生成证书的那段代码（scripts/ios-distribution-signing.mjs）里的认证逻辑复制成 3 行，
+# 而不是 import 它 —— 因为那个模块在 import 时就带写路径，读用途不该把它拉进来。
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  list:
+    name: list iOS distribution certificates (GET only)
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Say what this job does (and does not) touch
+        run: |
+          echo "READ-ONLY: this job issues exactly one Apple API request:"
+          echo "  GET https://api.appstoreconnect.apple.com/v1/certificates?limit=200"
+          echo "It never calls POST/PUT/PATCH/DELETE and never touches signing assets."
+
+      - name: List certificates
+        env:
+          APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+          APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+          APPLE_API_KEY_BASE64: ${{ secrets.APPLE_API_KEY_BASE64 }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$HOME/.appstoreconnect/private_keys"
+          KEY_PATH="$HOME/.appstoreconnect/private_keys/AuthKey_${APPLE_API_KEY}.p8"
+          printf '%s' "$APPLE_API_KEY_BASE64" | base64 --decode > "$KEY_PATH"
+          chmod 600 "$KEY_PATH"
+          grep -q 'BEGIN PRIVATE KEY' "$KEY_PATH" || { echo "::error::APPLE_API_KEY_BASE64 did not decode to a PEM .p8"; exit 1; }
+
+          node --input-type=module - <<'NODE'
+          import { readFileSync } from "node:fs";
+          import { createSign } from "node:crypto";
+
+          const keyId = process.env.APPLE_API_KEY;
+          const issuer = process.env.APPLE_API_ISSUER;
+          const keyPath = `${process.env.HOME}/.appstoreconnect/private_keys/AuthKey_${keyId}.p8`;
+          const privateKey = readFileSync(keyPath, "utf8");
+
+          const b64url = (buf) => Buffer.from(buf).toString("base64").replace(/=/g, "").replace(/\+/g, "-").replace(/\//g, "_");
+          const now = Math.floor(Date.now() / 1000);
+          const header = { alg: "ES256", kid: keyId, typ: "JWT" };
+          const payload = { iss: issuer, iat: now, exp: now + 600, aud: "appstoreconnect-v1" };
+          const signingInput = `${b64url(JSON.stringify(header))}.${b64url(JSON.stringify(payload))}`;
+          const signer = createSign("SHA256");
+          signer.update(signingInput);
+          signer.end();
+          const signature = signer.sign({ key: privateKey, dsaEncoding: "ieee-p1363" });
+          const token = `${signingInput}.${b64url(signature)}`;
+
+          // —— 唯一的一次 API 调用：GET ——
+          const res = await fetch("https://api.appstoreconnect.apple.com/v1/certificates?limit=200", {
+            headers: { authorization: `Bearer ${token}` },
+          });
+          const body = await res.text();
+          if (!res.ok) {
+            console.error(`GET /certificates failed (${res.status}): ${body.slice(0, 800)}`);
+            process.exit(1);
+          }
+          const data = JSON.parse(body);
+          const rows = (data.data || []).map((c) => ({
+            id: c.id,
+            name: c.attributes?.name ?? null,
+            type: c.attributes?.certificateType ?? null,
+            created: c.attributes?.expirationDate ? undefined : undefined,
+            csrCreated: c.attributes?.createdDate ?? null,
+            expires: c.attributes?.expirationDate ?? null,
+            serial: c.attributes?.serialNumber ?? null,
+          }));
+          // 只打印分布证书（iOS Distribution / Apple Distribution）
+          const dist = rows.filter((r) => /DISTRIBUTION/i.test(r.type || ""));
+          console.log(`total certificates: ${rows.length}`);
+          console.log(`distribution certificates: ${dist.length}`);
+          console.table(dist);
+          // 也给一版纯文本，便于贴进 Hub/工单
+          for (const r of dist) {
+            console.log(`- ${r.type} | id=${r.id} | name=${r.name} | created=${r.csrCreated} | expires=${r.expires} | serial=${r.serial}`);
+          }
+          NODE
