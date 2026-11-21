@@ -99,6 +99,14 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   });
   // #4976 —— 终态是错误时必须能重来一次（超时/节点暂时没回），不要求用户关掉面板重开。
   const [catalogAttempt, setCatalogAttempt] = useState(0);
+  // #4976 跟进：loading 超过 4 秒就换成「还剩多少秒会出结果」，别让人对着同一句话干等。
+  const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
+  useEffect(() => {
+    if (!catalog.loading) { setLoadingElapsedSec(0); return; }
+    const started = Date.now();
+    const timer = setInterval(() => setLoadingElapsedSec(Math.floor((Date.now() - started) / 1000)), 1000);
+    return () => clearInterval(timer);
+  }, [catalog.loading, catalogAttempt]);
   // undefined = 正在读；null = Hub 没这个接口/读失败；对象 = 真实读回。
   const [config, setConfig] = useState<NodeConfigRead | null | undefined>(undefined);
   const [busy, setBusy] = useState(false);
@@ -234,6 +242,9 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
     loading: catalog.loading && !targetError,
     error: targetError ?? catalog.error,
   });
+  // 上限口径：排队 8s + 单次轮询 6s（见 CATALOG_QUEUE_TIMEOUT_MS / CATALOG_POLL_TIMEOUT_MS）+ 1s 余量。
+  const loadingSlow = catalog.loading && loadingElapsedSec >= 4;
+  const loadingRemainingSec = Math.max(0, 15 - loadingElapsedSec);
   const catalogModels = useMemo(() => paletteCatalogModels(catalog.snapshot), [catalog.snapshot]);
   const currentKey = paletteCurrentKey(currentModel, catalogModels);
   const choices = paletteVariantChoices(catalog.snapshot, currentKey);
@@ -597,7 +608,9 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       ) : view.status === 'loading' ? (
         <View style={styles.statusRow} testID="model-palette-loading">
           <ActivityIndicator size="small" color={colors.textMuted} />
-          <Text style={styles.statusText}>{t('chat.modelPicker.loading')}</Text>
+          <Text style={styles.statusText}>
+            {loadingSlow ? t('chat.modelPicker.loadingSlow', { s: String(loadingRemainingSec) }) : t('chat.modelPicker.loading')}
+          </Text>
         </View>
       ) : view.total === 0 ? (
         <View style={styles.emptyBox} testID="model-palette-empty">
