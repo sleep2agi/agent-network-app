@@ -376,7 +376,10 @@ jobs:
             printf '%s' "$APPLE_CERTIFICATE" | base64 --decode > "$p12_path"
             security create-keychain -p "$password" "$keychain_path"
             security unlock-keychain -p "$password" "$keychain_path"
-            security import "$p12_path" -k "$keychain_path" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
+            # security cannot reliably infer OpenSSL 3 PKCS#12 formats; also accept PEM bundles.
+            local certificate_format=pkcs12
+            if grep -q -- '-----BEGIN ' "$p12_path"; then certificate_format=pemseq; fi
+            security import "$p12_path" -f "$certificate_format" -t agg -k "$keychain_path" -P "$APPLE_CERTIFICATE_PASSWORD" -T /usr/bin/codesign
             security set-keychain-settings -t 3600 -u "$keychain_path"
             security set-key-partition-list -S apple-tool:,apple:,codesign: -s -k "$password" "$keychain_path"
             rm -f "$p12_path"
