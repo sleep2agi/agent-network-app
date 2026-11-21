@@ -45,7 +45,9 @@
 // "field absent" apart from "screen broken" (lead 71ee862d
 // verification bullet).
 
-import { useCallback, useEffect, useLayoutEffect, useRef, useState, type ReactNode } from 'react';
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore, type ReactNode } from 'react';
+import { machineAliasLabel } from './machine-alias';
+import { machineAliasFor, subscribeMachineAliases } from './machine-alias-store';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import NodeAdoptionControls from './NodeAdoptionControls';
 import { versionPairHint } from './node-version-pair';
@@ -538,8 +540,15 @@ export default function NodeDetailScreen({
     void load();
   };
 
+  // Hub #3711 —— 机器别名可能在详情页里被改（下方卡片），facts 里那一行要跟着刷新。
+  const [machineAliasTick, setMachineAliasTick] = useState(0);
+  useEffect(() => subscribeMachineAliases(() => setMachineAliasTick(v => v + 1)), []);
+  // machineAliasTick 只用来在缓存更新后触发重渲染（值本身不参与计算）。
+  void machineAliasTick;
+  const machineName = machineAliasLabel(node?.hostname ?? s.hostname, machineAliasFor(cfg, node?.hostname ?? s.hostname) ?? null);
   const facts: NodeInfoFact[] = [
     ...nodeInfoFacts(s, node, cfg.serverUrl),
+    ...(machineName ? [{ label: '机器', value: machineName }] : []),
     { label: '所属部门', value: department ?? (hasDepartments && node ? '未分配' : undefined) },
     { label: '最后更新', value: formatTime(s.updated_at) },
     { label: '生命周期', value: node?.lifecycle_state },

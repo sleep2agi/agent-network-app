@@ -22,5 +22,6 @@ ck('没有 hostname 时不渲染输入框', card.includes("'这个节点没有�
 ck('api 的 GET/PUT 路径就是 /api/machines/:hostname', api.includes('/api/machines/${encodeURIComponent(host)}'));
 ck('api PUT 只发 { alias }', api.includes('body: JSON.stringify({ alias })'));
 
+ck('详情页概览事实里有「机器」一行，且跟着缓存刷新', detail.includes("label: '机器', value: machineName") && detail.includes('subscribeMachineAliases'));
 console.log(`${passed}/${total} passed`);
 if (passed !== total) process.exit(1);
