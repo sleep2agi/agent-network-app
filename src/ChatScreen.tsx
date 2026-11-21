@@ -2613,9 +2613,15 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
               </AvatarStatusRing>
               {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
               <View style={styles.headerTitleCol} testID="chat-header-title">
-                <Text style={styles.title} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
-                  {alias}
-                </Text>
+                <View style={styles.headerTitleLine}>
+                  <Text style={[styles.title, { flex: 1, minWidth: 0 }]} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
+                    {alias}
+                  </Text>
+                  {/* admin 2026-11-21「没看到在这个节点里面怎么去切换部门」：头像+名字本来就能点
+                      （打开同一个「聊天信息」面板），但之前完全没有可点的视觉信号，和普通静态文字
+                      没区别——加一个小箭头，别让人靠「下意识点一下试试」才发现。 */}
+                  {!windowChrome && onOpenNodeSettings ? <Ionicons name="chevron-forward" size={14} color={colors.textMuted} /> : null}
+                </View>
                 {subtitle ? (
                   <Text
                     style={[
@@ -3048,11 +3054,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.copiedToastText}>{t('chat.copied')}</Text>
         </View>
       ) : null}
-      {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill */}
+      {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill。
+          admin 2026-11-21「这个也特别奇怪」:原来贴右边缘(`right: spacing.lg`),窄窗口 /
+          右侧还有任务栏图标条时会被遮到只剩「…新 ↓」几个字。改成整行居中,胶囊自身宽度不变,
+          不会再贴着右边缘跟旁边的图标条抢地方。 */}
       {showJump ? (
-        <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
-          <Text style={styles.jumpPillText}>{unread > 0 ? t('chat.newMessages', { count: unread }) : t('chat.latest')} ↓</Text>
-        </Pressable>
+        <View style={styles.jumpWrap} pointerEvents="box-none">
+          <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
+            <Text style={styles.jumpPillText}>{unread > 0 ? t('chat.newMessages', { count: unread }) : t('chat.latest')} ↓</Text>
+          </Pressable>
+        </View>
       ) : null}
 
       {attached.length && composerKind === 'chat' ? (
@@ -3727,6 +3738,7 @@ const makeStyles = (B = bubbleLayout()) =>
   // headerTitleCol 的 flex:1，自己内部再给名字列同样的 flex:1，布局比例和点不动时完全一样。
   headerIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, minWidth: 0 },
   headerTitleCol: { flex: 1, minWidth: 0 },
+  headerTitleLine: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
   beginning: {
     color: colors.textMuted,
     fontSize: 11,
@@ -3880,10 +3892,8 @@ const makeStyles = (B = bubbleLayout()) =>
   // 拖文件进聊天区时整格一层虚线框 + 提示(不拦事件,drop 由 document 上的监听处理)。
   dropOverlay: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, bottom: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: radius.control, backgroundColor: colors.bg + 'E6', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   dropOverlayText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
+  jumpWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: 84, alignItems: 'center' },
   jumpPill: {
-    position: 'absolute',
-    right: spacing.lg,
-    bottom: 84,
     backgroundColor: colors.card,
     borderRadius: radius.pill,
     paddingVertical: spacing.sm,
