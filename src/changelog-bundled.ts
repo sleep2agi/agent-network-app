@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.590:",
+  "- 模型选择面板等待超过 4 秒时，会显示「再等最多多少秒」；超时会给出原因和「重试」，不再让人对着一句话干等。",
+  "",
   "What's new in 0.2.589:",
   "- 聊天输入框的「/」菜单不再串号：读不到当前节点的技能时，会清空旧的候选并说明原因，不会再列着别的节点的技能。",
   "- 用中文输入法打字时，按 Enter/Tab 只会确认输入法候选，不会再被「/」菜单抢走。",
