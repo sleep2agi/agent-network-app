@@ -363,17 +363,15 @@ export function ownerFilterSections<T extends { key: string; ref: RequirementPer
   return sections.filter(s => s.rows.length > 0);
 }
 
-/** 短 id(未知成员时附在后面,方便认):取最后 6 位。 */
-export const shortId = (id: string): string => (id.length > 6 ? id.slice(-6) : id);
-
 /**
- * 人 / 节点的显示名。成员表里找不到(已退出、成员表没读到…)时是「未知成员（…末 6 位）」——
+ * 人 / 节点的显示名。成员表里找不到(已退出、成员表没读到…)时是「未知成员」——
  * 永远不把裸 id(n_e06d936d / u_a4944afaa30b)当名字显示(owner 0.2.141 截图)。
+ * 2026-11-21:曾经在后面附过末 6 位 id「方便认」，admin 两次反馈看不懂、不是在帮用户，去掉。
  */
 export function personDisplay(ref: RequirementPersonRef, people: readonly RequirementPerson[]): { name: string; known: boolean } {
   const hit = people.find(p => personKey(p) === personKey(ref));
   if (hit?.name) return { name: hit.name, known: true };
-  return { name: `未知成员（${shortId(ref.id)}）`, known: false };
+  return { name: '未知成员', known: false };
 }
 
 export function personName(ref: RequirementPersonRef, people: readonly RequirementPerson[]): string {

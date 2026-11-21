@@ -11,7 +11,7 @@ ck('unassigned is presentation, not stored identity',ownerLabel({owner:null,assi
 ck('legacy user text identical to a label remains verbatim',ownerLabel({assignee:'未分配'},[])==='未分配');
 const ref={kind:'user' as const,id:'u1'};
 ck('real member names remain verbatim',personDisplay(ref,[{...ref,name:'未分配',networkId:'n'}]).name==='未分配');
-ck('unknown member hint translates without inventing identity',personDisplay(ref,[]).name==='Unknown member (u1)');
+ck('unknown member hint translates without inventing identity',personDisplay(ref,[]).name==='Unknown member');
 ck('due date full label translates',formatDueFull('2026-10-01')==='2026-10-01 All day');
 ck('due calculation and tone unchanged',dueInfo('2026-09-29','2026-09-30').tone==='overdue'&&dueInfo('2026-09-29','2026-09-30').label==='1d overdue');
 ck('subtask progress interpolates',tr('tasks.progress',{done:1,total:3})==='1/3 complete');

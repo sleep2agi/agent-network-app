@@ -771,7 +771,7 @@ test('participants: avatar chips in detail, stack of 3 + 「+N」 on cards, unkn
   const chips = JSON.stringify(byId('participants-chips').findAllByType('Text').map(n => n.props.children));
   expect(chips).toContain('成员');
   expect(chips).toContain('执行节点');
-  expect(chips).toContain('未知成员（faa30b）');
+  expect(chips).toContain('未知成员');
   expect(chips).not.toContain('u_a4944afaa30b');
   expect(chips).not.toContain('n_e06d936d');
   expect(renderer.root.findAllByType('ActivityIndicator').filter(n => n.props.testID === undefined)).toHaveLength(0);
