@@ -63,3 +63,37 @@ export function departmentScopeErrorText(code: string): string {
   if (code === 'department_required') return '选了「仅某部门」就要挑一个部门。';
   return code;
 }
+
+/** 整份替换时的合并：保留其它 capability 的授权，只替换 manage_nodes 那一组。
+ *  mode='all' → 去掉 manage_nodes（默认管理员本来就有全网权限）；mode='department' → 换成一条 department/edit。 */
+export function mergeUserGrants(
+  existing: ReadonlyArray<{ capability?: string; scope_kind?: string; scope_id?: string | null; level?: string }> | null | undefined,
+  input: { mode: DepartmentScopeMode; departmentId?: string | null },
+): Array<{ capability: string; scope_kind: string; scope_id: string; level: string }> {
+  const kept: Array<{ capability: string; scope_kind: string; scope_id: string; level: string }> = [];
+  for (const g of existing ?? []) {
+    const capability = String(g?.capability ?? '').trim();
+    if (!capability || capability === 'manage_nodes') continue;
+    kept.push({
+      capability,
+      scope_kind: String(g?.scope_kind ?? '').trim(),
+      scope_id: String(g?.scope_id ?? '').trim(),
+      level: String(g?.level ?? '').trim(),
+    });
+  }
+  const payload = departmentGrantPayload(input);
+  return payload ? [...kept, payload] : kept;
+}
+
+/** 把候选部门按负责范围过滤：不是部门负责人（allowed 为空且不是 network 级）就不过滤。
+ *  负责人只能授自己子树内的部门；接口层会 403，UI 上先不给选。 */
+export function filterGrantableDepartments(
+  nodes: ReadonlyArray<DepartmentNode> | null | undefined,
+  allowedIds: ReadonlyArray<string> | null | undefined,
+): DepartmentNode[] {
+  const all = departmentOptions(nodes);
+  const allowed = (allowedIds ?? []).map(id => String(id ?? '').trim()).filter(Boolean);
+  if (!allowed.length) return all;
+  const set = new Set(allowed);
+  return all.filter(n => set.has(n.id));
+}
