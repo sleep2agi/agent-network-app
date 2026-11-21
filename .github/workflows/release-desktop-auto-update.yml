@@ -614,6 +614,9 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.591:
+            - 定时任务页的报错不再把接口地址和 network_id 露给用户，改成边框卡片样式，只说明原因并给重试。
+
             What's new in 0.2.590:
             - 模型选择面板等待超过 4 秒时，会显示「再等最多多少秒」；超时会给出原因和「重试」，不再让人对着一句话干等。
 
