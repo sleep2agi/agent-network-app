@@ -48,7 +48,9 @@ ck('phone chart: no brand row / headline / avatar cloud, only the numbers', /\{c
 ck('phone chart: full-width department cards, no root pill or connector lines', showcase.includes('testID="org-showcase-phone-list"') && /org-showcase-phone-list[\s\S]*?stem=\{false\}/.test(showcase));
 ck('phone chart: no card frame around the chart, hero is a flat row', showcase.includes('c ? styles.chartPhone : styles.chartCard') && showcase.includes("heroCompact: { padding: 0, gap: spacing.sm, backgroundColor: 'transparent', borderWidth: 0 }"));
 ck('phone chart: crumbs only after drilling in; no footer', showcase.includes('{c && !here ? null : <View style={styles.chartHead}>') && showcase.includes('{c ? null : <View style={styles.footerRow} testID="org-showcase-footer">'));
-ck('phone chart view hides the 调整结构 block', /!p\.fill && !\(p\.phone && view === 'chart'\) \? \(\r?\n\s*<DemoAdjust/.test(screen));
+// admin 2026-11-21「这个理解成本很高」+「是不是这边可以直接下掉」：手机上不只是架构图，
+// 列表视图也一样收掉——那三步表单和聊天页头像点开的「所属部门」编辑器是同一件事。
+ck('phone hides the 调整结构 block in every view, not just chart', /!p\.fill && !p\.phone \? \(\r?\n\s*<DemoAdjust/.test(screen));
 
 // admin 2026-11-17「你来做吧」—— 调研方案第一步：逐层进入 + 先搜索 + 需要关注。
 {

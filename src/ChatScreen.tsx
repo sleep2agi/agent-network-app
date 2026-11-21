@@ -156,6 +156,8 @@ import { loadChatSources, mergeChatSource, type ChatSource } from './chat-source
 const PAGE = CHAT_PAGE;
 /** 定位滚动大约多久停下(动画 + 未量到布局时的补滚):高亮从这时起计时。 */
 const LOCATE_SETTLE_MS = 600;
+/** 「回到最新」胶囊到输入区顶部的间隙:胶囊自身高度(约 34)+ 一点呼吸空间。 */
+const JUMP_PILL_CLEARANCE = 48;
 
 // Local echo: sent messages appear instantly with a pending mark and
 // either get replaced by the server copy on the next reload (delivered)
@@ -2660,9 +2662,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onPress={footerModel ? undefined : () => setModelSheetOpen(true)}
           hitSlop={6}
         >
-          <Text style={styles.modelChip} numberOfLines={1} testID="chat-header-model">
+          {/* admin 2026-11-21「这个地方也很奇怪了」：页头这个胶囊写的是「节点上报：claude-code...」，
+              固定 132px 宽度一截断，模型名本身（唯一有用的信息）反而被切没了；底部输入框自己的模型
+              胶囊（composerModelPill）只显示模型名，不带「节点上报」这层框架，两边不一致本身就是
+              困惑点。去掉前缀跟下面对齐，截断也从「切尾巴」改成「切中间」，长名字至少头尾都留着。 */}
+          <Text style={styles.modelChip} numberOfLines={1} ellipsizeMode="middle" testID="chat-header-model">
             {composerModelLine
-              ? t('chat.reportedModel', { model: composerModelLine })
+              ? composerModelLine
               : modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')}
           </Text>
         </Pressable>
@@ -3055,11 +3061,19 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         </View>
       ) : null}
       {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill。
-          admin 2026-11-21「这个也特别奇怪」:原来贴右边缘(`right: spacing.lg`),窄窗口 /
+          admin 2026-11-21「这个也特别奇怪」(第一次):原来贴右边缘(`right: spacing.lg`),窄窗口 /
           右侧还有任务栏图标条时会被遮到只剩「…新 ↓」几个字。改成整行居中,胶囊自身宽度不变,
-          不会再贴着右边缘跟旁边的图标条抢地方。 */}
+          不会再贴着右边缘跟旁边的图标条抢地方。
+          admin 2026-11-21「这个地方也很奇怪了」(第二次,手机语音模式截图):居中之后,固定
+          `bottom: 84` 又在"模型/思考档位/停止"那行多出来时盖住了输入区——那行的高度不是常量,
+          处理中会多出"停止"等按钮。改成跟着实测的 composerFooterTop 走,输入区整体变高/变矮
+          胶囊都跟着挪,不会再撞在一起;composerFooterTop 还没测出来(首次渲染)时退回旧的
+          `bottom: 84`,不会闪一下跳到屏幕顶部。 */}
       {showJump ? (
-        <View style={styles.jumpWrap} pointerEvents="box-none">
+        <View
+          style={[styles.jumpWrap, composerFooterTop > 0 ? { bottom: undefined, top: composerFooterTop - JUMP_PILL_CLEARANCE } : null]}
+          pointerEvents="box-none"
+        >
           <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
             <Text style={styles.jumpPillText}>{unread > 0 ? t('chat.newMessages', { count: unread }) : t('chat.latest')} ↓</Text>
           </Pressable>

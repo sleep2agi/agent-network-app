@@ -374,7 +374,11 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
         </Pressable>
         {infoOpen ? infoBody : null}
       </View> : null}
-      {phase.kind === 'ready' && !p.fill && !(p.phone && view === 'chart') ? (
+      {/* admin 2026-11-21「这个理解成本很高」+「是不是这边可以直接下掉」:手机上"选择 Agent →
+          移到部门 → 保存到 Hub"这三步表单,和聊天页头像/名字点开的「所属部门」编辑器(#1620)
+          做的是同一件事,手机上多一条更重的路径只会让人犯嘀咕"这俩有什么区别"。桌面端保留——
+          那边还没有逐行的悬停/点击移动入口。 */}
+      {phase.kind === 'ready' && !p.fill && !p.phone ? (
         <DemoAdjust
           data={data}
           placed={placed}
