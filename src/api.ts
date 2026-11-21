@@ -213,11 +213,12 @@ async function get<T>(cfg: HubConfig, path: string): Promise<T> {
     );
     if (!got) {
       ctrl.abort();
-      throw new Error(`Hub ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应（${path}）`);
+      // 第一性原理②「说人话」:界面不出现 /api/...、network_id 这类内部词——不把 path 塞进用户可见的报错里。
+      throw new Error(`Hub ${Math.round(readDeadlineMs / 1000)} 秒内没有返回完整响应`);
     }
     if (!got.ok) {
       if (!readStatusCountsAsFailure(got.res.status)) reported = true;
-      throw new Error(`HTTP ${got.res.status} on ${path}`);
+      throw new Error(`HTTP ${got.res.status}`);
     }
     reportReadSuccess(Date.now(), Date.now() - started, { path, bytes: bodyBytes(got.res), epoch });
     reported = true;
@@ -883,7 +884,9 @@ export async function fetchTaskInspection(cfg: HubConfig, taskId: string): Promi
     }
     // Old Hubs may answer an unknown route with their JSON help response.
   } catch (e) {
-    if (!(e instanceof SyntaxError) && !(e instanceof Error && /^HTTP (404|501) on /.test(e.message))) throw e;
+    // get() no longer puts the raw path in the message (first-principles②「说人话」—— 不往用户可见的报错里塞
+    // /api/...、network_id);match just dropped the trailing " on {path}", not the pattern itself.
+    if (!(e instanceof SyntaxError) && !(e instanceof Error && /^HTTP (404|501)$/.test(e.message))) throw e;
   }
   return { task: await fetchTaskDetail(cfg, taskId), diagnostic: null };
 }
@@ -1331,7 +1334,7 @@ const sendTaskOnce = async (
     );
   } catch (e) {
     const aborted = ctrl.signal.aborted;
-    const error = aborted && headersAt === null ? new Error(`Hub ${Math.round(sendHeaderTimeoutMs / 1000)} 秒内没有响应（/api/task）`) : e;
+    const error = aborted && headersAt === null ? new Error(`Hub ${Math.round(sendHeaderTimeoutMs / 1000)} 秒内没有响应`) : e;
     timing(aborted ? 'timeout' : 'error', error);
     throw error;
   } finally {
@@ -1339,7 +1342,7 @@ const sendTaskOnce = async (
   }
   if (!got) {
     ctrl.abort();
-    const error = new Error(`Hub ${Math.round(sendDeadlineMs / 1000)} 秒内没有返回完整响应（/api/task）`);
+    const error = new Error(`Hub ${Math.round(sendDeadlineMs / 1000)} 秒内没有返回完整响应`);
     timing('timeout', error);
     throw error;
   }
