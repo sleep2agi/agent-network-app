@@ -54,14 +54,29 @@ export function runWindows(runs, slackMs = WINDOW_SLACK_MS, leadMs = WINDOW_LEAD
     const start = new Date(r.run_started_at ?? r.created_at ?? NaN);
     const end = new Date(r.updated_at ?? r.run_started_at ?? r.created_at ?? NaN);
     if (Number.isNaN(start.getTime()) || Number.isNaN(end.getTime())) continue;
-    out.push({ id: r.id ?? null, start: new Date(start.getTime() - leadMs), end: new Date(end.getTime() + slackMs) });
+    // status/conclusion 用来区分「还没跑完的并行 run」和「早就结束、私钥已随 runner 销毁的 run」。
+    // 2026-11-21 0.2.590：一小时一版的节奏下，2 小时宽限会把上一版的证书一直留着，很快撞满 Apple 的 3 张上限。
+    out.push({
+      id: r.id ?? null,
+      start: new Date(start.getTime() - leadMs),
+      end: new Date(end.getTime() + slackMs),
+      status: typeof r.status === 'string' ? r.status : null,
+      conclusion: typeof r.conclusion === 'string' ? r.conclusion : null,
+    });
   }
   return out;
 }
 
 export function windowFor(validFrom, windows) {
   if (!(validFrom instanceof Date) || Number.isNaN(validFrom.getTime())) return null;
-  return windows.find(w => validFrom >= w.start && validFrom <= w.end) ?? null;
+  // 窗口可能重叠（一条 run 排队时上一条还没结束）：取**最近开始**的那条，
+  // 否则会把新证书归到更早、已结束的 run 上，从而被误判为可吊销。
+  let best = null;
+  for (const w of windows) {
+    if (validFrom < w.start || validFrom > w.end) continue;
+    if (!best || w.start > best.start) best = w;
+  }
+  return best;
 }
 
 /**
@@ -75,6 +90,10 @@ export function partitionCiCertificates(certs, windows, now = new Date()) {
     const issued = c.validFrom ? c.validFrom.toISOString() : 'unknown issue time';
     const w = windowFor(c.validFrom, windows);
     if (!w) { keep.push(c); reason.set(c.id, `not issued inside any ios-build run (${issued}) — treated as manually created`); continue; }
+    // run 已结束 ⇒ 那张证书的私钥已经随 runner 销毁，留着只会占 Apple 的 3 张名额，立刻吊销。
+    if (w.status === 'completed') {
+      revoke.push(c); reason.set(c.id, `issued by finished ios-build run ${w.id} (${issued}); its private key died with that runner`); continue;
+    }
     if (now.getTime() - c.validFrom.getTime() < IN_FLIGHT_GRACE_MS) {
       keep.push(c); reason.set(c.id, `issued by ios-build run ${w.id} ${Math.round((now - c.validFrom) / 60000)} min ago — may still be in flight`); continue;
     }

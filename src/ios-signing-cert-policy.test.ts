@@ -72,5 +72,17 @@ const stepIdx = yml.indexOf('name: Prepare ephemeral App Store distribution sign
 const nextStep = yml.indexOf('- name:', stepIdx + 10);
 ck('workflow injects GH_TOKEN into the Prepare step', yml.slice(stepIdx, nextStep).includes('GH_TOKEN: ${{ github.token }}'));
 
+
+// 2026-11-21 0.2.590：一小时一版的节奏下，2 小时「宽限」会把上一版已结束的证书留着，撞 Apple 3 张上限。
+// 规则细化：证书所在 run **已结束**（status=completed）⇒ 立刻可吊销；run 还在排队/进行中 ⇒ 保留。
+const doneRun = { id: 888, run_started_at: new Date(now.getTime() - 30 * 60_000).toISOString(), updated_at: now.toISOString(), status: 'completed', conclusion: 'success' };
+const busyRun = { id: 889, run_started_at: new Date(now.getTime() - 10 * 60_000).toISOString(), updated_at: now.toISOString(), status: 'in_progress', conclusion: null };
+const doneCert = { ...base, id: 'DONE', validFrom: new Date(now.getTime() - 40 * 60_000) };
+const busyCert = { ...base, id: 'BUSY', validFrom: new Date(now.getTime() - 8 * 60_000) };
+const r2 = partitionCiCertificates([doneCert, busyCert], runWindows([doneRun, busyRun]), now);
+ck('finished run 的证书即使 2 小时内也吊销', r2.revoke.map(c => c.id).includes('DONE'));
+ck('still-running run 的证书保留', r2.keep.map(c => c.id).includes('BUSY'));
+ck('finished-run reason 写明 run 已结束', /finished ios-build run 888/.test(r2.reason.get('DONE') ?? ''));
+
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
