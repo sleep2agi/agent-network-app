@@ -111,7 +111,7 @@ registerTranslations({
   // 成员编辑器重设计(#417):双栏弹窗 / 手机成员页与它推入的两页。
   'users.roleHint.member': ['可对话、可建任务；不能管理成员', 'Can chat and create tasks; cannot manage members'],
   'users.roleHint.viewer': ['只能查看，不能对话、不能改任务', 'View only: cannot chat or edit tasks'],
-  'users.roleHint.admin': ['能访问全部 Agent 和任务，能管理成员', 'Every agent and task; can manage members'],
+  'users.roleHint.admin': ['能管理成员', 'Can manage members'],
   'users.adminAccess': ['管理员可以访问全部 Agent 和任务，不用单独授权。', 'Admins can reach every agent and task; nothing to grant.'],
   'users.picked': ['已选', 'Selected'],
   'users.pickedHint': ['{count} 个 · 点 × 移除', '{count} · tap × to remove'],
