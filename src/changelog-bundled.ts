@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.597:",
+  "- 节点详情的「概览」里多了一行「机器」：显示这台机器在 Hub 上设的别名（没设就是 hostname），和节点列表里看到的一致。",
+  "",
   "What's new in 0.2.596:",
   "- 模型面板里把「节点配置的模型」和「运行时上报的模型」分开显示：保存后还没重启时，一眼能看出「配置已经改了，重启才生效」。",
   "",
