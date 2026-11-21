@@ -47,6 +47,24 @@ try {
       });
     }
     await page.screenshot({ path: `${OUT}/${width}-${theme}-sender.png` });
+    if (width !== 390) {
+      const layers = await page.evaluate(() => {
+        const panel = document.querySelector('[data-testid="chat-info-panel"]');
+        const rect = panel.getBoundingClientRect();
+        const x = rect.left + rect.width / 2, y = rect.bottom - 45;
+        const hit = document.elementFromPoint(x, y);
+        const chain = [];
+        for (let el = panel; el; el = el.parentElement) {
+          const css = getComputedStyle(el);
+          chain.push({ testID: el.getAttribute('data-testid'), background: css.backgroundColor,
+            zIndex: css.zIndex, opacity: css.opacity, position: css.position });
+        }
+        return { panelOwnsBottom: panel.contains(hit), hitTestID: hit?.getAttribute('data-testid'), chain };
+      });
+      console.log(`LAYERS ${width} ${theme} ${JSON.stringify(layers)}`);
+      assert.notEqual(layers.chain[0].background, 'rgba(0, 0, 0, 0)', 'drawer must remain opaque inside glass content');
+      assert.equal(layers.panelOwnsBottom, true);
+    }
     const closeCard = async () => {
       if (width === 390) await page.getByTestId('chat-info-back').click();
       else await page.keyboard.press('Escape');

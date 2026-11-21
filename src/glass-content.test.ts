@@ -4,7 +4,7 @@ import { glassContentCss } from './glass-content-css';
 
 // 只取原子 class（r-…），丢掉 View 基础 class（css-…）和奇怪的名字；规则限定在桌面内容区里。
 const css = glassContentCss(['css-g5y9jx', 'r-1w914xz', 'r-13awgt0', 'bad name', 'r-a;b']);
-assert.equal(css, '[data-glass-content] .r-1w914xz{background-color:transparent !important}\n[data-glass-content] .r-13awgt0{background-color:transparent !important}');
+assert.equal(css, '[data-glass-content] .r-1w914xz:not([data-glass-opaque]){background-color:transparent !important}\n[data-glass-content] .r-13awgt0:not([data-glass-opaque]){background-color:transparent !important}');
 assert.equal(glassContentCss([]), '');
 
 // 接线：桌面内容区用 GlassContent 包住（admin 2026-11-19「任务这边也就是一块白」）。

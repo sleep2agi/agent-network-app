@@ -149,7 +149,7 @@ export default function ChatInfoPanel({
           accessibilityLabel={t('chat.closeInfo')}
           testID="chat-info-backdrop"
         />
-        <View ref={drawerRef} style={[styles.drawer, { width: chatInfoDrawerWidth(paneWidth) }]} testID="chat-info-panel" accessibilityViewIsModal>
+        <View ref={drawerRef} style={[styles.drawer, { width: chatInfoDrawerWidth(paneWidth) }]} testID="chat-info-panel" accessibilityViewIsModal {...({ dataSet: { glassOpaque: 'true' } } as any)}>
           <View style={[styles.header, headerHeight ? { minHeight: headerHeight } : null]} testID="chat-info-header">
             <Text style={styles.headerTitle} testID="chat-info-title">{t(identity ? 'chat.sender.title' : 'chat.info')}</Text>
           </View>
