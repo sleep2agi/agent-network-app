@@ -11,7 +11,7 @@ import { Text, TextInput } from './ui-text';
 import { fetchNodeConfig, updateNodeConfig, type HubConfig, type HubNode } from './api';
 import { patchForRuntime, runtimeOptions, runtimeSwitchErrorText, validateRuntimeSwitch } from './node-runtime-switch';
 import { styles } from './app-styles';
-import { colors, spacing } from './theme';
+import { colors, radius, spacing } from './theme';
 
 export default function NodeRuntimeSwitchCard(props: { cfg: HubConfig; node: HubNode; onChanged?: () => void }) {
   const { cfg, node, onChanged } = props;
@@ -75,12 +75,12 @@ export default function NodeRuntimeSwitchCard(props: { cfg: HubConfig; node: Hub
             placeholder={current || 'runtime id（例如 antigravity-acp）'}
             placeholderTextColor={colors.textMuted}
             autoCapitalize="none"
-            style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: 8, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}
+            style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}
           />
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {options.map(option => (
               <Pressable key={option.id} testID={`node-runtime-option-${option.id}`} accessibilityRole="button" onPress={() => { setDraft(option.id); setError(null); setNotice(null); }}>
-                <Text style={{ color: colors.textMuted, fontSize: 11, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: colors.inputBg, borderRadius: 6 }}>{option.label}</Text>
+                <Text style={{ color: colors.textMuted, fontSize: 11, paddingHorizontal: 8, paddingVertical: 4, backgroundColor: colors.inputBg, borderRadius: radius.item }}>{option.label}</Text>
               </Pressable>
             ))}
           </View>
