@@ -150,6 +150,10 @@
       "kind": "stub",
       "secs": 101
     },
+    "test-message-sender-info/drive.mjs": {
+      "kind": "stub",
+      "secs": 60
+    },
     "test-chat-older-batches/drive.mjs": {
       "kind": "stub",
       "secs": 70
