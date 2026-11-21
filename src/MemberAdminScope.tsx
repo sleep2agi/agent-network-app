@@ -14,6 +14,7 @@ import { fetchOrg } from './org-api';
 import {
   departmentScopeErrorText,
   filterGrantableDepartments,
+  grantErrorText,
   mergeUserGrants,
   scopeFromGrants,
   validateDepartmentScope,
@@ -49,7 +50,7 @@ export default function MemberAdminScope(props: { cfg: HubConfig; networkId: str
       const nodes: DepartmentNode[] = (org?.departments ?? []).map(d => ({ id: d.id, name: d.name }));
       // 部门负责人（不是 network owner/admin）只给自己子树内的部门；其它角色不过滤。
       setDepartments(filterGrantableDepartments(nodes, deptScope.all ? [] : deptScope.managed));
-      if (!read.ok) setError(read.error === 'unsupported' ? '当前 Hub 还不支持范围授权。' : read.error);
+      if (!read.ok) setError(grantErrorText(read.error));
       setLoading(false);
     });
     return () => { live = false; };
@@ -70,9 +71,7 @@ export default function MemberAdminScope(props: { cfg: HubConfig; networkId: str
     const res = await putUserGrants(cfg, userId, mergeUserGrants(grants, { mode, departmentId }));
     setBusy(false);
     if (!res.ok) {
-      setError(res.error === 'permission_denied'
-        ? '你没有权限授这个部门（部门负责人只能授自己负责的部门）。'
-        : res.error === 'department_not_found' ? '这个部门不存在（可能已被删除）。' : res.error);
+      setError(grantErrorText(res.error));
       return;
     }
     setGrants(res.grants);
