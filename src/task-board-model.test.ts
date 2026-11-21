@@ -54,7 +54,7 @@ console.log('# 分组 / 筛选');
   const counts = ownerCounts(items, people);
   const shape = counts.map(c => `${c.name}:${c.count}`).join();
   ck('负责人列表:数目降序,同数按名字(zh 排序),未分配在最后', shape === 'demo-node-a:2,测试者:1,demo-node-b:1,未分配:1', shape);
-  ck('名字取不到:「未知成员(末 6 位)」,不显示裸 id', ownerLabel(R('x', { owner: { kind: 'node', id: 'n_e06d936d' } }), people) === '未知成员（6d936d）');
+  ck('名字取不到:「未知成员」,不显示裸 id', ownerLabel(R('x', { owner: { kind: 'node', id: 'n_e06d936d' } }), people) === '未知成员');
   ck('旧 Hub 显示旧的 assignee 文本', ownerLabel({ owner: undefined, assignee: '旧节点' }, people) === '旧节点');
 }
 
@@ -281,7 +281,7 @@ console.log('# 参与人 / 未知成员');
   const refs = [ME, NODE_A, { kind: 'user' as const, id: 'u_a4944afaa30b' }, NODE_B, { kind: 'node' as const, id: 'n_e06d936d' }];
   const st = participantStack(refs, people);
   ck('最多 3 个头像 + 「+N」', st.shown.length === 3 && st.more === 2);
-  ck('认不出的成员:未知成员 + 短 id,不是裸 id', st.shown[2].name === '未知成员（faa30b）' && !st.shown[2].known && !st.all.includes('u_a4944afaa30b'));
+  ck('认不出的成员:未知成员,不是裸 id', st.shown[2].name === '未知成员' && !st.shown[2].known && !st.all.includes('u_a4944afaa30b'));
   ck('悬停名单写全(含种类)', st.all.startsWith('测试者（人类）、demo-node-a（Agent）'));
   ck('没有参与人 = 空', participantStack(undefined, people).shown.length === 0);
   ck('认得的成员 known', personDisplay(ME, people).known && personDisplay(ME, people).name === '测试者');

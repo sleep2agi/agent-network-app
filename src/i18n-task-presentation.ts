@@ -6,7 +6,7 @@ import { formatDueFull as rawDueFull } from './due-time';
 // Presentation-only adapters. IDs, sorting/filtering and outbound data stay in the model.
 export function personDisplay(...args: Parameters<typeof model.personDisplay>) {
  const result = model.personDisplay(...args);
- return result.known ? result : { ...result, name: t('tasks.unknownMember', { id: model.shortId(args[0].id) }) };
+ return result.known ? result : { ...result, name: t('tasks.unknownMember') };
 }
 /** 详情里一个参与人胶囊画什么:Agent =「名字 · Agent」(品牌蓝),人类 =「名字 人类」。 */
 export function participantChip(...[ref, people]: Parameters<typeof model.personDisplay>) {

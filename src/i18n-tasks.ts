@@ -273,7 +273,8 @@ registerTranslations({
  'tasks.noticeOpenA11y': ['打开任务', 'Open task'],
  'tasks.unassigned': ['未分配', 'Unassigned'],
  'tasks.today': ['今天', 'Today'], 'tasks.allDay': ['全天', 'All day'],
- 'tasks.unknownMember': ['未知成员（{id}）', 'Unknown member ({id})'],
+ // admin 2026-11-21 两次反馈「这个未知成员是什么鬼」——括号里那截 id 不再帮人识别,只让人更困惑,去掉。
+ 'tasks.unknownMember': ['未知成员', 'Unknown member'],
  'tasks.overdueDays': ['已逾期 {n} 天', '{n}d overdue'],
  'tasks.overdueHours': ['已逾期 {n} 小时', '{n}h overdue'],
  'tasks.overdueMinutes': ['已逾期 {n} 分钟', '{n}min overdue'],
