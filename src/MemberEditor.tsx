@@ -187,8 +187,10 @@ function RoleSection({ ed }: { ed: MemberEditorState }) {
   );
 }
 
-/** owner / admin(或正改成管理员):没有可授权的东西,说一句为什么。 */
+/** owner / admin(或正改成管理员):没有可授权的东西,说一句为什么。
+ *  #3665 之后 admin 有「管理范围」卡，那句「不用单独授权」会自相矛盾，所以只留给 owner。 */
 function AdminNote({ role }: { role: MemberRole }) {
+  if (role === 'admin') return null;
   if (grantsEditable({ role })) return null;
   return (
     <View style={styles.section}>

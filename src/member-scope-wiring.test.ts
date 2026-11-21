@@ -16,5 +16,6 @@ ck('合并只替换 manage_nodes', scope.includes('mergeUserGrants(grants'));
 ck('候选按负责范围过滤', scope.includes('filterGrantableDepartments'));
 ck('permission_denied 有人话', scope.includes('没有权限授这个部门'));
 ck('写清「无部门节点只有全网管理员能看到」', scope.includes('不属于任何部门的节点只有全网管理员能看到'));
+ck('admin 不再显示那句「不用单独授权」的旧提示', editor.includes("if (role === 'admin') return null;"));
 console.log(`${passed}/${total} passed`);
 if (passed !== total) process.exit(1);
