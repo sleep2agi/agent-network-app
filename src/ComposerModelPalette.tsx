@@ -26,6 +26,7 @@ import {
   type OpenCodeCatalogPoll,
 } from './api';
 import { catalogErrorText, isOpenCodeV2Node, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
+import { ACP_MODEL_SUGGESTIONS, acpModelErrorText, isAcpModelRuntime, normalizeAcpModelId } from './acp-model-edit';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { buildConfigPatch, variantAfterModelSwitch, variantValueError, variantWritable } from './node-variant-patch';
@@ -99,6 +100,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   });
   // #4976 —— 终态是错误时必须能重来一次（超时/节点暂时没回），不要求用户关掉面板重开。
   const [catalogAttempt, setCatalogAttempt] = useState(0);
+  // 2026-11-21 admin：ACP runtime 没有目录可读，改为「输入模型 id + 写节点配置」。
+  const [acpDraft, setAcpDraft] = useState('');
+  const [acpSaving, setAcpSaving] = useState(false);
+  const [acpNotice, setAcpNotice] = useState<string | null>(null);
+  const [acpError, setAcpError] = useState<string | null>(null);
   // #4976 跟进：loading 超过 4 秒就换成「还剩多少秒会出结果」，别让人对着同一句话干等。
   const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
   useEffect(() => {
@@ -254,7 +260,10 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   // 但那是「没读到」，不该按「明确不是 OpenCode V2」处理（会把这个节点整个面板锁死）。
   // 明确证据只有两种：代际字段说 v1；或者 runtime 有值且确实不在 OpenCode 名单里。
   const generation = node?.opencode_generation ?? node?.config_snapshot?.flags?.opencodeGeneration;
-  const knownNonV2 = !!node && (generation === 'v1' || (!!node.runtime && !v2));
+  // 2026-11-21：ACP runtime（grok/agy）没有目录，但**可以在 App 里设模型**（输入 + 写节点配置），
+  // 所以不能按「非 V2」锁成只读卡 —— 那是 admin 截图里「选不了模型」的直接原因。
+  const acpRuntime = !!node && isAcpModelRuntime(node.runtime);
+  const knownNonV2 = !!node && !acpRuntime && (generation === 'v1' || (!!node.runtime && !v2));
   const availability = modelControlAvailability(config ?? null, { hotModel: v2 });
   const variantGate = variantWritable({
     variantCapable: config?.opencode_variant_config_capable === true || config?.variant_capable === true,
@@ -531,6 +540,91 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   // admin 2026-11-13（营销神明等 claude-code 节点截图）：不是 OpenCode V2 的节点在聊天里切不了模型，
   // 以前照样弹出整个搜索面板，再给一段红字「不是 OpenCode V2」。现在只给一张说明卡：当前模型 + 原因，
   // 不出搜索框 / 列表 / 档位 / agent。
+  if (acpRuntime) {
+    const saveAcpModel = async () => {
+      if (!node || !config || acpSaving) return;
+      const checked = normalizeAcpModelId(acpDraft);
+      if (!checked.ok) { setAcpError(acpModelErrorText(checked.error)); return; }
+      setAcpSaving(true);
+      setAcpError(null);
+      setAcpNotice(null);
+      try {
+        const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: config.config_revision, patch: buildConfigPatch({ model: checked.value }) });
+        if (!res.ok) { setAcpError(res.error); return; }
+        // 只确认「配置真的写进去了」，不声称运行时已切换：这两个 runtime 没有目录/回读可校验。
+        const after = await fetchNodeConfig(cfg, node.node_id);
+        if (after && after.model !== checked.value) {
+          setAcpError(t('chat.modelPicker.acpNotSaved', { value: checked.value }));
+          return;
+        }
+        setConfig(after ?? config);
+        setAcpNotice(t('chat.modelPicker.acpSaved', { value: checked.value }));
+        setAcpDraft('');
+      } catch (e) {
+        setAcpError(e instanceof Error ? e.message : String(e));
+      } finally {
+        setAcpSaving(false);
+      }
+    };
+    return (
+      <View style={styles.card} testID="composer-model-sheet">
+        <View style={styles.searchBar} testID="model-palette-acp">
+          <Ionicons name="cube-outline" size={16} color={colors.textMuted} />
+          <Text style={styles.searchInput} numberOfLines={1} testID="model-palette-acp-current">
+            {currentModel || t('chat.modelUnknown')}
+          </Text>
+          <Pressable
+            testID="model-palette-close"
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.modelPicker.close')}
+            hitSlop={8}
+            onPress={() => closeRef.current()}
+            style={{ marginLeft: 8, padding: 2 }}
+          >
+            <Ionicons name="close" size={18} color={colors.textMuted} />
+          </Pressable>
+        </View>
+        <Text style={styles.source} testID="model-palette-acp-note">
+          {t('chat.modelPicker.acpHint', { runtime: node?.runtime || t('chat.modelUnknown') })}
+        </Text>
+        <TextInput
+          testID="model-palette-acp-input"
+          value={acpDraft}
+          onChangeText={text => { setAcpDraft(text); setAcpError(null); setAcpNotice(null); }}
+          placeholder={currentModel || 'claude-opus-5-5-high'}
+          placeholderTextColor={colors.textMuted}
+          autoCapitalize="none"
+          style={styles.acpInput}
+          onSubmitEditing={() => { void saveAcpModel(); }}
+        />
+        <View style={styles.acpChips}>
+          {ACP_MODEL_SUGGESTIONS.flatMap(group => group.ids.map(id => (
+            <Pressable
+              key={id}
+              testID={`model-palette-acp-suggest-${id}`}
+              accessibilityRole="button"
+              onPress={() => { setAcpDraft(id); setAcpError(null); setAcpNotice(null); }}
+              style={styles.acpChip}
+            >
+              <Text style={styles.acpChipText}>{id}</Text>
+            </Pressable>
+          )))}
+        </View>
+        <Pressable
+          testID="model-palette-acp-save"
+          accessibilityRole="button"
+          accessibilityState={{ busy: acpSaving, disabled: acpSaving }}
+          onPress={() => { void saveAcpModel(); }}
+          style={styles.acpSave}
+        >
+          <Text style={styles.acpSaveText}>{acpSaving ? t('chat.modelPicker.acpSaving') : t('chat.modelPicker.acpSave')}</Text>
+        </Pressable>
+        {acpError ? <Text style={styles.errorText} testID="model-palette-acp-error">{acpError}</Text> : null}
+        {acpNotice ? <Text style={styles.statusText} testID="model-palette-acp-notice">{acpNotice}</Text> : null}
+      </View>
+    );
+  }
+
   if (knownNonV2) {
     return (
       <View style={styles.card} testID="composer-model-sheet">
@@ -792,6 +886,13 @@ const makeStyles = () => ({
   searchInput: { flex: 1, fontSize: ds(13), color: colors.text, paddingVertical: 0 },
   statusRow: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 8, padding: 12 },
   statusText: { fontSize: ds(12), color: colors.textMuted },
+  // ACP runtime：输入框 + 候选 chip + 保存。
+  acpInput: { marginHorizontal: 10, marginTop: 8, fontSize: ds(13), color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: 10, paddingVertical: 8 },
+  acpChips: { flexDirection: 'row' as const, flexWrap: 'wrap' as const, gap: 6, paddingHorizontal: 10, paddingTop: 8 },
+  acpChip: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: radius.item, backgroundColor: colors.inputBg },
+  acpChipText: { fontSize: ds(11), color: colors.textMuted },
+  acpSave: { marginHorizontal: 10, marginTop: 10, marginBottom: 10, paddingVertical: 9, borderRadius: radius.control, backgroundColor: colors.accent, alignItems: 'center' as const },
+  acpSaveText: { fontSize: ds(13), color: '#fff', fontWeight: '600' as const },
   // #4976 —— 错误终态给一个明确的「重试」，别只留一段红字。
   retryButton: { alignSelf: 'flex-start' as const, marginTop: 8, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.item, backgroundColor: colors.inputBg },
   retryLabel: { fontSize: ds(12), color: colors.accent },
