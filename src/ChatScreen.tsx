@@ -369,8 +369,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [currentUsername, setCurrentUsername] = useState('我');
   const [currentUserId, setCurrentUserId] = useState<string | undefined>();
   const [senderProfile, setSenderProfile] = useState<{ nodeId?: string; userId?: string; label?: string } | null>(null);
-  useEffect(() => { setSenderProfile(null); }, [alias, networkId, accountCfg.profileId, accountCfg.token]);
-  useEffect(() => { setCurrentUserId(undefined); }, [accountCfg.serverUrl, accountCfg.profileId, accountCfg.token]);
+  useEffect(() => { setSenderProfile(null); }, [alias, cfg.networkId, cfg.serverUrl, cfg.profileId, cfg.token]);
+  useEffect(() => { setCurrentUserId(undefined); }, [cfg.serverUrl, cfg.profileId, cfg.token]);
   const [loaded, setLoaded] = useState(false);
   // admin 2026-11-20 截图：会话打开后骨架一直不消（首屏读没回来，poll 在非前台时根本不跑）。
   // 8 秒还没 loaded 就给一个可点的重试，不再干等。
