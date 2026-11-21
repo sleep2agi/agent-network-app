@@ -5,6 +5,9 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.592:",
+  "- 「/」草稿菜单里出现节点技能时会说明一句：技能是写给 Agent 的提示，不是 Runtime 原生命令，发送后由 Agent 决定怎么用。",
+  "",
   "What's new in 0.2.591:",
   "- 定时任务页的报错不再把接口地址和 network_id 露给用户，改成边框卡片样式，只说明原因并给重试。",
   "",
