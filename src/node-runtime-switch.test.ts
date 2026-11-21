@@ -1,6 +1,6 @@
 // 运行时切换的纯逻辑（admin 2026-11-21）。UI 排期在部门范围之后，先把语义钉住。
 //   run: bun src/node-runtime-switch.test.ts
-import { patchForRuntime, runtimeOptions, runtimeSwitchErrorText, validateRuntimeSwitch } from './node-runtime-switch';
+import { patchForRuntime, runtimeLoginHint, runtimeOptions, runtimeSwitchErrorText, validateRuntimeSwitch } from './node-runtime-switch';
 
 let passed = 0;
 let total = 0;
@@ -29,5 +29,8 @@ ck('卡片走 updateNodeConfig({patch:{runtime}})', card.includes('patch: patchF
 ck('卡片只回读配置、不声称已切换', card.includes("after.runtime") && card.includes('需要重启节点才生效'));
 ck('卡片写明可能要重配认证', card.includes('换运行时可能需要重新配置认证'));
 ck('卡片带进阶 toggle / 输入 / 保存 testID', ['node-runtime-advanced-toggle', 'node-runtime-input', 'node-runtime-save'].every(id => card.includes(id)));
+ck('agy 的登录命令能提示', runtimeLoginHint('antigravity-acp') === 'agy acp --login');
+ck('没有登录命令的 runtime 返回 null', runtimeLoginHint('claude-agent-sdk') === null);
+ck('未知 runtime 不编造', runtimeLoginHint('nope') === null);
 console.log(`${passed}/${total} passed`);
 if (passed !== total) process.exit(1);

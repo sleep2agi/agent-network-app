@@ -9,7 +9,7 @@ import { useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { fetchNodeConfig, updateNodeConfig, type HubConfig, type HubNode } from './api';
-import { patchForRuntime, runtimeOptions, runtimeSwitchErrorText, validateRuntimeSwitch } from './node-runtime-switch';
+import { patchForRuntime, runtimeLoginHint, runtimeOptions, runtimeSwitchErrorText, validateRuntimeSwitch } from './node-runtime-switch';
 import { styles } from './app-styles';
 import { colors, radius, spacing } from './theme';
 
@@ -77,6 +77,11 @@ export default function NodeRuntimeSwitchCard(props: { cfg: HubConfig; node: Hub
             autoCapitalize="none"
             style={{ color: colors.text, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, paddingHorizontal: spacing.md, paddingVertical: spacing.sm }}
           />
+          {runtimeLoginHint(draft) ? (
+            <Text testID="node-runtime-login-hint" style={{ color: colors.textMuted, fontSize: 12, lineHeight: 18 }}>
+              这个运行时的登录命令：<Text selectable style={{ color: colors.textSecondary }}>{runtimeLoginHint(draft)}</Text>（换过去之后可能要在这台机器上重新登录）
+            </Text>
+          ) : null}
           <View style={{ flexDirection: 'row', flexWrap: 'wrap', gap: 6 }}>
             {options.map(option => (
               <Pressable key={option.id} testID={`node-runtime-option-${option.id}`} accessibilityRole="button" onPress={() => { setDraft(option.id); setError(null); setNotice(null); }}>
