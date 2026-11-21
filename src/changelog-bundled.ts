@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.594:",
+  "- 节点列表里，头像旁边会显示这台机器的名字：在 Hub 上给机器设过别名就显示别名，没设就显示 hostname。",
+  "- 节点详情新增「机器别名」：可以给一台机器起个好认的名字（同一台机器上的节点共用），改完立刻生效。",
+  "",
   "What's new in 0.2.593:",
   "- 主窗口里点聊天页头的「头像 / 名字」也能打开聊天信息面板（「所属部门」就在里面），不用再找右上角「⋯」。",
   "- 分离出来的聊天窗口保持原来的行为：页头那一行仍然是拖动/双击最大化的标题栏。",
