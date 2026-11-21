@@ -18,6 +18,16 @@ const WINDOW_MS = 10 * 60_000;
 const TASK_LIMIT = 200;
 const POLL_MS = 30_000;
 
+/** cluster id → safe SVG element id(可能含 `::`/`__`)。 */
+const gradId = (id: string) => id.replace(/[^a-zA-Z0-9_-]/g, '_');
+
+function LegendDot(p: { color: string; label: string }) {
+  return <View style={{ flexDirection: 'row', alignItems: 'center', gap: 5 }}>
+    <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: p.color }} />
+    <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{p.label}</Text>
+  </View>;
+}
+
 export default function LiveOrgMap(p: { cfg: HubConfig; data: AgentOrgData; placed: PlacedAgent[]; onOpenAgent?: (alias: string) => void }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   const [root, setRoot] = useState<string | null>(null);
@@ -104,10 +114,26 @@ export default function LiveOrgMap(p: { cfg: HubConfig; data: AgentOrgData; plac
           ))}
         </View>
       ) : null}
-      <View style={{ flex: 1, minHeight: 320 }} onLayout={onLayout} testID="live-org-canvas">
+      <View style={{ flex: 1, minHeight: 360, borderRadius: radius.surface, backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border, overflow: 'hidden' }} onLayout={onLayout} testID="live-org-canvas">
         {W > 0 ? (
           <svg width={W} height={H} role="img" aria-label={`组织图：${clusters.length} 个部门，${online} 个 agent 在跑，近 10 分钟 ${countLabel} 次派活`} style={{ display: 'block', fontFamily: '-apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang SC", "Microsoft YaHei", "Noto Sans CJK SC", sans-serif' }}>
-            <style>{`@keyframes anetFlow{to{stroke-dashoffset:-18}} .anet-flow{animation:anetFlow 1.2s linear infinite}`}</style>
+            <style>{`
+              @keyframes anetFlow{to{stroke-dashoffset:-18}}
+              @keyframes anetPulse{0%,100%{opacity:.25}50%{opacity:.65}}
+              .anet-flow{animation:anetFlow 1.2s linear infinite}
+              .anet-pulse{animation:anetPulse 2.2s ease-in-out infinite}
+            `}</style>
+            <defs>
+              <marker id="anet-arrow" viewBox="0 0 8 8" refX="6.5" refY="4" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                <path d="M0,0 L8,4 L0,8 Z" fill={colors.accent} fillOpacity={dark ? 0.6 : 0.5} />
+              </marker>
+              {clusters.map(c => (
+                <radialGradient key={c.id} id={`anet-grad-${gradId(c.id)}`} cx="48%" cy="40%" r="62%">
+                  <stop offset="0%" stopColor={tint(c.hue, 10)} stopOpacity={dark ? 0.32 : 0.24} />
+                  <stop offset="100%" stopColor={tint(c.hue, 10)} stopOpacity={0} />
+                </radialGradient>
+              ))}
+            </defs>
             {flow.edges.map(e => {
               const a = e.from === CORE ? { ...core, r: 10 } : byId.get(e.from); const b = byId.get(e.to);
               if (!a || !b) return null;
@@ -117,15 +143,15 @@ export default function LiveOrgMap(p: { cfg: HubConfig; data: AgentOrgData; plac
               const w = 1.2 + (e.count / maxCount) * 4;
               return (
                 <g key={`${e.from}>${e.to}`}>
-                  <path className="anet-flow" d={`M${x1},${y1} Q${cx},${cy} ${x2},${y2}`} fill="none" stroke={colors.accent} strokeOpacity={dark ? 0.55 : 0.45} strokeWidth={w} strokeLinecap="round" strokeDasharray="3 6" />
+                  <path className="anet-flow" d={`M${x1},${y1} Q${cx},${cy} ${x2},${y2}`} fill="none" stroke={colors.accent} strokeOpacity={dark ? 0.55 : 0.45} strokeWidth={w} strokeLinecap="round" strokeDasharray="3 6" markerEnd="url(#anet-arrow)" />
                   <title>{`${e.from === CORE ? '定时 / 系统' : byId.get(e.from)?.name ?? ''} → ${b.name}：${e.count} 次`}</title>
                 </g>
               );
             })}
             {flow.edges.some(e => e.from === CORE) ? (
               <g>
+                <circle className="anet-pulse" cx={core.x} cy={core.y} r={16} fill="none" stroke={colors.accent} strokeOpacity={0.4} />
                 <circle cx={core.x} cy={core.y} r={7} fill={colors.accent} fillOpacity={0.9} />
-                <circle cx={core.x} cy={core.y} r={14} fill="none" stroke={colors.accent} strokeOpacity={0.3} />
                 <text x={core.x} y={core.y + 28} textAnchor="middle" fill={colors.textMuted} fontSize={11}>定时 / 系统</text>
                 <title>定时任务 / 系统派活从这里出发</title>
               </g>
@@ -138,27 +164,29 @@ export default function LiveOrgMap(p: { cfg: HubConfig; data: AgentOrgData; plac
               return (
                 <g key={c.id} data-cluster={c.id} onMouseEnter={() => setHover(c.id)} onMouseLeave={() => setHover(h => (h === c.id ? null : h))}
                   onClick={() => openCluster(c)} style={{ cursor: clickable ? 'pointer' : 'default' }}>
-                  <circle cx={c.x} cy={c.y} r={c.r} fill={color} fillOpacity={dark ? 0.1 : 0.08} stroke={color} strokeOpacity={hover === c.id ? 0.8 : dark ? 0.35 : 0.3} strokeWidth={hover === c.id ? 1.6 : 1} />
+                  <circle cx={c.x} cy={c.y} r={c.r} fill={`url(#anet-grad-${gradId(c.id)})`} stroke={color} strokeOpacity={hover === c.id ? 0.85 : dark ? 0.4 : 0.35} strokeWidth={hover === c.id ? 1.6 : 1} />
                   {ordered.map((a, i) => (
                     <circle key={a.alias} cx={c.x + pts[i].x} cy={c.y + pts[i].y} r={dotRadius(c.r, a.online)}
                       fill={a.online ? color : colors.border} fillOpacity={a.online ? 0.95 : 1}
+                      stroke={a.online ? colors.card : 'none'} strokeWidth={a.online ? 1 : 0}
                       style={{ cursor: p.onOpenAgent ? 'pointer' : undefined }}
                       onClick={(ev: { stopPropagation: () => void }) => { ev.stopPropagation(); p.onOpenAgent?.(a.alias); }}>
                       <title>{`${a.alias}${a.online ? '' : '（离线）'}`}</title>
                     </circle>
                   ))}
-                  <text x={c.x} y={c.y + c.r + 17} textAnchor="middle" fill={colors.text} fontSize={13} fontWeight={600}>{c.name}{clickable ? ' ›' : ''}</text>
-                  <text x={c.x} y={c.y + c.r + 33} textAnchor="middle" fill={colors.textMuted} fontSize={11}>{`${c.online} 在跑 / ${c.agents.length}`}</text>
+                  <circle cx={c.x} cy={c.y + c.r + 7} r={3} fill={color} />
+                  <text x={c.x} y={c.y + c.r + 22} textAnchor="middle" fill={colors.text} fontSize={13} fontWeight={700}>{c.name}{clickable ? ' ›' : ''}</text>
+                  <text x={c.x} y={c.y + c.r + 37} textAnchor="middle" fill={colors.textMuted} fontSize={11}>{`${c.online} 在跑 / ${c.agents.length}`}</text>
                 </g>
               );
             })}
           </svg>
         ) : null}
       </View>
-      <View style={{ flexDirection: 'row', gap: spacing.lg, paddingVertical: spacing.sm, borderTopWidth: 0 }} testID="live-org-legend">
-        <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>● 在跑</Text>
-        <Text style={{ color: colors.textMuted, fontSize: typeScale.small, opacity: 0.7 }}>● 离线</Text>
-        <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>┅ 近 10 分钟派活，越粗越多</Text>
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.lg, paddingVertical: spacing.sm, borderTopWidth: 0 }} testID="live-org-legend">
+        <LegendDot color={colors.accent} label="在跑" />
+        <LegendDot color={colors.border} label="离线" />
+        <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>→ 近 10 分钟派活，越粗越多</Text>
         <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>点部门往里看 · 点头像进聊天</Text>
       </View>
     </View>

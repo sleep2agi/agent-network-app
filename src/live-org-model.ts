@@ -59,7 +59,7 @@ export function packClusters(sizes: readonly { id: string; r: number }[], width:
   const out = new Map<string, { x: number; y: number; r: number }>();
   if (!placed.length) return out;
   const minX = Math.min(...placed.map(p => p.x - p.r)), maxX = Math.max(...placed.map(p => p.x + p.r));
-  const minY = Math.min(...placed.map(p => p.y - p.r - 6)), maxY = Math.max(...placed.map(p => p.y + p.r + 40)); // 下方留标签位
+  const minY = Math.min(...placed.map(p => p.y - p.r - 6)), maxY = Math.max(...placed.map(p => p.y + p.r + 48)); // 下方留标签位
   const k = Math.min(2.2, (width - 40) / Math.max(1, maxX - minX), (height - 40) / Math.max(1, maxY - minY));
   const ox = (width - (maxX - minX) * k) / 2 - minX * k, oy = (height - (maxY - minY) * k) / 2 - minY * k;
   for (const p of placed) out.set(p.id, { x: p.x * k + ox, y: p.y * k + oy, r: p.r * k });
