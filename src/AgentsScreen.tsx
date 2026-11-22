@@ -78,7 +78,7 @@ import {
 } from './unread-store';
 import { styles } from './app-styles';
 import { applyCollapsed, buildSections, countShown, holdWhileActive, SORT_BY_ACTIVITY, toggleCollapsed } from './agents-list';
-import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestMessageByAgent, rowActivity, rowStatus } from './agent-row-model';
+import { AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_PAD_Y, AGENT_ROW_SEPARATOR_INSET, AGENT_ROW_TOUCH_MIN, agentRowGeometry, agentRowModel, latestForAgentRow, latestMessageByAgent, rowActivity, rowStatus } from './agent-row-model';
 import { TaskTimeResolver } from './agent-task-time';
 import { GROUP_BY_CYCLE, GROUP_CHIP_VISUAL_HEIGHT, GROUP_OPTION_MIN_HEIGHT, GROUP_TOGGLE_HIT_SLOP, effectiveGroupBy as effectiveGroupByFor, groupByHint, groupByLabel, groupCountLabel, groupHeaderHint, groupUnlockHint, headerViewSuffix, runtimeGroupOf, runtimeGroupRank, statusGroupOf, statusGroupRank, type GroupBy } from './agent-list-grouping';
 import { loadCollapsedGroups, loadConversationTab, peekConversationTab, saveCollapsedGroups, saveConversationTab, loadGroupBy, saveGroupBy } from './agent-list-prefs';
@@ -319,6 +319,11 @@ export default function AgentsScreen({
   const latestByAgent = useMemo(() => latestMessageByAgent(preview
     ? { serverBody: preview.serverBody, replyRows: [], replyUsername: '' }
     : unreadSnap), [preview, unreadSnap]);
+  const chatLatest = preview ? undefined : unreadSnap.chatLatest;
+  const rowLatest = useCallback(
+    (s: Pick<Session, 'alias' | 'network_id'>) => latestForAgentRow(latestByAgent, chatLatest, s.alias, s.network_id ?? cfg.networkId),
+    [latestByAgent, chatLatest, cfg.networkId],
+  );
   // Rows whose second line is the task text get the time of the task that text came from
   // (agent-task-time.ts). One resolver per hub + network; a heartbeat never triggers a read.
   const taskTimes = useMemo(() => new TaskTimeResolver(async alias =>
@@ -330,16 +335,16 @@ export default function AgentsScreen({
   useEffect(() => {
     if (preview) return;
     void taskTimes.request(sessions
-      .filter(s => s.task && (!latestByAgent[s.alias]?.text || isAgentOnline(s.status)))
+      .filter(s => s.task && (!rowLatest(s)?.text || isAgentOnline(s.status)))
       .map(s => ({ alias: s.alias, text: s.task ?? '', online: isAgentOnline(s.status) })));
-  }, [preview, sessions, latestByAgent, taskTimes]);
+  }, [preview, sessions, rowLatest, taskTimes]);
   // Row activity time per alias — what `sortByActivity` orders by (off by default: SORT_BY_ACTIVITY).
   const activityByAlias = useMemo(() => {
     const out = new Map<string, number>();
-    for (const s of sessions) out.set(s.alias, rowActivity(s, latestByAgent[s.alias], taskTimes.timeFor(s.alias, s.task)).at);
+    for (const s of sessions) out.set(s.alias, rowActivity(s, rowLatest(s), taskTimes.timeFor(s.alias, s.task)).at);
     return out;
   // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [sessions, latestByAgent, taskTimes, taskTimesTick]);
+  }, [sessions, rowLatest, taskTimes, taskTimesTick]);
   // Folded group headers, remembered per device (agent-list-prefs.ts).
   const [collapsed, setCollapsed] = useState<string[]>([]);
   useEffect(() => {
@@ -966,7 +971,7 @@ export default function AgentsScreen({
   // Model (status → dot / label, time format): agent-row-model.ts.
   const renderPhoneRow = (item: Session) => {
     const pinned = pinnedAliases.includes(item.alias);
-    const model = agentRowModel(item, { latest: latestByAgent[item.alias], taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs });
+    const model = agentRowModel(item, { latest: rowLatest(item), taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs });
     const selected = selectedAlias === item.alias;
     const rowDraft = draftFor({ kind: 'node', alias: item.alias }, selected);
     // 手机上整窗渐变时行底色让出来（选中/按下仍给一档，否则光被一行行盖掉）。

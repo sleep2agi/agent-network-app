@@ -703,7 +703,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           return merged;
         });
         loadDiag.current.paintApplied(sequence, rows.length, mergedCount);
-        recordChatLatestActivity(alias, latestChatMessage(rows));
+        recordChatLatestActivity(alias, latestChatMessage(rows), cfg.networkId);
         setLoaded(true);
       };
       const results = await loadChatSources({

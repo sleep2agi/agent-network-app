@@ -180,18 +180,44 @@ export function latestChatMessage(items: readonly ChatLatestItem[] | null | unde
   return best;
 }
 
+/** Scope key for ChatScreen → sidebar latest-activity sync: isolates same-alias nodes across networks. */
+export function chatLatestKey(alias: string, networkId?: string | null): string {
+  const net = typeof networkId === 'string' ? networkId.trim() : '';
+  return `${net}\u0000${alias}`;
+}
+
+/**
+ * Resolve the latest message for one `(networkId, alias)` agent row.
+ * Merges network-scoped `chatLatest` observed by ChatScreen with `byAlias`
+ * (user_inbox / replyRows). Entries recorded under a different networkId are
+ * never read, so same-alias nodes across networks cannot leak into each other.
+ */
+export function latestForAgentRow(
+  byAlias: Readonly<Record<string, LatestMessage>>,
+  chatLatest: Readonly<Record<string, LatestMessage>> | undefined,
+  alias: string,
+  networkId?: string | null,
+): LatestMessage | undefined {
+  const base = byAlias[alias];
+  const scoped = chatLatest?.[chatLatestKey(alias, networkId)];
+  if (!scoped || !Number.isFinite(scoped.at) || scoped.at <= 0) return base;
+  const text = previewText(scoped.text);
+  if (!base || scoped.at > base.at || (scoped.at === base.at && !!text)) {
+    return { at: scoped.at, text };
+  }
+  return base;
+}
+
 /**
  * Latest message each agent sent the signed-in user — same two sources, same filter as
  * agent-unread-counts.ts `latestMessageAtByAgent` (which the 新消息 group sorts by), plus
- * the text for the preview line. When `chatLatest` (observed by ChatScreen for an opened
- * conversation, including peer-to-agent tasks and replies beyond the global inbox window)
- * is at least as recent, it wins so the sidebar matches the open chat pane.
+ * the text for the preview line. Network-scoped ChatScreen observations are merged per row
+ * via `latestForAgentRow` so same-alias nodes in different networks stay isolated.
  */
 export function latestMessageByAgent(snap: {
   serverBody: unknown;
   replyRows?: readonly unknown[];
   replyUsername?: string;
-  chatLatest?: Readonly<Record<string, LatestMessage>>;
 }): Record<string, LatestMessage> {
   const out: Record<string, LatestMessage> = {};
   const bump = (alias: unknown, at: unknown, text: unknown) => {
@@ -204,16 +230,6 @@ export function latestMessageByAgent(snap: {
   for (const m of Array.isArray(body?.messages) ? body!.messages! : []) bump(m?.from_session, m?.created_at, m?.content || m?.title);
   for (const r of (snap.replyRows ?? []) as readonly HubMessage[]) {
     if (snap.replyUsername && r?.to_alias === snap.replyUsername) bump(r.from_alias, r.created_at, r.content);
-  }
-  if (snap.chatLatest) {
-    for (const [alias, entry] of Object.entries(snap.chatLatest)) {
-      if (!alias || !entry || !Number.isFinite(entry.at) || entry.at <= 0) continue;
-      const cur = out[alias];
-      const text = previewText(entry.text);
-      if (!cur || entry.at > cur.at || (entry.at === cur.at && !!text)) {
-        out[alias] = { at: entry.at, text };
-      }
-    }
   }
   return out;
 }

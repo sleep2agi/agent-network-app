@@ -6,7 +6,7 @@
 
 import {
   AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_SEPARATOR_INSET,
-  agentRowModel, formatRowTime, latestChatMessage, latestMessageByAgent, previewText, rowActivity, rowStatus,
+  agentRowModel, chatLatestKey, formatRowTime, latestChatMessage, latestForAgentRow, latestMessageByAgent, previewText, rowActivity, rowStatus,
 } from './agent-row-model';
 import { latestMessageAtByAgent } from './agent-unread-counts';
 
@@ -144,22 +144,33 @@ ck('latestChatMessage reads proactive rows from reply side only',
   proactiveOnly?.at === Date.parse('2026-11-22T15:40:00Z') && proactiveOnly.text === '主动推送正文',
   JSON.stringify(proactiveOnly));
 
-const mergedWithChat = latestMessageByAgent({
+const baseByAgent = latestMessageByAgent({
   serverBody: { messages: [
     { from_session: '微软测试鸽', created_at: '2026-11-22 07:43:00', content: '飞书已登录成功并持久化保存到...' },
     { from_session: '另一节点', created_at: '2026-11-22 15:55:00', content: '更新的推送' },
   ] },
-  chatLatest: {
-    '微软测试鸽': { at: Date.parse('2026-11-22T15:39:55Z'), text: '.701 已切到 alpha 官网' },
-    '另一节点': { at: Date.parse('2026-11-22T15:30:00Z'), text: '较旧的已打开对话' },
-  },
 });
-ck('newer chatLatest overrides stale user_inbox message for the sidebar',
-  mergedWithChat['微软测试鸽']?.at === Date.parse('2026-11-22T15:39:55Z') && mergedWithChat['微软测试鸽']?.text === '.701 已切到 alpha 官网',
-  JSON.stringify(mergedWithChat['微软测试鸽']));
-ck('newer server user_inbox message still beats older chatLatest',
-  mergedWithChat['另一节点']?.at === Date.parse('2026-11-22T15:55:00Z') && mergedWithChat['另一节点']?.text === '更新的推送',
-  JSON.stringify(mergedWithChat['另一节点']));
+const scopedChatLatest = {
+  [chatLatestKey('微软测试鸽', 'net_A')]: { at: Date.parse('2026-11-22T15:39:55Z'), text: '.701 已切到 alpha 官网' },
+  [chatLatestKey('微软测试鸽', 'net_B')]: { at: Date.parse('2026-11-22T07:43:00Z'), text: '网络B独立消息' },
+  [chatLatestKey('另一节点', 'net_A')]: { at: Date.parse('2026-11-22T15:30:00Z'), text: '较旧的已打开对话' },
+};
+const resolvedNetA = latestForAgentRow(baseByAgent, scopedChatLatest, '微软测试鸽', 'net_A');
+ck('newer chatLatest in the same network overrides stale user_inbox message for the sidebar',
+  resolvedNetA?.at === Date.parse('2026-11-22T15:39:55Z') && resolvedNetA?.text === '.701 已切到 alpha 官网',
+  JSON.stringify(resolvedNetA));
+const resolvedNetB = latestForAgentRow(baseByAgent, scopedChatLatest, '微软测试鸽', 'net_B');
+ck('same-alias node in network B never reads network A chatLatest (stays isolated at net_B entry)',
+  resolvedNetB?.at === Date.parse('2026-11-22T07:43:00Z') && resolvedNetB?.text === '网络B独立消息',
+  JSON.stringify(resolvedNetB));
+const resolvedNetC = latestForAgentRow({}, scopedChatLatest, '微软测试鸽', 'net_C');
+ck('unvisited network C with same alias does not inherit net_A or net_B chatLatest',
+  resolvedNetC === undefined,
+  JSON.stringify(resolvedNetC));
+const resolvedOther = latestForAgentRow(baseByAgent, scopedChatLatest, '另一节点', 'net_A');
+ck('newer server user_inbox message still beats older chatLatest in the same network',
+  resolvedOther?.at === Date.parse('2026-11-22T15:55:00Z') && resolvedOther?.text === '更新的推送',
+  JSON.stringify(resolvedOther));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

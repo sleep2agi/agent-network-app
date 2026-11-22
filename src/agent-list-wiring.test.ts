@@ -44,12 +44,17 @@ ck('prefs parse through the tested parsers', prefs.includes('parseStoredListWidt
 // ── AgentsScreen: phone / two-pane rows ──
 const phoneRow = agents.slice(agents.indexOf('const renderPhoneRow = (item: Session) => {'), agents.indexOf('  return (\n    <View style={{ flex: 1'));
 ck('phone row block located', phoneRow.length > 200);
-ck('row content comes from agentRowModel, with the task time for the text it shows', phoneRow.includes('agentRowModel(item, { latest: latestByAgent[item.alias], taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs })'));
+ck('row content comes from agentRowModel, with network-scoped latest and task time for the text it shows',
+  phoneRow.includes('agentRowModel(item, { latest: rowLatest(item), taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs })')
+  && agents.includes('latestForAgentRow(latestByAgent, chatLatest, s.alias, s.network_id ?? cfg.networkId)'));
 // ── last-activity time (0.2.114): task times come from the latest task row, never updated_at ──
 ck('task-time resolver reads the latest task row for that alias only', agents.includes('fetchTasks(cfg, { to_name: alias, limit: 1, skipStats: true })'));
-ck('lookups cover rows without message text plus online rows whose task may be newer than a stale message', agents.includes('.filter(s => s.task && (!latestByAgent[s.alias]?.text || isAgentOnline(s.status)))'));
+ck('lookups cover rows without message text plus online rows whose task may be newer than a stale message', agents.includes('.filter(s => s.task && (!rowLatest(s)?.text || isAgentOnline(s.status)))'));
 const chat = read('./ChatScreen.tsx');
-ck('ChatScreen syncs its latest painted visible message back to the sidebar store', chat.includes('recordChatLatestActivity(alias, latestChatMessage(rows))'));
+ck('ChatScreen syncs its latest painted visible message with cfg.networkId inside the isCurrent() gate',
+  chat.includes('recordChatLatestActivity(alias, latestChatMessage(rows), cfg.networkId)')
+  && chat.includes('if (!isCurrent()) return;')
+  && chat.includes('conversationKey(cfg.profileId, cfg.serverUrl, cfg.networkId, alias)'));
 ck('a resolved task time re-renders the list', agents.includes('taskTimes.subscribe(() => setTaskTimesTick(n => n + 1))'));
 ck('the screen never derives a row time from updated_at', !/updated_at/.test(agents));
 ck('sort-by-activity is wired through the flag (one-line switch), not hard-coded', agents.includes('sortByActivity: SORT_BY_ACTIVITY,') && agents.includes('activityAt: alias => activityByAlias.get(alias) ?? 0,'));

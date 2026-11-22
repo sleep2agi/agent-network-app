@@ -7,7 +7,8 @@ import { mock } from 'bun:test';
 import { readFileSync } from 'node:fs';
 import { join } from 'node:path';
 import { accountScopedFile, createSessionStore, LEGACY_SESSION_ID, type SessionKv } from './session-registry';
-import { conversationScope } from './conversation-store';
+import { conversationScope, createConversationRequestGate, conversationKey } from './conversation-store';
+import { chatLatestKey, latestForAgentRow } from './agent-row-model';
 import { pinScopeKey } from './chat-pins-core';
 import { requirementsKey } from './requirements-store';
 import { taskScopeKey } from './task-board-store';
@@ -56,9 +57,31 @@ mock.module('react-native', () => ({ AppState: { addEventListener: () => ({ remo
 const unread = await import('./unread-store');
 unread.bindUnreadProfile('m-A');
 unread.ingestUserMessagesBody({ messages: [{ id: 'x1', from_alias: 'agent-of-A' }, { id: 'x2', from_alias: 'agent-of-A' }] });
-unread.recordChatLatestActivity('agent-of-A', { at: 1_700_000_000_000, text: 'A 对话最新消息' });
+unread.recordChatLatestActivity('agent-of-A', { at: 1_700_000_000_000, text: 'A 对话最新消息' }, 'net_A');
 const before = unread.getUnreadSnapshot();
-ck('I3 precondition: account A has 2 unread from agent-of-A', before.ledger.counts['agent-of-A'] === 2 && before.serverBody !== null && before.chatLatest?.['agent-of-A']?.at === 1_700_000_000_000);
+ck('I3 precondition: account A has 2 unread from agent-of-A', before.ledger.counts['agent-of-A'] === 2 && before.serverBody !== null && before.chatLatest?.[chatLatestKey('agent-of-A', 'net_A')]?.at === 1_700_000_000_000);
+// Same-account cross-network A -> B -> A with identical alias + stale async writeback guard
+const tA = Date.parse('2026-11-22T15:39:00Z');
+const tB = Date.parse('2026-11-22T07:43:00Z');
+const gate = createConversationRequestGate();
+const tokA = gate.open(conversationKey('m-A', 'https://hub.example.com', 'net_A', 'shared-alias'));
+unread.recordChatLatestActivity('shared-alias', { at: tA, text: '网络A的23:39消息' }, 'net_A');
+const tokB = gate.open(conversationKey('m-A', 'https://hub.example.com', 'net_B', 'shared-alias'));
+// Network B's earlier timestamp (15:43) must NOT be rejected by Network A's monotonic 23:39
+unread.recordChatLatestActivity('shared-alias', { at: tB, text: '网络B的15:43消息' }, 'net_B');
+// Stale async response from Network A arrives after switching to Network B → gate rejects it
+if (gate.isCurrent(tokA)) {
+  unread.recordChatLatestActivity('shared-alias', { at: tA + 60_000, text: '过期异步响应' }, 'net_B');
+}
+ck('I3 same-account A→B→A: net_B keeps 15:43 without being overwritten or rejected by net_A 23:39',
+  gate.isCurrent(tokB) && !gate.isCurrent(tokA)
+  && latestForAgentRow({}, unread.getUnreadSnapshot().chatLatest, 'shared-alias', 'net_B')?.at === tB
+  && latestForAgentRow({}, unread.getUnreadSnapshot().chatLatest, 'shared-alias', 'net_B')?.text === '网络B的15:43消息');
+const tokA2 = gate.open(conversationKey('m-A', 'https://hub.example.com', 'net_A', 'shared-alias'));
+ck('I3 same-account A→B→A: returning to net_A restores net_A 23:39 cleanly',
+  gate.isCurrent(tokA2) && !gate.isCurrent(tokB)
+  && latestForAgentRow({}, unread.getUnreadSnapshot().chatLatest, 'shared-alias', 'net_A')?.at === tA
+  && latestForAgentRow({}, unread.getUnreadSnapshot().chatLatest, 'shared-alias', 'net_A')?.text === '网络A的23:39消息');
 unread.bindUnreadProfile('m-B');
 const after = unread.getUnreadSnapshot();
 ck('I3 switching to B clears A\'s unread counts', Object.keys(after.ledger.counts).length === 0, JSON.stringify(after.ledger.counts));

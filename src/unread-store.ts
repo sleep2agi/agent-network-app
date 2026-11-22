@@ -4,7 +4,7 @@
  */
 import { AppState, type AppStateStatus } from 'react-native';
 import type { HubMessage, HubUserMessage } from './api';
-import type { LatestMessage } from './agent-row-model';
+import { chatLatestKey, type LatestMessage } from './agent-row-model';
 import { readServerUnreadByAgent } from './user-unread';
 import { ingestUserMessages } from './unread-badge';
 import { advanceWatermark, loadReplyWatermarks, replyUnreadByAgent, saveReplyWatermarks, watermarkAfterRender, type ReplyWatermarks } from './reply-unread';
@@ -28,7 +28,7 @@ export type UnreadStoreSnapshot = {
   replyUsername: string;
   /** 水位线属于哪个账号(app#275:按 profile 分 key;undefined = 旧的全局 key)。 */
   replyProfileId?: string;
-  /** ChatScreen 打开/轮询后观察到的每个 agent 最新可见对话（含节点间任务与回复），供侧栏时间与预览同步。 */
+  /** ChatScreen 打开/轮询后观察到的每个 `(networkId, alias)` 最新可见对话（含节点间任务与回复），供侧栏时间与预览同步。 */
   chatLatest?: Readonly<Record<string, LatestMessage>>;
 };
 
@@ -102,16 +102,17 @@ export function ingestInboxMessagesBody(body: unknown, username: string | undefi
   emit();
 }
 
-/** 把 ChatScreen 刚画出来的该 agent 最新可见消息同步给列表侧栏（单调推进，避免旧缓存回退）。 */
-export function recordChatLatestActivity(alias: string, latest: LatestMessage | null): void {
+/** 把 ChatScreen 刚画出来的该 `(networkId, alias)` 最新可见消息同步给列表侧栏（按网络隔离且单调推进，避免旧缓存回退）。 */
+export function recordChatLatestActivity(alias: string, latest: LatestMessage | null, networkId?: string | null): void {
   if (!alias || !latest || !Number.isFinite(latest.at) || latest.at <= 0) return;
-  const prev = snapshot.chatLatest?.[alias];
+  const key = chatLatestKey(alias, networkId);
+  const prev = snapshot.chatLatest?.[key];
   if (prev && (latest.at < prev.at || (latest.at === prev.at && (latest.text === prev.text || (!latest.text && !!prev.text))))) {
     return;
   }
   snapshot = {
     ...snapshot,
-    chatLatest: { ...(snapshot.chatLatest ?? {}), [alias]: { at: latest.at, text: latest.text } },
+    chatLatest: { ...(snapshot.chatLatest ?? {}), [key]: { at: latest.at, text: latest.text } },
   };
   emit();
 }
