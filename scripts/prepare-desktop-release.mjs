@@ -95,10 +95,15 @@ export function prepareReleaseDraft({
   // 服务端收到空 body 后报 `For 'links/0/schema', nil is not an object. (HTTP 422)`
   // —— 2026-11-05 就是这么又挂了一次。
   run = (args, opts) => gh(args, opts),
-  // --slurp 让分页结果是一个数组的数组；直接 JSON.parse 多页拼接会炸（gh 的手册明确要求）。
+  // 2026-11-22：这条只用来找「同一个 tag 有没有已存在的 release」（见下面 planReleaseDraft
+  // 的 same = releases.filter(r => r.tag_name === tag)）——不需要仓库全部发版历史。
+  // 之前用 --paginate --slurp 拉全量（这仓已经 650+ release，13 页）：gh 连续 4 次
+  // 以非零状态退出、stderr 为空（不是 HTTP 层报错，更像是分页量太大时 gh 自己的限制）。
+  // 会和当前 tag 撞上的只可能是**这次发版自己**留下的草稿（同一版本号的前几次重试），
+  // 那必然在最近创建的那一批里 —— 不需要翻全部历史，拉最近 100 条（单次请求，不分页）足够。
   listReleases = () => {
-    const pages = run(['api', `repos/${repository}/releases?per_page=50`, '--paginate', '--slurp']);
-    return (Array.isArray(pages) ? pages : []).flat();
+    const page = run(['api', `repos/${repository}/releases?per_page=100`]);
+    return Array.isArray(page) ? page : [];
   },
   listAssets = (releaseId) => run(['api', `repos/${repository}/releases/${releaseId}/assets?per_page=50`, '--paginate', '--slurp']),
   // 草稿上的 target_commitish 通常是分支名（tauri-action 建草稿时就是这样）：

@@ -85,6 +85,24 @@ ck('release 列表用 --slurp 分页再摊平', (() => {
   return calls.length === 1;
 })());
 
+// 2026-11-22：这仓已经 650+ release，默认 listReleases 原来用 --paginate --slurp 翻
+// 全量历史（13 页），gh 连续 4 次以非零状态退出（stderr 为空，不是 HTTP 层报错）。
+// planReleaseDraft 只按 tag_name 精确匹配——会撞上的只可能是这次发版自己的重试草稿，
+// 必然在最近创建的那一批里，不需要翻全部历史。默认实现改成单次 per_page=100、不分页。
+ck('默认 listReleases 不再用 --paginate --slurp 翻全部发版历史（#4，653+ release 会把 gh 拖垮）', (() => {
+  let runArgs: string[] = [];
+  prepareReleaseDraft({
+    version: '0.2.287',
+    run: (args: string[]) => { runArgs = args; return [{ id: 1, tag_name: 'desktop-v0.2.287', draft: true }]; },
+    listAssets: () => [],
+    deleteAsset: () => ({}),
+    log: () => {},
+  });
+  return runArgs.join(' ').includes('per_page=100')
+    && !runArgs.includes('--paginate')
+    && !runArgs.includes('--slurp');
+})());
+
 ck('建草稿带 target_commitish 与用户可见说明（走 stdin JSON，不当命令行参数）', (() => {
   let args: string[] = [];
   let payload: Record<string, unknown> = {};
