@@ -30,7 +30,9 @@ export function createChatLoadDiag(tag = 'chat-load'): ChatLoadDiag {
     },
     paintApplied(seq, rows, mergedRows) {
       c.applied += 1;
-      console.log(`[${tag}] paint applied seq=${seq} rows=${rows} merged=${mergedRows} | ${stamp()}`);
+      // merged=-1 表示 updater 还没跑（并发渲染下可能晚于本次日志），不是「合并后为空」
+      const merged = mergedRows < 0 ? 'pending' : String(mergedRows);
+      console.log(`[${tag}] paint applied seq=${seq} rows=${rows} merged=${merged} | ${stamp()}`);
     },
     loadSettled(seq, ms) {
       c.settled += 1;

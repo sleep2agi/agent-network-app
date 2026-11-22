@@ -15,11 +15,14 @@ describe('createChatLoadDiag', () => {
       d.paintDropped(1, 'token');
       d.paintDropped(1, 'sequence');
       d.paintDropped(1, 'unmounted');
-      d.paintApplied(2, 3, -1);
+      d.paintApplied(2, 3, 9);
+      d.paintApplied(3, 3, -1);   // updater 未跑 → 应印 pending 而不是 -1
       d.loadSettled(2, 42);
     } finally { console.log = origLog; console.warn = origWarn; }
     expect(logs.join('\n')).toContain('start seq=1 token=stale');
-    expect(logs.join('\n')).toContain('paint applied seq=2 rows=3');
+    expect(logs.join('\n')).toContain('paint applied seq=2 rows=3 merged=9');
+    expect(logs.join('\n')).toContain('paint applied seq=3 rows=3 merged=pending');
+    expect(logs.join('\n')).not.toContain('merged=-1');
     expect(logs.join('\n')).toContain('settle seq=2 ms=42');
     expect(warns.join('\n')).toContain('reason=token');
     expect(warns.join('\n')).toContain('dropped(token=1,seq=1,unmounted=1)');
