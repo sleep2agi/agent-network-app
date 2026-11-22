@@ -455,9 +455,13 @@ export default function SettingsScreen({
         </View>
       </View>
       <ScrollView horizontal={compact} showsHorizontalScrollIndicator={false} showsVerticalScrollIndicator={false} contentContainerStyle={compact ? styles.categoryRow : styles.categoryList}>
-        {filtered.map(cat => {
+        {filtered.map((cat, index) => {
           const isActive = !searching && cat.key === active;
           return (
+            <View key={cat.key}>
+            {!compact && !searching && index > 0 && (cat.key === 'appearance' || cat.key === 'about') ? (
+              <View style={styles.categoryDivider} />
+            ) : null}
             <Pressable
               key={cat.key}
               accessibilityLabel={tr('settings.copy.178', { v0: settingsText(cat.label) })}
@@ -469,6 +473,7 @@ export default function SettingsScreen({
               <Ionicons name={cat.icon as any} size={17} color={isActive ? colors.text : colors.textSecondary} />
               <Text style={[styles.categoryLabel, isActive && styles.categoryLabelActive]} numberOfLines={1}>{settingsText(cat.label)}</Text>
             </Pressable>
+            </View>
           );
         })}
         {searching && filtered.length === 0 ? <Text style={styles.emptySide}>{tr('settings.copy.5')}</Text> : null}
@@ -876,7 +881,7 @@ export default function SettingsScreen({
     : null;
 
   return (
-    <View style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone, mobileGlowActive() && { backgroundColor: 'transparent' }]}>
+    <View {...(!compact ? { dataSet: { glassOpaque: 'true' } } : {})} style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone, compact && mobileGlowActive() && { backgroundColor: 'transparent' }]}>
       {compact ? (subPage ? phoneHeader : listHeader) : sidebar}
       {compact ? (subPage ? phoneSubPage : phoneList) : (
       <View style={styles.pane} testID="settings-pane">
@@ -1625,6 +1630,7 @@ const makeStyles = () =>
   searchBox: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, borderWidth: 1, borderColor: colors.border, borderRadius: radius.control, backgroundColor: colors.inputBg, paddingHorizontal: spacing.md, minHeight: ds(36) },
   searchInput: { flex: 1, color: colors.text, fontSize: 13, padding: 0, outlineStyle: 'none' } as any,
   categoryList: { paddingHorizontal: spacing.sm, gap: 2 },
+  categoryDivider: { height: 1, backgroundColor: colors.border, marginHorizontal: spacing.md, marginVertical: spacing.md },
   categoryRow: { flexDirection: 'row', paddingHorizontal: spacing.md, gap: spacing.sm },
   categoryItem: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingVertical: spacing.sm + 2, borderRadius: radius.item },
   categoryChip: { borderWidth: 1, borderColor: colors.border, paddingVertical: spacing.xs + 2 },
