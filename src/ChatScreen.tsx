@@ -2627,7 +2627,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
               {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
               <View style={styles.headerTitleCol} testID="chat-header-title">
                 <View style={styles.headerTitleLine}>
-                  <Text style={[styles.title, { flex: 1, minWidth: 0 }]} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
+                  <Text style={[styles.title, { flexShrink: 1, minWidth: 0 }]} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
                     {alias}
                   </Text>
                   {/* admin 2026-11-21「没看到在这个节点里面怎么去切换部门」：头像+名字本来就能点
