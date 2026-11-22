@@ -100,6 +100,7 @@ import { comboChips, comboFromEvent, shortcutForCombo } from './shortcuts-model'
 import { KBD_IDLE, kbdVoiceBlur, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, type KbdVoiceMode, type KbdVoiceState, type KbdVoiceStep } from './voice-shortcut-model';
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { withHardDeadline } from './hard-deadline';
 import { onConversationReply } from './reply-wake';
 import { fetchAuthMe } from './user-admin-api';
 import { recallConversation, rememberConversation } from './swr-cache';
@@ -695,8 +696,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       };
       const results = await loadChatSources({
         // 只等入站（to_name=本 agent）先画：首屏不能被第二次请求拖慢（drives 的首屏/时延断言就是量这个）。
-        tasks: () => fetchTasks(cfg, params),
-        proactive: () => fetchChatUserMessages(cfg),
+        tasks: () => withHardDeadline(fetchTasks(cfg, params), 'chat tasks'),
+        proactive: () => withHardDeadline(fetchChatUserMessages(cfg), 'chat user messages'),
         isCurrent,
         onTasks: data => {
           const fetched = data.tasks ?? [];
