@@ -1,10 +1,11 @@
-import { Fragment, useContext, useState, type ReactNode } from 'react';
+import { Fragment, memo, useContext, useMemo, useState, type ReactNode } from 'react';
 import { Platform, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { MineBubble, MineBubbleContext, useMineBubble } from './bubble-ink';
 import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } from './markdown-model';
 import { foldCode, foldLabel } from './markdown-code-fold';
+import { foldLongMessage, longMessageFoldLabel } from './markdown-message-fold';
 import { gridCellWidth, listIndent, markdownLayout } from './bubble-layout';
 import { openExternal } from './open-external';
 import { stackedRows, tableLayoutFor } from './table-layout';
@@ -113,13 +114,24 @@ function CodeBlock({ text, srcProps }: { text: string; srcProps?: object }) {
 // 带行号;列表项的 y 相对所在列表(parent)。node-rules-view.ts resolveBlockRects / blockAtY 用它按手指位置找块。
 // 都不传就和以前一样,聊天里不多挂 onLayout、不多挂属性。
 export type MarkdownBlockLayout = { id: string; parent?: string; start: number; end: number; y: number; height: number };
-export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout, renderImage, tone }: {
+function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout, renderImage, tone, foldLong }: {
   children: string;
   /** 'mine' = 画在「我发出的」气泡里(#545):字 / 链接用 onBubbleMine / linkOnBubbleMine。 */
   tone?: 'mine'; onHeadingLayout?: (index: number, y: number) => void; sourceLines?: boolean; onBlockLayout?: (layout: MarkdownBlockLayout) => void;
   /** 任务描述:独占一行的 `![名字](/api/files/<id>)` 交给调用方画(带鉴权下载、点开看大图)。不传 = 和聊天一样当文字。 */
   renderImage?: (image: { alt: string; fileId: string; url: string }, key: number) => ReactNode;
+  /** 聊天气泡可选：超过 LONG_MESSAGE_CHARS 时默认折叠，点「展开全文」再解析完整 Markdown，防止单条 98KB 历史消息卡死主线程。 */
+  foldLong?: boolean;
 }) {
+  const [longExpanded, setLongExpanded] = useState(false);
+  const longFold = useMemo(
+    () => (foldLong ? foldLongMessage(children, longExpanded) : null),
+    [foldLong, children, longExpanded],
+  );
+  const shownText = longFold ? longFold.shown : children;
+  const longToggleLabel = longFold ? longMessageFoldLabel(longFold, longExpanded) : null;
+  const hubImages = !!renderImage;
+  const blocks = useMemo(() => parseMarkdownBlocks(shownText, { hubImages }), [shownText, hubImages]);
   let headingIndex = 0;
   const src = sourceLines ? WITH_SRC : NO_SRC;
   // 报块布局的 onLayout;没有 onBlockLayout 或块没有行号时返回空对象(一个属性都不多挂)。
@@ -132,7 +144,7 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
   return (
     <MineBubble value={mine}>
     <View style={styles.root}>
-      {parseMarkdownBlocks(children, { hubImages: !!renderImage }).map((block, index) => {
+      {blocks.map((block, index) => {
         const id = `b${index}`;
         if (block.kind === 'image') return renderImage ? renderImage(block, index) : null;
         if (block.kind === 'heading') {
@@ -150,10 +162,20 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
         if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} rowLines={block.rowLines} src={src} rootProps={lay(id, block.line, block.endLine)} />;
         return <Text key={index} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)} style={[styles.text, styles.block]}><Inline text={block.text} /></Text>;
       })}
+      {longToggleLabel ? (
+        <Pressable
+          onPress={(event) => { event.stopPropagation?.(); setLongExpanded((v) => !v); }}
+          hitSlop={8}
+          testID="markdown-long-fold-toggle"
+        >
+          <Text style={styles.foldToggle}>{longToggleLabel}</Text>
+        </Pressable>
+      ) : null}
     </View>
     </MineBubble>
   );
 }
+export default memo(MarkdownMessage);
 
 // 长串(hash、URL、路径、行内代码)没有可断点时会把整行撑出气泡(2026-09-24 Vincent 截图)。
 // web/桌面:允许在任意位置断行;原生端 Text 本来就按字符换行,不需要。
