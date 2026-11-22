@@ -617,6 +617,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.606:
+            ### 修复
+
+            - Android 上点「相册」偶尔会弹出一段看不懂的系统报错；这是安卓系统本身的已知问题（设备在后台被系统重建后，图片/相机/文件选择器会一起失效），现在改成提示「请完全退出本 App 再重新打开后重试」。
+
             What's new in 0.2.605:
             ### 修复
 
