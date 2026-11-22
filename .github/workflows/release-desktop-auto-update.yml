@@ -617,6 +617,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.609:
+            ### 修复
+
+            - 聊天页仅在节点支持对应能力时显示「停止」「打断并发送」和「插话」，避免不支持的节点出现无效操作入口。
+
             What's new in 0.2.608:
             ### 修复
 
