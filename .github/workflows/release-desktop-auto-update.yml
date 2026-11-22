@@ -617,6 +617,12 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.605:
+            ### 修复
+
+            - 桌面设置页恢复清晰的主题背景，避免暖色光斑透入内容区域。
+            - 设置侧栏增加分组留白与细分隔线，让账号、偏好设置和关于入口更容易辨认。
+
             What's new in 0.2.604:
             ### 修复
 
