@@ -2415,6 +2415,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         setControlSession(s ?? null);
         setTurnReport({ cfg, alias, session: s ?? null });
         if (!s) return;
+        const next = chatInfoCaps(s);
+        setFullCaps(c => (c && c.rules === next.rules && c.skills === next.skills ? c : next));
         // Old status projections omit generation/config; only join by authoritative node_id.
         if (s.node_id && (s.turn_interrupt_capable == null || s.turn_steer_capable == null)) {
           void fetchHubNodes(cfg).then(({ nodes }) => {
@@ -2435,8 +2437,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             } });
           }).catch(() => { /* Unknown remains hidden. */ });
         }
-        const next = chatInfoCaps(s);
-        setFullCaps(c => (c && c.rules === next.rules && c.skills === next.skills ? c : next));
       })
       .catch(() => { /* keep last / light fallback */ });
     return () => { live = false; };

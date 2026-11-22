@@ -83,7 +83,7 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
     && /if \(shouldInterruptBeforeSend\(sessionStatus\)\) \{/.test(screen) === false);
   // 空闲时两条路都不打断：按钮只在在飞时渲染，submit 的打断分支也要在飞才成立。
   ck('idle shows no interrupt action and never interrupts',
-    /\{interruptable\(sessionStatus\) \? \(/.test(screen)
+    (screen.match(/\{turnCaps\.interrupt && interruptable\(sessionStatus\) \? \(/g) ?? []).length === 2
     && !shouldInterruptBeforeSend('idle'));
   ck('no send when the interrupt is unconfirmed',
     /verdict !== 'confirmed'[\s\S]{0,400}return;/.test(screen));
@@ -101,7 +101,7 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
   ck('inject is guarded against double taps',
     /injectBusyRef\.current\) return;/.test(screen) && /finally \{[\s\S]{0,80}injectBusyRef\.current = false/.test(screen));
   ck('inject never silently degrades to a normal send',
-    /opts\?\.inject === true && !canSteer\(sessionStatus\)[\s\S]{0,200}return;/.test(screen));
+    /opts\?\.inject === true && \(!turnCaps\.steer \|\| !canSteer\(sessionStatus\)\)[\s\S]{0,200}return;/.test(screen));
   ck('inject ack watcher does not treat user content as an ack', !/row\.content/.test(screen.split('readRecent')[1]?.slice(0, 400) ?? ''));
   ck('user-facing copy avoids the word steer', !/插话|steer/i.test(readFileSync(new URL('./i18n-chat.ts', import.meta.url), 'utf8').split('chat.steer.')[1]?.slice(0, 400) ?? ''));
 }
