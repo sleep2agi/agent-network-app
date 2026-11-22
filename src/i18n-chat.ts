@@ -99,6 +99,8 @@ export const chatTranslations = {
   'chat.draftKept': ['附件未上传，草稿已保留', 'Attachment not uploaded. Your draft was kept.'],
   'chat.processing': ['••• 正在处理…', '••• Working…'],
   'chat.cannotOpen': ['无法打开', 'Could not open'],
+  // 已知的 Android 系统级选择器失效(expo/expo#50386)：说清楚怎么办，而不是扔一段 Java 异常。
+  'chat.pickerNeedsRestart': ['图片/文件选择器暂时用不了，请完全退出本 App 再重新打开后重试', 'The photo/file picker is temporarily unavailable — please fully quit and reopen the app, then try again'],
   'chat.back': ['返回', 'Back'],
   'chat.info': ['聊天信息', 'Chat info'],
   'chat.infoHint': ['查找聊天内容、置顶、免打扰、节点设置', 'Search, pin, mute or open node settings'],
