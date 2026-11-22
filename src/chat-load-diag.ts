@@ -9,9 +9,8 @@
 // 累计计数打在同一行里，日志量 = 每轮轮询一行（5s），不刷屏。
 export type ChatLoadDiag = {
   loadStarted(seq: number, tokenCurrent: boolean, limit: number): void;
-  paintDropped(seq: number, reason: 'token' | 'sequence' | 'unmounted'): void;
   paintApplied(seq: number, rows: number, mergedRows: number): void;
-  loadSettled(seq: number, ms: number): void;
+  loadSettled(seq: number, ms: number, drop: 'none' | 'token' | 'sequence' | 'unmounted'): void;
 };
 
 export function createChatLoadDiag(tag = 'chat-load'): ChatLoadDiag {
@@ -22,21 +21,22 @@ export function createChatLoadDiag(tag = 'chat-load'): ChatLoadDiag {
       c.started += 1;
       console.log(`[${tag}] start seq=${seq} token=${tokenCurrent ? 'current' : 'stale'} limit=${limit} | ${stamp()}`);
     },
-    paintDropped(seq, reason) {
-      if (reason === 'token') c.droppedToken += 1;
-      else if (reason === 'sequence') c.droppedSeq += 1;
-      else c.droppedUnmounted += 1;
-      console.warn(`[${tag}] paint dropped seq=${seq} reason=${reason} | ${stamp()}`);
-    },
+    // 丢因在 settle 时判定（不在 paint 里判）：paint 的守卫必须保持
+    // `if (!isCurrent()) return;` 这一行原样 —— conversation-store.test.ts 按它做源码断言。
+
     paintApplied(seq, rows, mergedRows) {
       c.applied += 1;
       // merged=-1 表示 updater 还没跑（并发渲染下可能晚于本次日志），不是「合并后为空」
       const merged = mergedRows < 0 ? 'pending' : String(mergedRows);
       console.log(`[${tag}] paint applied seq=${seq} rows=${rows} merged=${merged} | ${stamp()}`);
     },
-    loadSettled(seq, ms) {
+    loadSettled(seq, ms, drop) {
       c.settled += 1;
-      console.log(`[${tag}] settle seq=${seq} ms=${ms} | ${stamp()}`);
+      if (drop === 'token') c.droppedToken += 1;
+      else if (drop === 'sequence') c.droppedSeq += 1;
+      else if (drop === 'unmounted') c.droppedUnmounted += 1;
+      const line = `[${tag}] settle seq=${seq} ms=${ms} drop=${drop} | ${stamp()}`;
+      if (drop === 'none') console.log(line); else console.warn(line);
     },
   };
 }

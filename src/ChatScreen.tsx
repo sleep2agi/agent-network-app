@@ -686,10 +686,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       const isCurrent = () => requestGate.isCurrent(token) && mountedRef.current && sequence === loadSequenceRef.current;
       const params = newestPageParams(alias, limit);
       const paint = (source: ChatSource, rows: ChatItem[], fetched: HubTask[] = [], confirmed = new Set<string>()) => {
-        if (!isCurrent()) {
-          loadDiag.current.paintDropped(sequence, !requestGate.isCurrent(token) ? 'token' : !mountedRef.current ? 'unmounted' : 'sequence');
-          return;
-        }
+        if (!isCurrent()) return;
         // mergedRows 必须是真的算出来的那一份：诊断的 ② 就是靠「paint 发生了、但渲染数组里没有这些行」判定的，
         // 写死 -1 会让这条日志永远印同一个值、对定性无用（2026-11-22 review）。
         let mergedCount = -1;
@@ -740,7 +737,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         if (results.every(Boolean)) setConversationReady(true);
         setLoaded(true);
       }
-      loadDiag.current.loadSettled(sequence, Date.now() - startedAt);
+      loadDiag.current.loadSettled(sequence, Date.now() - startedAt,
+        !requestGate.isCurrent(token) ? 'token' : !mountedRef.current ? 'unmounted' : sequence !== loadSequenceRef.current ? 'sequence' : 'none');
       void retryUnreadPersistFromPoll();
     },
     [cfg, alias],
