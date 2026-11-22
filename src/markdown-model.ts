@@ -43,7 +43,11 @@ export const parseMarkdownBlocks = (source: string, opts: { hubImages?: boolean 
     // 现场（chuqi 2026-11-11）：对端 agent 用 `~~~text` 写代码块，客户端只认 ```，于是整段
     // 退化成正文字段——波浪号原样显示、里面的「1. / 2.」被当成有序列表重新编号，
     // 读起来就像「消息渲染坏了」。
-    const fence = line.match(/^\s*(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
+    // 现场（admin 2026-11-22 截图）：对端 agent 习惯在开围栏那一行前面自己写个 `[alias] ` 署名
+    // （与气泡上方已经画出来的发送者名字重复），这行就不再是「只有围栏」了，整段又退化成正文。
+    // 这里容忍一个短的方括号标签开头（≤40 字、不含换行/嵌套方括号）——视作冗余署名直接丢弃，
+    // 不是真内容（真正的署名已经由气泡头部的 ChatMetaLine 画出来了）。
+    const fence = line.match(/^\s*(?:\[[^[\]\n]{1,40}\]\s+)?(`{3,}|~{3,})\s*([^\s`]*)\s*$/);
     if (fence) {
       const marker = fence[1];
       const close = new RegExp(`^\\s*${marker[0] === '`' ? '`' : '~'}{${marker.length},}\\s*$`);

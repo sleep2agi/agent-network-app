@@ -25,5 +25,14 @@ ck('闭合围栏可以用更长的同字符', b4.length === 1 && b4[0].kind === 
 const b5 = parseMarkdownBlocks('```\n~~~\n```');
 ck('反引号块里的 ~~~ 不会被当成闭合', b5.length === 1 && b5[0].kind === 'code' && (b5[0] as any).text === '~~~');
 
+// admin 2026-11-22 截图：对端在开围栏那一行前面自己写了 [alias] 署名，与气泡头部已有的
+// 发送者名字重复；这一行就不再是「只有围栏」了，整段又退化成正文。
+const b6 = parseMarkdownBlocks('[通信欧] ```text\n本轮：...\n```');
+ck('开围栏前的 [alias] 署名不挡围栏识别', b6.length === 1 && b6[0].kind === 'code');
+ck('[alias] 署名本身被丢弃（头部已经画过了），语言标记仍是 text', b6[0].kind === 'code' && (b6[0] as any).language === 'text');
+ck('块内容不含 [alias] 前缀', b6[0].kind === 'code' && (b6[0] as any).text === '本轮：...');
+const b7 = parseMarkdownBlocks('普通一段话 ```text\n不是围栏\n```');
+ck('围栏前面是真正文（不是短方括号标签）时该行不识别为开围栏，仍是段落', b7[0]?.kind === 'paragraph' && (b7[0] as any).text.startsWith('普通一段话'));
+
 console.log(`${p}/${t} passed`);
 if (p !== t) process.exit(1);
