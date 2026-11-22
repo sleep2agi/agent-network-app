@@ -101,6 +101,7 @@ import { KBD_IDLE, kbdVoiceBlur, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, t
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { withHardDeadline } from './hard-deadline';
+import { createChatLoadDiag } from './chat-load-diag';
 import { onConversationReply } from './reply-wake';
 import { fetchAuthMe } from './user-admin-api';
 import { recallConversation, rememberConversation } from './swr-cache';
@@ -674,15 +675,22 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     };
   }, []);
 
+  const loadDiag = useRef(createChatLoadDiag());
+
   const load = useCallback(
     async (limit: number) => {
       const token = requestGate.current();
       if (!token) return;
       const sequence = ++loadSequenceRef.current;
+      const startedAt = Date.now();
+      loadDiag.current.loadStarted(sequence, requestGate.isCurrent(token), limit);
       const isCurrent = () => requestGate.isCurrent(token) && mountedRef.current && sequence === loadSequenceRef.current;
       const params = newestPageParams(alias, limit);
       const paint = (source: ChatSource, rows: ChatItem[], fetched: HubTask[] = [], confirmed = new Set<string>()) => {
         if (!isCurrent()) return;
+        // mergedRows 必须是真的算出来的那一份：诊断的 ② 就是靠「paint 发生了、但渲染数组里没有这些行」判定的，
+        // 写死 -1 会让这条日志永远印同一个值、对定性无用（2026-11-22 review）。
+        let mergedCount = -1;
         setMessages(prev => {
           if (!isCurrent()) return prev;
           const kept = prev.filter(t => !t._localId || (!confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)));
@@ -690,8 +698,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           conversations.put(token.key, merged);
           // Only server rows enter the bounded disk cache; never echoes or local attachments.
           rememberConversation(cfg.profileId, token.key, merged.filter(t => !t._localId) as unknown as Record<string, unknown>[]);
+          mergedCount = merged.length;
           return merged;
         });
+        loadDiag.current.paintApplied(sequence, rows.length, mergedCount);
         setLoaded(true);
       };
       const results = await loadChatSources({
@@ -728,6 +738,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         if (results.every(Boolean)) setConversationReady(true);
         setLoaded(true);
       }
+      loadDiag.current.loadSettled(sequence, Date.now() - startedAt,
+        !requestGate.isCurrent(token) ? 'token' : !mountedRef.current ? 'unmounted' : sequence !== loadSequenceRef.current ? 'sequence' : 'none');
       void retryUnreadPersistFromPoll();
     },
     [cfg, alias],
