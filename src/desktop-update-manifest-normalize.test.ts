@@ -1,5 +1,5 @@
 import { readFileSync } from 'node:fs';
-import { planReleaseDraft } from '../scripts/prepare-desktop-release.mjs';
+import { planReleaseDraft, prepareReleaseDraft } from '../scripts/prepare-desktop-release.mjs';
 import {
   assertAnonymousDownloads,
   fileNameFromPublicUrl,
@@ -287,5 +287,26 @@ check('normalizer only runs for publish builds', /normalize-updater-manifest:[\s
 check('normalizer runs this script', normalizeJob.slice(0, 2000).includes('node scripts/normalize-desktop-update-manifest.mjs'));
 check('normalizer passes the release tag', normalizeJob.slice(0, 2000).includes('RELEASE_TAG='));
 check('normalizer job is declared after attach-android-apk', workflow.indexOf('normalize-updater-manifest:') > workflow.indexOf('attach-android-apk:'));
+
+// A matching published release beyond the first page must prevent any writes.
+let oldReleaseBlocked = false;
+let listCalls = 0;
+try {
+  prepareReleaseDraft({
+    version: '0.2.605',
+    run: (args, opts) => {
+      listCalls++;
+      if (listCalls !== 1 || !args.includes('--paginate') || opts?.parse !== false) {
+        throw new Error('unexpected call or non-paginated lookup');
+      }
+      const rows = Array.from({ length: 105 }, (_, i) => ({ id: i + 1, tag_name: `other-${i}`, draft: true }));
+      rows.push({ id: 999, tag_name: 'desktop-v0.2.605', draft: false });
+      return rows.map(row => JSON.stringify(row)).join('\r\n') + '\r\n';
+    },
+  });
+} catch (error) {
+  oldReleaseBlocked = String(error).includes('already-published');
+}
+check('paginated NDJSON finds old published tag and prevents writes', oldReleaseBlocked && listCalls === 1);
 
 console.log(`desktop update manifest normalize: ${passed}/${total} checks passed`);
