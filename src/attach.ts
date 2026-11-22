@@ -9,6 +9,7 @@ import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } fro
 import { createSerialQueue, resizeForUpload } from './native-resize';
 import { attachmentFromFile } from './desktop-file-intake';
 import { resolveUploadNetworkId, uploadUrlFor, type UploadOptions } from './upload-url';
+import { t } from './i18n';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
 // pick → upload → attach (see uploadImage below). The hub's
@@ -57,6 +58,25 @@ export const pickFiles = async (): Promise<PickedImage[]> => {
     if (file) return attachmentFromFile(file);
     return { uri: a.uri, fileName: a.name ?? 'file.bin', mimeType: a.mimeType ?? 'application/octet-stream', fileSize: a.size ?? undefined };
   });
+};
+
+// admin 2026-11-22 截图(Android)：点「相册」弹出一整段 Java 异常给最终用户看——
+//   "Call to function 'ExponentImagePicker.launchImageLibraryAsync' has been rejected.
+//    → Caused by: java.lang.IllegalStateException: Attempting to launch an unregistered
+//    ActivityResultLauncher ..."
+// 查实是 expo-modules-core 的已知上游缺陷(expo/expo#50386，修复 PR #49634 已合但未见
+// 已发布版本号)：Activity 因系统配置变化(字体大小、旋转、深浅色等)被重建后，图片/相机/
+// 文件选择器共用的 ActivityResultLauncher 没有跟着重新注册，之后这个进程里再点什么选择器
+// 都会抛同一类异常，直到整个 App 被完全杀掉重开。不是我们代码能避免的时机问题，只能在
+// 用户看到它时把原始 Java 栈换成一句说清楚「怎么办」的话(而不是一段看不懂的异常文本)。
+const UNREGISTERED_LAUNCHER_RE = /unregistered ActivityResultLauncher/i;
+
+/** 把选择器抛出的错误整理成人话；已知的「选择器失效，需要重开 App」给专门文案，
+ *  其余原样带出原始 message(保留排障信息，不是本函数该吞掉的)。 */
+export const pickerErrorMessage = (error: unknown): string => {
+  const raw = error instanceof Error ? error.message : String(error);
+  if (Platform.OS === 'android' && UNREGISTERED_LAUNCHER_RE.test(raw)) return t('chat.pickerNeedsRestart');
+  return raw;
 };
 
 /** 「相册」多选(Vincent 2026-09-26「像微信一样支持选择多张图片」)。

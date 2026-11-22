@@ -43,6 +43,7 @@ import {
   pickDocument,
   pickFiles,
   pickImages,
+  pickerErrorMessage,
   prepareForUpload,
   uploadImage,
   toTaskAttachment,
@@ -2457,7 +2458,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     const pickInto = (pick: () => Promise<PickedImage | null>) =>
       pick()
         .then(item => { if (item) appendAttachment(item); })
-        .catch(error => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error)));
+        .catch(error => Alert.alert(t('chat.cannotOpen'), pickerErrorMessage(error)));
     if (key === 'album') {
       const slots = remainingImageSlots(attachedRef.current);
       if (slots <= 0) {
@@ -2466,7 +2467,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       }
       pickImages(slots)
         .then(appendAttachments)
-        .catch(error => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error)));
+        .catch(error => Alert.alert(t('chat.cannotOpen'), pickerErrorMessage(error)));
     }
     else if (key === 'file') pickInto(pickDocument);
     else if (key === 'camera') pickInto(pickCameraPhoto);
@@ -2478,7 +2479,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     if (plusPressAction({ desktop, attachEnabled: ATTACH_ENABLED }) === 'panel') { plusEvent('toggle'); return; }
     pickFiles()
       .then(appendAttachments)
-      .catch(error => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error)));
+      .catch(error => Alert.alert(t('chat.cannotOpen'), pickerErrorMessage(error)));
   };
   // Mobile row, right of the input: ＋ always; 「发送」 next to it once there is something to send.
   const rightSlot = composerRightSlot({ draft, attachmentCount: attached.length, voiceMode });

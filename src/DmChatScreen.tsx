@@ -21,7 +21,7 @@ import AttachmentFileCard from './AttachmentFileCard';
 import { localFileStatus } from './attachment-file-model';
 import ImageViewer from './ImageViewer';
 import { ackUserMessages, type HubConfig } from './api';
-import { ATTACH_ENABLED, pickCameraPhoto, pickDocument, pickFiles, pickImages, prepareForUpload, uploadImage, type PickedImage } from './attach';
+import { ATTACH_ENABLED, pickCameraPhoto, pickDocument, pickFiles, pickImages, pickerErrorMessage, prepareForUpload, uploadImage, type PickedImage } from './attach';
 import { attachmentCacheScope } from './attach-download';
 import { attachmentsFromClipboard, isTauriDesktop, releaseClipboardAttachment } from './clipboard-attachment';
 import { conversationDraftKey, stashDraftAttachments, takeDraftAttachments, useComposerDraft } from './composer-drafts';
@@ -282,7 +282,7 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   }, [plusOpen, desktop]);
   const { height: windowHeight } = useWindowDimensions();
   const plusItems = plusPanelItems({ os: Platform.OS, desktop, attachEnabled: ATTACH_ENABLED, btwEntry: false });
-  const cannotOpen = (error: unknown) => Alert.alert(t('chat.cannotOpen'), error instanceof Error ? error.message : String(error));
+  const cannotOpen = (error: unknown) => Alert.alert(t('chat.cannotOpen'), pickerErrorMessage(error));
   const runPlusItem = (key: PlusItemKey) => {
     plusEvent('itemPicked');
     if (key === 'album') {
