@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.608:",
+  "### 修复",
+  "",
+  "- 聊天页顶部的详情箭头紧贴名字显示，不再漂到右侧菜单旁；长名字仍可正常省略。",
+  "",
   "What's new in 0.2.607:",
   "### 修复",
   "",
