@@ -66,8 +66,21 @@ jobs:
           if [ "$path" != ".github/workflows/android-build.yml" ]; then echo "::error::run $RUN_ID is not an android-build run ($path)"; exit 1; fi
           if [ "$branch" != "main" ]; then echo "::error::run $RUN_ID was built from '$branch', only main may be published"; exit 1; fi
           if [ "$conclusion" != "success" ]; then echo "::error::run $RUN_ID concluded '$conclusion'"; exit 1; fi
-          if [ "$sha" != "$REQUESTED_COMMIT" ]; then echo "::error::source run SHA does not match requested commit"; exit 1; fi
-          echo "SOURCE_SHA=$sha" >> "$GITHUB_ENV"
+          printf '%s\n' "$run" > "$RUNNER_TEMP/android-source-run.json"
+          if [ "$sha" != "$REQUESTED_COMMIT" ]; then
+            echo "VERIFY_SOURCE_METADATA=true" >> "$GITHUB_ENV"
+          fi
+          echo "SOURCE_SHA=$REQUESTED_COMMIT" >> "$GITHUB_ENV"
+
+      # Use the verifier from this workflow revision, not from an older APK commit.
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: ${{ github.sha }}
+          path: source-verifier
+          persist-credentials: false
+
+      - name: Preserve source verifier
+        run: cp source-verifier/scripts/android-build-source.mjs "$RUNNER_TEMP/android-build-source.mjs"
 
       - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955 # v4.3.0
         with:
@@ -99,6 +112,17 @@ jobs:
           echo "APK=$apks" >> "$GITHUB_ENV"
           ls -l "$apks"
 
+      - name: Verify dispatched build source and APK digest
+        if: env.VERIFY_SOURCE_METADATA == 'true'
+        env:
+          GH_TOKEN: ${{ github.token }}
+          RUN_ID: ${{ inputs.run_id }}
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n android-build-source -D "$RUNNER_TEMP/android-source"
+          node "$RUNNER_TEMP/android-build-source.mjs" "$RUNNER_TEMP/android-source/android-build-source.json" "$RUNNER_TEMP/android-source-run.json" "$GITHUB_REPOSITORY" "$REQUESTED_COMMIT" "$APK"
+
       - name: Read and check the APK version
         run: |
           set -euo pipefail
@@ -113,6 +137,8 @@ jobs:
           expected_code=$(node -e 'const v=process.argv[1].split(".").map(Number);process.stdout.write(String(v[0]*1e6+v[1]*1e3+v[2]))' "$name")
           if [ "$code" != "$expected_code" ]; then echo "::error::versionCode $code does not match versionName $name ($expected_code)"; exit 1; fi
           expected_pkg=$(node -p 'require("./app.json").expo.android.package')
+          expected_version=$(node -p 'require("./app.json").expo.version')
+          if [ "$name" != "$expected_version" ]; then echo "::error::APK version does not match requested commit"; exit 1; fi
           if [ "$pkg" != "$expected_pkg" ]; then echo "::error::package '$pkg' is not '$expected_pkg'"; exit 1; fi
           echo "VERSION=$name" >> "$GITHUB_ENV"
 
