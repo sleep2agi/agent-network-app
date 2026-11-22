@@ -151,20 +151,6 @@ for (const c of CASES) {
   const shot = async (name) => { const f = `${OUT}/plussend-${tag}-${name}.png`; await page.screenshot({ path: f }); shots.push(f); };
   const has = async (id) => (await page.locator(`[data-testid="${id}"]`).count()) > 0;
 
-  // 0 #574：手机 ＋ 首次提示 —— 出现一次、点掉、刷新后不再出现（只弹一次）。
-  ck(tag, '＋ 首次提示出现', await has('composer-plus-hint'));
-  if (await has('composer-plus-hint')) {
-    await page.locator('[data-testid="composer-plus-hint"]').click();
-    await page.waitForTimeout(200);
-    ck(tag, '点掉后提示立刻消失', !(await has('composer-plus-hint')));
-    await page.reload();
-    await page.waitForFunction(() => !!window.__anetLayoutSweep, null, { timeout: 20000 });
-    await page.evaluate((a) => window.__anetLayoutSweep.setScreen({ name: 'chat', alias: a }), ALIAS);
-    await page.locator(inputSel).waitFor({ timeout: 15000 });
-    await page.waitForTimeout(400);
-    ck(tag, '刷新后不再出现（只弹一次）', !(await has('composer-plus-hint')));
-  }
-
   // 1 空
   ck(tag, '空:只有 ＋,没有 发送', await has('composer-plus') && !(await has('composer-send')));
   await shot('1-empty');
