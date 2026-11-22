@@ -128,8 +128,6 @@ export const chatTranslations = {
   'chat.failReason.network': ['账号所在的网络已变更，请重试或重新登录', 'Your network has changed. Retry or sign in again'],
   'chat.failReason.attachment': ['附件无权访问，请移除后重发', 'Attachment not accessible. Remove it and resend'],
   'chat.delivered': ['已送达 ✓', 'Delivered ✓'],
-  // #574：手机输入框左侧「＋」的首次提示（只弹一次，点掉或点 ＋ 后不再出现）。
-  'chat.plusHintFirst': ['点「＋」可以发图片和文件', 'Tap ＋ to send photos and files'],
   'chat.exitSelection': ['退出多选', 'Exit selection'],
   'chat.selectMessages': ['选择要转发或删除的消息', 'Select messages to forward or delete'],
   'chat.copied': ['已复制', 'Copied'],
