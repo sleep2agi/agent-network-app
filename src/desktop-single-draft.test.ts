@@ -70,7 +70,7 @@ ck('别的 tag 不影响判定',
   planReleaseDraft([{ id: 14, tag_name: 'desktop-v0.2.286', draft: true }], tag).action === 'create');
 
 // 5. 分页 / commit / 说明 / 旧资产回收（exact-review 4351263301/304/322/338）
-ck('release 列表用 --slurp 分页再摊平', (() => {
+ck('注入的 release 列表只读取一次', (() => {
   const calls: string[][] = [];
   prepareReleaseDraft({
     version: '0.2.287',
@@ -85,21 +85,24 @@ ck('release 列表用 --slurp 分页再摊平', (() => {
   return calls.length === 1;
 })());
 
-// 2026-11-22：这仓已经 650+ release，默认 listReleases 原来用 --paginate --slurp 翻
-// 全量历史（13 页），gh 连续 4 次以非零状态退出（stderr 为空，不是 HTTP 层报错）。
-// planReleaseDraft 只按 tag_name 精确匹配——会撞上的只可能是这次发版自己的重试草稿，
-// 必然在最近创建的那一批里，不需要翻全部历史。默认实现改成单次 per_page=100、不分页。
-ck('默认 listReleases 不再用 --paginate --slurp 翻全部发版历史（#4，653+ release 会把 gh 拖垮）', (() => {
+// 全历史精简字段，避免正文超过缓冲限制，同时保留旧 tag 判重。
+ck('默认 listReleases 分页输出精简 NDJSON，不使用 slurp', (() => {
   let runArgs: string[] = [];
+  let parse: boolean | undefined;
   prepareReleaseDraft({
     version: '0.2.287',
-    run: (args: string[]) => { runArgs = args; return [{ id: 1, tag_name: 'desktop-v0.2.287', draft: true }]; },
+    run: (args: string[], opts: { parse?: boolean } = {}) => {
+      runArgs = args;
+      parse = opts.parse;
+      return JSON.stringify({ id: 1, tag_name: 'desktop-v0.2.287', draft: true }) + '\n';
+    },
     listAssets: () => [],
     deleteAsset: () => ({}),
     log: () => {},
   });
-  return runArgs.join(' ').includes('per_page=100')
-    && !runArgs.includes('--paginate')
+  return parse === false && runArgs.includes('--jq')
+    && runArgs.includes('.[] | {id,tag_name,draft,target_commitish}')
+    && runArgs.includes('--paginate')
     && !runArgs.includes('--slurp');
 })());
 

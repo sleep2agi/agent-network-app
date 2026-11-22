@@ -95,15 +95,12 @@ export function prepareReleaseDraft({
   // 服务端收到空 body 后报 `For 'links/0/schema', nil is not an object. (HTTP 422)`
   // —— 2026-11-05 就是这么又挂了一次。
   run = (args, opts) => gh(args, opts),
-  // 2026-11-22：这条只用来找「同一个 tag 有没有已存在的 release」（见下面 planReleaseDraft
-  // 的 same = releases.filter(r => r.tag_name === tag)）——不需要仓库全部发版历史。
-  // 之前用 --paginate --slurp 拉全量（这仓已经 650+ release，13 页）：gh 连续 4 次
-  // 以非零状态退出、stderr 为空（不是 HTTP 层报错，更像是分页量太大时 gh 自己的限制）。
-  // 会和当前 tag 撞上的只可能是**这次发版自己**留下的草稿（同一版本号的前几次重试），
-  // 那必然在最近创建的那一批里 —— 不需要翻全部历史，拉最近 100 条（单次请求，不分页）足够。
+  // 全历史正文和资产会超过 spawnSync 的 64 MiB 缓冲（ENOBUFS）。
+  // gh 逐页只输出判重所需字段，保留老草稿/已发布 tag 的完整检查。
+  // --paginate --jq 输出 NDJSON；不能与 --slurp 合用。
   listReleases = () => {
-    const page = run(['api', `repos/${repository}/releases?per_page=100`]);
-    return Array.isArray(page) ? page : [];
+    const text = run(['api', `repos/${repository}/releases?per_page=50`, '--paginate', '--jq', '.[] | {id,tag_name,draft,target_commitish}'], { parse: false });
+    return text.split('\n').filter((line) => line.trim()).map((line) => JSON.parse(line));
   },
   listAssets = (releaseId) => run(['api', `repos/${repository}/releases/${releaseId}/assets?per_page=50`, '--paginate', '--slurp']),
   // 草稿上的 target_commitish 通常是分支名（tauri-action 建草稿时就是这样）：
