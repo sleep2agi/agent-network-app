@@ -101,6 +101,7 @@ import { KBD_IDLE, kbdVoiceBlur, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, t
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
 import { withHardDeadline } from './hard-deadline';
+import { createChatLoadDiag } from './chat-load-diag';
 import { onConversationReply } from './reply-wake';
 import { fetchAuthMe } from './user-admin-api';
 import { recallConversation, rememberConversation } from './swr-cache';
