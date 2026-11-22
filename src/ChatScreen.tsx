@@ -2590,6 +2590,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         onLayout={(event) => { const h = Math.round(event.nativeEvent.layout.height); setHeaderHeight(c => (c === h ? c : h)); }}
         testID="chat-header"
       >
+      <View style={styles.headerTopRow}>
         {!desktop && !hideBack ? (
           <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} testID="chat-header-back">
             <Text style={styles.back}>‹</Text>
@@ -2653,6 +2654,21 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           );
         })()}
         <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.info')}
+          accessibilityHint={t('chat.infoHint')}
+          onPress={() => setInfoOpen(true)}
+          hitSlop={10}
+          style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
+          testID="chat-header-more"
+        >
+          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
+        </Pressable>
+      </View>
+      {/* admin 2026-11-22「把上面这一样放到下面一列」：模型胶囊单独一行，不再和头像/名字/⋯
+          挤在标题那一行里抢宽度——整行都归它，不用靠加宽上限去凑合。 */}
+      <View style={styles.headerModelRow}>
+        <Pressable
           accessibilityRole={footerModel ? undefined : 'button'}
           accessibilityLabel={footerModel ? undefined : (modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect'))}
           onPress={footerModel ? undefined : () => setModelSheetOpen(true)}
@@ -2672,17 +2688,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
               : modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')}
           </Text>
         </Pressable>
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.info')}
-          accessibilityHint={t('chat.infoHint')}
-          onPress={() => setInfoOpen(true)}
-          hitSlop={10}
-          style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
-          testID="chat-header-more"
-        >
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
-        </Pressable>
+      </View>
       </View>
 
       {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
@@ -3718,15 +3724,17 @@ const makeStyles = (B = bubbleLayout()) =>
   loadRetry: { alignSelf: 'center', marginTop: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
   loadRetryText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.card,
   },
+  // admin 2026-11-22「把上面这一样放到下面一列」：模型胶囊原来和头像/名字/⋯挤在同一行，
+  // 不管桌面窗口多宽都只分得到一条缝；拆成两行后，标题行（这一个）只装头像/名字/⋯，
+  // 模型胶囊挪到下面单独一行（headerModelRow），整行宽度都归它用。
+  headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
+  headerModelRow: { flexDirection: 'row', marginTop: spacing.xs },
   // 桌面聊天页底色带角落光斑（chat-glow.ts）：头部和输入区外围透明，让光透出来；卡片本身仍是实底。
   headerOverGlow: { backgroundColor: 'transparent' },
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
