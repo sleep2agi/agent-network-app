@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.607:",
+  "### 修复",
+  "",
+  "- 修复 Android 更新镜像同步流程，统一使用正式发布的安装包并校验文件摘要，避免同版本安装包在不同下载渠道不一致。",
+  "",
   "What's new in 0.2.606:",
   "### 修复",
   "",
