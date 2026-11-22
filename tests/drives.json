@@ -154,6 +154,10 @@
       "kind": "stub",
       "secs": 15
     },
+    "test-turn-capabilities/drive.mjs": {
+      "kind": "stub",
+      "secs": 90
+    },
     "test-message-sender-info/drive.mjs": {
       "kind": "stub",
       "secs": 60
