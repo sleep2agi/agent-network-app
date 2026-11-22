@@ -617,6 +617,14 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.604:
+            ### 修复
+
+            - 去掉输入框「＋」按钮第一次使用时卡住不消失的提示气泡。
+            - 节点主动发来的消息，回复气泡不再把作者头像认错成自己。
+            - 对方消息开头带了自己名字标签时，代码块能正常显示，不再变成一整段乱码。
+            - 桌面宽窗口下，聊天页头的模型标签不再被挤成看不出型号的一小截，改成单独一行显示。
+
             What's new in 0.2.603:
             ### 新增
 
