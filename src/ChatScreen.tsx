@@ -112,6 +112,7 @@ import { conversationOpened } from './conversation-flags';
 import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
 import { ackAgentUnread } from './agent-ack';
 import MarkdownMessage from './MarkdownMessage';
+import { CHAT_LIST_PERF, sameChatMessages } from './markdown-message-fold';
 import { ChatMetaLine, ChatTimePill } from './ChatTimeText';
 import MessageSelectOverlay, { type MessageSelectTarget } from './MessageSelectOverlay';
 import { copyValueFor, type SelectionPayload, type SelectMenuKey } from './message-select-model';
@@ -700,7 +701,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           // Only server rows enter the bounded disk cache; never echoes or local attachments.
           rememberConversation(cfg.profileId, token.key, merged.filter(t => !t._localId) as unknown as Record<string, unknown>[]);
           mergedCount = merged.length;
-          return merged;
+          return sameChatMessages(prev, merged) ? prev : merged;
         });
         loadDiag.current.paintApplied(sequence, rows.length, mergedCount);
         setLoaded(true);
@@ -2891,6 +2892,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onScroll={onScroll}
           scrollEventThrottle={16}
           inverted
+          {...CHAT_LIST_PERF}
           data={messages}
           // 高亮(定位 / 搜索)只改 state 不改 data:不传 extraData,列表不重画格子,高亮根本画不出来(#463 量到的)。
           extraData={highlightExtra}
@@ -2968,7 +2970,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
-                        {agentSent ? <MarkdownMessage>{sentBody}</MarkdownMessage> : <MarkdownMessage tone="mine">{sentBody}</MarkdownMessage>}
+                        {agentSent ? <MarkdownMessage foldLong>{sentBody}</MarkdownMessage> : <MarkdownMessage tone="mine">{sentBody}</MarkdownMessage>}
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, !agentSent)}
                         </MineBubble>
                       </View>
@@ -3003,7 +3005,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
                           <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
                         ) : null}
-                        <MarkdownMessage>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
+                        <MarkdownMessage foldLong>{hideGridImageLines(cleanAttachmentDebugText(sentQuoted.body || (sentQuoted.quote ? '' : '—')), sentGridNames) || (sentQuoted.quote ? '' : '—')}</MarkdownMessage>
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item)}
                       </View>
                       {sentQuoted.quote ? (
@@ -3033,7 +3035,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
-                          <MarkdownMessage>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>
+                          <MarkdownMessage foldLong>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>
                           {renderAttachments(replyViews)}
                           {item._taskNotice && onOpenTask ? (
                             <Pressable
