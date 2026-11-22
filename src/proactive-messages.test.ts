@@ -30,6 +30,13 @@ const render = chat.slice(chat.indexOf('renderItem={({ item, index }) => {'));
 // 但「主动项不画发送气泡」这条不变。
 check('渲染:主动项不画发送气泡', /\{!item\._proactive \? \(sender\.isCurrentUser \|\| outgoing\) \? \(/.test(render));
 check('渲染:主动项回复气泡带翻译后的主动汇报标', render.includes("t('chat.proactive')"));
+// admin 2026-11-22 截图「这是谁发出来的？」：主动项的 from_name/to_name 形状恰好满足
+// isOutgoingRow（from_name===alias 且 to_name!==alias），回复气泡的作者/头像被当成
+// 「本 agent 发给别的节点」，显示成 to_name（当前登录的人类自己），不是发消息的那个 agent。
+// 主动项永远不是「发给别的节点」，回复侧必须强制排除 _proactive。
+check('渲染:主动项回复气泡的作者/头像不受 outgoing 影响（排除 _proactive）', render.includes('const replyOutgoing = outgoing && !item._proactive;'));
+check('渲染:回复气泡作者文案用 replyOutgoing 不是裸 outgoing', /name=\{`\$\{replyOutgoing \? outgoingReplyAuthor/.test(render));
+check('渲染:回复气泡头像用 replyOutgoing 不是裸 outgoing', /AliasAvatar alias=\{replyOutgoing \? outgoingReplyAuthor/.test(render));
 // ---- 2026-09-17 回复引用条:主动消息带上它回的是哪条任务 ----
 check('in_reply_to 行字段优先', proactiveInReplyTo({ in_reply_to: ' t-1 ', meta_json: '{"in_reply_to":"t-9"}' }) === 't-1');
 check('in_reply_to 退回 meta_json', proactiveInReplyTo({ in_reply_to: null, meta_json: '{"in_reply_to":"t-9"}' }) === 't-9');

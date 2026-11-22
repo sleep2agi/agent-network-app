@@ -2872,6 +2872,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             // 本 agent 发给别的节点的行：画在发送侧，作者写「本 agent → 收件人」，别当成「别人的来信」。
             const outgoing = isOutgoingRow(item, alias);
             const sentAuthor = outgoing ? `${alias} → ${item.to_name ?? ''}` : sender.alias;
+            // 主动消息（item._proactive）的 from_name/to_name 是为「出现在哪个会话里」构造的
+            // （proactive-messages.ts：from_name = alias、to_name = 当前登录用户名），恰好满足
+            // isOutgoingRow 的形状，把它当成「本 agent 发给别的节点」—— 于是回复气泡的作者/头像
+            // 被判成「收件人」，显示成当前登录的人类自己（admin 2026-11-22 截图：「这是谁发出来的？」）。
+            // 主动消息永远是「agent → 人」，不会是「本 agent 发给别的节点」，这里强制排除。
+            const replyOutgoing = outgoing && !item._proactive;
             // 微信式引用条:开头的「@作者: 文本」不进气泡,渲染成气泡下方的灰条
             const sentQuoted = parseQuoted(item.content);
             const sentGridNames = sentAttachmentViews(item, cfg.serverUrl).filter(gridRenderable).map(a => a.name);
@@ -2962,12 +2968,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 ) : null}
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
-                    <Pressable accessibilityRole="button" accessibilityLabel={outgoing ? outgoingReplyAuthor(item, alias) : alias} testID="chat-sender-avatar-reply" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'reply', outgoing, currentAlias: alias, currentUserId, row: item }))}>
-                      <AliasAvatar alias={outgoing ? outgoingReplyAuthor(item, alias) : alias} size={36} />
+                    <Pressable accessibilityRole="button" accessibilityLabel={replyOutgoing ? outgoingReplyAuthor(item, alias) : alias} testID="chat-sender-avatar-reply" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'reply', outgoing: replyOutgoing, currentAlias: alias, currentUserId, row: item }))}>
+                      <AliasAvatar alias={replyOutgoing ? outgoingReplyAuthor(item, alias) : alias} size={36} />
                     </Pressable>
                     <View style={[styles.messageContent, bubbleCap, item.late ? { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.sm } : null]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
-                      <ChatMetaLine name={`${outgoing ? outgoingReplyAuthor(item, alias) : alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
+                      <ChatMetaLine name={`${replyOutgoing ? outgoingReplyAuthor(item, alias) : alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
                       <Pressable
                         {...(pointer ? ({ dataSet: { messageKey: msgKey(item), messagePart: 'reply' }, onMouseEnter: () => setHoverKey(`${msgKey(item)}:reply`), onMouseLeave: () => setHoverKey(null) } as any) : {})}
                         onLongPress={pointer ? undefined : () => openSelect(`${msgKey(item)}:reply`, { item, text: item.result ?? item.reply ?? '', author: alias }, 'reply')}
