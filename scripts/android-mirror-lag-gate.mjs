@@ -32,6 +32,7 @@ import process from 'node:process';
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compareDesktopVersions, parseDesktopTag } from './modelscope-mirror.mjs';
+import { downloadAndroidBuildSource, selectVerifiedDispatchedBuild } from './android-build-source.mjs';
 
 export const DEFAULT_REPOSITORY = 'sleep2agi/agent-network-app';
 export const DEFAULT_MIRROR_BASE = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master';
@@ -261,7 +262,16 @@ export const gate = async ({
 
   // 4. release 提交上成功的 android-build
   const runs = await json('GET', `/repos/${repo}/actions/workflows/${BUILD_WORKFLOW}/runs?head_sha=${sha}&per_page=50`);
-  const { run: build, seen, newestConclusion } = selectBuildRun(runs?.workflow_runs, sha);
+  const selected = selectBuildRun(runs?.workflow_runs, sha);
+  const { seen, newestConclusion } = selected;
+  let build = selected.run;
+  if (!build) {
+    const dispatched = await json('GET', `/repos/${repo}/actions/workflows/${BUILD_WORKFLOW}/runs?event=workflow_dispatch&status=success&branch=main&per_page=50`);
+    build = await selectVerifiedDispatchedBuild(dispatched?.workflow_runs, {
+      repository: repo, commit: sha,
+      loadSource: run => downloadAndroidBuildSource({ repository: repo, run, token, json }),
+    });
+  }
   if (!build) return { code: 1, lines: [...lines, failureMessages.noBuildRun({ tag, sha, seen, newestConclusion })] };
   say(`build    ${BUILD_WORKFLOW} run ${build.id} (success on main @ ${sha.slice(0, 8)})`);
 

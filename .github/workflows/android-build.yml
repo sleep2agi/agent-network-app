@@ -172,6 +172,31 @@ jobs:
             exit 1
           fi
 
+      - name: Record verified APK source identity
+        env:
+          APK_PATH: ${{ steps.apk.outputs.path }}
+        run: |
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync } from 'node:fs';
+          import { execFileSync } from 'node:child_process';
+          import { createHash } from 'node:crypto';
+          const commit = execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+          const config = JSON.parse(readFileSync('app.json', 'utf8')).expo;
+          const apkSha256 = createHash('sha256').update(readFileSync(process.env.APK_PATH)).digest('hex');
+          writeFileSync('android-build-source.json', JSON.stringify({
+            schemaVersion: 1, repository: process.env.GITHUB_REPOSITORY,
+            runId: process.env.GITHUB_RUN_ID, runAttempt: process.env.GITHUB_RUN_ATTEMPT,
+            commit, version: config.version, versionCode: config.android.versionCode, apkSha256,
+          }) + '\n');
+          NODE
+
+      - name: Upload APK source identity
+        uses: actions/upload-artifact@v4
+        with:
+          name: android-build-source
+          path: android-build-source.json
+          if-no-files-found: error
+
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
