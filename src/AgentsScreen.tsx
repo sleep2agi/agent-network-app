@@ -330,7 +330,7 @@ export default function AgentsScreen({
   useEffect(() => {
     if (preview) return;
     void taskTimes.request(sessions
-      .filter(s => s.task && !latestByAgent[s.alias]?.text)
+      .filter(s => s.task && (!latestByAgent[s.alias]?.text || isAgentOnline(s.status)))
       .map(s => ({ alias: s.alias, text: s.task ?? '', online: isAgentOnline(s.status) })));
   }, [preview, sessions, latestByAgent, taskTimes]);
   // Row activity time per alias — what `sortByActivity` orders by (off by default: SORT_BY_ACTIVITY).

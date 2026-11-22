@@ -47,7 +47,9 @@ ck('phone row block located', phoneRow.length > 200);
 ck('row content comes from agentRowModel, with the task time for the text it shows', phoneRow.includes('agentRowModel(item, { latest: latestByAgent[item.alias], taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs })'));
 // ── last-activity time (0.2.114): task times come from the latest task row, never updated_at ──
 ck('task-time resolver reads the latest task row for that alias only', agents.includes('fetchTasks(cfg, { to_name: alias, limit: 1, skipStats: true })'));
-ck('lookups only for rows whose preview IS the task text (no message text)', agents.includes('.filter(s => s.task && !latestByAgent[s.alias]?.text)'));
+ck('lookups cover rows without message text plus online rows whose task may be newer than a stale message', agents.includes('.filter(s => s.task && (!latestByAgent[s.alias]?.text || isAgentOnline(s.status)))'));
+const chat = read('./ChatScreen.tsx');
+ck('ChatScreen syncs its latest painted visible message back to the sidebar store', chat.includes('recordChatLatestActivity(alias, latestChatMessage(rows))'));
 ck('a resolved task time re-renders the list', agents.includes('taskTimes.subscribe(() => setTaskTimesTick(n => n + 1))'));
 ck('the screen never derives a row time from updated_at', !/updated_at/.test(agents));
 ck('sort-by-activity is wired through the flag (one-line switch), not hard-coded', agents.includes('sortByActivity: SORT_BY_ACTIVITY,') && agents.includes('activityAt: alias => activityByAlias.get(alias) ?? 0,'));

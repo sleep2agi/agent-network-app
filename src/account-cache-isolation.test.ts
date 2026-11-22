@@ -56,12 +56,14 @@ mock.module('react-native', () => ({ AppState: { addEventListener: () => ({ remo
 const unread = await import('./unread-store');
 unread.bindUnreadProfile('m-A');
 unread.ingestUserMessagesBody({ messages: [{ id: 'x1', from_alias: 'agent-of-A' }, { id: 'x2', from_alias: 'agent-of-A' }] });
+unread.recordChatLatestActivity('agent-of-A', { at: 1_700_000_000_000, text: 'A 对话最新消息' });
 const before = unread.getUnreadSnapshot();
-ck('I3 precondition: account A has 2 unread from agent-of-A', before.ledger.counts['agent-of-A'] === 2 && before.serverBody !== null);
+ck('I3 precondition: account A has 2 unread from agent-of-A', before.ledger.counts['agent-of-A'] === 2 && before.serverBody !== null && before.chatLatest?.['agent-of-A']?.at === 1_700_000_000_000);
 unread.bindUnreadProfile('m-B');
 const after = unread.getUnreadSnapshot();
 ck('I3 switching to B clears A\'s unread counts', Object.keys(after.ledger.counts).length === 0, JSON.stringify(after.ledger.counts));
 ck('I3 …A\'s user_inbox body (server-side per-agent unread) is dropped', after.serverBody === null);
+ck('I3 …A\'s observed chatLatest entries are dropped', Object.keys(after.chatLatest ?? {}).length === 0);
 ck('I3 …and A\'s seen ids (so B\'s messages are counted fresh)', after.seenIds.size === 0);
 ck('I3 …and the user half is marked not-yet-ingested (notifier waits for B\'s first poll)', unread.unreadHalvesIngested().user === false);
 unread.ingestUserMessagesBody({ messages: [{ id: 'y1', from_alias: 'agent-of-B' }] });

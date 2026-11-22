@@ -142,15 +142,56 @@ export const previewText = (raw: unknown, max = 80): string => {
   return one.length > max ? one.slice(0, max) : one;
 };
 
+export interface ChatLatestItem {
+  content?: string | null;
+  result?: string | null;
+  reply?: string | null;
+  created_at?: string | null;
+  completed_at?: string | null;
+  _proactive?: boolean;
+  _failed?: boolean;
+  _localId?: string;
+}
+
+/**
+ * Derive the newest visible event (time + preview text) from a ChatScreen's loaded rows.
+ * Matches what the chat pane renders (ChatScreen.tsx):
+ *   - sent/foreign prompt: created_at + content (skipped for _proactive rows, which render on the reply side)
+ *   - reply/proactive:     (completed_at ?? created_at) + (result ?? reply)
+ * Failed or unconfirmed local echoes are ignored so unsent drafts never overwrite the sidebar.
+ */
+export function latestChatMessage(items: readonly ChatLatestItem[] | null | undefined): LatestMessage | null {
+  if (!Array.isArray(items) || items.length === 0) return null;
+  let best: LatestMessage | null = null;
+  const consider = (atRaw: unknown, textRaw: unknown, preferTie: boolean) => {
+    const ms = hubTimeMs(atRaw);
+    if (!ms) return;
+    const text = previewText(textRaw);
+    if (!best || ms > best.at || (ms === best.at && ((preferTie && !!text) || (!!text && !best.text)))) {
+      best = { at: ms, text };
+    }
+  };
+  for (const item of items) {
+    if (!item || item._failed || item._localId) continue;
+    if (!item._proactive) consider(item.created_at, item.content, false);
+    const reply = item.result || item.reply;
+    if (reply) consider(item.completed_at ?? item.created_at, reply, true);
+  }
+  return best;
+}
+
 /**
  * Latest message each agent sent the signed-in user — same two sources, same filter as
  * agent-unread-counts.ts `latestMessageAtByAgent` (which the 新消息 group sorts by), plus
- * the text for the preview line.
+ * the text for the preview line. When `chatLatest` (observed by ChatScreen for an opened
+ * conversation, including peer-to-agent tasks and replies beyond the global inbox window)
+ * is at least as recent, it wins so the sidebar matches the open chat pane.
  */
 export function latestMessageByAgent(snap: {
   serverBody: unknown;
   replyRows?: readonly unknown[];
   replyUsername?: string;
+  chatLatest?: Readonly<Record<string, LatestMessage>>;
 }): Record<string, LatestMessage> {
   const out: Record<string, LatestMessage> = {};
   const bump = (alias: unknown, at: unknown, text: unknown) => {
@@ -163,6 +204,16 @@ export function latestMessageByAgent(snap: {
   for (const m of Array.isArray(body?.messages) ? body!.messages! : []) bump(m?.from_session, m?.created_at, m?.content || m?.title);
   for (const r of (snap.replyRows ?? []) as readonly HubMessage[]) {
     if (snap.replyUsername && r?.to_alias === snap.replyUsername) bump(r.from_alias, r.created_at, r.content);
+  }
+  if (snap.chatLatest) {
+    for (const [alias, entry] of Object.entries(snap.chatLatest)) {
+      if (!alias || !entry || !Number.isFinite(entry.at) || entry.at <= 0) continue;
+      const cur = out[alias];
+      const text = previewText(entry.text);
+      if (!cur || entry.at > cur.at || (entry.at === cur.at && !!text)) {
+        out[alias] = { at: entry.at, text };
+      }
+    }
   }
   return out;
 }
@@ -189,9 +240,11 @@ export type ActivitySource = 'message' | 'task' | null;
 
 /**
  * The row's activity: the preview text and the time of the SAME event.
- *   - a last message with text → that message, at its time;
- *   - else the session's task text → that text, at the time of the task row it came from
- *     (`taskAt`, agent-task-time.ts; 0 ⇒ the hub has no row for that text ⇒ no time);
+ *   - if the session's current task has a known `taskAt` strictly newer than `latest.at`,
+ *     use that task activity (time = `taskAt`, preview = '' — never leak `session.task`
+ *     raw text, and never pair a stale old message with a newer task time);
+ *   - else a last message with text → that message, at its time;
+ *   - else the session's task activity (at `taskAt`, or 0 when no hub row matches);
  *   - else a last message with no text → no preview, the message time.
  */
 export function rowActivity(
@@ -199,11 +252,14 @@ export function rowActivity(
   latest?: LatestMessage,
   taskAt = 0,
 ): { preview: string; source: ActivitySource; at: number } {
-  if (latest?.text) return { preview: latest.text, source: 'message', at: latest.at };
   // 2026-11-20（负责人定）：session.task 是节点**自己上报**的当前任务/进度，协同时甚至
   // 就是本机 TUI 里打的提示词 —— 别的用户不该看到正文。这里只保留「这条活动的来源与时间」，
   // 正文一律不回传（行上只画状态词，如「工作中」）。
   const task = previewText(session.task);
+  if (task && taskAt > 0 && taskAt > (latest?.at ?? 0)) {
+    return { preview: '', source: 'task', at: taskAt };
+  }
+  if (latest?.text) return { preview: latest.text, source: 'message', at: latest.at };
   if (task) return { preview: '', source: taskAt > 0 ? 'task' : null, at: taskAt > 0 ? taskAt : 0 };
   if (latest) return { preview: '', source: 'message', at: latest.at };
   return { preview: '', source: null, at: 0 };
@@ -225,7 +281,7 @@ export function agentRowModel(
     preview: act.preview,
     time: act.at ? formatRowTime(act.at, opts.nowMs) : '',
     source: act.source,
-    showingTask: !opts.latest?.text && !!previewText(session.task),
+    showingTask: act.source === 'task' || (!opts.latest?.text && !!previewText(session.task)),
     activityAt: act.at,
     pinned: !!opts.pinned,
   };
