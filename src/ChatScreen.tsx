@@ -2661,8 +2661,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           {/* admin 2026-11-21「这个地方也很奇怪了」：页头这个胶囊写的是「节点上报：claude-code...」，
               固定 132px 宽度一截断，模型名本身（唯一有用的信息）反而被切没了；底部输入框自己的模型
               胶囊（composerModelPill）只显示模型名，不带「节点上报」这层框架，两边不一致本身就是
-              困惑点。去掉前缀跟下面对齐，截断也从「切尾巴」改成「切中间」，长名字至少头尾都留着。 */}
-          <Text style={styles.modelChip} numberOfLines={1} ellipsizeMode="middle" testID="chat-header-model">
+              困惑点。去掉前缀跟下面对齐，截断也从「切尾巴」改成「切中间」，长名字至少头尾都留着。
+              admin 2026-11-22「这是啥情况」：132px 这个宽度上限是按手机窄屏定的，桌面宽窗口头部
+              明明有大把空白，却还套着同一个上限，"opencode-cli · openai/gpt-6-astra" 这类较长的
+              runtime+model 组合照样被切得看不出是什么型号。桌面这边放宽上限，手机仍按 132px（窄屏
+              没有多余空间可以给）。 */}
+          <Text style={[styles.modelChip, desktop && styles.modelChipDesktop]} numberOfLines={1} ellipsizeMode="middle" testID="chat-header-model">
             {composerModelLine
               ? composerModelLine
               : modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')}
@@ -3751,6 +3755,8 @@ const makeStyles = (B = bubbleLayout()) =>
     borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
     fontSize: ds(11), overflow: 'hidden',
   },
+  // 桌面宽窗口头部有空间，132px 那个手机窄屏的上限没必要照搬（admin 2026-11-22）。
+  modelChipDesktop: { maxWidth: 260 },
   // 头像+名字这一整块现在是一个可点的整体（见 chat-header-identity）：行容器接过原来
   // headerTitleCol 的 flex:1，自己内部再给名字列同样的 flex:1，布局比例和点不动时完全一样。
   headerIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, minWidth: 0 },
