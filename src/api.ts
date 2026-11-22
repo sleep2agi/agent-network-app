@@ -1,4 +1,5 @@
 import type { RuntimeReadinessMap } from './runtime-readiness';
+import type { TurnCapabilityReport } from './turn-capabilities';
 import { readTaskDiagnostic, type TaskDiagnostic } from './task-execution';
 import { appFetch, appFetchLoad } from './app-fetch';
 import { buildConfigPatch } from './node-variant-patch';
@@ -17,7 +18,7 @@ import { interpretCloneReply, isCloneToolMissing, type CloneNodeArgs } from './n
 // proxies (status / tasks / messages); auth is the network token sent
 // as a Bearer header. Server URL + token live in app state (Settings).
 
-export interface Session {
+export interface Session extends TurnCapabilityReport {
   alias: string;
   status: string;
   agent?: string;
@@ -274,7 +275,7 @@ export const fetchNodeStatus = (cfg: HubConfig, alias?: string) =>
  *  returns `{ ok, nodes, count }`; hub #462 added `avatar_url` to the
  *  projection (server.ts:2784) — nullable, `/avatars/<name>.(webp|png|svg)`
  *  or an absolute http(s) URL (avatar-validate.ts). */
-export interface HubNode {
+export interface HubNode extends TurnCapabilityReport {
   node_id: string;
   alias: string;
   node_name?: string | null;
@@ -328,6 +329,8 @@ export interface HubNode {
   /** Hub ≥ .93(#2275):调用者能不能改这个节点的模式 —— 「权限」分区只在它为 true 时出现。 */
   viewer_can?: { permission_mode?: boolean } | null;
   config_snapshot?: {
+    turn_interrupt_capable?: boolean | null;
+    turn_steer_capable?: boolean | null;
     model?: string | null;
     role?: string | null;
     channels?: unknown[];

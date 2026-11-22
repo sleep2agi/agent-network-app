@@ -90,6 +90,7 @@ import { canEditDepartments, departmentDisplayLabel, type OrgLike } from './node
 import { fetchOrg } from './org-api';
 import { useDesktopWindowPin } from './DesktopWindowPin';
 import { nodeInfoSectionKey, requestNodeSection } from './node-section-request';
+import { turnCapabilities } from './turn-capabilities';
 import { chatComposerKind, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRoles } from './daemon-node';
 import DaemonManagementScreen from './DaemonManagementScreen';
 import { echoSupersededByFetched } from './chat-echo';
@@ -2035,7 +2036,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // 与「打断并发送」是两件事：这条不停上一轮，上一轮继续跑，只是把新内容并进去。
     // 只有在飞时才走这条路。按钮在空闲时本就不出现；但状态可能在这一拍翻走（轮询滞后/回合刚结束），
     // 所以这里**不能**「不满足条件就落回普通发送」—— 用户点的是插话，悄悄变成普通消息等于骗他。
-    if (opts?.inject === true && !canSteer(sessionStatus)) {
+    if (opts?.interruptFirst === true && !turnCaps.interrupt) return;
+    if (opts?.inject === true && (!turnCaps.steer || !canSteer(sessionStatus))) {
       setComposerNotice(t('chat.inject.missed'));
       return;
     }
@@ -2206,6 +2208,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const interruptBusy = interrupt.phase === 'sending' || interrupt.phase === 'waiting';
   const interruptIdOf = (m: { task_id?: string; created_at?: string; content?: string }) => `${m.task_id ?? ''}|${m.created_at ?? ''}|${m.content ?? ''}`;
   const [controlSession, setControlSession] = useState<Session | null>(null);
+  const [turnReport, setTurnReport] = useState<{ cfg: typeof cfg; alias: string; session: Session | null } | null>(null);
+  const turnCaps = turnCapabilities(turnReport?.cfg === cfg && turnReport.alias === alias ? turnReport.session : null);
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
   const [sessionModel, setSessionModel] = useState('');
@@ -2347,7 +2351,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   }, [cfg, alias]);
   // #4591 —— 点「停止」：先记下此刻的消息集合（回执只认之后新出现的），发控制消息，再等真凭据（窗口 INTERRUPT_CONFIRM_MS，迟到凭据上限 LATE_EVIDENCE_MS）。
   const pressInterrupt = () => {
-    if (interruptBusy || !interruptable(sessionStatus)) return;
+    if (!turnCaps.interrupt || interruptBusy || !interruptable(sessionStatus)) return;
     interruptSeenRef.current = new Set(messages.map(interruptIdOf));
     interruptSentAtRef.current = Date.now();
     interruptBaselineRef.current = sessionStatus ?? '';
@@ -2409,9 +2413,30 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         if (!live) return;
         const s = (data.sessions ?? []).find(x => x.alias === alias);
         setControlSession(s ?? null);
+        setTurnReport({ cfg, alias, session: s ?? null });
         if (!s) return;
         const next = chatInfoCaps(s);
         setFullCaps(c => (c && c.rules === next.rules && c.skills === next.skills ? c : next));
+        // Old status projections omit generation/config; only join by authoritative node_id.
+        if (s.node_id && (s.turn_interrupt_capable == null || s.turn_steer_capable == null)) {
+          void fetchHubNodes(cfg).then(({ nodes }) => {
+            if (!live) return;
+            const matches = nodes.filter(n => n.node_id === s.node_id);
+            if (matches.length !== 1) return;
+            const n = matches[0];
+            setTurnReport({ cfg, alias, session: {
+              ...s,
+              turn_interrupt_capable: s.turn_interrupt_capable ?? n.turn_interrupt_capable,
+              turn_steer_capable: s.turn_steer_capable ?? n.turn_steer_capable,
+              opencode_generation: s.opencode_generation ?? n.opencode_generation,
+              opencode_mode: s.opencode_mode ?? n.opencode_mode,
+              config_snapshot: s.config_snapshot ?? n.config_snapshot,
+              agent_node_version: s.agent_node_version ?? n.agent_node_version,
+              build_commit: s.build_commit ?? n.build_commit,
+              runtime: s.runtime ?? n.runtime,
+            } });
+          }).catch(() => { /* Unknown remains hidden. */ });
+        }
       })
       .catch(() => { /* keep last / light fallback */ });
     return () => { live = false; };
@@ -3404,8 +3429,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 </Pressable>
               ) : null}
               {/* 「停止」只在节点在跑、或打断还在进行 / 刚有结果时出现；空闲时一直挂着一个灰按钮只是噪音。 */}
-              {interruptable(sessionStatus) || interrupt.phase !== 'idle' ? <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} desktop onPress={pressInterrupt} /> : null}
-              {interruptable(sessionStatus) ? (
+              {turnCaps.interrupt && (interruptable(sessionStatus) || interrupt.phase !== 'idle') ? <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} desktop onPress={pressInterrupt} /> : null}
+              {turnCaps.interrupt && interruptable(sessionStatus) ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('chat.steer.action')}
@@ -3424,7 +3449,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
                 </Pressable>
               ) : null}
-              {canSteer(sessionStatus) ? (
+              {turnCaps.steer && canSteer(sessionStatus) ? (
                 <ComposerInjectButton
                   enabled={canSend(draft, attached.length > 0, sending) && attached.length === 0}
                   desktop
@@ -3515,8 +3540,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           </Text>
           <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
-        <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} onPress={pressInterrupt} />
-        {interruptable(sessionStatus) ? (
+        {turnCaps.interrupt && (interruptable(sessionStatus) || interrupt.phase !== 'idle') ? <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} onPress={pressInterrupt} /> : null}
+        {turnCaps.interrupt && interruptable(sessionStatus) ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('chat.steer.action')}
@@ -3535,7 +3560,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
                 </Pressable>
               ) : null}
-              {canSteer(sessionStatus) ? (
+              {turnCaps.steer && canSteer(sessionStatus) ? (
                 <ComposerInjectButton
                   enabled={canSend(draft, attached.length > 0, sending) && attached.length === 0}
                   desktop
