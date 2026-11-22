@@ -109,7 +109,8 @@ import { recallConversation, rememberConversation } from './swr-cache';
 import { chatSearchState, isHighlighted, isStaleSearch, matchCountLabel, searchItems, shouldLoadOlderForSearch, stepHit, type SearchHit } from './chat-search';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import { conversationOpened } from './conversation-flags';
-import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, unackedIdsForAgent } from './unread-store';
+import { dispatchUnread, hubHasAgentUnread, markAgentRepliesSeen, markAgentServerUnreadCleared, recordChatLatestActivity, unackedIdsForAgent } from './unread-store';
+import { latestChatMessage } from './agent-row-model';
 import { ackAgentUnread } from './agent-ack';
 import MarkdownMessage from './MarkdownMessage';
 import { ChatMetaLine, ChatTimePill } from './ChatTimeText';
@@ -703,6 +704,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           return merged;
         });
         loadDiag.current.paintApplied(sequence, rows.length, mergedCount);
+        recordChatLatestActivity(alias, latestChatMessage(rows), cfg.networkId);
         setLoaded(true);
       };
       const results = await loadChatSources({

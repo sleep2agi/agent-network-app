@@ -6,7 +6,7 @@
 
 import {
   AGENT_ROW_AVATAR, AGENT_ROW_DOT, AGENT_ROW_GAP, AGENT_ROW_HEIGHT, AGENT_ROW_PAD_X, AGENT_ROW_SEPARATOR_INSET,
-  agentRowModel, formatRowTime, latestMessageByAgent, previewText, rowActivity, rowStatus,
+  agentRowModel, chatLatestKey, formatRowTime, latestChatMessage, latestForAgentRow, latestMessageByAgent, previewText, rowActivity, rowStatus,
 } from './agent-row-model';
 import { latestMessageAtByAgent } from './agent-unread-counts';
 
@@ -92,8 +92,10 @@ ck('model status is rowStatus(status)', JSON.stringify(agentRowModel({ alias: 'w
 const taskAt = at(2026, 9, 26, 8, 13);
 const taskRow = agentRowModel(heartbeat, { taskAt, nowMs: now });
 ck('task activity → time is that task\'s time, text hidden', taskRow.preview === '' && taskRow.time === '08:13' && taskRow.source === 'task', JSON.stringify(taskRow));
-const msgWins = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '旧消息' }, taskAt, nowMs: now });
-ck('message preview → message time, never the task time', msgWins.preview === '旧消息' && msgWins.time === '周四' && msgWins.source === 'message', JSON.stringify(msgWins));
+const newerMsgWins = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 26, 14, 2), text: '新消息' }, taskAt, nowMs: now });
+ck('newer message preview → message time, never the older task time', newerMsgWins.preview === '新消息' && newerMsgWins.time === '14:02' && newerMsgWins.source === 'message' && !newerMsgWins.showingTask, JSON.stringify(newerMsgWins));
+const newerTaskBeatsStaleMsg = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '旧消息' }, taskAt, nowMs: now });
+ck('newer task beats stale message → task time shown, stale message text dropped (and session.task never leaked)', newerTaskBeatsStaleMsg.preview === '' && newerTaskBeatsStaleMsg.time === '08:13' && newerTaskBeatsStaleMsg.source === 'task' && newerTaskBeatsStaleMsg.showingTask, JSON.stringify(newerTaskBeatsStaleMsg));
 const emptyMsg = agentRowModel(heartbeat, { latest: { at: at(2026, 9, 24, 9), text: '' }, taskAt, nowMs: now });
 ck('message with no text → task time, text still hidden', emptyMsg.preview === '' && emptyMsg.time === '08:13' && emptyMsg.source === 'task', JSON.stringify(emptyMsg));
 const emptyMsgNoTask = agentRowModel({ alias: 'q', status: 'idle' }, { latest: { at: at(2026, 9, 24, 9), text: '' }, nowMs: now });
@@ -107,8 +109,68 @@ ck('no data at all → no preview, no time', (() => { const m = agentRowModel({ 
 const hb1 = agentRowModel({ ...heartbeat, updated_at: new Date(now - 3600_000).toISOString() }, { taskAt, nowMs: now });
 const hb2 = agentRowModel({ ...heartbeat, updated_at: new Date(now).toISOString() }, { taskAt, nowMs: now });
 ck('heartbeat (updated_at moves) → same time and activityAt', hb1.time === hb2.time && hb1.activityAt === hb2.activityAt && hb2.time === '08:13');
-ck('activityAt is the shown event\'s ms', taskRow.activityAt === taskAt && msgWins.activityAt === at(2026, 9, 24, 9));
+ck('activityAt is the shown event\'s ms', taskRow.activityAt === taskAt && newerMsgWins.activityAt === at(2026, 9, 26, 14, 2) && newerTaskBeatsStaleMsg.activityAt === taskAt);
 ck('rowActivity is what agentRowModel shows (preview empty: text hidden)', JSON.stringify(rowActivity(heartbeat, undefined, taskAt)) === JSON.stringify({ preview: '', source: 'task', at: taskAt }));
+
+// ── ChatScreen → sidebar sync (latestChatMessage + chatLatest merge) ──
+const peerTaskOnly = latestChatMessage([
+  { content: '飞书已登录成功并持久化保存到...', created_at: '2026-11-22 07:43:00' },
+  { content: '.701 已切到 alpha 官网，立即从官网下载安装验收', created_at: '2026-11-22 15:39:55' },
+  { content: '失败草稿不应盖掉时间', created_at: '2026-11-22 15:50:00', _failed: true, _localId: 'loc-1' },
+  { content: '本地发送中回显不应盖掉时间', created_at: '2026-11-22 15:51:00', _localId: 'loc-2' },
+]);
+ck('latestChatMessage picks newest peer task and ignores failed/local echoes',
+  peerTaskOnly?.at === Date.parse('2026-11-22T15:39:55Z') && peerTaskOnly.text === '.701 已切到 alpha 官网，立即从官网下载安装验收',
+  JSON.stringify(peerTaskOnly));
+
+const withReply = latestChatMessage([
+  { content: '派单正文', created_at: '2026-11-22 15:39:55', result: '已完成验收', completed_at: '2026-11-22 15:52:16' },
+]);
+ck('latestChatMessage prefers reply completed_at + result when present',
+  withReply?.at === Date.parse('2026-11-22T15:52:16Z') && withReply.text === '已完成验收',
+  JSON.stringify(withReply));
+
+const sameSecondReply = latestChatMessage([
+  { content: '问句', created_at: '2026-11-22 15:39:55', result: '秒回' },
+]);
+ck('latestChatMessage prefers reply on same-second tie (missing completed_at)',
+  sameSecondReply?.at === Date.parse('2026-11-22T15:39:55Z') && sameSecondReply.text === '秒回',
+  JSON.stringify(sameSecondReply));
+
+const proactiveOnly = latestChatMessage([
+  { content: '不该被当作发送侧', created_at: '2026-11-22 15:40:00', result: '主动推送正文', _proactive: true },
+]);
+ck('latestChatMessage reads proactive rows from reply side only',
+  proactiveOnly?.at === Date.parse('2026-11-22T15:40:00Z') && proactiveOnly.text === '主动推送正文',
+  JSON.stringify(proactiveOnly));
+
+const baseByAgent = latestMessageByAgent({
+  serverBody: { messages: [
+    { from_session: '微软测试鸽', created_at: '2026-11-22 07:43:00', content: '飞书已登录成功并持久化保存到...' },
+    { from_session: '另一节点', created_at: '2026-11-22 15:55:00', content: '更新的推送' },
+  ] },
+});
+const scopedChatLatest = {
+  [chatLatestKey('微软测试鸽', 'net_A')]: { at: Date.parse('2026-11-22T15:39:55Z'), text: '.701 已切到 alpha 官网' },
+  [chatLatestKey('微软测试鸽', 'net_B')]: { at: Date.parse('2026-11-22T07:43:00Z'), text: '网络B独立消息' },
+  [chatLatestKey('另一节点', 'net_A')]: { at: Date.parse('2026-11-22T15:30:00Z'), text: '较旧的已打开对话' },
+};
+const resolvedNetA = latestForAgentRow(baseByAgent, scopedChatLatest, '微软测试鸽', 'net_A');
+ck('newer chatLatest in the same network overrides stale user_inbox message for the sidebar',
+  resolvedNetA?.at === Date.parse('2026-11-22T15:39:55Z') && resolvedNetA?.text === '.701 已切到 alpha 官网',
+  JSON.stringify(resolvedNetA));
+const resolvedNetB = latestForAgentRow(baseByAgent, scopedChatLatest, '微软测试鸽', 'net_B');
+ck('same-alias node in network B never reads network A chatLatest (stays isolated at net_B entry)',
+  resolvedNetB?.at === Date.parse('2026-11-22T07:43:00Z') && resolvedNetB?.text === '网络B独立消息',
+  JSON.stringify(resolvedNetB));
+const resolvedNetC = latestForAgentRow({}, scopedChatLatest, '微软测试鸽', 'net_C');
+ck('unvisited network C with same alias does not inherit net_A or net_B chatLatest',
+  resolvedNetC === undefined,
+  JSON.stringify(resolvedNetC));
+const resolvedOther = latestForAgentRow(baseByAgent, scopedChatLatest, '另一节点', 'net_A');
+ck('newer server user_inbox message still beats older chatLatest in the same network',
+  resolvedOther?.at === Date.parse('2026-11-22T15:55:00Z') && resolvedOther?.text === '更新的推送',
+  JSON.stringify(resolvedOther));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
