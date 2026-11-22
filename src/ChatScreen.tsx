@@ -674,15 +674,22 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     };
   }, []);
 
+  const loadDiag = useRef(createChatLoadDiag());
+
   const load = useCallback(
     async (limit: number) => {
       const token = requestGate.current();
       if (!token) return;
       const sequence = ++loadSequenceRef.current;
+      const startedAt = Date.now();
+      loadDiag.current.loadStarted(sequence, requestGate.isCurrent(token), limit);
       const isCurrent = () => requestGate.isCurrent(token) && mountedRef.current && sequence === loadSequenceRef.current;
       const params = newestPageParams(alias, limit);
       const paint = (source: ChatSource, rows: ChatItem[], fetched: HubTask[] = [], confirmed = new Set<string>()) => {
-        if (!isCurrent()) return;
+        if (!isCurrent()) {
+          loadDiag.current.paintDropped(sequence, !requestGate.isCurrent(token) ? 'token' : !mountedRef.current ? 'unmounted' : 'sequence');
+          return;
+        }
         setMessages(prev => {
           if (!isCurrent()) return prev;
           const kept = prev.filter(t => !t._localId || (!confirmed.has(t._localId) && !echoSupersededByFetched(t, fetched)));
@@ -692,6 +699,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           rememberConversation(cfg.profileId, token.key, merged.filter(t => !t._localId) as unknown as Record<string, unknown>[]);
           return merged;
         });
+        loadDiag.current.paintApplied(sequence, rows.length, -1);
         setLoaded(true);
       };
       const results = await loadChatSources({
@@ -728,6 +736,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         if (results.every(Boolean)) setConversationReady(true);
         setLoaded(true);
       }
+      loadDiag.current.loadSettled(sequence, Date.now() - startedAt);
       void retryUnreadPersistFromPoll();
     },
     [cfg, alias],
