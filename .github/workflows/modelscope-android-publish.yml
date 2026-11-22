@@ -123,6 +123,44 @@ jobs:
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n android-build-source -D "$RUNNER_TEMP/android-source"
           node "$RUNNER_TEMP/android-build-source.mjs" "$RUNNER_TEMP/android-source/android-build-source.json" "$RUNNER_TEMP/android-source-run.json" "$GITHUB_REPOSITORY" "$REQUESTED_COMMIT" "$APK"
 
+      # Published releases are the canonical bytes; rebuilding the same commit
+      # can produce a different APK. Never replace the release asset with a rebuild.
+      - name: Use canonical published APK when available
+        env:
+          GH_TOKEN: ${{ github.token }}
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          version=$(node -p 'require("./app.json").expo.version')
+          tag="desktop-v$version"
+          # Only a genuine 404 permits the pre-release artifact path.
+          if gh api "repos/$GITHUB_REPOSITORY/releases/tags/$tag" > "$RUNNER_TEMP/android-release.json" 2> "$RUNNER_TEMP/android-release-error"; then
+            if [ "$(jq -r .draft "$RUNNER_TEMP/android-release.json")" = false ]; then
+              node --input-type=module <<'NODE'
+              import { readFileSync, appendFileSync } from 'node:fs';
+              const release = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/android-release.json`, 'utf8'));
+              if (release.prerelease || release.target_commitish !== process.env.REQUESTED_COMMIT) throw new Error('published release source mismatch');
+              const apks = release.assets.filter(a => a.name.endsWith('.apk'));
+              if (apks.length !== 1 || apks[0].state !== 'uploaded' || !/^sha256:[0-9a-f]{64}$/.test(apks[0].digest)) throw new Error('canonical APK identity unavailable');
+              appendFileSync(process.env.GITHUB_ENV, `CANONICAL_APK_ID=${apks[0].id}\nCANONICAL_APK_SHA256=${apks[0].digest.slice(7)}\n`);
+          NODE
+            fi
+          elif ! grep -q 'HTTP 404' "$RUNNER_TEMP/android-release-error"; then
+            cat "$RUNNER_TEMP/android-release-error" >&2
+            exit 1
+          fi
+
+      - name: Download and verify canonical APK
+        if: env.CANONICAL_APK_ID != ''
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          canonical="$RUNNER_TEMP/canonical-release.apk"
+          gh api -H 'Accept: application/octet-stream' "repos/$GITHUB_REPOSITORY/releases/assets/$CANONICAL_APK_ID" > "$canonical"
+          printf '%s  %s\n' "$CANONICAL_APK_SHA256" "$canonical" | sha256sum --check
+          echo "APK=$canonical" >> "$GITHUB_ENV"
+
       - name: Read and check the APK version
         run: |
           set -euo pipefail
