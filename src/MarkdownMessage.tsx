@@ -7,7 +7,7 @@ import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } 
 import { foldCode, foldLabel } from './markdown-code-fold';
 import { gridCellWidth, listIndent, markdownLayout } from './bubble-layout';
 import { openExternal } from './open-external';
-import { stackedRows, tableLayoutFor } from './table-layout';
+import { stackedRows, fitsReportGrid } from './table-layout';
 
 export async function openMarkdownUrl(url: string) {
   if (!isSafeMarkdownUrl(url)) return;
@@ -55,25 +55,26 @@ const WITH_SRC: Src = (start, end) => (start == null ? {} : ({ dataSet: { mdLine
 function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[][]; rowLines?: number[]; src?: Src; rootProps?: object }) {
   const styles = useMd();
   const columns = rows.reduce((max, row) => Math.max(max, row.length), 0);
-  const layout = tableLayoutFor(columns, NATIVE);
-  if (layout === 'stacked') {
+  const [width, setWidth] = useState(0);
+  const measure = (event: {nativeEvent:{layout:{width:number}}}) => setWidth(Math.floor(event.nativeEvent.layout.width));
+  if (!fitsReportGrid(columns, width)) {
     return (
-      <View style={styles.tableStack} {...rootProps}>
+      <View style={styles.tableStack} {...rootProps} onLayout={e=>{measure(e); (rootProps as any)?.onLayout?.(e);}}>
         {stackedRows(rows).map((cells, rowIndex) => (
           <View key={rowIndex} style={styles.tableCard} {...src(rowLines?.[rowIndex + 1])}>
             {cells.map((cell, cellIndex) => (
               // One Text, label as a span: a label / value flex row inside the shrink-to-fit bubble gets its
               // height negotiated at a different width than it is drawn at (bubble-layout.ts).
-              <Text key={cellIndex} style={styles.text}><Text style={styles.tableCardLabel}>{cell.label}</Text>{'  '}<Inline text={cell.value} /></Text>
+              <Text key={cellIndex} style={styles.text}><Text style={styles.tableCardLabel}>{cell.label}：</Text><Inline text={cell.value} /></Text>
             ))}
           </View>
         ))}
       </View>
     );
   }
-  const cellStyle = layout === 'grid-flex' ? [styles.tableCellFlex, gridCellWidth(columns)] : styles.tableCell;
+  const cellStyle = [styles.tableCellFlex, gridCellWidth(columns)];
   const grid = (
-    <WideBlock style={styles.table}>
+    <View style={styles.table} onLayout={measure}>
       <View>
         {rows.map((row, rowIndex) => (
           <View key={rowIndex} style={[styles.tableRow, rowIndex === 0 && styles.tableHead]} {...src(rowLines?.[rowIndex])}>
@@ -83,7 +84,7 @@ function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[
           </View>
         ))}
       </View>
-    </WideBlock>
+    </View>
   );
   return rootProps && Object.keys(rootProps).length ? <View {...rootProps}>{grid}</View> : grid;
 }
@@ -134,6 +135,7 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
     <View style={styles.root}>
       {parseMarkdownBlocks(children, { hubImages: !!renderImage }).map((block, index) => {
         const id = `b${index}`;
+        if (block.kind === 'rule') return <View key={index} style={styles.rule} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)} />;
         if (block.kind === 'image') return renderImage ? renderImage(block, index) : null;
         if (block.kind === 'heading') {
           const nth = headingIndex++;
@@ -169,7 +171,8 @@ const makeStyles = (L = markdownLayout(), ink?: { text: string; link: string }) 
   strong: { fontWeight: '600' },
   em: { fontStyle: 'italic' },
   // 我发出的实底气泡里:行内代码用气泡字色 + 半透明白底(深浅主题下都是同一块浅一档的蓝),不再是一块输入框底色。
-  inlineCode: { color: ink ? ink.text : colors.accent, backgroundColor: ink ? 'rgba(255,255,255,0.18)' : colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
+  inlineCode: { color: ink?.text ?? colors.text, backgroundColor: ink ? 'rgba(255,255,255,0.18)' : colors.inputBg, fontFamily: 'monospace', fontSize: 13, ...WRAP_ANYWHERE },
+  rule: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, alignSelf: 'stretch' },
   link: { color: ink?.link ?? colors.accent, textDecorationLine: 'underline' },
   listRow: L.listRow,
   marker: { color: ink?.text ?? colors.textSecondary, fontSize: 14, lineHeight: 21, textAlign: 'right', ...L.marker },
@@ -186,7 +189,7 @@ const makeStyles = (L = markdownLayout(), ink?: { text: string; link: string }) 
   tableCellFlex: { borderColor: colors.border, ...L.tableCellFlex },
   // 原生 ≥3 列:每行一张卡,「表头: 值」逐行
   tableStack: L.tableStack,
-  tableCard: { borderColor: colors.border, borderRadius: radius.item, backgroundColor: colors.inputBg + '55', ...L.tableCard },
+  tableCard: { borderBottomWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingVertical: spacing.xs, gap: 2 },
   tableCardLabel: { color: ink?.text ?? colors.textMuted, fontSize: 12 },
 });
 

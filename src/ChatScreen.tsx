@@ -637,6 +637,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   })), []);
   // 桌面气泡最大宽度:窗格的 85%,但不超过 DESKTOP_BUBBLE_MAX(宽窗口里一行字不拉满)。手机不变。
   const bubbleCap = desktopBubbleCap(desktop, paneWidth);
+  // The measured chat pane already excludes the tool rail. Reserve list padding, avatar and gap once.
+  const replyCap = paneWidth > 0 ? { maxWidth: Math.max(1, Math.min(704, paneWidth - 2 * spacing.lg - ds(36) - spacing.sm)) } : bubbleCap;
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
   // #745:当前会话已拉到的 hub 行(newest-first)。轮询刷新最新一页、往上翻按游标接更早的一页,都只改它。
@@ -3072,7 +3074,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                     <Pressable accessibilityRole="button" accessibilityLabel={replyOutgoing ? outgoingReplyAuthor(item, alias) : alias} testID="chat-sender-avatar-reply" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'reply', outgoing: replyOutgoing, currentAlias: alias, currentUserId, row: item }))}>
                       <AliasAvatar alias={replyOutgoing ? outgoingReplyAuthor(item, alias) : alias} size={36} />
                     </Pressable>
-                    <View style={[styles.messageContent, bubbleCap, item.late ? { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.sm } : null]}>
+                    <View style={[styles.messageContent, replyCap, item.late ? { borderLeftWidth: 3, borderLeftColor: colors.textMuted, paddingLeft: spacing.sm } : null]}>
                       {/* 2026-09-16 Vincent:「每条消息都展示下时间吧」—— 回复用完成时刻,没有就用创建时刻 */}
                       <ChatMetaLine name={`${replyOutgoing ? outgoingReplyAuthor(item, alias) : alias}${item._proactive ? t('chat.proactive') : ''}${item.late ? t('chat.lateReply') : ''}`} time={(item.completed_at ?? item.created_at) ? formatChatHeader(item.completed_at ?? item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-reply" />
                       <Pressable
@@ -3081,7 +3083,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                         delayLongPress={300}
                         style={styles.replyPressable}
                       >
-                        <View style={[styles.bubble, styles.replyBubble, desktop && styles.replyBubbleDesktop]} ref={bubbleRef(`${msgKey(item)}:reply`)}>
+                        <View style={[styles.bubble, styles.replyBubble, styles.replyBubbleDesktop]} ref={bubbleRef(`${msgKey(item)}:reply`)}>
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
