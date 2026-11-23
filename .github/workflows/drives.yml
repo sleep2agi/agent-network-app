@@ -131,23 +131,27 @@ jobs:
           path: web-export
       # Chromium 下载（~167 MB）按 Playwright 版本缓存，别每个 shard 每次都重下。
       - if: env.RUN_DRIVES == 'true'
+        id: playwright-cache
         uses: actions/cache@v4
         with:
           path: ~/.cache/ms-playwright
           key: ms-playwright-1.58.2-chromium-${{ runner.os }}
-      # Same Playwright as the suites' Docker images (mcr.microsoft.com/playwright:v1.58.2-noble).
-      # 2026-11-19：Ubuntu 软件源整下午 503，--with-deps 装系统字体失败（exit 100），shard 全红只能手动重跑。
-      # 现在失败自动重试 3 次（间隔 30 秒），偶发的源抽风不再让 PR 卡住。
+      # Bound each attempt below the step timeout so a hung installer can retry,
+      # instead of consuming the whole 25-minute job. Browser cache hits never download.
       - name: Playwright + Chromium
+        id: playwright-install
         if: env.RUN_DRIVES == 'true'
-        run: |
-          npm install --prefix /tmp/pw --no-audit --no-fund playwright@1.58.2
-          for attempt in 1 2 3; do
-            if /tmp/pw/node_modules/.bin/playwright install --with-deps chromium; then exit 0; fi
-            echo "::warning::playwright install failed (attempt $attempt/3), retrying in 30s"
-            sleep 30
-          done
-          exit 1
+        timeout-minutes: 5
+        continue-on-error: true
+        env:
+          PLAYWRIGHT_CACHE_HIT: ${{ steps.playwright-cache.outputs.cache-hit }}
+        run: timeout --signal=TERM --kill-after=10s 270s bash scripts/install-drive-browser.sh
+      - name: Retry Playwright + Chromium once
+        if: env.RUN_DRIVES == 'true' && steps.playwright-install.outcome == 'failure'
+        timeout-minutes: 5
+        env:
+          PLAYWRIGHT_CACHE_HIT: ${{ steps.playwright-cache.outputs.cache-hit }}
+        run: timeout --signal=TERM --kill-after=10s 270s bash scripts/install-drive-browser.sh
       - name: Run shard
         if: env.RUN_DRIVES == 'true'
         env:
