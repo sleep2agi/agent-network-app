@@ -233,5 +233,11 @@ export function agentCount(placed: readonly PlacedAgent[], data: AgentOrgData, d
 }
 
 export function orgTree(data: Pick<AgentOrgData, 'departments'>): OrgData {
-  return { departments: data.departments, members: [] };
+  const ids = new Set(data.departments.map(d => d.id));
+  // A parent may be outside this user's visible directory. Keep that branch
+  // reachable from the root without inventing a department for it.
+  return { departments: data.departments.map(d => d.parent_id && (!ids.has(d.parent_id) || d.parent_id === d.id)
+    ? { ...d, parent_id: null } : d), members: [] };
 }
+
+export const showUnassigned = (count: number) => count > 0;

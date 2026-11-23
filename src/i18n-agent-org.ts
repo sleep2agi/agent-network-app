@@ -15,6 +15,7 @@ export const agentOrgTranslations = {
   'agentOrg.empty': ['还没有部门', 'No departments yet'],
   'agentOrg.unowned': ['未归属', 'Unassigned'],
   'agentOrg.agentsCount': ['{count} 个 Agent', '{count} agents'],
+  'agentOrg.agentsInclusive': ['含下级共 {count} 个 Agent', '{count} agents including subdepartments'],
   'agentOrg.owner': ['负责人 {name}', 'Owner {name}'],
   'agentOrg.noAgents': ['这个部门下面没有 Agent', 'No agents in this department'],
   'agentOrg.noOwner': ['没有负责人', 'No owner'],
