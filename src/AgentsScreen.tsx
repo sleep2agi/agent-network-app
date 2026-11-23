@@ -556,7 +556,11 @@ export default function AgentsScreen({
         sortByActivity: SORT_BY_ACTIVITY,
         activityAt: alias => activityByAlias.get(alias) ?? 0,
       },
-      unread: { count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0 },
+      // While the list says “名称前缀”, unread agents belong to their visible prefix too.
+      // Keep badges and the unread tab driven by the same counts; only suppress promotion.
+      unread: viewGroupBy === 'department' && !deptByAlias.size ? undefined : {
+        count: alias => floatInput.counts[alias] ?? 0, lastMessageAt: alias => floatInput.lastAt[alias] ?? 0,
+      },
       // 有部门数据时,没有归属的 agent 统一进「未归属」——按部门分区就要把没分配的也显式列出来,
       // 否则它们会被前缀拆成好几种「看起来像部门」的组。没有部门数据时 undefined = 旧行为。
       teamOf: alias => (viewGroupBy === 'status'
