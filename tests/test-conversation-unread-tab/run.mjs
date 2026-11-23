@@ -36,11 +36,11 @@ const box = async (page, sel) => { const b = await page.locator(sel).first().bou
 
 const UNREAD = ['示例牛2号', '示例猫1号', '示例马3号'];
 
-const initScript = ({ theme, unread }) => {
+const initScript = ({ theme, unread, slowDepartments = false }) => {
   const HUB = 'http://mock-hub.invalid';
   const now = Date.now();
   const iso = (minAgo) => new Date(now - minAgo * 60000).toISOString();
-  const teams = ['示例牛', '示例猫', '示例马'];
+  const teams = slowDepartments ? ['o10样例', 'TM样例', 'TMA样例'] : ['示例牛', '示例猫', '示例马'];
   const sessions = Array.from({ length: 12 }, (_, i) => ({ alias: `${teams[i % 3]}${Math.floor(i / 3) + 1}号`, status: i % 5 ? 'idle' : 'offline', agent: 'claude-code', node_id: `n_tab_${i}`, updated_at: iso(5 + i) }));
   const humans = [{ user_id: 'u_tester', username: 'tester' }, { user_id: 'u_1', username: 'chuqi' }, { user_id: 'u_2', username: 'chengshi' }];
   const threads = [{ other_user_id: 'u_2', last_at: iso(3), unread: 2 }];
@@ -88,6 +88,10 @@ const initScript = ({ theme, unread }) => {
         case 'plugin:http|fetch': { const id = ++rid; reqs.set(id, args.clientConfig); return id; }
         case 'plugin:http|fetch_send': {
           const c = reqs.get(args.rid);
+          if (slowDepartments && new URL(c.url).pathname.endsWith('/departments')) {
+            window.__deptPending = true;
+            await new Promise(resolve => { window.__finishDepartments = resolve; });
+          }
           const body = route(c.url, String(c.method || 'GET').toUpperCase(), c.data);
           const buf = new TextEncoder().encode(body === null ? '{"ok":false}' : JSON.stringify(body));
           const id = ++rid; bodies.set(id, { buf, sent: false });
@@ -206,6 +210,32 @@ async function run(vp, viewport, ua, theme, phone) {
 }
 
 for (const theme of ['light', 'dark']) {
+  const p = await browser.newPage({ viewport: { width: 390, height: 844 }, userAgent: ANDROID_UA, colorScheme: theme });
+  const unread = ['o10样例1号', 'TM样例1号', 'TMA样例1号'];
+  await p.addInitScript(t => {
+    localStorage.setItem('theme_mode_v1', t);
+    localStorage.setItem('anet.language.v1', 'zh');
+    localStorage.setItem('agent_list_collapsed_v1', JSON.stringify(['TM', 'o1']));
+  }, theme);
+  await p.addInitScript(initScript, { theme, unread, slowDepartments: true });
+  await p.goto(web.url);
+  await p.waitForFunction(() => window.__deptPending && document.querySelector('[data-testid="conversation-tab-unread-count"]')?.textContent === '4');
+  const group = name => p.locator(tid(`agent-group-${name}`));
+  await group('TM').waitFor();
+  record(theme, 'departments pending: folded prefixes own all twelve agents', {
+    tm: (await group('TM').innerText()).includes('6/8'),
+    o1: (await group('o1').innerText()).includes('3/4'),
+    noLooseRows: await p.locator('[data-testid^="agent-row-"]').count() === 0,
+  });
+  await group('TM').click();
+  record(theme, 'opening TM reveals both TM unread agents, not o1', {
+    tm: await p.locator(tid(`agent-row-${unread[1]}`)).isVisible(),
+    tma: await p.locator(tid(`agent-row-${unread[2]}`)).isVisible(),
+    o1: !await p.locator(tid(`agent-row-${unread[0]}`)).count(),
+  });
+  await p.screenshot({ path: join(OUT, `prefix-midload-${theme}.png`) });
+  await p.evaluate(() => window.__finishDepartments());
+  await p.close();
   await run('desktop-1440x900', { width: 1440, height: 900 }, MAC_UA, theme, false);
   await run('phone-390x844', { width: 390, height: 844 }, ANDROID_UA, theme, true);
 }

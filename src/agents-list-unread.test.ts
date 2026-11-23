@@ -143,7 +143,7 @@ const pinned = (a: string) => a === '节点A' || a === '团队Y丙';
   const tray = read('./desktop-tray.ts');
   const screen = read('./AgentsScreen.tsx');
   ck('托盘 trayCountsFrom 直接返回 agentUnreadCounts(snap)', /export function trayCountsFrom\([^)]*\)[^{]*\{\s*return agentUnreadCounts\(snap\);\s*\}/.test(tray));
-  ck('节点列表的新消息组用 agentUnreadCounts 取数', /counts: agentUnreadCounts\(src\)/.test(screen) && /unread: \{ count: alias => floatInput\.counts\[alias\]/.test(screen));
+  ck('节点列表的新消息组用 agentUnreadCounts 取数', /counts: agentUnreadCounts\(src\)/.test(screen) && /count:\s*alias => floatInput\.counts\[alias\]/.test(screen));
 }
 
 console.log(`${pass}/${total} passed`);
