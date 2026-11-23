@@ -1,4 +1,4 @@
-import { Text } from 'react-native';
+import { Text } from './ui-text';
 import { colors } from './theme';
 import { useTranslation } from './i18n-react';
 import './i18n-accounts';
