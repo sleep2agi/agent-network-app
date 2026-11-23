@@ -2,6 +2,7 @@ import { registerTranslations } from './i18n';
 
 // 切换账号(Vincent 2026-09-29):设置里「退出登录」上面那一行、手机底部面板 / 桌面对话框、登录页「添加账号」模式。
 registerTranslations({
+  'accounts.httpAddressHint': ['这个地址没有加密，建议只在公司内网或可信网络使用', 'This address is not encrypted. Use it only on a company or trusted network.'],
   'accounts.switch': ['切换账号', 'Switch account'],
   // 设置 → 账号 重新设计(#427):分组标题 · ⋯ 菜单。
   'accounts.groupCurrent': ['当前账号', 'Current account'],
