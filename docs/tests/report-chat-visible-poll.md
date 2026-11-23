@@ -2,7 +2,7 @@
 
 One mounted chat, quiet network, warm steady-state minute, no retries, events or navigation. Per 5 s: `GET /api/tasks?to_name=…` and `GET /api/messages?scope=user` start together; successful inbound starts `GET /api/tasks?from_name=…`. Both task reads use `skip_stats=1`. The inbox reads 50 normally, 200 on cold start / 10 minute resync and falls back to 200 if the 50 do not overlap. The two header status reads run separately every 30 s. Navigation away unmounts the screen. Excludes global notification/other panes, send/retry, one-time identity lookup and explicit history navigation.
 
-`bun tests/chat-poll-ledger.ts`: synthetic loopback transport, virtual time, response body bytes only. Both directions deliberately use the supplied 114,000 / 691,000 bytes for 30 / 200 tasks respectively; inbox fixture 19,000 bytes, status fixtures 1,000 bytes. Not a packet capture from Android. A sparsely populated outbound direction will save fewer bytes. No Hub ETag assumed.
+`bun tests/chat-poll-ledger.mjs`: synthetic loopback transport, virtual time, response body bytes only. Both directions deliberately use the supplied 114,000 / 691,000 bytes for 30 / 200 tasks respectively; inbox fixture 19,000 bytes, status fixtures 1,000 bytes. Not a packet capture from Android. A sparsely populated outbound direction will save fewer bytes. No Hub ETag assumed.
 
 | Scenario | Before: requests / bytes per min | After: requests / bytes per min |
 |---|---:|---:|
