@@ -1437,6 +1437,10 @@ const sendTaskOnce = async (
     throw error;
   }
   const { res, data } = got;
+  if (res.status === 401) {
+    const expired = isTokenExpiredBody(data);
+    reportProfileAuthResponse(res.status, authProfileId(cfg), expired ? 'token_expired' : undefined, cfg.token);
+  }
   if (res.status === 401 || res.status === 403) sendIdentityCache.delete(sendIdentityKey(cfg));
   // CommHub returns this exact 429 only after an identical task was already
   // recorded during its five-minute deduplication window. Retire the local

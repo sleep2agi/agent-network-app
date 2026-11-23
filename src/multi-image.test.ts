@@ -217,7 +217,8 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8').
   check(/await uploadForSend</.test(send) && /concurrency: UPLOAD_CONCURRENCY/.test(send) && /runUploadQueue\(imgs,[\s\S]*?concurrency: args\.concurrency/.test(resendPlan), 'doSend uploads through the limited queue');
   check(!/Promise\.all\(imgs\.map/.test(send), 'no unbounded Promise.all upload left in doSend');
   const failAt = send.indexOf('if (!run.ok)');
-  const sendAt = send.indexOf('await sendTask(');
+  // 发送现在包在 runWithSendAutoRetry 里（超时自动重发），sendTask 仍必须排在上传失败的 return 之后。
+  const sendAt = send.search(/await (?:runWithSendAutoRetry\(\s*\(\) => )?sendTask\(/);
   check(failAt > 0 && sendAt > failAt && /_failed: true, _uploadError: summary[\s\S]*?return;/.test(send.slice(failAt, sendAt)), 'any failed upload stops BEFORE sendTask (no partial message)');
   check(/uploadMemo\.get\(cfg\.serverUrl, img\.uri, original\)/.test(send), 'retry skips already-uploaded images');
   check(/prepareForUpload\(img, original\)/.test(send) && /oversizeMessage\(prepared\)/.test(send), 'compress, then check 12MB, then upload');

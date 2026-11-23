@@ -298,7 +298,7 @@ const waitState = async (text, want, ms) => {
   while (Date.now() - t0 < ms) { st = await bubbleState(text); if (st === want) return { ok: true, ms: Date.now() - t0 }; await page.waitForTimeout(100); }
   return { ok: false, ms: Date.now() - t0, st };
 };
-const SEND_BOUND = 15_000 + 6_000; // HUB_TOOL_DEADLINE_MS + reconcile/render slack
+const SEND_BOUND = 3 * 15_000 + 3_000 + 8_000; // 1 initial + 2 auto-retries (1s/2s backoff) + reconcile/render slack
 const scenario = async (mode, { plugin = false, switchAway = false } = {}) => {
   await page.evaluate((off) => { try { off ? localStorage.setItem('anet.pooledHttp.off', '1') : localStorage.removeItem('anet.pooledHttp.off'); } catch {} }, plugin);
   const input = await openChat(A);

@@ -172,7 +172,8 @@ try {
     ck('reason: network_id_required → network', sendFailureReason(e(400, 'network_id_required')) === 'network');
     ck('reason: access denied to requested network → network', sendFailureReason(e(403, 'access denied to requested network')) === 'network');
     ck('reason: attachment_not_accessible → attachment', sendFailureReason(e(403, 'attachment_not_accessible')) === 'attachment');
-    ck('reason: timeout / plain Error → none (bare 未送达)', sendFailureReason(new Error('服务器 12 秒内没有响应')) === null);
+    ck('reason: timeout error → timeout (friendly network-slow prompt)', sendFailureReason(new Error('服务器 12 秒内没有响应')) === 'timeout');
+    ck('reason: unknown plain Error → none (bare 未送达)', sendFailureReason(new Error('unexpected failure')) === null);
     ck('reason: unknown hub code → none', sendFailureReason(e(500, 'boom')) === null);
     ck('recoverable set: only the three network-scoped failures',
       isNetworkScopedSendFailure(e(404, 'alias_not_found')) && isNetworkScopedSendFailure(e(400, 'network_id_required'))

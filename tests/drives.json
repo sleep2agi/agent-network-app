@@ -413,7 +413,7 @@
     },
     "test-send-dispatch/drive.mjs": {
       "kind": "stub",
-      "secs": 150
+      "secs": 240
     },
     "test-server-address-mask/drive.mjs": {
       "kind": "stub",

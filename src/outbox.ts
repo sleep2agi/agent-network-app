@@ -19,12 +19,16 @@
 //   - liveImages 是本进程内的原始 PickedImage(含 web/Tauri 的 Blob),重挂后靠它保住预览与重传;
 //   - 都拿不回来的图 = 丢了:重试拒发(绝不发出只剩文字的半条),见 resend-plan.ts。
 
+import type { SendFailureReason } from './send-failure-reason';
+
 export interface OutboxEntry {
   id: string; // == ChatScreen 的 _localId,重试复用
   alias: string; // 目标会话
   content: string;
   createdAt: number;
   state: 'pending' | 'failed';
+  /** 最近一次失败的分类原因（切会话/重开后仍保留「对方卡住了」等提示及是否允许重试）。 */
+  failReason?: SendFailureReason;
   hadImage?: boolean;
   priority?: 'high' | 'normal';
   /** 发送时的「原图」开关;重试沿用它。 */
@@ -200,11 +204,20 @@ export function outboxMarkFailed(id: string): void {
   flush();
 }
 
+/** 记下失败原因（切会话/重开后保留「对方卡住了」等提示及是否允许重试）。 */
+export function outboxSetFailReason(id: string, failReason: SendFailureReason): void {
+  const e = entries[id];
+  if (!e || e.failReason === failReason) return;
+  entries[id] = { ...e, failReason };
+  flush();
+}
+
 /** 重试前标回 pending(仍在盘上——重试中被杀照样恢复)。 */
 export function outboxMarkPending(id: string, createdAt = Date.now()): void {
   const e = entries[id];
   if (!e) return;
-  entries[id] = { ...e, state: 'pending', createdAt };
+  const { failReason: _cleared, ...rest } = e;
+  entries[id] = { ...rest, state: 'pending', createdAt };
   flush();
 }
 
