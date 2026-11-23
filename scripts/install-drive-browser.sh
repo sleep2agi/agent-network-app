@@ -1,9 +1,8 @@
 #!/usr/bin/env bash
 set -euo pipefail
 # Keep this version aligned with the exact browser-cache key and suite images.
-export PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1
 export DRIVE_PW_PREFIX="${DRIVE_PW_PREFIX:-/tmp/pw}"
-npm install --prefix "$DRIVE_PW_PREFIX" --no-audit --no-fund playwright@1.58.2
+PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --prefix "$DRIVE_PW_PREFIX" --no-audit --no-fund playwright@1.58.2
 pw="$DRIVE_PW_PREFIX/node_modules/.bin/playwright"
 # Browser caches do not contain OS libraries. Install these separately; the caller
 # bounds the entire attempt, including npm/apt, to 270 seconds.
