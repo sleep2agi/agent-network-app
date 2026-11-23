@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.614:",
+  "### 修复与改进",
+  "",
+  "- 助手发来的表格在手机和平板上更好读了；代码字样不再和链接一个颜色；平板上消息不再只占中间一窄条。",
+  "",
   "What's new in 0.2.613:",
   "### 修复与改进",
   "",
