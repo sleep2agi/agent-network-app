@@ -5,6 +5,13 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.613:",
+  "### 修复与改进",
+  "",
+  "- 聊天页平时只刷新最新 30 条，翻看过的历史每分钟校准一次，减少重复加载和服务器负担。",
+  "- 离开聊天页或把 App 切到后台时暂停轮询，回来后刷新；收到回复通知时及时补读消息。",
+  "- 修复助手列表中只有未读数时的错位，让名字居中、未读数与名字显示在同一行。",
+  "",
   "What's new in 0.2.612:",
   "### 修复与改进",
   "",
