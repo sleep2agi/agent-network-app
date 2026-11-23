@@ -66,8 +66,8 @@ offC();
 
 // ── wiring ──
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
-ck('chat wakes its own load on a reply', /onConversationReply\(cfg, alias, \(\) => \{ void load\(limitRef\.current\); \}/.test(chat));
-ck('the 5 s poll is still there as the fallback', /usePoll\(\(\) => load\(limitRef\.current\), 5000, \[load\]\)/.test(chat));
+ck('a visible chat schedules a fresh round after a reply', /onConversationReply\(cfg, alias,[\s\S]*?rounds\.reply\([\s\S]*?if \(live && chatForeground\(\)\) await readRound\(limitRef\.current\)/.test(chat));
+ck('the visible 5 s fallback uses the same readRound', /const tick = useCallback\([\s\S]*?rounds\.tick\([\s\S]*?readRound\(limit\s*[,)]/.test(chat) && chat.includes('usePoll(tick, 5000, [tick], foreground)'));
 const sse = readFileSync(new URL('./logs-sse.ts', import.meta.url), 'utf8');
 ck('the stream is the hub observer route /events/network/:id', sse.includes('/events/network/${encodeURIComponent(netId)}') && sse.includes("'start_network_event_stream'"));
 

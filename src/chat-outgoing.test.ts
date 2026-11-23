@@ -76,7 +76,7 @@ ck('reply author falls back when to_name equals alias', outgoingReplyAuthor({ fr
   ck('🔴 cache from another agent is never painted into this conversation', ids(firstPaintRows(inbound, { alias: B, rows: out }, A, 20)) === 'i1' && cachedOutgoing({ alias: B, rows: out }, A).length === 0);
   ck('first paint respects the limit', firstPaintRows(inbound, { alias: A, rows: Array.from({ length: 30 }, (_, i) => row(`x${i}`, A, B, `2026-11-14 08:${String(i).padStart(2, '0')}:00`)) }, A, 20).length === 20);
   const screen = require('node:fs').readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
-  ck('screen paints inbound together with cached outgoing', screen.includes("paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, params.limit), fetched, confirmed);"));
+  ck('screen paints inbound together with cached outgoing', screen.includes("paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, displayLimit), fetched, confirmed);"));
   ck('screen updates the cache when the outgoing refetch lands', screen.includes('outgoingCacheRef.current = { alias, rows: outgoingRows };'));
   ck('rows that really disappeared are still removed (repaint when cache had rows)', screen.includes('if (!outgoingRows.length && !hadOutgoing) return;'));
 }

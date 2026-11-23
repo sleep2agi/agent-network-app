@@ -6,3 +6,9 @@ export const nextPollDelay = (intervalMs: number, lastDurationMs: number): numbe
   const backoff = Math.max(intervalMs, lastDurationMs * 2);
   return Math.min(backoff, intervalMs * 6);
 };
+
+/** The primary reads set the next due time. A serialized outbound tail consumes
+ * time until then; it is not another reason to postpone the next primary read. */
+export function delayAfterTail(interval: number, primary: number, elapsed: number, failureDelay: number) {
+  return Math.max(0, Math.max(nextPollDelay(interval, primary), failureDelay) - Math.max(0, elapsed - primary));
+}

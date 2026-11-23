@@ -21,7 +21,7 @@ check('空输入 / 空 alias → 空', proactiveItemsForAgent(undefined, 'x').le
 check('proactiveBody 去首尾空白', proactiveBody({ title: ' t ', content: ' b ' }) === '**t**\n\nb');
 // 接线契约(ChatScreen import react-native,bun 里按源码查)
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
-const load = chat.slice(chat.indexOf('const load = useCallback('), chat.indexOf('// Reset the lazy window when the chat target changes'));
+const load = chat.slice(chat.indexOf('const readRound = useCallback('), chat.indexOf('const load = useCallback('));
 check('ChatScreen.load 与任务同一次轮询里取 scope=user 消息并映射为主动项', load.includes('fetchChatUserMessages(cfg') && load.includes('proactiveItemsForAgent('));
 check('主动项与任务分别到达但保留另一来源并按时间合并', load.includes('mergeChatSource(kept, rows, source)'));
 const render = chat.slice(chat.indexOf('renderItem={({ item, index }) => {'));

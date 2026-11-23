@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { pollBackoffMs, subscribeReconnect } from './connectivity';
-import { nextPollDelay } from './poll-delay';
+import { delayAfterTail } from './poll-delay';
 import { installConnectivityLifecycle } from './connectivity-lifecycle';
 
 installConnectivityLifecycle();
@@ -31,8 +31,9 @@ installConnectivityLifecycle();
  *  让真正停摆的页面多卡 30s 以上才被发现，得不偿失。 */
 export const WATCHDOG_FACTORS = 4;
 
-export function usePoll(fn: () => void | Promise<unknown>, intervalMs: number, deps: React.DependencyList): void {
+export function usePoll(fn: (first?: boolean, primarySettled?: () => void) => void | Promise<unknown>, intervalMs: number, deps: React.DependencyList, visible?: boolean): void {
   useEffect(() => {
+    if (visible === false) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
     let active = true;
     let running = false;
@@ -47,6 +48,7 @@ export function usePoll(fn: () => void | Promise<unknown>, intervalMs: number, d
     // 从界面上只能看到「不刷新」，看不出「轮询死了」）。这里强制复位并记 warn。
     let runningSince = 0;
     let gen = 0;
+    let first = true;
     const tick = async () => {
       if (!active) return;
       if (running) {
@@ -59,14 +61,17 @@ export function usePoll(fn: () => void | Promise<unknown>, intervalMs: number, d
       running = true;
       runningSince = Date.now();
       const started = runningSince;
-      try { await fn(); } catch { /* the poller itself never throws; keep polling */ }
+      const initial = first; first = false;
+      let primaryMs: number | undefined;
+      try { if (visible === undefined) await fn(); else await fn(initial, () => { primaryMs = Date.now() - started; }); } catch { /* keep polling */ }
       // 被看门狗复位过的那一代，settle 时不要再改状态/排期（否则会和新的 tick 打架）
       if (myGen !== gen) return;
       running = false;
-      schedule(Math.max(nextPollDelay(intervalMs, Date.now() - started), pollBackoffMs(intervalMs)));
+      const elapsed = Date.now() - started;
+      schedule(delayAfterTail(intervalMs, primaryMs ?? elapsed, elapsed, pollBackoffMs(intervalMs)));
     };
     void tick();
-    const sub = AppState.addEventListener('change', s => {
+    const sub = visible !== undefined ? undefined : AppState.addEventListener('change', s => {
       if (s === 'active') {
         active = true;
         void tick();
@@ -79,8 +84,8 @@ export function usePoll(fn: () => void | Promise<unknown>, intervalMs: number, d
     return () => {
       active = false;
       if (timer) clearTimeout(timer);
-      sub.remove();
+      sub?.remove();
       unsubReconnect();
     };
-  }, deps);
+  }, [...deps, visible]);
 }
