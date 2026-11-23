@@ -4,6 +4,9 @@ set -euo pipefail
 export DRIVE_PW_PREFIX="${DRIVE_PW_PREFIX:-/tmp/pw}"
 PLAYWRIGHT_SKIP_BROWSER_DOWNLOAD=1 npm install --prefix "$DRIVE_PW_PREFIX" --no-audit --no-fund playwright@1.58.2
 pw="$DRIVE_PW_PREFIX/node_modules/.bin/playwright"
+# A prior timed-out apt attempt may have unpacked packages. Repair that state
+# before retrying; never delete dpkg locks or ignore configuration failures.
+sudo timeout --signal=TERM --kill-after=5s 30s dpkg --configure -a
 # Browser caches do not contain OS libraries. Install these separately; the caller
 # bounds the entire attempt, including npm/apt, to 270 seconds.
 # Playwright otherwise spawns sudo/apt itself: an unprivileged outer timeout

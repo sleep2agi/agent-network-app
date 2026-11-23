@@ -18,7 +18,7 @@ class InstallTest(unittest.TestCase):
             sudo = binaries / 'sudo'
             sudo.write_text('#!/bin/bash\necho "sudo $*" >> "$LOG"\nexec "$@"\n')
             sudo.chmod(0o755)
-            for path in [binaries / 'npm', binaries / 'node', pw / 'playwright']:
+            for path in [binaries / 'npm', binaries / 'node', binaries / 'dpkg', pw / 'playwright']:
                 path.write_text('#!/bin/bash\necho "$(basename "$0") $*" >> "$LOG"\n'
                                 'if [[ -n "$FAIL" && "$*" == *"$FAIL"* ]]; then exit 42; fi\n')
                 path.chmod(0o755)
@@ -33,6 +33,7 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(code, 0)
         self.assertIn('playwright install-deps chromium', log)
         self.assertIn('sudo timeout --signal=TERM --kill-after=10s 180s', log)
+        self.assertLess(log.index('dpkg --configure -a'), log.index('playwright install-deps chromium'))
         self.assertNotIn('playwright install chromium', log)
         self.assertIn('node --input-type=module', log)
 
@@ -46,6 +47,11 @@ class InstallTest(unittest.TestCase):
         self.assertEqual(code, 42)
         self.assertNotIn('playwright install chromium', log)
         self.assertNotIn('node --input-type=module', log)
+
+    def test_failed_package_repair_stops_install(self):
+        code, log = self.run_install('', '--configure')
+        self.assertEqual(code, 42)
+        self.assertNotIn('playwright install-deps chromium', log)
 
 if __name__ == '__main__':
     unittest.main()
