@@ -34,7 +34,7 @@ const tag = 'desktop-v0.2.287';
 ck('存在唯一的 prepare-release job', /prepare-release:[\s\S]{0,200}runs-on: ubuntu-latest/.test(wf));
 ck('prepare-release 输出 release_id', /prepare-release:[\s\S]{0,600}release_id: \$\{\{ steps\.prepare\.outputs\.release_id \}\}/.test(wf));
 ck('prepare-release 调用专用脚本', wf.includes('node scripts/prepare-desktop-release.mjs'));
-ck('build-release 依赖 prepare-release', /build-release:\n    needs: \[prepare-release\]/.test(wf));
+ck('build-release 依赖预检与 prepare-release', /build-release:\n    needs: \[android-source-preflight, prepare-release\]/.test(wf));
 ck('矩阵 job 内不再有按 tag 删草稿的步骤', !wf.includes('Remove stale draft releases for this tag'));
 ck('矩阵 job 内不再等其它平台先建草稿', !wf.includes('Wait for the single draft release created by the macOS job'));
 
@@ -141,7 +141,7 @@ ck('从 workflow 解出 releaseBody 并替换 __VERSION__',
 
 // 6. dry run 仍能构建 + updater 写入串行 + 二进制上传走 uploads host
 ck('publish=false 的 dry run 仍会跑 build matrix（always() 保证 skipped prepare 不拖死 matrix）',
-  /build-release:[\s\S]{0,800}if: always\(\) && \(inputs\.publish == false \|\| needs\.prepare-release\.result == 'success'\)/.test(wf));
+  /build-release:[\s\S]{0,1000}if: always\(\) && needs\.android-source-preflight\.result == 'success' && \(inputs\.publish == false \|\| needs\.prepare-release\.result == 'success'\)/.test(wf));
 ck('矩阵并行时各腿不写 latest.json（由 assemble 一次性生成），带 Linux 才串行', wf.includes('max-parallel: ${{ inputs.include_linux && 1 || 2 }}') && wf.includes('uploadUpdaterJson: ${{ inputs.include_linux }}'));
 ck('二进制资产上传走完整 uploads.github.com URL（不用 gh api --hostname）', (() => {
   const normalizeSrc = readFileSync(new URL('../scripts/normalize-desktop-update-manifest.mjs', import.meta.url), 'utf8');
