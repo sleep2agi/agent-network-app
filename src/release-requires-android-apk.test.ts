@@ -24,5 +24,15 @@ check('不再保留「by hand」式静默放行',
   !/::warning::no android-build run for \$COMMIT/.test(wf)
   && !/::warning::android-build \$run_id for \$COMMIT concluded/.test(wf)
   && !/did not finish in 20 minutes; attach the APK by hand/.test(wf));
+// 0.2.614：挂 APK 这一步用 `releases/tags/<tag>` 查草稿 ⇒ HTTP 404（草稿在发布前没有 tag ref），
+// Mac / Windows 都构建完了，卡在最后一步。同一个错此前在 0.2.455、0.2.504 各出过一次。
+// 这个 job 跑在发布之前：只能用 prepare-release 交出来的 release_id 找草稿。
+const attach = wf.slice(wf.indexOf('\n  attach-android-apk:'), wf.indexOf('\n  normalize-updater-manifest:'));
+check('挂 APK 的 job 拿得到 prepare-release 的 release_id', /needs: \[prepare-release, build-release, verify-draft\]/.test(attach)
+  && attach.includes('RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}'));
+check('挂 APK 的 job 按 id 读草稿并核对是本版本', attach.includes('gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID"')
+  && attach.includes('= "desktop-v$version" ]'));
+check('挂 APK 的 job 里没有任何按 tag 查 release 的调用',
+  attach.length > 1000 && !attach.split(/\r?\n/).some(l => !/^\s*#/.test(l) && /releases\/tags\//.test(l)));
 if (failed) { console.error(`${failed} check(s) failed`); process.exit(1); }
 console.log('all green');

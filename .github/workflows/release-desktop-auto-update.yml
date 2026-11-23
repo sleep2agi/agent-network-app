@@ -3438,7 +3438,8 @@ jobs:
   #   * 用 aapt2 再核一次 versionName,避免「同 commit 但版本号不对」的包被挂上去;
   #   * 找不到 android-build 就 warning 跳过,不拖住桌面发布(镜像会等 30 分钟后照常同步)。
   attach-android-apk:
-    needs: [build-release, verify-draft]
+    # prepare-release is listed for its release_id output: the draft is addressed by id, never by tag.
+    needs: [prepare-release, build-release, verify-draft]
     if: inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 35
@@ -3526,6 +3527,7 @@ jobs:
           PINNED_ARTIFACT: ${{ steps.find.outputs.artifact_id }}
           PINNED_DIGEST: ${{ steps.find.outputs.artifact_digest }}
           PINNED_ATTEMPT: ${{ steps.find.outputs.run_attempt }}
+          RELEASE_ID: ${{ needs.prepare-release.outputs.release_id }}
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
@@ -3556,7 +3558,12 @@ jobs:
           fi
           node scripts/android-attachment-identity.mjs "$version" "${{ inputs.commit }}" "$apk"
           cp "$apk" "$tmp/$name"
-          gh api "repos/$GITHUB_REPOSITORY/releases/tags/desktop-v$version" > "$tmp/release.json"
+          # This job runs before publication. A draft has no tag ref yet, so `releases/tags/<tag>`
+          # answers 404 (0.2.455, 0.2.504, and again on 0.2.614). Read the draft by the id that
+          # prepare-release handed out and confirm it is the release for this version.
+          [[ "$RELEASE_ID" =~ ^[0-9]+$ ]] || { echo "::error::prepare-release did not hand over a release id"; exit 1; }
+          gh api "repos/$GITHUB_REPOSITORY/releases/$RELEASE_ID" > "$tmp/release.json"
+          [ "$(jq -r .tag_name "$tmp/release.json")" = "desktop-v$version" ] || { echo "::error::release $RELEASE_ID is not desktop-v$version"; exit 1; }
           existing=$(jq -r --arg name "$name" '[.assets[] | select(.name == $name)] | if length == 0 then "" elif length == 1 then .[0].digest else error("duplicate APK assets") end' "$tmp/release.json")
           digest="sha256:$(sha256sum "$tmp/$name" | cut -d ' ' -f1)"
           if [ -n "$existing" ]; then
