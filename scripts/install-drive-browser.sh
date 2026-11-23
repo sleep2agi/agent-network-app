@@ -7,7 +7,10 @@ npm install --prefix "$DRIVE_PW_PREFIX" --no-audit --no-fund playwright@1.58.2
 pw="$DRIVE_PW_PREFIX/node_modules/.bin/playwright"
 # Browser caches do not contain OS libraries. Install these separately; the caller
 # bounds the entire attempt, including npm/apt, to 270 seconds.
-"$pw" install-deps chromium
+# Playwright otherwise spawns sudo/apt itself: an unprivileged outer timeout
+# cannot reliably terminate that root process, leaving dpkg locked on retry.
+# Give the privileged process group its own shorter deadline and kill fallback.
+sudo timeout --signal=TERM --kill-after=10s 180s "$pw" install-deps chromium
 if [[ "${PLAYWRIGHT_CACHE_HIT:-}" == true ]]; then
   echo 'Exact Playwright browser cache hit; skipping browser download.'
 else
