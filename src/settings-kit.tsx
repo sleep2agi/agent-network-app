@@ -424,7 +424,15 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
       onPress={onPress}
       style={({ pressed }) => [styles.profileCard, { minHeight: Math.max(76, ds(84)) }, pressed && { opacity: 0.88 }]}
     >
-      <View style={styles.profileAvatar}><AliasAvatar alias={name} size={52} /></View>
+      {/* admin 2026-11-23：设置页不再用随机卡通插画（AliasAvatar 会按 alias 哈希到插画池），
+          统一成克制的字标；用户自设头像仍在「头像」小节里编辑。 */}
+      <View style={styles.profileAvatar}>
+        <View style={{ width: 52, height: 52, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
+          <Text style={{ fontSize: 20, fontWeight: '600', color: colors.textSecondary }}>
+            {(name || '?').trim().slice(0, 1).toUpperCase()}
+          </Text>
+        </View>
+      </View>
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
           <Text style={styles.profileName} numberOfLines={1} testID={`${id}-label`}>{name}</Text>

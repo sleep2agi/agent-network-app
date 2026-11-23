@@ -20,9 +20,9 @@ const groups = groupProfilesByHub(list);
 ck('same host+port share one group, first-seen order, local first', eq(groups.map(g => [g.local, g.profiles.map(x => x.profileId)]), [[true, [LOCAL_HUB_PROFILE_ID]], [false, ['a', 'b', 'd']], [false, ['c']]]));
 ck('different port = different Hub group', groups.filter(g => !g.local).length === 2);
 ck('empty list → no groups', groupProfilesByHub([]).length === 0);
-ck('short network id drops net_ prefix, 6 chars', shortNetworkId('net_399bdf86f528') === '399bdf' && shortNetworkId(undefined) === '');
-ck('row detail: no host, short net', accountRowDetail(list[0], '网络') === '网络 399bdf');
-ck('row detail: username shown only when display name differs', accountRowDetail(list[2], '网络') === 'local-admin · 网络 ee6c4e' && accountRowDetail(prof('x', 'h', 'u', undefined, 'u'), 'net') === '');
+ck('short network id 已废弃：恒返回空串（内部 id 不再外露）', shortNetworkId('net_399bdf86f528') === '' && shortNetworkId(undefined) === '');
+ck('row detail: no host, no network id', accountRowDetail(list[0], '网络') === '');
+ck('row detail: username shown only when display name differs', accountRowDetail(list[2], '网络') === 'local-admin' && accountRowDetail(prof('x', 'h', 'u', undefined, 'u'), 'net') === '');
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

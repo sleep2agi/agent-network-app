@@ -23,14 +23,14 @@ export function groupProfilesByHub(profiles: readonly HubProfile[]): AccountHubG
   return out.sort((a, b) => Number(b.local) - Number(a.local));
 }
 
-/** 网络 id 的短写:`net_399bdf86f528` → `399bdf`。够区分,不把整串 id 摊给用户看。 */
-export const shortNetworkId = (id?: string | null): string => (id ? id.replace(/^net_/, '').slice(0, 6) : '');
+/** 已废弃：内部网络 id 不再出现在任何用户可见文案里（admin 2026-11-23）。
+ *  保留导出只为兼容旧测试/调用点，返回值恒为空串。 */
+export const shortNetworkId = (_id?: string | null): string => '';
 
 /** 分组里一行的副标题:用户名(显示名不同时才写)+ 网络短 id。Hub 地址已经在组标题里,不再重复。 */
-export function accountRowDetail(p: Pick<HubProfile, 'username' | 'displayName' | 'networkId'>, networkLabel: string): string {
+export function accountRowDetail(p: Pick<HubProfile, 'username' | 'displayName' | 'networkId'>, _networkLabel: string): string {
+  // admin 2026-11-23：只留账号名（显示名与用户名不同才写），**不再拼网络 id**
   const parts: string[] = [];
   if (p.username && p.displayName && p.displayName !== p.username) parts.push(p.username);
-  const net = shortNetworkId(p.networkId);
-  if (net) parts.push(`${networkLabel} ${net}`);
   return parts.join(' · ');
 }
