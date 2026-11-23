@@ -617,6 +617,14 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.612:
+            ### 修复与改进
+
+            - 消息超时未发出时会自动重发，最多重试两次，不用手点；重发时显示「网络慢，正在重试…」。
+            - 发送失败会说清原因：网络慢、对方卡住、对方没在运行或登录过期。
+            - 修复点「重试」时聊天记录会闪没，以及键盘弹着时第一下点不中的问题。
+            - 账号设置去掉内部网络编号，默认头像统一为字标，当前账号优先显示自设头像。
+
             What's new in 0.2.611:
             ### 改进
 
