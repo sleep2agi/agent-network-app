@@ -1,6 +1,10 @@
 {
   "//": "Every tests/*/drive.mjs and tests/*/run.mjs, and how CI runs it. stub = needs only the web export + Chromium (run by .github/workflows/drives.yml in shards; secs = measured runtime, used to balance shards); docker = builds its own bundle with its Dockerfile (nightly job); hub / manual = not in CI, with the reason. src/drive-registry.test.ts fails when a drive is missing here.",
   "drives": {
+    "test-report-readability/drive.mjs": {
+      "kind": "manual",
+      "why": "Before/after screenshot capture for report tables at 390/960/1440 in light and dark; writes PNGs to /out and needs PHASE, so it is run by hand for visual review, not as a CI shard. The layout rules it shows are asserted in src/mobile-table.test.ts and src/markdown-model.test.ts."
+    },
     "composer-agent/drive.mjs": {
       "kind": "stub",
       "secs": 55
