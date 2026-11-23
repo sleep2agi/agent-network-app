@@ -1,6 +1,7 @@
+import { AppSwitch } from './AppSwitch';
 // 成员编辑器(#417)宽屏双栏弹窗的小积木:分段控件、方形复选框(含三态)、小开关。
 // 成员弹窗与任务权限区块(TaskAccessSection 的 desktop 画法)共用,两边长得一样。手机页用 settings-kit,不用这里。
-import { Pressable, StyleSheet, Switch, View } from 'react-native';
+import { Pressable, StyleSheet,  View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, radius, spacing, themeMode } from './theme';
@@ -61,14 +62,13 @@ export function LabeledSwitch({ label, value, onValueChange, accessibilityLabel,
   return (
     <View style={styles.switchWrap}>
       <Text style={styles.switchLabel} numberOfLines={1}>{label}</Text>
-      <Switch
+      <AppSwitch
         accessibilityLabel={accessibilityLabel}
         value={value}
         disabled={disabled}
         onValueChange={onValueChange}
         // 深色下关着的轨道若用 border 色,会和卡片、深色滑块糊成一片(看着像没有开关):抬到中灰。
-        trackColor={{ true: colors.accent, false: themeMode() === 'dark' ? colors.rest : colors.border }}
-        thumbColor={colors.card}
+
         testID={testID}
       />
     </View>

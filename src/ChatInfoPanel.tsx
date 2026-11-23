@@ -1,3 +1,4 @@
+import { AppSwitch } from './AppSwitch';
 // 聊天信息(微信式):会话页右上角「⋯」打开。行的取舍在 chat-info-model.ts,这里只画。
 //
 //   drawer — 桌面 / 安卓双栏:盖在聊天窗格上的右侧抽屉(不是 Modal,只盖这个窗格);
@@ -5,7 +6,7 @@
 //   page   — 手机单栏:推进来的一整页(Modal,自己的窗口 ⇒ useModalSafePadding),‹ / 系统返回关闭;
 //            web 导出里再压一条 history,让浏览器「后退」也只关这一页。
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
-import { BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet,  View } from 'react-native';
 import { Text } from './ui-text';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
@@ -190,13 +191,12 @@ function Row({ row, alias, subtitle, styles, onRow }: {
     return (
       <View style={styles.row} testID={testID} {...({ dataSet: { rowKind: 'toggle' } } as any)}>
         <Text style={styles.label} numberOfLines={1} testID={`${testID}-label`}>{label}</Text>
-        <Switch
+        <AppSwitch
           accessibilityLabel={label}
           value={!!row.value}
           onValueChange={() => onRow(row)}
           // Off track in textMuted: the border token vanishes against the dark card.
-          trackColor={{ true: colors.accent, false: colors.textMuted }}
-          thumbColor={colors.card}
+
           {...({ activeThumbColor: colors.card } as any)}
           testID={`${testID}-switch`}
         />

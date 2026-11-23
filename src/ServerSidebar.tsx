@@ -153,10 +153,6 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
           ))}
         </View>
       </ScrollView>
-      <View style={styles.footer}>
-        <Text style={styles.footerLabel}>{t('server.network')}</Text>
-        <Text style={styles.footerValue} numberOfLines={1}>{cfg.networkId ?? 'default'}</Text>
-      </View>
     </View>
   );
 }

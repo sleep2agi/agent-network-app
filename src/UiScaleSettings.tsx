@@ -138,9 +138,9 @@ export default function UiScaleSettings({ s, showFont, showDensity }: { s: Share
           testID="settings-ui-scale-reset"
           disabled={!anyStored}
           onPress={() => persistUiScale({ font: null, density: null })}
-          style={({ pressed }) => [s.actionButton, !anyStored && { opacity: 0.45 }, pressed && { opacity: 0.6 }]}
+          style={({ pressed }) => [{ paddingHorizontal: spacing.md, paddingVertical: spacing.sm }, !anyStored && { opacity: 0.45 }, pressed && { opacity: 0.6 }]}
         >
-          <Text style={s.actionButtonText}>{tr('settings.copy.102')}</Text>
+          <Text style={{ color: colors.textSecondary }}>{tr('settings.copy.102')}</Text>
         </Pressable>
       </View>
     </View>
@@ -177,7 +177,7 @@ export function UiScalePreview() {
       </View>
       <View style={st.buttons}>
         <View style={st.button}>
-          <Ionicons name="send" size={16} color={colors.onAccent} />
+          <Ionicons name="send" size={16} color={colors.textSecondary} />
           <Text style={st.buttonText}>{tr('settings.copy.72')}</Text>
         </View>
       </View>
@@ -207,6 +207,6 @@ const makePreviewStyles = () => { const g = agentRowGeometry(uiScale().listDense
   bubbleMe: { alignSelf: 'flex-end', backgroundColor: colors.bubbleMine },
   bubbleText: { color: colors.text, fontSize: 14, lineHeight: 20 },
   buttons: { flexDirection: 'row', justifyContent: 'flex-end', padding: spacing.md, borderTopWidth: StyleSheet.hairlineWidth, borderTopColor: colors.border },
-  button: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, height: ds(36), paddingHorizontal: spacing.lg, borderRadius: radius.control, backgroundColor: colors.accent },
-  buttonText: { color: colors.onAccent, fontSize: 13, fontWeight: '600' },
+  button: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs, height: ds(36), paddingHorizontal: spacing.lg, borderRadius: radius.control, backgroundColor: colors.bg },
+  buttonText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
 }); };

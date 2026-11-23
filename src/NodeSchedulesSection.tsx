@@ -1,3 +1,4 @@
+import { AppSwitch } from './AppSwitch';
 // 节点页「定时任务」分区:这个节点要执行的计划 —— Hub 计划 + 节点计划(RFC-036),按 node_id 认执行节点。
 // 取数与定时任务页同一套接口(scheduled-tasks / status 的 external_schedules / runs?limit=1),
 // 行怎么画、开关能不能按在 node-schedules.ts(纯函数,node-schedules.test.ts 测)。
@@ -5,7 +6,7 @@
 // 复制 / 取消计划 + 最近执行),不切页面;保存后列表就地刷新。节点计划(crontab 等)没有这些字段,仍去定时任务页。
 // 「＋ 新建」在节点页的分区标题上,由 NodeDetailScreen 画,经 createSeq 打开预填了这个节点的编辑器。
 import { useCallback, useEffect, useRef, useState } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet,  View } from 'react-native';
 import { Text } from './ui-text';
 import {
   SCHEDULE_PURGE_CAPABILITY,
@@ -360,14 +361,13 @@ function ScheduleRow({ row, last, busy, onOpen, onToggle, onDelete, stopped = fa
         </Pressable>
       ) : null}
       {onDelete && stopped ? null : <View style={s.toggleWrap} testID={`node-schedule-toggle-${id}`}>
-        <Switch
+        <AppSwitch
           accessibilityLabel={row.toggle.value ? `暂停 ${row.name}` : `恢复 ${row.name}`}
           accessibilityHint={row.toggle.hint ?? undefined}
           value={row.toggle.value}
           disabled={row.toggle.disabled || busy}
           onValueChange={onToggle}
-          trackColor={{ true: colors.accent, false: colors.border }}
-          thumbColor={colors.card}
+
         />
       </View>}
     </View>
