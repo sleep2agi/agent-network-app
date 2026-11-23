@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.611:",
+  "### 改进",
+  "",
+  "- 账号设置不再显示内部网络编号，当前账号卡与账号列表统一使用简洁字标头像，让账号信息更易辨认。",
+  "",
   "What's new in 0.2.610:",
   "### 修复",
   "",
