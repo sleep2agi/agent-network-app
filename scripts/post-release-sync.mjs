@@ -2,6 +2,7 @@ import { execFileSync } from 'node:child_process';
 import { createHash } from 'node:crypto';
 import { writeFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { GH_MAX_BUFFER, RUNS_FIELDS } from './android-early-dispatch.mjs';
 
 const APP = 'sleep2agi/agent-network-app';
 const HUB = 'sleep2agi/agent-network';
@@ -36,7 +37,7 @@ export function defaults() {
   return {
     env: process.env,
     gh: (args, token = process.env.GH_TOKEN) => execFileSync('gh', args, {
-      env: { ...process.env, GH_TOKEN: token }, encoding: 'utf8', timeout: 60000,
+      env: { ...process.env, GH_TOKEN: token }, encoding: 'utf8', timeout: 60000, maxBuffer: GH_MAX_BUFFER,
     }).trim(),
     fetch: (url) => fetch(url, { headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(120000) }),
     now: () => Date.now(),
@@ -54,7 +55,7 @@ async function get(d, url) {
 }
 
 async function runs(d, repo, workflow, token) {
-  return JSON.parse(await d.gh(['api', `repos/${repo}/actions/workflows/${workflow}/runs?per_page=100`], token)).workflow_runs;
+  return JSON.parse(await d.gh(['api', `repos/${repo}/actions/workflows/${workflow}/runs?per_page=30`, '--jq', RUNS_FIELDS], token)).workflow_runs;
 }
 
 // Match only dispatch runs newer than the pre-dispatch high-water mark on main.
@@ -155,7 +156,7 @@ export async function main(d = defaults()) {
   if (!/^desktop-v\d+\.\d+\.\d+$/.test(tag || '')) throw new Error('Invalid RELEASE_TAG');
   const release = JSON.parse(await d.gh(['api', `repos/${APP}/releases/tags/${tag}`]));
   const id = identity(release, tag);
-  const comparison = JSON.parse(await d.gh(['api', `repos/${APP}/compare/${id.sha}...main`]));
+  const comparison = JSON.parse(await d.gh(['api', `repos/${APP}/compare/${id.sha}...main`, '--jq', '{status}']));
   if (!['ahead', 'identical'].includes(comparison.status)) throw new Error('Release SHA is not a main ancestor');
   const latest = JSON.parse(await d.gh(['api', `repos/${APP}/releases/latest`]));
   if (latest.id !== release.id) throw new Error('Release superseded: use version-specific manual recovery');

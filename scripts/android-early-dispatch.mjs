@@ -6,6 +6,10 @@ import { pathToFileURL } from 'node:url';
 import { validateAndroidBuildSource } from './android-build-source.mjs';
 import { pinnedBuild } from './android-pinned-build.mjs';
 
+export const GH_MAX_BUFFER = 64 * 1024 * 1024;
+// Only the fields the dispatch proof reads; the full run objects are ~15 KB each.
+export const RUNS_FIELDS = '{workflow_runs: [.workflow_runs[] | {id, event, head_branch, head_sha, created_at, status, conclusion, html_url}]}';
+
 export function versionChanged(current, parent) {
   if (![current, parent].every(v => /^\d+\.\d+\.\d+$/.test(v || ''))) throw new Error('Cannot establish package version change');
   return current !== parent;
@@ -29,7 +33,8 @@ export function validateEarlyTrigger(run, source, repository, commit) {
 async function main() {
   const repo = process.env.GITHUB_REPOSITORY, runId = process.env.BUILD_RUN_ID, commit = process.env.BUILD_COMMIT;
   if (!/^\d+$/.test(runId || '') || !/^[a-f0-9]{40}$/.test(commit || '')) throw new Error('Invalid run/commit');
-  const gh = args => execFileSync('gh', args, { encoding: 'utf8', timeout: 60000 }).trim();
+  // GitHub list/compare responses run to megabytes; Node's default 1 MB output cap aborts with ENOBUFS.
+  const gh = args => execFileSync('gh', args, { encoding: 'utf8', timeout: 60000, maxBuffer: GH_MAX_BUFFER }).trim();
   const run = JSON.parse(gh(['api', `repos/${repo}/actions/runs/${runId}`]));
   const parents = JSON.parse(gh(['api', `repos/${repo}/commits/${commit}`])).parents;
   const parent = parents?.[0]?.sha;
@@ -53,10 +58,10 @@ async function main() {
       headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(30000),
     }));
     if (alreadyPublished(record, source, run)) { console.log('已发布，跳过'); return; }
-    const comparison = JSON.parse(gh(['api', `repos/${repo}/compare/${commit}...main`]));
+    const comparison = JSON.parse(gh(['api', `repos/${repo}/compare/${commit}...main`, '--jq', '{status}']));
     if (!['ahead', 'identical'].includes(comparison.status)) throw new Error('Build source is no longer on main');
     const workflow = 'modelscope-android-publish.yml';
-    const runs = () => JSON.parse(gh(['api', `repos/${repo}/actions/workflows/${workflow}/runs?per_page=100`])).workflow_runs;
+    const runs = () => JSON.parse(gh(['api', `repos/${repo}/actions/workflows/${workflow}/runs?per_page=30`, '--jq', RUNS_FIELDS])).workflow_runs;
     const baseline = Math.max(0, ...runs().map(r => r.id));
     gh(['workflow', 'run', workflow, '--repo', repo, '--ref', 'main', '-f', `commit=${commit}`, '-f', `run_id=${runId}`, '-f', 'dry_run=false']);
     const deadline = Date.now() + 180000;
