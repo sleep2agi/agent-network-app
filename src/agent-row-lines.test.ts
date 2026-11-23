@@ -29,3 +29,6 @@ for (const width of [238, 306, 450]) {
     } finally { body.freeRecursive(); }
   }
 }
+
+// yoga-layout 的 wasm 会留住事件循环：断言都过了就显式退出（仓库约定，见 yoga-explicit-exit.test.ts）。任一断言失败会先抛错，走不到这里。
+console.log("agent-row-lines: all layout combinations ok"); process.exit(0);
