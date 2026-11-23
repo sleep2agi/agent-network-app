@@ -950,6 +950,7 @@ export default function SettingsScreen({
                           pill={tr('accounts.currentPill')}
                           extraPill={usersAvailable ? tr('users.role.admin') : currentProfile.profileId === LOCAL_HUB_PROFILE_ID ? tr('accounts.localPill') : undefined}
                           subtitle={[maskedHubHost(currentProfile.serverUrl), me.networkName || ''].filter(Boolean).join(' · ')}
+                          avatarUrl={authMe?.user?.avatar_url ?? undefined}
                           warning={currentProfile.requiresReauth ? tr('settings.copy.15') : undefined}
                           onMore={el => openProfileMore(currentProfile, el)}
                           moreLabel={tr('accounts.more', { name: accountName(currentProfile) })}

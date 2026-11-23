@@ -9,7 +9,7 @@
 // 宽屏(桌面两栏)右栏也用这些积木(#427「设置页整体重新设计」):SettingsPane 把内容收在一列居中的窄栏里,
 // 每段一张卡片;账号一段用 SettingsAccountRow(头像 · 名字 · 当前 · ⋯)。
 import { Children, Fragment, isValidElement, useRef, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type TextInputProps } from 'react-native';
+import { ActivityIndicator, Image, Pressable, StyleSheet, Switch, View, type TextInputProps } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing, radius } from './theme';
@@ -182,7 +182,10 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
  * ⋯ 放在 › / ✓ 同一列(右边缘对齐)。large = 当前账号那张卡(头像 48)。
  */
 /** 设置页统一字标头像：首字母 + card 底 + pill 圆角（尺寸随行高）。 */
-export function SettingsLetterAvatar({ name, size }: { name: string; size: number }) {
+export function SettingsLetterAvatar({ name, size, avatarUrl }: { name: string; size: number; avatarUrl?: string | null }) {
+  if (avatarUrl) {
+    return <Image source={{ uri: avatarUrl }} style={{ width: size, height: size, borderRadius: radius.pill, backgroundColor: colors.card }} />;
+  }
   return (
     <View style={{ width: size, height: size, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
       <Text style={{ fontSize: Math.round(size * 0.4), fontWeight: '600', color: colors.textSecondary }}>
@@ -192,7 +195,7 @@ export function SettingsLetterAvatar({ name, size }: { name: string; size: numbe
   );
 }
 
-export function SettingsAccountRow({ name, subtitle, warning, current, badge, large, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
+export function SettingsAccountRow({ name, subtitle, warning, current, badge, large, avatarUrl, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
   name: string;
   subtitle?: string;
   /** 例如「登录已失效」:红字,在灰字下面。 */
@@ -202,6 +205,8 @@ export function SettingsAccountRow({ name, subtitle, warning, current, badge, la
   /** 其他小标(本地工作区 =「本机」)。 */
   badge?: string;
   large?: boolean;
+  /** 自设头像（Hub 上的 avatar_url）；没有就显字标。 */
+  avatarUrl?: string | null;
   onPress?: () => void;
   onMore?: (anchor: any) => void;
   moreLabel?: string;
@@ -214,7 +219,7 @@ export function SettingsAccountRow({ name, subtitle, warning, current, badge, la
     <RowShell onPress={onPress} testID={id} accessibilityLabel={accessibilityLabel ?? name}>
       {/* admin 2026-11-23：账号行统一字标（默认不用随机卡通插画）；自设头像在「头像」小节里编辑 */}
       <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}>
-        <SettingsLetterAvatar name={name} size={large ? 48 : 36} />
+        <SettingsLetterAvatar name={name} size={large ? 48 : 36} avatarUrl={avatarUrl} />
       </View>
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
@@ -412,7 +417,7 @@ export function SettingsTextField({ label, testID, ...input }: TextInputProps & 
  * 底色用实底品牌色(solidBrand,深浅两档都是实底蓝),字和图形用 onSolid(两档都是白)——
  * 不用 accent:深色下 accent 是亮蓝、onAccent 是黑字,整张卡会发灰。
  */
-export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
+export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, avatarUrl, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
   name: string;
   subtitle?: string;
   pill?: string;
@@ -420,6 +425,7 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
   extraPill?: string;
   /** 例如「登录已失效」。 */
   warning?: string;
+  avatarUrl?: string | null;
   onPress?: () => void;
   /** 桌面账号页的当前账号:右侧 ⋯(复制 / 编辑 / 移除),没有 › 。 */
   onMore?: (anchor: any) => void;
@@ -440,11 +446,7 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
       {/* admin 2026-11-23：设置页不再用随机卡通插画（AliasAvatar 会按 alias 哈希到插画池），
           统一成克制的字标；用户自设头像仍在「头像」小节里编辑。 */}
       <View style={styles.profileAvatar}>
-        <View style={{ width: 52, height: 52, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
-          <Text style={{ fontSize: 20, fontWeight: '600', color: colors.textSecondary }}>
-            {(name || '?').trim().slice(0, 1).toUpperCase()}
-          </Text>
-        </View>
+        <SettingsLetterAvatar name={name} size={52} avatarUrl={avatarUrl} />
       </View>
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
