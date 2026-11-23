@@ -1,7 +1,7 @@
 import { useEffect } from 'react';
 import { AppState } from 'react-native';
 import { pollBackoffMs, subscribeReconnect } from './connectivity';
-import { nextPollDelay } from './poll-delay';
+import { delayAfterTail } from './poll-delay';
 import { installConnectivityLifecycle } from './connectivity-lifecycle';
 
 installConnectivityLifecycle();
@@ -31,7 +31,7 @@ installConnectivityLifecycle();
  *  让真正停摆的页面多卡 30s 以上才被发现，得不偿失。 */
 export const WATCHDOG_FACTORS = 4;
 
-export function usePoll(fn: (first?: boolean) => void | Promise<unknown>, intervalMs: number, deps: React.DependencyList, visible?: boolean): void {
+export function usePoll(fn: (first?: boolean, primarySettled?: () => void) => void | Promise<unknown>, intervalMs: number, deps: React.DependencyList, visible?: boolean): void {
   useEffect(() => {
     if (visible === false) return;
     let timer: ReturnType<typeof setTimeout> | null = null;
@@ -62,11 +62,13 @@ export function usePoll(fn: (first?: boolean) => void | Promise<unknown>, interv
       runningSince = Date.now();
       const started = runningSince;
       const initial = first; first = false;
-      try { if (visible === undefined) await fn(); else await fn(initial); } catch { /* keep polling */ }
+      let primaryMs: number | undefined;
+      try { if (visible === undefined) await fn(); else await fn(initial, () => { primaryMs = Date.now() - started; }); } catch { /* keep polling */ }
       // 被看门狗复位过的那一代，settle 时不要再改状态/排期（否则会和新的 tick 打架）
       if (myGen !== gen) return;
       running = false;
-      schedule(Math.max(nextPollDelay(intervalMs, Date.now() - started), pollBackoffMs(intervalMs)));
+      const elapsed = Date.now() - started;
+      schedule(delayAfterTail(intervalMs, primaryMs ?? elapsed, elapsed, pollBackoffMs(intervalMs)));
     };
     void tick();
     const sub = visible !== undefined ? undefined : AppState.addEventListener('change', s => {

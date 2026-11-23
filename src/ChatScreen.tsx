@@ -687,7 +687,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const foreground = useChatForeground();
   const rounds = useMemo(() => createChatRounds(), [conversationKeyFor, cfg]);
   const readRound = useCallback(
-    async (limit: number) => {
+    async (limit: number, primarySettled?: () => void) => {
       const token = requestGate.current();
       if (!token || token.key !== conversationKeyFor) return;
       const sequence = ++loadSequenceRef.current;
@@ -755,13 +755,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       loadDiag.current.loadSettled(sequence, Date.now() - startedAt,
         !requestGate.isCurrent(token) ? 'token' : !mountedRef.current ? 'unmounted' : sequence !== loadSequenceRef.current ? 'sequence' : 'none');
       void retryUnreadPersistFromPoll();
+      primarySettled?.();
       await outgoing;
     },
     [cfg, alias, conversationKeyFor],
   );
   const load = useCallback((limit: number) => rounds.run(() => readRound(limit), false), [rounds, readRound]);
-  const tick = useCallback((first = false) => rounds.tick(Math.max(limitRef.current, hubRowsRef.current.length),
-    limit => chatForeground() ? readRound(limit) : Promise.resolve(), first), [rounds, readRound]);
+  const tick = useCallback((first = false, primarySettled?: () => void) => rounds.tick(Math.max(limitRef.current, hubRowsRef.current.length),
+    limit => chatForeground() ? readRound(limit, primarySettled) : Promise.resolve(), first), [rounds, readRound]);
 
   // Reset the lazy window when the chat target changes; usePoll does the
   // initial fetch + polling (fires fn() right after this effect → limit=PAGE).
