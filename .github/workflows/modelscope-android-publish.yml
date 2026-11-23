@@ -67,9 +67,6 @@ jobs:
           if [ "$branch" != "main" ]; then echo "::error::run $RUN_ID was built from '$branch', only main may be published"; exit 1; fi
           if [ "$conclusion" != "success" ]; then echo "::error::run $RUN_ID concluded '$conclusion'"; exit 1; fi
           printf '%s\n' "$run" > "$RUNNER_TEMP/android-source-run.json"
-          if [ "$sha" != "$REQUESTED_COMMIT" ]; then
-            echo "VERIFY_SOURCE_METADATA=true" >> "$GITHUB_ENV"
-          fi
           echo "SOURCE_SHA=$REQUESTED_COMMIT" >> "$GITHUB_ENV"
 
       # Use the verifier from this workflow revision, not from an older APK commit.
@@ -113,7 +110,6 @@ jobs:
           ls -l "$apks"
 
       - name: Verify dispatched build source and APK digest
-        if: env.VERIFY_SOURCE_METADATA == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.run_id }}

@@ -13,7 +13,11 @@ const ck = (name: string, ok: boolean) => {
 };
 const source = workflow.slice(workflow.indexOf('- name: Check the source run'), workflow.indexOf('- uses: actions/checkout'));
 ck('required exact commit input', /commit:\n\s+description:[^\n]+\n\s+required: true\n\s+type: string/.test(workflow));
-ck('source run is verified before checkout', source.includes('if [ "$sha" != "$REQUESTED_COMMIT" ]; then') && source.includes('exit 1; fi'));
+ck('source run is verified before checkout', source.includes('"$branch" != "main"') && source.includes('"$conclusion" != "success"') && source.includes('exit 1; fi'));
+const metadataGate = workflow.slice(workflow.indexOf('- name: Verify dispatched build source'), workflow.indexOf('- name: Use canonical published APK'));
+ck('every source run requires metadata and APK digest verification',
+  metadataGate.includes('android-build-source.mjs') && metadataGate.includes('"$APK"')
+  && !/^\s+if:/m.test(metadataGate));
 ck('checkout uses requested SHA and full history', workflow.includes('ref: ${{ inputs.commit }}\n          fetch-depth: 0'));
 const gate = workflow.slice(workflow.indexOf('- name: Require exact merged commit'), workflow.indexOf('- name: Download the APK artifact'));
 ck('gate precedes artifact download and upload', gate.includes('REQUESTED_COMMIT: ${{ inputs.commit }}'));
