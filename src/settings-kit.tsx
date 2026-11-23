@@ -15,7 +15,6 @@ import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds } from './ui-scale';
 import { elevated } from './elevation';
-import AliasAvatar from './AliasAvatar';
 
 /** 卡片左右边距 与 行内左右内边距(标签左边缘 = 卡片左边缘 + ROW_PAD_X)。 */
 export const SETTINGS_GUTTER = 16;
@@ -182,6 +181,17 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
  * 点行 = onPress(切换 / 重新验证);点 ⋯ = onMore(锚点元素),由调用方出菜单(桌面锚定菜单 / 手机底部面板)。
  * ⋯ 放在 › / ✓ 同一列(右边缘对齐)。large = 当前账号那张卡(头像 48)。
  */
+/** 设置页统一字标头像：首字母 + card 底 + pill 圆角（尺寸随行高）。 */
+export function SettingsLetterAvatar({ name, size }: { name: string; size: number }) {
+  return (
+    <View style={{ width: size, height: size, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
+      <Text style={{ fontSize: Math.round(size * 0.4), fontWeight: '600', color: colors.textSecondary }}>
+        {(name || '?').trim().slice(0, 1).toUpperCase()}
+      </Text>
+    </View>
+  );
+}
+
 export function SettingsAccountRow({ name, subtitle, warning, current, badge, large, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
   name: string;
   subtitle?: string;
@@ -202,7 +212,10 @@ export function SettingsAccountRow({ name, subtitle, warning, current, badge, la
   const moreRef = useRef<any>(null);
   return (
     <RowShell onPress={onPress} testID={id} accessibilityLabel={accessibilityLabel ?? name}>
-      <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}><AliasAvatar alias={name} size={large ? 48 : 36} /></View>
+      {/* admin 2026-11-23：账号行统一字标（默认不用随机卡通插画）；自设头像在「头像」小节里编辑 */}
+      <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}>
+        <SettingsLetterAvatar name={name} size={large ? 48 : 36} />
+      </View>
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
           <Text style={[styles.label, { color: colors.text }, large && styles.accountNameLarge]} numberOfLines={1} testID={`${id}-label`}>{name}</Text>
