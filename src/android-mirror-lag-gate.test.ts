@@ -95,6 +95,8 @@ const stub = (plan: {
   dispatchStatus?: number;
   mirror: string[]; // android/latest/VERSION 的应答队列
   runState?: unknown;
+  notes?: string[];
+  publication?: unknown;
 }) => {
   const calls: string[] = [];
   const dispatches: any[] = [];
@@ -103,6 +105,7 @@ const stub = (plan: {
     ok: (r.status ?? 200) < 300,
     status: r.status ?? 200,
     text: async () => (typeof r.body === 'string' ? r.body : JSON.stringify(r.body ?? {})),
+    json: async () => r.body,
   });
   const fetchImpl = async (url: string, init: any = {}) => {
     const method = init.method ?? 'GET';
@@ -110,6 +113,8 @@ const stub = (plan: {
     if (url.includes('/releases?')) return reply({ body: plan.releases ?? [] });
     if (url.includes('/git/ref/tags/')) return reply({ body: { object: { type: 'commit', sha: plan.refSha ?? SHA } } });
     if (url.includes('/android/latest/VERSION')) return reply({ body: take(plan.mirror, plan.mirror[plan.mirror.length - 1]) });
+    if (url.endsWith('/notes.md')) return reply({ body: take(plan.notes, `What's new in ${NEW}:\n- ready`) });
+    if (url.endsWith('/publication.json')) return reply({ status: plan.publication ? 200 : 404, body: plan.publication });
     if (url.includes('/actions/workflows/android-build.yml/runs')) return reply({ body: { workflow_runs: plan.buildRuns ?? [] } });
     if (url.includes(`/actions/workflows/${PUBLISH_WORKFLOW}/dispatches`)) {
       dispatches.push(JSON.parse(init.body));
@@ -141,6 +146,29 @@ const base = {
 };
 
 const buildRun = run(424242);
+
+// Android is already at the release version, but its notes still say desktop pending.
+// Select the original publication run, not the newer rebuild offered in buildRuns.
+{
+  const original = run(123, { path: '.github/workflows/android-build.yml', run_attempt: 1 });
+  const pending = `What's new in ${NEW}:\n- 安卓版已可下载，桌面版稍后。`;
+  const s = stub({ releases: [release(`desktop-v${NEW}`)], mirror: [NEW],
+    notes: [pending, `What's new in ${NEW}:\n- desktop ready`],
+    publication: { schemaVersion: 1, repository: 'sleep2agi/agent-network-app', version: NEW, commit: SHA,
+      runId: 123, runAttempt: 1, artifactId: 456, artifactName: 'agent-network-android-apk',
+      artifactDigest: `sha256:${'a'.repeat(64)}`, apkSha256: 'b'.repeat(64) },
+    buildRuns: [buildRun], runState: original, publishRuns: [[run(100)], [run(101)]],
+  });
+  const result = await gate({ ...base, ...s });
+  check('equal version with pending notes dispatches original build, not newer rebuild', result.code === 0 && s.dispatches[0]?.inputs.run_id === '123');
+  check('notes refresh waits for the pending notice to disappear', s.calls.filter(c => c.endsWith('/notes.md')).length === 2);
+}
+{
+  const s = stub({ releases: [release(`desktop-v${NEW}`)], mirror: [NEW],
+    notes: [`What's new in ${NEW}:\n- 安卓版已可下载，桌面版稍后。`], buildRuns: [buildRun] });
+  const result = await gate({ ...base, ...s });
+  check('pending notes without immutable identity never trigger a rebuild', result.code === 1 && s.dispatches.length === 0);
+}
 
 // 1) 一致 → 绿,不 dispatch
 {

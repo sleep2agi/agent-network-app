@@ -33,6 +33,9 @@ import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { compareDesktopVersions, parseDesktopTag } from './modelscope-mirror.mjs';
 import { downloadAndroidBuildSource, selectVerifiedDispatchedBuild } from './android-build-source.mjs';
+import { pinnedBuild } from './android-pinned-build.mjs';
+
+export const desktopNotesPending = text => String(text).includes('安卓版已可下载，桌面版稍后。');
 
 export const DEFAULT_REPOSITORY = 'sleep2agi/agent-network-app';
 export const DEFAULT_MIRROR_BASE = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master';
@@ -248,23 +251,38 @@ export const gate = async ({
   if (!mirror.version) return { code: 1, lines: [...lines, `MIRROR-GATE: android/latest/VERSION is unreadable anonymously from ${mirrorBase} (${mirror.error ?? 'not X.Y.Z'}) — cannot compare, so this is not a green.`] };
   say(`mirror   android/latest/VERSION ${mirror.version}`);
 
-  // 3. 一致 → 一行结论
+  // Equal version can still have Android-first notes waiting for desktop publication.
+  let refreshNotes = false;
   if (mirror.version === version) {
-    say(`OK  android mirror is in sync: ${version}`);
-    return { code: 0, lines };
+    const response = await fetchImpl(`${mirrorBase}/android/${version}/notes.md`, { signal: AbortSignal.timeout(25000) });
+    if (!response.ok) return { code: 1, lines: [...lines, `MIRROR-GATE: cannot verify published Android notes: HTTP ${response.status}`] };
+    refreshNotes = desktopNotesPending(await response.text());
+    if (!refreshNotes) {
+      say(`OK  android mirror is in sync: ${version}`);
+      return { code: 0, lines };
+    }
+    say(`NOTES  desktop ${version} is published; refreshing Android's desktop-pending notice with the original APK`);
   }
   if (mirrorAheadOfRelease(mirror.version, version)) {
     say(`AHEAD  android mirror ${mirror.version} is newer than the newest published release ${version} — nothing to publish (the mirror only moves forward). `
       + `Usually the newer desktop release is still a draft; run this gate again after publishing it (app#1430).`);
     return { code: 0, lines };
   }
-  say(`LAG  android mirror is ${mirror.version}, release is ${version}`);
+  if (!refreshNotes) say(`LAG  android mirror is ${mirror.version}, release is ${version}`);
 
   // 4. release 提交上成功的 android-build
   const runs = await json('GET', `/repos/${repo}/actions/workflows/${BUILD_WORKFLOW}/runs?head_sha=${sha}&per_page=50`);
   const selected = selectBuildRun(runs?.workflow_runs, sha);
   const { seen, newestConclusion } = selected;
   let build = selected.run;
+  if (refreshNotes) {
+    const pinned = await pinnedBuild(version, sha, url => fetchImpl(url.replace(DEFAULT_MIRROR_BASE, mirrorBase), { signal: AbortSignal.timeout(25000) }));
+    if (!pinned) return { code: 1, lines: [...lines, 'MIRROR-GATE: pending desktop notes lack immutable publication identity; refusing a rebuild'] };
+    build = await json('GET', `/repos/${repo}/actions/runs/${pinned.runId}`);
+    if (build.head_branch !== 'main' || build.status !== 'completed' || build.conclusion !== 'success'
+      || build.path !== `.github/workflows/${BUILD_WORKFLOW}` || build.run_attempt !== pinned.runAttempt)
+      return { code: 1, lines: [...lines, 'MIRROR-GATE: original Android publication run is no longer valid'] };
+  }
   if (!build) {
     const dispatched = await json('GET', `/repos/${repo}/actions/workflows/${BUILD_WORKFLOW}/runs?event=workflow_dispatch&status=success&branch=main&per_page=50`);
     build = await selectVerifiedDispatchedBuild(dispatched?.workflow_runs, {
@@ -319,6 +337,14 @@ export const gate = async ({
     const after = await readMirrorVersion({ mirrorBase, fetchImpl, wait, attempts: 1 });
     if (after.version) current = after.version;
     if (after.version === version) {
+      if (refreshNotes) {
+        const notes = await fetchImpl(`${mirrorBase}/android/${version}/notes.md`, { signal: AbortSignal.timeout(25000) });
+        if (!notes.ok || desktopNotesPending(await notes.text())) {
+          if (now() >= mirrorDeadline) return { code: 1, lines: [...lines, 'MIRROR-GATE: desktop-pending Android notes did not refresh before timeout'] };
+          await wait(mirrorPollSeconds * 1000);
+          continue;
+        }
+      }
       say(`OK  android mirror advanced to ${version} (was ${mirror.version}) — ${PUBLISH_WORKFLOW} run ${confirmed.id}`);
       return { code: 0, lines };
     }

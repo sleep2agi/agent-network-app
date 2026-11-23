@@ -29,8 +29,18 @@ Full CI is retained. Manual rebuild events and forks cannot automatically publis
   identity is rejected even if the APK bytes happen to match.
 - Disable the early trigger to return to desktop-first operation. Do not overwrite
   an already published APK or lower versionCode; use a higher-version repair release.
-- Existing source selection by the post-release lag gate must be checked in integration:
-  it must not cause a rebuilt run to replace an earlier publication.
+- When version pointers already match but Android notes still say desktop pending,
+  the post-release lag gate selects the original recorded build and waits for the
+  notice to disappear. Missing provenance stops the refresh. Mocked whole-gate
+  integration coverage lives in `src/android-mirror-lag-gate.test.ts` (39/39).
+
+## Local checks before PR
+
+- New Node test files: 11 tests passed (including six actual workflow selector cases).
+- Publication-record Python tests: 4/4 passed.
+- Source gates: `android-release-source.test.ts` 6/6 and `android-publish-source.test.ts` 12/12.
+- Android update-note regression: 16/16; mirror-gate integration: 39/39.
+- These are offline checks; GitHub CI and first real publication remain separate gates.
 
 ## Acceptance still required
 
