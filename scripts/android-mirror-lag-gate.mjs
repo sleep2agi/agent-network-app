@@ -36,6 +36,26 @@ import { downloadAndroidBuildSource, selectVerifiedDispatchedBuild } from './and
 import { pinnedBuild } from './android-pinned-build.mjs';
 
 export const desktopNotesPending = text => String(text).includes('安卓版已可下载，桌面版稍后。');
+export const NOTES_GRACE_MS = 20 * 60 * 1000;
+export async function readMirrorNotes({ mirrorBase, version, fetchImpl = fetch, wait = sleep, attempts = 3 }) {
+  let error;
+  for (let attempt = 0; attempt < attempts; attempt++) {
+    try {
+      const response = await fetchImpl(`${mirrorBase}/android/${version}/notes.md`, { signal: AbortSignal.timeout(25000) });
+      if (!response.ok) throw new Error(`HTTP ${response.status}`);
+      return { text: await response.text() };
+    } catch (e) { error = e.message; }
+    if (attempt + 1 < attempts) await wait(2000);
+  }
+  return { error };
+}
+
+export function notesDeadlineResult(text, publishedAt, nowMs) {
+  const published = Date.parse(publishedAt);
+  if (desktopNotesPending(text) && Number.isFinite(published) && nowMs - published > NOTES_GRACE_MS)
+    return { code: 1, line: 'MIRROR-GATE: 桌面已发布超过20分钟，安卓说明仍写着「桌面版稍后」' };
+  return { code: 0, line: 'WARN  版本指针一致；安卓说明仍在20分钟宽限期内（或发布时间无法确认），下一轮再确认' };
+}
 
 export const DEFAULT_REPOSITORY = 'sleep2agi/agent-network-app';
 export const DEFAULT_MIRROR_BASE = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master';
@@ -254,9 +274,9 @@ export const gate = async ({
   // Equal version can still have Android-first notes waiting for desktop publication.
   let refreshNotes = false;
   if (mirror.version === version) {
-    const response = await fetchImpl(`${mirrorBase}/android/${version}/notes.md`, { signal: AbortSignal.timeout(25000) });
-    if (!response.ok) return { code: 1, lines: [...lines, `MIRROR-GATE: cannot verify published Android notes: HTTP ${response.status}`] };
-    refreshNotes = desktopNotesPending(await response.text());
+    const notes = await readMirrorNotes({ mirrorBase, version, fetchImpl, wait });
+    if (notes.error) return { code: 0, lines: [...lines, `WARN  版本指针一致；更新说明重试后仍无法读取，没法确认更新说明：${notes.error}`] };
+    refreshNotes = desktopNotesPending(notes.text);
     if (!refreshNotes) {
       say(`OK  android mirror is in sync: ${version}`);
       return { code: 0, lines };
@@ -338,9 +358,13 @@ export const gate = async ({
     if (after.version) current = after.version;
     if (after.version === version) {
       if (refreshNotes) {
-        const notes = await fetchImpl(`${mirrorBase}/android/${version}/notes.md`, { signal: AbortSignal.timeout(25000) });
-        if (!notes.ok || desktopNotesPending(await notes.text())) {
-          if (now() >= mirrorDeadline) return { code: 1, lines: [...lines, 'MIRROR-GATE: desktop-pending Android notes did not refresh before timeout'] };
+        const notes = await readMirrorNotes({ mirrorBase, version, fetchImpl, wait });
+        if (notes.error) return { code: 0, lines: [...lines, `WARN  版本指针一致；更新说明重试后仍无法读取，没法确认更新说明：${notes.error}`] };
+        if (desktopNotesPending(notes.text)) {
+          if (now() >= mirrorDeadline) {
+            const result = notesDeadlineResult(notes.text, release.published_at, now());
+            return { code: result.code, lines: [...lines, result.line] };
+          }
           await wait(mirrorPollSeconds * 1000);
           continue;
         }

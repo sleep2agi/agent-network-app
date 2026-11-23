@@ -8,12 +8,15 @@ export async function pinnedBuild(version, commit, get = fetch) {
   if (!response.ok) throw new Error(`Publication record HTTP ${response.status}`);
   const record = await response.json();
   if (record.schemaVersion !== 1 || record.repository !== 'sleep2agi/agent-network-app'
-      || record.version !== version || record.commit !== commit
+      || record.version !== version || !/^[a-f0-9]{40}$/.test(record.commit || '')
+      || record.versionCode !== version.split('.').map(Number).reduce((n, v, i) => n + v * [1000000, 1000, 1][i], 0)
       || record.artifactName !== 'agent-network-android-apk'
       || !/^sha256:[a-f0-9]{64}$/.test(record.artifactDigest || '')
       || !/^[a-f0-9]{64}$/.test(record.apkSha256 || '')
       || ['runId', 'runAttempt', 'artifactId'].some(k => !Number.isSafeInteger(record[k]) || record[k] <= 0))
     throw new Error('Invalid immutable Android publication record');
+  if (record.commit !== commit)
+    throw new Error(`安卓 ${version} 已从提交 ${record.commit} 先发；桌面请从同一提交发布，或升一个版本号（本次请求 ${commit}）`);
   return record;
 }
 

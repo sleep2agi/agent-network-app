@@ -6,6 +6,19 @@ builds continue independently. Dispatch acceptance is not publication success:
 inspect the publisher's anonymous download verification before announcing availability.
 Full CI is retained. Manual rebuild events and forks cannot automatically publish.
 
+**合并版本号 PR = 安卓用户可能立即收到更新提示，不再有后续人工批准环节兜底。**
+版本号 PR 合并前必须完成安卓相关验收；例外须明确授权并记录未验项。
+紧急关停：停用 `android-early-publish.yml` 工作流（`gh workflow disable android-early-publish.yml --repo sleep2agi/agent-network-app`）。
+已启动的 publisher 需另行确认状态/取消；停用入口不会撤回已发布 APK。
+
+Only a package version change against the commit's first parent can trigger publishing.
+Dependency/script-only edits print “不是版本号提交，跳过”; identical existing publication
+prints “已发布，跳过”. Existing mismatched identity still fails closed.
+Before any desktop build (including dry builds), preflight checks existing Android
+publication: a different source SHA requires using the original SHA or a new version.
+Notes reads retry three times. Equal pointers with unavailable notes warn green, not
+verified notes; known pending notes become stale only after 20 minutes from publication.
+
 ## Hard checks and offline evidence
 
 | Requirement | Enforcement | Test |

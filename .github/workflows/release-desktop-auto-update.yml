@@ -44,11 +44,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  android-source-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Use the current verifier, including when dispatch targets an older commit.
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Reject desktop source conflicting with early Android publication
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$REQUESTED_COMMIT" origin/main
+          git show "$REQUESTED_COMMIT:package.json" > "$RUNNER_TEMP/requested-package.json"
+          version=$(node -p 'JSON.parse(require("fs").readFileSync(process.env.RUNNER_TEMP+"/requested-package.json")).version')
+          node scripts/android-pinned-build.mjs "$version" "$REQUESTED_COMMIT"
+
   # 一个 tag 只允许一个 release 对象，决定权只在这个 job：
   #   published → fail（要重发请 bump 版本号）；0 draft → 创建并输出 release_id；
   #   1 draft → 复用；>1 draft → fail-closed。
   # 后面所有 matrix job 只认这个 release_id，禁止再按 tag 各自创建/删除。
   prepare-release:
+    needs: [android-source-preflight]
     if: inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -87,14 +112,14 @@ jobs:
           node scripts/prepare-desktop-release.mjs
 
   build-release:
-    needs: [prepare-release]
+    needs: [android-source-preflight, prepare-release]
     # 卡死自愈:2026-10-30 有一个 ubuntu deb job 在 waiting 里挂了 2.5 小时,
     # 而 concurrency group 是固定名(release-desktop-auto-update)⇒ 它把整条发布链锁死,
     # 新 run 全部 pending、取消也不生效。给三条腿都设上限,让 stuck 的腿自己超时退出。
     timeout-minutes: 120
     # publish=false 是「只构建 + smoke，不建 release」的 dry run：prepare-release 会跳过，
     # 这个 job 必须照常跑，否则 Build signed bundles without uploading a release 那套永远不执行。
-    if: always() && (inputs.publish == false || needs.prepare-release.result == 'success')
+    if: always() && needs.android-source-preflight.result == 'success' && (inputs.publish == false || needs.prepare-release.result == 'success')
     environment: macos-signing
     strategy:
       fail-fast: false
@@ -3445,7 +3470,6 @@ jobs:
             echo "::error::${why}；这一版会缺 APK，安卓用户读不到更新。确认要这样发就重新 dispatch 并设 skip_android=true"
             exit 1
           }
-          # android-build is triggered by the push that produced the bump commit and
           version=$(node -p 'require("./package.json").version')
           node scripts/android-pinned-build.mjs "$version" "$COMMIT"
           if grep -q '^artifact_id=' "$GITHUB_OUTPUT"; then
@@ -3453,6 +3477,7 @@ jobs:
             exit 0
           fi
           # No early publication record: use the normal exact-commit build lookup.
+          # android-build is triggered by the push that produced the bump commit and
           # usually finishes after the desktop release starts. Wait for THIS commit's
           # run instead of silently skipping the attach.
           # 0.2.532 教训（#1438）：发布目标 commit 可能**不是**那个改 package.json 的 bump commit
