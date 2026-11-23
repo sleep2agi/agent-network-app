@@ -15,6 +15,7 @@ import { useTranslation } from './i18n-react';
 import './i18n-accounts';
 import DialogFrame from './DialogFrame';
 import { colors, onThemeChange, radius, spacing } from './theme';
+import { HttpAddressHint } from './HttpAddressHint';
 import { elevated } from './elevation';
 import { useModalSafePadding } from './safe-area-runtime';
 import { appFetch } from './app-fetch';
@@ -265,6 +266,7 @@ export function AccountEditDialog({ profile, current, onClose, onSaved, onRelogi
           style={styles.input}
           onSubmitEditing={() => { if (!unchanged) void save(); }}
         />
+        <HttpAddressHint address={server} />
       </View>
       <Text style={styles.hint} testID="account-edit-identity">
         {tr('accounts.editIdentity', { user: profile.username || '—', net: profile.networkId || '—' })}

@@ -1,5 +1,6 @@
 import { useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import OrgWorkspace from './src/OrgWorkspace';
+import { HttpAddressHint } from './src/HttpAddressHint';
 import { useRailHidden, visibleRailTabs } from './src/rail-prefs';
 import { useTranslation } from './src/i18n-react';
 import { clearConditionalReads } from './src/conditional-get';
@@ -1805,6 +1806,7 @@ export function LoginScreen({ onLogin, initialProfile, onCancelReauth, onCancelA
                 accessibilityLabel="Hub 地址"
               />
             </View>
+            <HttpAddressHint address={serverUrl} />
           </View>
           <View style={loginStyles.field}>
             <Text style={loginStyles.label}>用户名</Text>
