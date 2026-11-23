@@ -60,6 +60,7 @@ import { denserRowPitch, publishListFirstRowTop } from './list-rail-align';
 import { usePoll } from './usePoll';
 import { retryUnreadPersistFromPoll } from './conversation-unread-persist';
 import AgentUnreadBadge from './AgentUnreadBadge';
+import { hasAgentDetailLine } from './agent-row-lines';
 import DegradedBadge from './DegradedBadge';
 import { nodeDegraded } from './node-degraded';
 import { formatUnreadBadge, type UnreadState } from './unread-ledger';
@@ -977,6 +978,8 @@ export default function AgentsScreen({
     // 手机上整窗渐变时行底色让出来（选中/按下仍给一档，否则光被一行行盖掉）。
     const rowBg = selected ? colors.rowActive : mobileGlowActive() ? 'transparent' : colors.bg;
     const badge = rowBadge(item.alias);
+    const hasDetail = hasAgentDetailLine(model.status.label, model.preview, rowDraft);
+    const unread = <AgentUnreadBadge inline badge={badge} testID={`unread-badge-${item.alias}`} />;
     return (
       <Pressable
         testID={`agent-row-${item.alias}`}
@@ -1019,9 +1022,9 @@ export default function AgentsScreen({
               </Text>
             ) : null}
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
+            {hasDetail ? null : unread}
           </View>
-          {/* No second line when there is nothing to say (and no badge): the name then centres. */}
-          {model.status.label || model.preview || badge || rowDraft ? <View style={rowStyles.line}>
+          {hasDetail ? <View style={rowStyles.line}>
             {model.status.label && model.status.labelTone ? (
               <Text dense selectable={false} style={[rowStyles.label, { color: colors[model.status.labelTone] }]}>{model.status.label}</Text>
             ) : null}
@@ -1029,7 +1032,7 @@ export default function AgentsScreen({
               ? draftLine(rowDraft, [rowStyles.preview, { color: colors.textMuted }], `draft-preview-${item.alias}`)
               // 没有消息时 preview 为空(不再回传 session.task 正文);状态词由上面的 label 画。
               : <Text dense selectable={false} numberOfLines={1} style={[rowStyles.preview, { color: colors.textMuted }]}>{model.preview}</Text>}
-            <AgentUnreadBadge inline badge={badge} testID={`unread-badge-${item.alias}`} />
+            {unread}
           </View> : null}
         </View>
       </Pressable>
@@ -1580,4 +1583,3 @@ const makeRowStyles = () => ({
 } as const);
 let rowStyles = makeRowStyles();
 onThemeChange(() => { rowStyles = makeRowStyles(); });
-
