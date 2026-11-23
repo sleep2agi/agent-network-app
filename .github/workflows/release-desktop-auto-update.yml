@@ -617,6 +617,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.610:
+            ### 修复
+
+            - 同步侧栏与已打开聊天的最新消息时间和预览，避免旧消息盖过新任务；按网络隔离同名节点的聊天活动缓存。
+
             What's new in 0.2.609:
             ### 修复
 
