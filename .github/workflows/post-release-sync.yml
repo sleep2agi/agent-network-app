@@ -20,7 +20,7 @@ concurrency:
 
 jobs:
   sync:
-    if: github.event_name == 'release' || github.ref == 'refs/heads/main'
+    if: startsWith(github.event.release.tag_name || inputs.tag, 'desktop-v') && (github.event_name == 'release' || github.ref == 'refs/heads/main')
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -37,7 +37,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           # Fine-grained token: Actions write on sleep2agi/agent-network only.
-          # Missing credentials fail visibly; never silently skip the fallback.
+          # Missing credentials preserve App synchronization, then fail with recovery guidance.
           HUB_ACTIONS_TOKEN: ${{ secrets.HUB_ACTIONS_TOKEN }}
           RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag }}
         run: node scripts/post-release-sync.mjs
