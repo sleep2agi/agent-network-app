@@ -3,7 +3,7 @@ import { RAIL_HIDEABLE, setRailVisible, useRailHidden } from './rail-prefs';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { diagnosticsLine } from './diagnostics-copy';
 import { maskedHubHost } from './mask-hub-address';
-import { accountRowDetail, groupProfilesByHub, shortNetworkId } from './account-groups';
+import { accountRowDetail, groupProfilesByHub } from './account-groups';
 import { t as tr } from './i18n';
 import './i18n-fatal';
 import { fatalSummary } from './fatal-report';
@@ -949,7 +949,7 @@ export default function SettingsScreen({
                           name={currentProfile.displayName || currentProfile.username || tr('settings.copy.12')}
                           pill={tr('accounts.currentPill')}
                           extraPill={usersAvailable ? tr('users.role.admin') : currentProfile.profileId === LOCAL_HUB_PROFILE_ID ? tr('accounts.localPill') : undefined}
-                          subtitle={[maskedHubHost(currentProfile.serverUrl), me.networkName || (currentProfile.networkId ? `${tr('accounts.network')} ${shortNetworkId(currentProfile.networkId)}` : '')].filter(Boolean).join(' · ')}
+                          subtitle={[maskedHubHost(currentProfile.serverUrl), me.networkName || ''].filter(Boolean).join(' · ')}
                           warning={currentProfile.requiresReauth ? tr('settings.copy.15') : undefined}
                           onMore={el => openProfileMore(currentProfile, el)}
                           moreLabel={tr('accounts.more', { name: accountName(currentProfile) })}
