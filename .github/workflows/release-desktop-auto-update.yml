@@ -3446,6 +3446,13 @@ jobs:
             exit 1
           }
           # android-build is triggered by the push that produced the bump commit and
+          version=$(node -p 'require("./package.json").version')
+          node scripts/android-pinned-build.mjs "$version" "$COMMIT"
+          if grep -q '^artifact_id=' "$GITHUB_OUTPUT"; then
+            echo 'Reusing the immutable early Android publication run/artifact'
+            exit 0
+          fi
+          # No early publication record: use the normal exact-commit build lookup.
           # usually finishes after the desktop release starts. Wait for THIS commit's
           # run instead of silently skipping the attach.
           # 0.2.532 教训（#1438）：发布目标 commit 可能**不是**那个改 package.json 的 bump commit
@@ -3486,12 +3493,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.find.outputs.run_id }}
+          PINNED_ARTIFACT: ${{ steps.find.outputs.artifact_id }}
+          PINNED_DIGEST: ${{ steps.find.outputs.artifact_digest }}
+          PINNED_ATTEMPT: ${{ steps.find.outputs.run_attempt }}
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
           name="Agent.Network_${version}_android-universal.apk"
           tmp="$RUNNER_TEMP/apk"; mkdir -p "$tmp"
-          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n agent-network-android-apk -D "$tmp"
+          if [ -n "$PINNED_ARTIFACT" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > "$tmp/run.json"
+            jq -e --argjson attempt "$PINNED_ATTEMPT" '.head_branch == "main" and .status == "completed" and .conclusion == "success" and .path == ".github/workflows/android-build.yml" and .run_attempt == $attempt' "$tmp/run.json" >/dev/null
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PINNED_ARTIFACT" > "$tmp/artifact.json"
+            jq -e --argjson run "$RUN_ID" --arg digest "sha256:$PINNED_DIGEST" '.workflow_run.id == $run and .expired == false and .name == "agent-network-android-apk" and .digest == $digest' "$tmp/artifact.json" >/dev/null
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PINNED_ARTIFACT/zip" > "$tmp/artifact.zip"
+            printf '%s  %s\n' "$PINNED_DIGEST" "$tmp/artifact.zip" | sha256sum --check
+            unzip -q "$tmp/artifact.zip" -d "$tmp"
+          else
+            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n agent-network-android-apk -D "$tmp"
+          fi
           apk=$(find "$tmp" -name '*.apk' -print -quit)
           [[ -n "$apk" ]] || { echo "::error::android-build artifact has no APK"; exit 1; }
           aapt2=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name aapt2 -type f 2>/dev/null | sort -V | tail -1 || true)
@@ -3504,8 +3524,16 @@ jobs:
           else
             echo "::warning::aapt2 not found; skipping the APK versionName assertion"
           fi
+          node scripts/android-attachment-identity.mjs "$version" "${{ inputs.commit }}" "$apk"
           cp "$apk" "$tmp/$name"
-          gh release upload "desktop-v$version" "$tmp/$name" --clobber --repo "$GITHUB_REPOSITORY"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/desktop-v$version" > "$tmp/release.json"
+          existing=$(jq -r --arg name "$name" '[.assets[] | select(.name == $name)] | if length == 0 then "" elif length == 1 then .[0].digest else error("duplicate APK assets") end' "$tmp/release.json")
+          digest="sha256:$(sha256sum "$tmp/$name" | cut -d ' ' -f1)"
+          if [ -n "$existing" ]; then
+            [ "$existing" = "$digest" ] || { echo '::error::Existing APK asset differs; cannot overwrite same version'; exit 1; }
+          else
+            gh release upload "desktop-v$version" "$tmp/$name" --repo "$GITHUB_REPOSITORY"
+          fi
           echo "attached $name to desktop-v$version"
 
   # 0.2.286 的真问题:tauri-action 生成的 latest.json 里，五个 platforms.url 是
