@@ -7,7 +7,7 @@ import { isSafeMarkdownUrl, parseInline, parseMarkdownBlocks, type InlineNode } 
 import { foldCode, foldLabel } from './markdown-code-fold';
 import { gridCellWidth, listIndent, markdownLayout } from './bubble-layout';
 import { openExternal } from './open-external';
-import { stackedRows, fitsReportGrid } from './table-layout';
+import { stackedRows, reportTableLayout } from './table-layout';
 
 export async function openMarkdownUrl(url: string) {
   if (!isSafeMarkdownUrl(url)) return;
@@ -52,14 +52,13 @@ const WITH_SRC: Src = (start, end) => (start == null ? {} : ({ dataSet: { mdLine
 
 // 表格三种布局(table-layout.ts):web 横向滚动网格;原生 ≤2 列自适应网格;原生 ≥3 列每行一张卡。
 // rootProps:挂在表格最外层元素上(规则文件原生阅读区用它报块布局)。
-function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[][]; rowLines?: number[]; src?: Src; rootProps?: object }) {
+function TableBlock({ rows, rowLines, src = NO_SRC, rootProps, width, mouse = false }: { rows: string[][]; rowLines?: number[]; src?: Src; rootProps?: object; width?: number; mouse?: boolean }) {
   const styles = useMd();
   const columns = rows.reduce((max, row) => Math.max(max, row.length), 0);
-  const [width, setWidth] = useState(0);
-  const measure = (event: {nativeEvent:{layout:{width:number}}}) => setWidth(Math.floor(event.nativeEvent.layout.width));
-  if (!fitsReportGrid(columns, width)) {
+  const layout = reportTableLayout(columns, width, mouse, NATIVE);
+  if (layout === 'stacked') {
     return (
-      <View style={styles.tableStack} {...rootProps} onLayout={e=>{measure(e); (rootProps as any)?.onLayout?.(e);}}>
+      <View testID="report-table-stacked" style={styles.tableStack} {...rootProps}>
         {stackedRows(rows).map((cells, rowIndex) => (
           <View key={rowIndex} style={styles.tableCard} {...src(rowLines?.[rowIndex + 1])}>
             {cells.map((cell, cellIndex) => (
@@ -72,9 +71,10 @@ function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[
       </View>
     );
   }
-  const cellStyle = [styles.tableCellFlex, gridCellWidth(columns)];
+  const cellStyle = layout === 'grid-scroll' ? styles.tableCell : [styles.tableCellFlex, gridCellWidth(columns)];
+  const Grid = layout === 'grid-scroll' ? WideBlock : View;
   const grid = (
-    <View style={styles.table} onLayout={measure}>
+    <Grid style={[styles.table, width !== undefined && { width }]}>
       <View>
         {rows.map((row, rowIndex) => (
           <View key={rowIndex} style={[styles.tableRow, rowIndex === 0 && styles.tableHead]} {...src(rowLines?.[rowIndex])}>
@@ -84,7 +84,7 @@ function TableBlock({ rows, rowLines, src = NO_SRC, rootProps }: { rows: string[
           </View>
         ))}
       </View>
-    </View>
+    </Grid>
   );
   return rootProps && Object.keys(rootProps).length ? <View {...rootProps}>{grid}</View> : grid;
 }
@@ -114,7 +114,8 @@ function CodeBlock({ text, srcProps }: { text: string; srcProps?: object }) {
 // 带行号;列表项的 y 相对所在列表(parent)。node-rules-view.ts resolveBlockRects / blockAtY 用它按手指位置找块。
 // 都不传就和以前一样,聊天里不多挂 onLayout、不多挂属性。
 export type MarkdownBlockLayout = { id: string; parent?: string; start: number; end: number; y: number; height: number };
-export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout, renderImage, tone }: {
+export default function MarkdownMessage({ children, onHeadingLayout, sourceLines, onBlockLayout, renderImage, tone, contentWidth, mouse }: {
+  contentWidth?: number; mouse?: boolean;
   children: string;
   /** 'mine' = 画在「我发出的」气泡里(#545):字 / 链接用 onBubbleMine / linkOnBubbleMine。 */
   tone?: 'mine'; onHeadingLayout?: (index: number, y: number) => void; sourceLines?: boolean; onBlockLayout?: (layout: MarkdownBlockLayout) => void;
@@ -149,7 +150,7 @@ export default function MarkdownMessage({ children, onHeadingLayout, sourceLines
         }
         if (block.kind === 'quote') return <View key={index} style={styles.quote} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)}><Text style={styles.text}><Inline text={block.text} /></Text></View>;
         if (block.kind === 'code') return <CodeBlock key={index} text={block.text} srcProps={{ ...src(block.line, block.endLine), ...lay(id, block.line, block.endLine) }} />;
-        if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} rowLines={block.rowLines} src={src} rootProps={lay(id, block.line, block.endLine)} />;
+        if (block.kind === 'table') return <TableBlock key={index} rows={block.rows} rowLines={block.rowLines} width={contentWidth} mouse={mouse} src={src} rootProps={lay(id, block.line, block.endLine)} />;
         return <Text key={index} {...src(block.line, block.endLine)} {...lay(id, block.line, block.endLine)} style={[styles.text, styles.block]}><Inline text={block.text} /></Text>;
       })}
     </View>

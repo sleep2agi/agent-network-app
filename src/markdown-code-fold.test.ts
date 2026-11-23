@@ -19,7 +19,7 @@ const src = fs.readFileSync(path.join(process.cwd(), 'src/MarkdownMessage.tsx'),
 ck('原生端判定常量存在', src.includes("const NATIVE = Platform.OS !== 'web';"));
 ck('代码块走 CodeBlock', /<CodeBlock key=\{index\} text=\{block\.text\}[^>]*\/>/.test(src));
 // 2026-09-16:表格先经 TableBlock 判布局,网格分支仍走 WideBlock(原生 View / web 横向滚动)
-ck('表格按内容宽度分流，网格不嵌套滚动', src.includes('fitsReportGrid(columns, width)') && src.includes('<View style={styles.table} onLayout={measure}>'));
+ck('表格按内容宽度分流，网格不嵌套滚动', src.includes('reportTableLayout(columns, width, mouse, NATIVE)') && src.includes("layout === 'grid-scroll' ? WideBlock : View"));
 ck('代码块不再直接渲染成横向 ScrollView', !/block\.kind === 'code'\) return <ScrollView/.test(src));
 ck('代码块有展开/收起按钮', src.includes('setExpanded((v) => !v)'));
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

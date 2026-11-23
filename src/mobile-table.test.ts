@@ -1,12 +1,15 @@
 // 2026-09-16 Vincent(安卓截图):「手机端的那个表格显示还是很有问题」—— 定宽列把气泡撑出屏幕、右边被裁。
 import fs from 'node:fs';
 import path from 'node:path';
-import { fitsReportGrid, stackedRows } from './table-layout';
+import { reportTableLayout, stackedRows } from './table-layout';
 import { gridCellWidth, markdownLayout } from './bubble-layout';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 
-ck('three columns switch at the measured content width', !fitsReportGrid(3, 323) && fitsReportGrid(3, 324));
-ck('many columns stack; simple pairs stay in a grid', !fitsReportGrid(6, 400) && fitsReportGrid(2, 280));
+for (const [w, expected] of [[323, 'stacked'], [324, 'grid-flex']] as const) {
+  ck(`first and stable render at ${w}`, [0, 1].every(() => reportTableLayout(3, w, false, true) === expected));
+}
+ck('six columns on desktop scroll at 670', reportTableLayout(6, 670, true, false) === 'grid-scroll');
+ck('unknown width retains platform behavior', reportTableLayout(3, undefined, false, false) === 'grid-scroll' && reportTableLayout(3, undefined, false, true) === 'stacked');
 
 const rows = [['变异', 'rc', '顶出'], ['M1 删掉', '1', '承重'], ['M2', '1']];
 const cards = stackedRows(rows);
@@ -18,7 +21,7 @@ ck('empty table → no cards', stackedRows([]).length === 0);
 
 const src = fs.readFileSync(path.join(__dirname, 'MarkdownMessage.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 ck('table block delegates to TableBlock', /if \(block\.kind === 'table'\) return <TableBlock key=\{index\} rows=\{block\.rows\}[^>]*\/>;/.test(src));
-ck('TableBlock uses the layout helper with the measured width', src.includes('fitsReportGrid(columns, width)'));
+ck('TableBlock uses the layout helper with the measured width', src.includes('reportTableLayout(columns, width, mouse, NATIVE)') && !src.slice(src.indexOf('function TableBlock'),src.indexOf('function CodeBlock')).includes('useState'));
 // 2026-09-30: an equal percentage share per column (gridCellWidth), not `flex: 1` — a grow/shrink negotiation
 // inside the shrink-to-fit bubble gets its height from a different width than it is drawn at (bubble-layout.ts).
 const cell: Record<string, unknown> = markdownLayout().tableCellFlex;

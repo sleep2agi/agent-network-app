@@ -5,6 +5,7 @@ import { stripInlineMarkdown } from './notify-text';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 
 const blocks = parseMarkdownBlocks('## 标题\n\n- 一\n- 二\n\n|项|结果|\n|---|---|\n|Enter|通过|\n\n```ts\nconst x = 1\n```');
+ck('正文紧接 --- 保留正文并生成分隔线', parseMarkdownBlocks('正文\n---').map(b => b.kind).join() === 'paragraph,rule');
 ck('解析标题', blocks[0]?.kind === 'heading' && blocks[0].text === '标题');
 ck('合并连续列表', blocks[1]?.kind === 'list' && blocks[1].items.length === 2);
 ck('解析表格并跳过分隔行', blocks[2]?.kind === 'table' && blocks[2].rows.length === 2);
