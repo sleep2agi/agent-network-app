@@ -19,17 +19,18 @@ import AttachmentFileCard from './AttachmentFileCard';
 import { localFileStatus } from './attachment-file-model';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
-import { sendFailureReason, type SendFailureReason } from './send-failure-reason';
+import { isDefiniteSendRejection, isRetryableSendFailure, sendFailureReason, type SendFailureReason } from './send-failure-reason';
+import { runWithSendAutoRetry } from './send-auto-retry';
 import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, interruptTurn, steerInFlight, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
 import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
-import { notifyOutboxListeners, outboxAdd, outboxEntry, outboxForAlias, outboxLiveImages, outboxMarkFailed, outboxMarkPending, outboxRemove, outboxRemoveAttachment, subscribeOutbox } from './outbox';
+import { notifyOutboxListeners, outboxAdd, outboxEntry, outboxForAlias, outboxLiveImages, outboxMarkFailed, outboxMarkPending, outboxRemove, outboxRemoveAttachment, outboxSetFailReason, subscribeOutbox } from './outbox';
 import { imagesForResend, planResend, uploadForSend, type ResendImage } from './resend-plan';
 import { beginSend, endSend, orphanedPendingIds, settleEchoes } from './send-lifecycle';
 import { recordSendBubble } from './send-timing';
-import { mayApplySendResult, shouldExposeSendFailure } from './send-reconciliation';
+import { mayApplySendResult, reconcileOutboxForSend, shouldExposeSendFailure } from './send-reconciliation';
 import { conversationKey, conversationScope, createConversationRequestGate, createConversationStore } from './conversation-store';
 import { resolveSender } from './chat-sender';
 import { keyboardAvoidEnabled, useKeyboardVisible } from './keyboard-visibility';
@@ -769,6 +770,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         _localId: e.id,
         _pending: e.state === 'pending',
         _failed: e.state === 'failed',
+        ...(e.failReason ? { _failReason: e.failReason } : {}),
         ...(imgs.length ? { _imgs: imgs as ChatItem['_imgs'] } : {}),
         _restoredNoImage: lost > 0,
         _original: !!e.original,
@@ -1947,7 +1949,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         attachments = uploaded.map(({ img, up }) => toTaskAttachment(img, up));
         outgoing = `${content}${uploaded.map(({ img, up }) => attachmentTextHint(img, up)).join('')}`;
       }
-      const response = await sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId));
+      const response = await runWithSendAutoRetry(
+        () => sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId)),
+        { shouldStop: () => !outboxEntry(localId) },
+      );
       imgs.forEach(releaseClipboardAttachment);
       // delivered: drop the echo, the server copy arrives with reload.
       // 🔴 outbox 唯一删除路径=此处(sendTask 确认成功)。
@@ -1967,6 +1972,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       await load(limitRef.current);
     } catch (sendError) {
       const failReason = sendFailureReason(sendError) ?? undefined;
+      const definiteRejection = isDefiniteSendRejection(sendError);
       // Timeout is not proof that the write failed. The Hub may have committed
       // the task and lost only the HTTP acknowledgement; reconcile before a
       // red retry action can manufacture duplicate work.
@@ -1974,22 +1980,34 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         // A late A failure while B is visible is ambiguous, not a reason to
         // paint a retry under B. Reconcile A directly without borrowing B's
         // request token; leave it pending if the Hub is unreachable.
-        try { await reconcileStartedConversation(); } catch { /* the hub is unreachable: unconfirmed */ }
+        if (!definiteRejection) {
+          try { await reconcileStartedConversation(); } catch { /* the hub is unreachable: unconfirmed */ }
+        }
         // #518: still unconfirmed ⇒ 「未送达」, never a 「发送中…」 that nobody will finish. The instance
         // showing this conversation now (or the next one to open it) picks it up from the outbox; retry
         // reuses the same client_request_id, so a send the hub did take is deduplicated, not doubled.
         if (outboxForAlias(startedAlias).some(entry => entry.id === localId)) {
           outboxMarkFailed(localId);
+          if (failReason) outboxSetFailReason(localId, failReason);
           recordSendBubble(dashboardRequestIdForLocalId(localId), 'failed');
         }
         return;
       }
       const exposeFailure = await shouldExposeSendFailure(
-        () => load(limitRef.current),
+        definiteRejection
+          ? async () => {}
+          : () => reconcileOutboxForSend({
+              fetchRows: async () => (await fetchTasks(cfg, newestPageParams(startedAlias, limitRef.current))).tasks ?? [],
+              pendingEntries: () => outboxForAlias(startedAlias),
+              confirmIds: confirmedOutboxIds,
+              removeOutbox: outboxRemove,
+              onConfirmed: () => { if (mayTouchVisibleState()) void load(limitRef.current); },
+            }),
         () => outboxForAlias(startedAlias).some(entry => entry.id === localId),
       );
       if (!exposeFailure) return;
       outboxMarkFailed(localId); // 盘上也是 failed——杀 app 重开仍可重试
+      if (failReason) outboxSetFailReason(localId, failReason);
       setMessages(prev =>
         prev.map(t => (t._localId === localId ? { ...t, _pending: false, _failed: true, _failReason: failReason } : t)),
       );
@@ -2152,6 +2170,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   };
 
   const retry = (item: ChatItem) => {
+    if (!isRetryableSendFailure(item._failReason)) return;
     // #527:重试发的是「这条消息」——字和图一起。图拿不回来就不发,让用户删掉重选(绝不只发文字)。
     const plan = planResend(item);
     if (plan.kind === 'nothing' || !item._localId) return;
@@ -2168,12 +2187,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     }
     const retriedAt = Date.now();
     outboxMarkPending(item._localId, retriedAt); // 重试中被杀照样恢复(仍在盘上)
-    setMessages(prev =>
-      mergeMessagesNewestFirst(
-        prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false, _failReason: undefined, _uploadError: undefined } : t)),
-        [],
-      ),
-    );
+    setMessages(prev => {
+      const updated = prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false, _failReason: undefined, _uploadError: undefined } : t));
+      return mergeMessagesNewestFirst(updated.filter(t => t._localId), updated.filter(t => !t._localId));
+    });
     const priority = item._priority ?? outboxForAlias(alias).find(e => e.id === item._localId)?.priority ?? 'normal';
     doSend(plan.content, item._localId, plan.imgs, priority, !!(item._original ?? outboxEntry(item._localId)?.original));
   };
@@ -2893,6 +2910,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onScroll={onScroll}
           scrollEventThrottle={16}
           inverted
+          keyboardShouldPersistTaps="handled"
           data={messages}
           // 高亮(定位 / 搜索)只改 state 不改 data:不传 extraData,列表不重画格子,高亮根本画不出来(#463 量到的)。
           extraData={highlightExtra}
@@ -3071,11 +3089,19 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 {item._pending ? (
                   <Text style={styles.pendingMark}>{t('chat.sending')}</Text>
                 ) : item._failed ? (
-                  <Pressable onPress={() => retry(item)} hitSlop={8}>
-                    {item._uploadError ? <Text style={styles.uploadErrorText}>{item._uploadError}</Text> : null}
-                    <Text style={styles.failedMark}>{t('chat.notDelivered')}</Text>
-                    {item._failReason ? <Text style={styles.failReasonText} testID="chat-fail-reason">{t(`chat.failReason.${item._failReason}`)}</Text> : null}
-                  </Pressable>
+                  isRetryableSendFailure(item._failReason) ? (
+                    <Pressable onPress={() => retry(item)} hitSlop={8}>
+                      {item._uploadError ? <Text style={styles.uploadErrorText}>{item._uploadError}</Text> : null}
+                      <Text style={styles.failedMark}>{t('chat.notDelivered')}</Text>
+                      {item._failReason ? <Text style={styles.failReasonText} testID="chat-fail-reason">{t(`chat.failReason.${item._failReason}`)}</Text> : null}
+                    </Pressable>
+                  ) : (
+                    <View testID="chat-not-delivered-permanent">
+                      {item._uploadError ? <Text style={styles.uploadErrorText}>{item._uploadError}</Text> : null}
+                      <Text style={styles.failedMark}>{t('chat.notDeliveredNoRetry')}</Text>
+                      {item._failReason ? <Text style={styles.failReasonText} testID="chat-fail-reason">{t(`chat.failReason.${item._failReason}`)}</Text> : null}
+                    </View>
+                  )
                 ) : sender.isCurrentUser && !(item.result ?? item.reply) ? (
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
                   // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
