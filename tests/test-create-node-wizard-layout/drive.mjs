@@ -28,8 +28,8 @@ const DAEMON = { daemon_node_id: 'd_example_1', alias: 'daemon-example', hostnam
 const VIEWPORTS = [{ name: 'desktop-1200x850', w: 1200, h: 850, desktop: true }, { name: 'phone-390x844', w: 390, h: 844, mobile: true }];
 const THEMES = ['light', 'dark'];
 const RUNS = [
-  { slug: 'codex-copresence', label: 'Codex（TUI 共存）', want: ['名字', 'Runtime', '确认'] },
-  { slug: 'claude-agent-sdk', label: 'Claude Agent SDK', want: ['名字', 'Runtime', '模型', '参数', '确认'] },
+  { slug: 'codex-copresence', label: 'Codex（TUI 共存）', want: ['名字', '选择 AI', '确认'] },
+  { slug: 'claude-agent-sdk', label: 'Claude Agent SDK', want: ['名字', '选择 AI', '模型', '参数', '确认'] },
 ];
 
 const DEFAULT_STEPS = 5;
@@ -136,7 +136,7 @@ for (const vp of VIEWPORTS) {
           await page.getByText('上一步', { exact: true }).click();
           await settle(page);
           const back = await snapshot(page);
-          ck(`${tag}: 上一步 from 确认 returns to Runtime`, back.title === 'Runtime', String(back.title));
+          ck(`${tag}: 上一步 from 确认 returns to 选择 AI`, back.title === '选择 AI', String(back.title));
         } else {
           ck(`${tag}: nothing skipped → no skipped line`, last.skipped === null, String(last.skipped));
         }
