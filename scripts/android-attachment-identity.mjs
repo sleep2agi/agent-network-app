@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { mirrorFetch } from './android-mirror-fetch.mjs';
 
 const BASE = 'https://modelscope.cn/datasets/SmartFlowAI/agent-network-releases/resolve/master/android';
 export async function verifyEarlyAttachment({ version, commit, apkSha256, get = fetch }) {
@@ -28,6 +29,6 @@ export async function verifyEarlyAttachment({ version, commit, apkSha256, get = 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
   const [version, commit, path] = process.argv.slice(2);
   verifyEarlyAttachment({ version, commit, apkSha256: createHash('sha256').update(readFileSync(path)).digest('hex'),
-    get: (url, options) => fetch(url, { ...options, signal: AbortSignal.timeout(120000), headers: { 'Cache-Control': 'no-cache' } }),
+    get: mirrorFetch(),
   }).then(result => console.log(result)).catch(error => { console.error(error.message); process.exitCode = 1; });
 }

@@ -1,5 +1,6 @@
 import { appendFileSync } from 'node:fs';
 import { pathToFileURL } from 'node:url';
+import { mirrorFetch } from './android-mirror-fetch.mjs';
 
 export async function pinnedBuild(version, commit, get = fetch) {
   if (!/^\d+\.\d+\.\d+$/.test(version) || !/^[a-f0-9]{40}$/.test(commit)) throw new Error('Invalid requested source');
@@ -21,9 +22,7 @@ export async function pinnedBuild(version, commit, get = fetch) {
 }
 
 if (process.argv[1] && import.meta.url === pathToFileURL(process.argv[1]).href) {
-  pinnedBuild(process.argv[2], process.argv[3], url => fetch(url, {
-    headers: { 'Cache-Control': 'no-cache' }, signal: AbortSignal.timeout(30000),
-  })).then(record => {
+  pinnedBuild(process.argv[2], process.argv[3], mirrorFetch()).then(record => {
     if (record) appendFileSync(process.env.GITHUB_OUTPUT,
       `run_id=${record.runId}\nrun_attempt=${record.runAttempt}\nartifact_id=${record.artifactId}\nartifact_digest=${record.artifactDigest.slice(7)}\n`);
   }).catch(error => { console.error(error.message); process.exitCode = 1; });
