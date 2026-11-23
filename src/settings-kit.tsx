@@ -8,12 +8,13 @@
 // 文字一律走 ui-text(字体大小设置生效),尺寸走 ds()(界面密度生效)。
 // 宽屏(桌面两栏)右栏也用这些积木(#427「设置页整体重新设计」):SettingsPane 把内容收在一列居中的窄栏里,
 // 每段一张卡片;账号一段用 SettingsAccountRow(头像 · 名字 · 当前 · ⋯)。
-import { Children, Fragment, isValidElement, useRef, type ReactNode } from 'react';
+import { Children, Fragment, isValidElement, useRef, useState, type ReactNode } from 'react';
 import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type TextInputProps } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { ds } from './ui-scale';
+import UserAvatarImage from './UserAvatarImage';
 import { elevated } from './elevation';
 
 /** 卡片左右边距 与 行内左右内边距(标签左边缘 = 卡片左边缘 + ROW_PAD_X)。 */
@@ -182,17 +183,32 @@ export function SettingsRow({ label, subtitle, subtitleTone, value, valueTone, v
  * ⋯ 放在 › / ✓ 同一列(右边缘对齐)。large = 当前账号那张卡(头像 48)。
  */
 /** 设置页统一字标头像：首字母 + card 底 + pill 圆角（尺寸随行高）。 */
-export function SettingsLetterAvatar({ name, size }: { name: string; size: number }) {
+export function SettingsLetterAvatar({ name, size, avatarUrl, hubUrl, token }: {
+  name: string; size: number; avatarUrl?: string | null; hubUrl?: string; token?: string;
+}) {
+  const [failed, setFailed] = useState(false);
+  // 只取「受保护路径 / 合法 https」这一支；**不使用 humanAvatarPlan 的 file 兜底**（那会回落到卡通插画池）。
+  // 加载一律走 UserAvatarImage：受保护路径带 token 取，失败时保留底层字标。
+  const showImage = !!avatarUrl && !!hubUrl && !failed;
   return (
-    <View style={{ width: size, height: size, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
+    <View style={{ width: size, height: size, borderRadius: radius.pill, overflow: 'hidden', alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
       <Text style={{ fontSize: Math.round(size * 0.4), fontWeight: '600', color: colors.textSecondary }}>
         {(name || '?').trim().slice(0, 1).toUpperCase()}
       </Text>
+      {showImage ? (
+        <UserAvatarImage
+          value={avatarUrl!}
+          hubUrl={hubUrl!}
+          token={token}
+          onError={() => setFailed(true)}
+          style={{ position: 'absolute', width: size, height: size, borderRadius: radius.pill }}
+        />
+      ) : null}
     </View>
   );
 }
 
-export function SettingsAccountRow({ name, subtitle, warning, current, badge, large, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
+export function SettingsAccountRow({ name, subtitle, warning, current, badge, large, avatarUrl, hubUrl, token, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
   name: string;
   subtitle?: string;
   /** 例如「登录已失效」:红字,在灰字下面。 */
@@ -202,6 +218,11 @@ export function SettingsAccountRow({ name, subtitle, warning, current, badge, la
   /** 其他小标(本地工作区 =「本机」)。 */
   badge?: string;
   large?: boolean;
+  /** 自设头像（Hub 上的 avatar_url）；没有就显字标。 */
+  avatarUrl?: string | null;
+  /** 头像必须带 hubUrl + token 才能走受保护路径。 */
+  hubUrl?: string;
+  token?: string;
   onPress?: () => void;
   onMore?: (anchor: any) => void;
   moreLabel?: string;
@@ -214,7 +235,7 @@ export function SettingsAccountRow({ name, subtitle, warning, current, badge, la
     <RowShell onPress={onPress} testID={id} accessibilityLabel={accessibilityLabel ?? name}>
       {/* admin 2026-11-23：账号行统一字标（默认不用随机卡通插画）；自设头像在「头像」小节里编辑 */}
       <View style={[styles.lead, { width: ds(SETTINGS_LEAD) }]} testID={`${id}-lead`}>
-        <SettingsLetterAvatar name={name} size={large ? 48 : 36} />
+        <SettingsLetterAvatar name={name} size={large ? 48 : 36} avatarUrl={avatarUrl} hubUrl={hubUrl} token={token} />
       </View>
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
@@ -412,7 +433,7 @@ export function SettingsTextField({ label, testID, ...input }: TextInputProps & 
  * 底色用实底品牌色(solidBrand,深浅两档都是实底蓝),字和图形用 onSolid(两档都是白)——
  * 不用 accent:深色下 accent 是亮蓝、onAccent 是黑字,整张卡会发灰。
  */
-export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
+export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, avatarUrl, hubUrl, token, onPress, onMore, moreLabel, testID, accessibilityLabel }: {
   name: string;
   subtitle?: string;
   pill?: string;
@@ -420,6 +441,10 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
   extraPill?: string;
   /** 例如「登录已失效」。 */
   warning?: string;
+  avatarUrl?: string | null;
+  /** 头像必须带 hubUrl + token 才能走受保护路径。 */
+  hubUrl?: string;
+  token?: string;
   onPress?: () => void;
   /** 桌面账号页的当前账号:右侧 ⋯(复制 / 编辑 / 移除),没有 › 。 */
   onMore?: (anchor: any) => void;
@@ -440,11 +465,7 @@ export function SettingsProfileCard({ name, subtitle, pill, extraPill, warning, 
       {/* admin 2026-11-23：设置页不再用随机卡通插画（AliasAvatar 会按 alias 哈希到插画池），
           统一成克制的字标；用户自设头像仍在「头像」小节里编辑。 */}
       <View style={styles.profileAvatar}>
-        <View style={{ width: 52, height: 52, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card }}>
-          <Text style={{ fontSize: 20, fontWeight: '600', color: colors.textSecondary }}>
-            {(name || '?').trim().slice(0, 1).toUpperCase()}
-          </Text>
-        </View>
+        <SettingsLetterAvatar name={name} size={52} avatarUrl={avatarUrl} hubUrl={hubUrl} token={token} />
       </View>
       <View style={styles.accountCopy}>
         <View style={styles.accountNameLine}>
