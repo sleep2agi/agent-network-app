@@ -642,6 +642,12 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.615:
+            ### 修复与改进
+
+            - 新建节点时，暂时用不了的 AI 会收进可展开的分组，不再满屏红字；原因更简短，需要的命令可以直接复制。全应用的开关颜色也统一了。
+            - 部门数量会显示「含下级共 N 个」，手机和电脑看到的统计一致。
+
             What's new in 0.2.614:
             ### 修复与改进
 
