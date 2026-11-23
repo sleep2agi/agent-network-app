@@ -8,7 +8,7 @@ import DialogFrame from './DialogFrame';
 import { listenEscapeClose } from './escape-close';
 import { fetchScopedStatus, type HubConfig } from './api';
 import { loadAgentOrg, moveAgentDepartment, orgLoadErrorReason } from './agent-org-api';
-import { agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, orgTree, placeAgents, staleDays, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
+import { showUnassigned, agentCount, agentsDirectlyIn, hiddenAgentsDirectlyIn, orgTree, placeAgents, staleDays, type AgentOrgData, type DemoMove, type PlacedAgent } from './agent-org-model';
 import { childrenOf, deptPathLabel, flattenTree, subtreeIds, type Department } from './org-model';
 import { createDepartment, deleteDepartment, updateDepartment, OrgRequestError } from './org-api';
 import { blockersFromDetail, canEditAnyDepartment, DEPT_MENU_LABEL_KEY, deleteBlockers, deptMenuActions, isDeleteBlocked, type DeleteBlockers, type DeptMenuAction } from './agent-org-dept-menu';
@@ -129,7 +129,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
       // #2025：有未归属 Agent 时右栏直接落在「未归属」，不再先落在某个部门上。
       const unowned = data ? agentCount(initialAgents, data, null) : 0;
       const populated = data ? flattenTree(orgTree(data)).find(row => agentsDirectlyIn(initialAgents, row.dept.id).length > 0) : undefined;
-      const fallback = data?.directory || unowned > 0 ? null : (data?.departments[0]?.id ?? null);
+      const fallback = data ? flattenTree(orgTree(data))[0]?.dept.id ?? null : null;
       setFocus(p.phone ? undefined : (unowned > 0 ? null : (populated?.dept.id ?? fallback)));
     };
     // admin 2026-11-16「这个UI 加载UI太差了」:先画上次读到的组织架构(内存瞬开,磁盘次之),实时结果回来再替换。
@@ -506,7 +506,7 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
   const { t } = useTranslation();
   const rows = flattenTree(orgTree(p.data), p.fill ? { collapsed: p.collapsed } : {});
   const unowned = agentCount(p.placed, p.data, null);
-  const unassignedRow = p.data.directory || unowned > 0 ? (
+  const unassignedRow = showUnassigned(unowned) ? (
     <DepartmentRow
       testID="agent-org-dept-unassigned"
       label={t('agentOrg.unowned')}
@@ -691,7 +691,7 @@ function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onF
         </Pressable>;
       }) : <Text testID="agent-org-empty" style={[styles.phoneRowSub, { padding: spacing.md }]}>{t('agentOrg.empty')}</Text>}
     </View>
-    {p.data.directory || unowned.count > 0 ? <View style={[styles.phoneGroup, { marginTop: spacing.md }]}>
+    {showUnassigned(unowned.count) ? <View style={[styles.phoneGroup, { marginTop: spacing.md }]}>
       <Pressable testID="agent-org-dept-unassigned" accessibilityRole="button" onPress={() => p.onFocus(null)}
         onLongPress={pointerUi() ? undefined : p.onMenu ? e => p.onMenu!(null, e.nativeEvent.pageX, e.nativeEvent.pageY) : undefined}
         style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md }, pressed && { backgroundColor: colors.rowHover }]}>
@@ -780,6 +780,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
   const shown = filtered.slice(0, ROW_CAP);
   const hidden = filtered.length - shown.length;
   const children = p.focus ? childrenOf(orgTree(p.data), p.focus) : [];
+  const countLabel = children.length ? t('agentOrg.agentsInclusive', { count: agentCount(p.placed, p.data, p.focus) }) : t('agentOrg.agentsCount', { count: agents.length });
   const deptPath = p.focus ? deptPathLabel(orgTree(p.data), p.focus) : '';
   if (p.fill) return (
     <View testID="agent-org-detail-card" style={styles.detailFill}>
@@ -787,7 +788,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <View style={styles.memberTitle}>
             <Text numberOfLines={1} style={[styles.title, { flexShrink: 1 }]}>{title}</Text>
-            <Text testID="agent-org-member-count" style={styles.countDense}>{t('agentOrg.agentsCount', { count: agents.length })}</Text>
+            <Text testID="agent-org-member-count" style={styles.countDense}>{countLabel}</Text>
           </View>
           <Text numberOfLines={1} style={styles.treeHeadSub}>{deptPath && deptPath !== title ? `${deptPath} · ` : ''}{p.tab === 'people' ? t('agentOrg.people.sub') : t('agentOrg.directMembers')}</Text>
         </View>
@@ -863,7 +864,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
       <View style={styles.detailHeading}>
         <View style={styles.memberTitle}>
           <Text numberOfLines={2} style={[styles.title, { flexShrink: 1 }]}>{title}</Text>
-          <Text testID="agent-org-member-count" style={styles.count}>{t('agentOrg.agentsCount', { count: agents.length })}</Text>
+          <Text testID="agent-org-member-count" style={styles.count}>{countLabel}</Text>
         </View>
         {p.actions}
         {p.focus === null && filtered.length > 0 && p.onBulkAssign && p.data.departments.length > 0 ? (
@@ -909,7 +910,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
           onPress={() => p.onFocus(child.id)}
         />
       ))}
-        {filtered.length ? shown.map(agent => <AgentLine key={agent.nodeId} agent={agent} onOpen={p.onOpenAgent ? () => p.onOpenAgent!(agent.alias) : undefined} />) : <View testID={agents.length ? 'agent-org-no-results' : 'agent-org-no-agents'} style={styles.empty}>
+        {filtered.length ? shown.map(agent => <AgentLine key={agent.nodeId} agent={agent} onOpen={p.onOpenAgent ? () => p.onOpenAgent!(agent.alias) : undefined} />) : children.length ? null : <View testID={agents.length ? 'agent-org-no-results' : 'agent-org-no-agents'} style={styles.empty}>
           <Ionicons name={agents.length ? 'search-outline' : 'people-outline'} size={30} color={colors.textMuted} />
           <Text style={styles.note}>{t(agents.length ? 'agentOrg.noResults' : 'agentOrg.noAgents')}</Text>
         </View>}
