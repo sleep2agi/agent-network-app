@@ -102,6 +102,8 @@ import { comboChips, comboFromEvent, shortcutForCombo } from './shortcuts-model'
 import { KBD_IDLE, kbdVoiceBlur, kbdVoiceKeyDown, kbdVoiceKeyUp, kbdVoiceSync, type KbdVoiceMode, type KbdVoiceState, type KbdVoiceStep } from './voice-shortcut-model';
 import type { GestureResponderEvent, NativeSyntheticEvent, NativeScrollEvent } from 'react-native';
 import { usePoll } from './usePoll';
+import { chatForeground, useChatForeground } from './chat-foreground';
+import { createChatRounds } from './chat-poll-round';
 import { withHardDeadline } from './hard-deadline';
 import { createChatLoadDiag } from './chat-load-diag';
 import { onConversationReply } from './reply-wake';
@@ -682,10 +684,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   const loadDiag = useRef(createChatLoadDiag());
 
-  const load = useCallback(
+  const foreground = useChatForeground();
+  const rounds = useMemo(() => createChatRounds(), [conversationKeyFor, cfg]);
+  const readRound = useCallback(
     async (limit: number) => {
       const token = requestGate.current();
-      if (!token) return;
+      if (!token || token.key !== conversationKeyFor) return;
       const sequence = ++loadSequenceRef.current;
       const startedAt = Date.now();
       loadDiag.current.loadStarted(sequence, requestGate.isCurrent(token), limit);
@@ -710,6 +714,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         recordChatLatestActivity(alias, latestChatMessage(rows), cfg.networkId);
         setLoaded(true);
       };
+      let outgoing: Promise<void> | undefined;
       const results = await loadChatSources({
         // 只等入站（to_name=本 agent）先画：首屏不能被第二次请求拖慢（drives 的首屏/时延断言就是量这个）。
         tasks: () => withHardDeadline(fetchTasks(cfg, params), 'chat tasks'),
@@ -722,18 +727,21 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           const confirmed = new Set(confirmedOutboxIds(outboxForAlias(alias), fetched));
           confirmed.forEach(outboxRemove);
           // 先画入站 + 上一轮已知的出站(同一 agent),出站行不再每轮刷新先消失再出现。
-          paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, params.limit), fetched, confirmed);
+          const displayLimit = Math.max(rows.length, limitRef.current);
+          paint('tasks', firstPaintRows(rows, outgoingCacheRef.current, alias, displayLimit), fetched, confirmed);
           // 出站（from_name=本 agent）再补一次：这些行 to_name 是别的节点，result 才是**对方回给它的**内容，
           // 只拉入站会让「节点回给它的那半」永远不出现。**不阻塞首屏**，回来后再合并重画一次。
-          void fetchTasks(cfg, { from_name: alias, limit: params.limit, skipStats: true })
+          if (!chatForeground()) return;
+          outgoing = fetchTasks(cfg, { from_name: alias, limit: params.limit, skipStats: true })
             .then(out => {
               if (!isCurrent()) return;
-              const outgoingRows = (out.tasks ?? []).filter(r => (r.from_name ?? '') === alias);
+              const outgoingRows = mergeNewestPage(cachedOutgoing(outgoingCacheRef.current, alias), (out.tasks ?? []).filter(r => (r.from_name ?? '') === alias), params.limit);
               const hadOutgoing = cachedOutgoing(outgoingCacheRef.current, alias).length > 0;
               outgoingCacheRef.current = { alias, rows: outgoingRows };
               // 原来没有、现在也没有 → 不用重画;原来有、现在没了 → 照实重画(行确实不在了)。
               if (!outgoingRows.length && !hadOutgoing) return;
-              paint('tasks', mergeConversationSides(rows, outgoingRows, params.limit), fetched, confirmed);
+              const currentRows = hubRowsRef.current;
+              paint('tasks', mergeConversationSides(currentRows, outgoingRows, Math.max(currentRows.length, limitRef.current)), fetched, confirmed);
             })
             .catch(() => { /* 出站补拉失败就保持入站视图，不清空已画内容 */ });
         },
@@ -747,9 +755,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       loadDiag.current.loadSettled(sequence, Date.now() - startedAt,
         !requestGate.isCurrent(token) ? 'token' : !mountedRef.current ? 'unmounted' : sequence !== loadSequenceRef.current ? 'sequence' : 'none');
       void retryUnreadPersistFromPoll();
+      await outgoing;
     },
-    [cfg, alias],
+    [cfg, alias, conversationKeyFor],
   );
+  const load = useCallback((limit: number) => rounds.run(() => readRound(limit), false), [rounds, readRound]);
+  const tick = useCallback((first = false) => rounds.tick(Math.max(limitRef.current, hubRowsRef.current.length),
+    limit => chatForeground() ? readRound(limit) : Promise.resolve(), first), [rounds, readRound]);
 
   // Reset the lazy window when the chat target changes; usePoll does the
   // initial fetch + polling (fires fn() right after this effect → limit=PAGE).
@@ -828,12 +840,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   // Foreground-only message polling: 5s while visible, paused in background,
   // instant refresh on resume (shared hook). Reads the live window via limitRef.
-  usePoll(() => load(limitRef.current), 5000, [load]);
+  usePoll(tick, 5000, [tick], foreground);
   // 回复推送(reply-wake.ts):hub 的网络事件流一报「这个 agent 回复了」就立刻读,不等下一次 5 s 轮询。
   // 只是叫醒;内容照旧从同一个 /api/tasks 读。流不在 / 断了 / 漏了,轮询照旧兜底。
   const shownTaskIds = useRef<Set<string>>(new Set());
   shownTaskIds.current = new Set(messages.map(m => m.task_id).filter((id): id is string => !!id));
-  useEffect(() => onConversationReply(cfg, alias, () => { void load(limitRef.current); }, { isShownTask: id => shownTaskIds.current.has(id) }), [cfg, alias, load]);
+  useEffect(() => foreground ? onConversationReply(cfg, alias, () => { void tick(); }, { isShownTask: id => shownTaskIds.current.has(id) }) : undefined, [cfg, alias, tick, foreground]);
 
   useEffect(() => {
     // 2026-09-17 Vincent:身份只查一次,走 RELAY 隧道那一次失败,整场会话都不知道
@@ -872,7 +884,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       if (!requestGate.isCurrent(token) || !mountedRef.current) return;
       const { rows, added } = mergeOlderPage(hubRowsRef.current, page);
       hubRowsRef.current = rows;
-      // 轮询照旧刷新整个已加载窗口(hub 上限 200 由 newestPageParams 截),更早的行由 mergeNewestPage 留着。
+      // Track display history and the minute calibration; ordinary ticks always use CHAT_PAGE.
       limitRef.current = Math.max(limitRef.current, rows.length);
       if (!olderPageHasMore(page.length, added)) setHasOlder(false);
       setMessages(prev => {
@@ -2325,6 +2337,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
 
   // 手机复用页头空间，但来源与桌面一致：只展示当前 scope 内未过期的上报。
   useEffect(() => {
+    if (!foreground) return;
     let live = true;
     let generation = 0;
     let expiry: ReturnType<typeof setTimeout> | undefined;
@@ -2348,12 +2361,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     void poll();
     const timer = setInterval(poll, 30_000);
     return () => { live = false; clearInterval(timer); if (expiry) clearTimeout(expiry); };
-  }, [cfg, alias, composerModelScope]);
+  }, [cfg, alias, composerModelScope, foreground]);
   // Deliberately a slower, separate poll than the 5s message poll above:
   // an agent's online/offline state changes far less often than messages
   // do, so 30s keeps the status badge fresh without doubling the chat's
   // request rate. Don't merge the two — they have different freshness needs.
   useEffect(() => {
+    if (!foreground) return;
     let live = true;
     const poll = async () => {
       try {
@@ -2375,7 +2389,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       live = false;
       clearInterval(t);
     };
-  }, [cfg, alias]);
+  }, [cfg, alias, foreground]);
   // #4591 —— 点「停止」：先记下此刻的消息集合（回执只认之后新出现的），发控制消息，再等真凭据（窗口 INTERRUPT_CONFIRM_MS，迟到凭据上限 LATE_EVIDENCE_MS）。
   const pressInterrupt = () => {
     if (!turnCaps.interrupt || interruptBusy || !interruptable(sessionStatus)) return;
