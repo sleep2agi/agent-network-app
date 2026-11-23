@@ -845,7 +845,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 只是叫醒;内容照旧从同一个 /api/tasks 读。流不在 / 断了 / 漏了,轮询照旧兜底。
   const shownTaskIds = useRef<Set<string>>(new Set());
   shownTaskIds.current = new Set(messages.map(m => m.task_id).filter((id): id is string => !!id));
-  useEffect(() => foreground ? onConversationReply(cfg, alias, () => { void tick(); }, { isShownTask: id => shownTaskIds.current.has(id) }) : undefined, [cfg, alias, tick, foreground]);
+  useEffect(() => {
+    if (!foreground) return;
+    let live = true;
+    const off = onConversationReply(cfg, alias, () => {
+      void rounds.reply(async () => {
+        if (live && chatForeground()) await readRound(limitRef.current);
+      }).catch(() => {});
+    }, { isShownTask: id => shownTaskIds.current.has(id) });
+    return () => { live = false; off(); };
+  }, [cfg, alias, rounds, readRound, foreground]);
 
   useEffect(() => {
     // 2026-09-17 Vincent:身份只查一次,走 RELAY 隧道那一次失败,整场会话都不知道

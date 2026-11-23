@@ -72,7 +72,7 @@ const checks: Array<[string, boolean]> = [
     // #781: two independent sources must not replace a newer A snapshot after A→B→A.
     /setMessages\(prev => \{\s*if \(!isCurrent\(\)\) return prev;/.test(screen) && screen.includes('conversations.put(token.key, merged)')],
   ['the screen checks request ownership before its first state write', (() => {
-    const afterFetch = screen.slice(screen.indexOf('const load = useCallback('));
+    const afterFetch = screen.slice(screen.indexOf('const readRound = useCallback('), screen.indexOf('const load = useCallback('));
     const gate = afterFetch.indexOf('if (!isCurrent()) return;');
     const write = afterFetch.indexOf('setMessages(');
     return gate > 0 && write > gate;
