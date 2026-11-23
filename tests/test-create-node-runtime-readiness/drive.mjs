@@ -14,7 +14,7 @@
 //     (3) 🔴 旧 daemon(没 runtime_readiness):和以前一样 —— 没有胶囊排、「可建节点」行还在、runtime 名 chip 还在
 //     (4) 几何:每颗胶囊都在自己的卡片里(左右不出界),卡片在视口里,页面没有横向滚动(手机 390 尤其)
 //   向导 Runtime 步
-//     (5) 🔴 建不了的 runtime(missing_cli / not_logged_in)禁用:点了选不中、选中的仍是原来那个;名字下面写着原因+修法
+//     (5) 🔴 不可用 AI 默认折叠；展开看短原因，点行看修法与可选命令，当前选择不变
 //     (6) 未检测(hub unknown)仍可选,带「未检测」;共用登录 → 「与 3 个节点共用登录」,仍可选
 //     (7) 初始 runtime 是第一个能用的
 //     (8) 🔴 旧 daemon:没有任何原因 / 未检测行,声明支持的 runtime 都能选(和以前一样)
@@ -249,16 +249,32 @@ for (const vp of VIEWPORTS) {
 
       const sdk0 = await runtimeRow(page, 'claude-agent-sdk');
       ck(`${tag} wizard: initial runtime is the first usable one (Claude Agent SDK, checked)`, !!sdk0?.checked && !sdk0.disabled);
-      for (const [rt, reason] of [['grok-build-acp', REASON_GROK], ['codex-sdk', REASON_CODEX]]) {
-        const row = await runtimeRow(page, rt);
-        ck(`🔴 ${tag} wizard: ${rt} row is disabled`, !!row?.disabled, JSON.stringify(row));
-        ck(`🔴 ${tag} wizard: ${rt} reason + fix visible under the name`, (await visible(page, `runtime-reason-${rt}`)) && ((await textOf(page, `runtime-reason-${rt}`)) || '').includes(reason));
-        await page.locator(q(`runtime-row-${rt}`)).click({ force: true });
-        await settle(page);
-        const after = await runtimeRow(page, rt);
-        const sdk = await runtimeRow(page, 'claude-agent-sdk');
-        ck(`🔴 ${tag} wizard: clicking ${rt} does not select it`, !after?.checked && !!sdk?.checked, `${rt} checked=${after?.checked} sdk checked=${sdk?.checked}`);
+      const group = page.getByRole('button', { name: /这台机器上暂时用不了/ });
+      const unavailable = [
+        { name: 'Grok', reason: '未安装', command: null },
+        { name: 'Codex SDK', reason: '未登录', command: 'codex login --device-auth' },
+      ];
+      const help = page.getByText('怎么解决', { exact: true });
+      const copy = page.getByRole('button', { name: '复制', exact: true });
+      ck(`${tag} wizard: unavailable group is visible`, await group.isVisible());
+      for (const { name } of unavailable) ck(`${tag} wizard: ${name} initially hidden`, !await page.getByText(name, { exact: true }).isVisible());
+      await group.click();
+      for (const { name, reason, command } of unavailable) {
+        const row = page.getByRole('button').filter({ has: page.getByText(name, { exact: true }) });
+        const why = row.getByText(reason, { exact: true });
+        await why.waitFor();
+        ck(`${tag} wizard: ${name} shows short reason only`, await why.isVisible() && !await help.isVisible() && !await copy.isVisible());
+        const rb = await row.boundingBox(), wb = await why.boundingBox();
+        ck(`${tag} wizard: ${name} reason fits row`, rb && wb && wb.x >= rb.x - 1 && wb.x + wb.width <= rb.x + rb.width + 1);
+        await row.click();
+        await help.waitFor();
+        ck(`${tag} wizard: ${name} command availability`, command ? await page.getByText(command, { exact: true }).isVisible() && await copy.isVisible() : !await copy.isVisible());
+        ck(`${tag} wizard: opening ${name} keeps Claude selected`, !!(await runtimeRow(page, 'claude-agent-sdk'))?.checked && await page.getByRole('radio', { checked: true }).count() === 1);
+        await row.click();
+        await help.waitFor({ state: 'hidden' });
       }
+      ck(`${tag} wizard: no horizontal overflow`, await page.evaluate(() => document.documentElement.scrollWidth <= innerWidth));
+      await group.click();
       // (6) 未检测:可选
       ck(`${tag} wizard: unknown runtime shows 「未检测」`, ((await textOf(page, 'runtime-unchecked-claude-code-cli')) || '').includes('未检测'));
       await page.locator(q('runtime-row-claude-code-cli')).click();
@@ -269,13 +285,6 @@ for (const vp of VIEWPORTS) {
       await page.locator(q('runtime-row-codex-app-server')).click();
       await settle(page);
       ck(`${tag} wizard: shared-login runtime stays selectable`, !!(await runtimeRow(page, 'codex-app-server'))?.checked);
-      // 几何:原因行在行内、行在视口里
-      const geo = await page.evaluate(() => {
-        const r = (s) => document.querySelector(s)?.getBoundingClientRect();
-        const row = r('[data-testid="runtime-row-codex-sdk"]'), why = r('[data-testid="runtime-reason-codex-sdk"]');
-        return row && why ? { rowX: row.x, rowR: row.right, whyX: why.x, whyR: why.right, scrollW: document.documentElement.scrollWidth, innerW: innerWidth } : null;
-      });
-      ck(`${tag} wizard: reason wraps inside its row, no horizontal scroll`, !!geo && geo.whyX >= geo.rowX && geo.whyR <= geo.rowR + 0.5 && geo.scrollW <= geo.innerW, JSON.stringify(geo));
       await page.locator(q('runtime-row-claude-agent-sdk')).click();
       await settle(page);
       await shot('runtime-final');
