@@ -1,3 +1,4 @@
+import { AppSwitch } from './AppSwitch';
 // 手机「设置」子页的积木(Vincent 2026-09-27「设置界面有点体验太差」):照微信 设置 → 通用 / 字体大小
 // 那一套画 —— 页面地色上一块块白色圆角卡片(左右 16 边距),卡片里是 ≥48 高的行:
 //   标签在左 · 值在右 · 最右一列 › 或 ✓(同一个 18 宽的格子,所以 › 和 ✓ 右边缘对齐)。
@@ -9,7 +10,7 @@
 // 宽屏(桌面两栏)右栏也用这些积木(#427「设置页整体重新设计」):SettingsPane 把内容收在一列居中的窄栏里,
 // 每段一张卡片;账号一段用 SettingsAccountRow(头像 · 名字 · 当前 · ⋯)。
 import { Children, Fragment, isValidElement, useRef, useState, type ReactNode } from 'react';
-import { ActivityIndicator, Pressable, StyleSheet, Switch, View, type TextInputProps } from 'react-native';
+import { ActivityIndicator, Pressable, StyleSheet,  View, type TextInputProps } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { colors, onThemeChange, spacing, radius } from './theme';
@@ -391,14 +392,13 @@ export function SettingsSwitchRow({ label, subtitle, subtitleTone, value, onValu
   return (
     <RowShell testID={id} accessibilityLabel={label}>
       <RowLabel label={label} subtitle={subtitle} subtitleTone={subtitleTone} testID={`${id}-label`} />
-      <Switch
+      <AppSwitch
         testID={`${id}-switch`}
         accessibilityLabel={label}
         value={value}
         disabled={disabled}
         onValueChange={onValueChange}
-        trackColor={{ true: colors.accent, false: colors.border }}
-        thumbColor={colors.card}
+
         style={[styles.switch, disabled && styles.disabled]}
       />
     </RowShell>

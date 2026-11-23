@@ -1,3 +1,4 @@
+import { AppSwitch } from './AppSwitch';
 // 设置 → 用户管理(多用户账号与 Agent 权限,hub agent-network#2084)。
 // 列出当前网络的成员;owner / admin 行恒为「全部 Agent」;点成员可改「可访问范围」(全部 / 仅指定)、
 // 逐个分配 Agent 与「可对话」、改角色、移出网络(RFC-038 第 1 步)。「新建用户」走 POST /api/admin/users。
@@ -11,7 +12,7 @@ import type { OrgData } from './org-model';
 import { OrgDesktopPanel, OrgPhoneModal } from './OrgChart';
 import { AgentTeamsSection } from './AgentTeams';
 import { useCallback, useEffect, useMemo, useState, type ComponentProps, type ReactNode } from 'react';
-import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet, Switch, View } from 'react-native';
+import { ActivityIndicator, Platform, Pressable, ScrollView, StyleSheet,  View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
@@ -443,13 +444,12 @@ function DesktopAgentPicker({ p, enabled, chat, readOnlyTag = true, note }: { p:
               {on && chat ? (
                 <View style={styles.canMessage}>
                   <Text style={styles.canMessageText}>{tr('users.canMessage')}</Text>
-                  <Switch
+                  <AppSwitch
                     accessibilityLabel={`${tr('users.canMessage')} ${a.alias}`}
                     value={p.selection.get(a.node_id) === true}
                     disabled={!enabled}
                     onValueChange={v => p.setSelection(s => setCanMessage(s, a.node_id, v))}
-                    trackColor={{ true: colors.accent, false: colors.border }}
-                    thumbColor={colors.card}
+
                     testID={`grant-can-message-${a.alias}`}
                   />
                 </View>

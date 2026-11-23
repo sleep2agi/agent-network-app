@@ -22,6 +22,7 @@ import { readinessFor, readinessSelectable } from './runtime-readiness';
 import { describeOpenCodeCreateError, opencodeCreateError, OPENCODE_GENERATION_LABELS, OPENCODE_V1_NOTE, OPENCODE_V2_WARNING, type OpenCodeGeneration } from './opencode-create-options';
 import CodexProviderFields from './CodexProviderFields';
 import { ProviderConfigDemo } from './BackendPendingDemo';
+import { UnavailableAi } from './UnavailableAi';
 import DaemonRuntimeProviders from './DaemonRuntimeProviders';
 import DaemonCreateProvider from './DaemonCreateProvider';
 import type { CreateProviderReference } from './daemon-provider-create';
@@ -416,7 +417,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
                 testID={blockedByReadiness ? `runtime-reason-${r.id}` : `runtime-unchecked-${r.id}`}
                 style={[styles.readinessLine, blockedByReadiness ? styles.readinessBlocked : styles.readinessUnchecked]}
               >
-                {blockedByReadiness ? `✗ ${ready.note}` : ready.note}
+                {ready.cliDetected ? '已检测到' : '未检测'}
               </Text>
             ) : null}
             {allowed && ready.sharedLoginWarning ? (
@@ -633,16 +634,17 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
             <PaletteSearch
               value={choiceQuery}
               onChangeText={setChoiceQuery}
-              placeholder="搜索 runtime"
-              accessibilityLabel="搜索 runtime"
+              placeholder="搜索 AI"
+              accessibilityLabel="搜索 AI"
               testID="create-runtime-search"
             />
-            <PaletteSectionLabel title={`主要 runtime · ${primaryRuntimes(RUNTIMES).length}`} testID="create-runtime-group-main" />
+            <PaletteSectionLabel title={`可选 AI · ${primaryRuntimes(RUNTIMES).filter(r => isRuntimeAllowed(r.id)).length}`} testID="create-runtime-group-main" />
             {primaryRuntimes(RUNTIMES).map(r => {
               // 「高级」折叠:只挂在有折叠项的行下面(目前是 Grok → 共存模式·实验性),
               // 且只在该行(或其折叠项)被选中时出现,不给其他 runtime 添噪音。
-              const kids = advancedRuntimesOf(RUNTIMES, r.id);
-              const toggle = showsAdvancedToggle(RUNTIMES, r.id, runtimeId);
+              const kids = advancedRuntimesOf(RUNTIMES, r.id).filter(k => isRuntimeAllowed(k.id));
+              if (!isRuntimeAllowed(r.id)) return kids.filter(k => runtimeMatchesQuery(k, choiceQuery)).map(k => renderRuntimeRow(k, false));
+              const toggle = kids.length > 0 && showsAdvancedToggle(RUNTIMES, r.id, runtimeId);
               const open = advancedExpanded(RUNTIMES, r.id, runtimeId, advancedOpen);
               // 搜索：本行或折叠项命中才画；都不命中就整行收起（不把选中的 runtime 换成别的）。
               const anyVisible = runtimeMatchesQuery(r, choiceQuery) || (open && kids.some(k => runtimeMatchesQuery(k, choiceQuery)));
@@ -737,6 +739,7 @@ export default function CreateNodeWizardScreen({ cfg, daemon, onBack, onExit, de
               opencodeGeneration={opencodeGeneration}
               onSelectModel={setModel}
             />
+            <UnavailableAi rows={RUNTIMES.filter(r => !isRuntimeAllowed(r.id) && runtimeMatchesQuery(r, choiceQuery))} daemon={daemon} />
           </View>
         )}
 

@@ -1,10 +1,11 @@
+import { AppSwitch } from './AppSwitch';
 // Hub req #938 — 「复制节点」浮层。节点详情和 Daemon 节点列表共用。
 //
 // 版式与 #4130 模型命令面板同一套：浮层卡片 + 当前来源行（✓）+ 卡片内紧凑确认区
 // （名称 / 工作目录 / 是否复制会话 + 提交），不再另开老式分步弹窗。
 // 请求体仍然走 node-clone.ts 的 cloneDraft（clone_node 工具，字段名不变）。
 import { useState } from 'react';
-import { Pressable, Switch, View } from 'react-native';
+import { Pressable,  View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import { cloneNode, type HubConfig } from './api';
@@ -224,14 +225,13 @@ export default function CloneNodeDialog({
             <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>{t('nodeClone.copySession')}</Text>
             <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t('nodeClone.copySessionHint')}</Text>
           </View>
-          <Switch
+          <AppSwitch
             testID="clone-node-copy-session"
             accessibilityLabel={t('nodeClone.copySession')}
             value={copySession}
             disabled={busy || demo}
             onValueChange={setCopySession}
-            trackColor={{ true: colors.accent, false: colors.border }}
-            thumbColor={colors.card}
+
           />
         </View>
 
