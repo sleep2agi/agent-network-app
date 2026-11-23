@@ -87,10 +87,9 @@ const chatSource = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'u
   ck('409 node_stopped -> targetNotRunning', sendFailureReason(e(409, 'node_stopped')) === 'targetNotRunning');
   ck('401 -> unauthorized', sendFailureReason(e(401, 'token_expired')) === 'unauthorized' && sendFailureReason(e(401)) === 'unauthorized');
 
-  ck('409 targetUnresponsive / targetNotRunning / unauthorized are NOT retryable',
-    !isRetryableSendFailure('targetUnresponsive')
-    && !isRetryableSendFailure('targetNotRunning')
-    && !isRetryableSendFailure('unauthorized'));
+  ck('only unauthorized is NOT retryable (re-login first)', !isRetryableSendFailure('unauthorized'));
+  ck('targetUnresponsive / targetNotRunning stay retryable (tap once the agent recovers, no retyping)',
+    isRetryableSendFailure('targetUnresponsive') && isRetryableSendFailure('targetNotRunning'));
   ck('timeout / aliasNotFound / notGranted / network / attachment / undefined remain retryable',
     isRetryableSendFailure('timeout')
     && isRetryableSendFailure('aliasNotFound')
@@ -112,6 +111,12 @@ const chatSource = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'u
   ck('zh copy: timeout tells user network is slow and to tap retry', t('chat.failReason.timeout').includes('重试'));
   ck('zh copy: targetUnresponsive says stuck', t('chat.failReason.targetUnresponsive').includes('卡住'));
   ck('zh copy: targetNotRunning says not running', t('chat.failReason.targetNotRunning').includes('没在运行'));
+  ck('zh copy: stuck / not-running reasons tell the user when to retry',
+    t('chat.failReason.targetUnresponsive').includes('恢复后再点重试') && t('chat.failReason.targetNotRunning').includes('启动后再点重试'));
+  ck('auto-retry shows 「网络慢，正在重试…」 instead of a silent 发送中',
+    t('chat.sendingRetry') === '网络慢，正在重试…'
+    && chatSource.includes("t(item._retrying ? 'chat.sendingRetry' : 'chat.sending')")
+    && /onRetry: \(\) => \{[\s\S]{0,200}?_retrying: true/.test(chatSource));
   ck('zh copy: unauthorized says sign in again', t('chat.failReason.unauthorized').includes('重新登录'));
   ck('zh copy: non-retryable header omits 点击重试', t('chat.notDeliveredNoRetry') === '未送达');
 

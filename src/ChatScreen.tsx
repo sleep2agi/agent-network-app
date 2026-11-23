@@ -176,6 +176,8 @@ type ChatItem = HubTask & {
   _failed?: boolean;
   /** #552:Hub 回了明确错误码时的原因(i18n key 后缀,chat.failReason.<key>);超时 / 断网没有。 */
   _failReason?: SendFailureReason;
+  /** 超时后正在后台自动重发：气泡写「网络慢，正在重试…」而不是干等的「发送中…」。 */
+  _retrying?: boolean;
   _img?: PickedImage;
   /** 回显里的图。从 outbox 重建时可能只剩 hub 上那份(hubFileId,预览带令牌读)——#527。 */
   _imgs?: (PickedImage & { hubFileId?: string })[];
@@ -1951,7 +1953,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       }
       const response = await runWithSendAutoRetry(
         () => sendTask(cfg, alias, outgoing, attachments, priority, dashboardRequestIdForLocalId(localId)),
-        { shouldStop: () => !outboxEntry(localId) },
+        {
+          shouldStop: () => !outboxEntry(localId),
+          onRetry: () => {
+            if (!mayTouchVisibleState()) return;
+            setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _retrying: true } : t)));
+          },
+        },
       );
       imgs.forEach(releaseClipboardAttachment);
       // delivered: drop the echo, the server copy arrives with reload.
@@ -2188,7 +2196,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     const retriedAt = Date.now();
     outboxMarkPending(item._localId, retriedAt); // 重试中被杀照样恢复(仍在盘上)
     setMessages(prev => {
-      const updated = prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false, _failReason: undefined, _uploadError: undefined } : t));
+      const updated = prev.map(t => (t._localId === item._localId ? { ...t, created_at: new Date(retriedAt).toISOString(), _pending: true, _failed: false, _failReason: undefined, _retrying: undefined, _uploadError: undefined } : t));
       return mergeMessagesNewestFirst(updated.filter(t => t._localId), updated.filter(t => !t._localId));
     });
     const priority = item._priority ?? outboxForAlias(alias).find(e => e.id === item._localId)?.priority ?? 'normal';
@@ -3087,7 +3095,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   <Text style={styles.restoredNote}>{t('chat.restoredTextOnly')}</Text>
                 ) : null}
                 {item._pending ? (
-                  <Text style={styles.pendingMark}>{t('chat.sending')}</Text>
+                  <Text style={styles.pendingMark} testID={item._retrying ? 'chat-sending-retry' : undefined}>{t(item._retrying ? 'chat.sendingRetry' : 'chat.sending')}</Text>
                 ) : item._failed ? (
                   isRetryableSendFailure(item._failReason) ? (
                     <Pressable onPress={() => retry(item)} hitSlop={8}>

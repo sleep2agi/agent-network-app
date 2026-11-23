@@ -5,7 +5,7 @@
 // 2026-11-23 补充：
 //   - 超时 / 断网给出明确人话（「网络慢，没发出去，点一下重试」），并由后台自动退避重发 2 次后才标红；
 //   - 409 target_never_consumes / node_degraded / node_not_active / node_stopped 明确告知对方卡住/没在运行，
-//     且不再提供无意义的「点击重试」；
+//     仍可重试（对方恢复后点一下即可，不用重新打字）；
 //   - 401 走重新登录提示，同样不给「点击重试」。
 
 /** sendTask 失败时抛的错误:带 HTTP 状态码和 Hub 的 error 码(没有就是 undefined)。 */
@@ -68,11 +68,13 @@ export function isDefiniteSendRejection(err: unknown): boolean {
     && err.status !== 429;
 }
 
-/** 这一类失败点击重试有没有意义。对方卡住 / 没在运行 / 401 登录过期时重试没用，不给「点击重试」。 */
+/**
+ * 这一类失败还给不给「点击重试」。只有登录过期不给（要先重新登录，重试必然再失败）。
+ * 对方卡住 / 没在运行仍然可以重试：对方恢复后用户点一下就能把这条发出去，不用重新打字；
+ * 原因那一行会写明「等它恢复后再点重试」。
+ */
 export function isRetryableSendFailure(reason?: SendFailureReason): boolean {
-  return reason !== 'targetUnresponsive'
-    && reason !== 'targetNotRunning'
-    && reason !== 'unauthorized';
+  return reason !== 'unauthorized';
 }
 
 /** Hub 错误码 / 超时断网 → 原因 key(i18n:chat.failReason.<key>)。未知错误 → null(只显示「未送达」)。 */
