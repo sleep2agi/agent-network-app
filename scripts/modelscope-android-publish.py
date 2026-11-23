@@ -27,6 +27,7 @@ shared with scripts/modelscope-mirror-upload.py.
 import argparse
 import hashlib
 import importlib.util
+import json
 import os
 import re
 import shutil
@@ -93,6 +94,33 @@ def current_channel_version(repo):
     return version
 
 
+def publication_record_files(identity, version, sha, held, existing=None):
+    """Fail closed before staging: immutable identity, APK bytes and monotonic code."""
+    fields = ('schemaVersion', 'repository', 'commit', 'version', 'versionCode',
+              'runId', 'runAttempt', 'artifactId', 'artifactName', 'artifactDigest', 'apkSha256')
+    if set(identity) != set(fields) or identity['schemaVersion'] != 1:
+        raise ValueError('invalid publication identity schema')
+    code = lambda v: sum(n * scale for n, scale in zip(map(int, v.split('.')), (1000000, 1000, 1)))
+    if identity['version'] != version or identity['versionCode'] != code(version) or identity['apkSha256'] != sha:
+        raise ValueError('publication identity does not match APK version/code/digest')
+    if identity['repository'] != 'sleep2agi/agent-network-app' or not re.fullmatch(r'[a-f0-9]{40}', identity['commit']):
+        raise ValueError('invalid publication source')
+    if not re.fullmatch(r'sha256:[a-f0-9]{64}', identity['artifactDigest']) or not re.fullmatch(r'[a-f0-9]{64}', sha):
+        raise ValueError('invalid artifact/APK digest')
+    if any(type(identity[k]) is not int or identity[k] <= 0 for k in ('runId', 'runAttempt', 'artifactId', 'versionCode')):
+        raise ValueError('invalid numeric publication identity')
+    if identity['artifactName'] != 'agent-network-android-apk':
+        raise ValueError('unexpected APK artifact name')
+    if existing is not None and existing != identity:
+        raise ValueError('immutable publication identity conflict; bump version')
+    if held and code(version) < code(held):
+        raise ValueError('versionCode must not decrease')
+    if held and code(version) == code(held) and (held != version or existing is None):
+        raise ValueError('equal versionCode requires identical existing publication')
+    body = (json.dumps(identity, sort_keys=True, separators=(',', ':')) + '\n').encode()
+    return {f'android/{version}/publication.json': body}
+
+
 def cmd_publish(args):
     version = args.version.strip()
     if not parse_version(version):
@@ -123,6 +151,21 @@ def cmd_publish(args):
     sha_text = f'{sha}  {name}\n'.encode()
     version_text = f'{version}\n'.encode()
     files = {f'android/{name}.sha256': sha_text, f'android/{version}/notes.md': notes, 'android/latest/VERSION': version_text}
+    if getattr(args, 'identity', None):
+        with open(args.identity, encoding='utf-8') as handle:
+            identity = json.load(handle)
+        record_path = f'android/{version}/publication.json'
+        existing = None
+        if record_path in listing:
+            status, body = mirror.http_get(mirror.resolve_url(args.repo, record_path))
+            if status != 200:
+                raise SystemExit('::error::cannot read existing publication identity')
+            if hashlib.sha256(body).hexdigest() != listing[record_path]:
+                raise SystemExit('::error::publication identity differs from listing digest')
+            existing = json.loads(body)
+        elif held_sha:
+            raise SystemExit('::error::APK exists without publication identity; cannot adopt/rebuild this version')
+        files.update(publication_record_files(identity, version, sha, held, existing))
     expected = {apk_path: sha, **{p: hashlib.sha256(b).hexdigest() for p, b in files.items()}}
 
     staging = tempfile.mkdtemp(prefix='anet-android-publish-')
@@ -204,6 +247,7 @@ def main():
     parser.add_argument('--apk', required=True)
     parser.add_argument('--version', required=True)
     parser.add_argument('--notes', required=True, help="notes.md for this version (scripts/android-release-notes.mjs)")
+    parser.add_argument('--identity', help='Verified immutable run/artifact/APK identity JSON for early publication')
     parser.add_argument('--dry-run', action='store_true')
     args = parser.parse_args()
     cmd_publish(args)

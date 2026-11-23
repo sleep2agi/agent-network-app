@@ -50,12 +50,20 @@ export function versionItems(body, version) {
 }
 
 /** The notes.md content for `version`, or an Error describing why there is none. */
-export function androidReleaseNotes(workflowText, version) {
+export function androidReleaseNotes(workflowText, version, { desktopPending = false } = {}) {
   if (!/^\d+\.\d+\.\d+$/.test(String(version ?? ''))) return new Error(`version must be X.Y.Z, got ${version}`);
   const body = extractReleaseBody(workflowText);
   if (!body) return new Error('no releaseBody block in the release workflow');
   if (!versionItems(body, version).length) return new Error(`releaseBody has no "What's new in ${version}:" section with items`);
-  return `${stripDesktopPackagingHeader(body)}\n`;
+  const notes = stripDesktopPackagingHeader(body);
+  if (desktopPending) {
+    // Keep the version heading first for the updater's release-note parser.
+    const lines = notes.split('\n');
+    const heading = lines.findIndex(line => /^What's new in\s+/i.test(line.trim()));
+    lines.splice(heading + 1, 0, '', '- 安卓版已可下载，桌面版稍后。下文涉及桌面的改动将在桌面包发布后提供。');
+    return `${lines.join('\n')}\n`;
+  }
+  return `${notes}\n`;
 }
 
 /**
@@ -79,12 +87,13 @@ export function stripDesktopPackagingHeader(body) {
 const DESKTOP_PACKAGING_PREFIX = /^(macOS \(Apple Silicon\) and Windows \(x64\) installers\b|Signed and notarized update for macOS\b)/i;
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
-  const [file, version] = process.argv.slice(2);
+  const [file, version, option] = process.argv.slice(2);
+  if (option && option !== '--desktop-pending') throw new Error(`Unknown option: ${option}`);
   if (!file || !version) {
     console.error('usage: android-release-notes.mjs <release-desktop-auto-update.yml> <version>');
     process.exit(2);
   }
-  const notes = androidReleaseNotes(readFileSync(file, 'utf8'), version);
+  const notes = androidReleaseNotes(readFileSync(file, 'utf8'), version, { desktopPending: option === '--desktop-pending' });
   if (notes instanceof Error) {
     console.error(`::error::${notes.message}`);
     process.exit(1);

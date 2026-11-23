@@ -267,7 +267,7 @@ const workflow = readFileSync('.github/workflows/release-desktop-auto-update.yml
 const normalizeJob = workflow.slice(workflow.indexOf('normalize-updater-manifest:'));
 check('release workflow declares the normalizer job', workflow.includes('normalize-updater-manifest:'));
 check('release workflow has a single prepare-release job', workflow.includes('prepare-release:') && workflow.includes('node scripts/prepare-desktop-release.mjs'));
-check('build matrix depends on prepare-release', /build-release:\n\s+needs: \[prepare-release\]/.test(workflow));
+check('build matrix depends on source preflight and prepare-release', /build-release:\n\s+needs: \[android-source-preflight, prepare-release\]/.test(workflow));
 check('every matrix job uploads into the same release id', /releaseId: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));
 check('draft verification reads the release by id', /verify-draft:[\s\S]{0,2500}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));
 check('normalizer reads the release by id', /normalize-updater-manifest:[\s\S]{0,1200}RELEASE_ID: \$\{\{ needs\.prepare-release\.outputs\.release_id \}\}/.test(workflow));

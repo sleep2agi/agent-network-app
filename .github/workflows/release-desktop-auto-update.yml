@@ -44,11 +44,36 @@ concurrency:
   cancel-in-progress: false
 
 jobs:
+  android-source-preflight:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      # Use the current verifier, including when dispatch targets an older commit.
+      - uses: actions/checkout@08eba0b27e820071cde6df949e0beb9ba4906955
+        with:
+          ref: main
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020
+        with:
+          node-version: 22
+      - name: Reject desktop source conflicting with early Android publication
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          [[ "$REQUESTED_COMMIT" =~ ^[0-9a-f]{40}$ ]]
+          git merge-base --is-ancestor "$REQUESTED_COMMIT" origin/main
+          git show "$REQUESTED_COMMIT:package.json" > "$RUNNER_TEMP/requested-package.json"
+          version=$(node -p 'JSON.parse(require("fs").readFileSync(process.env.RUNNER_TEMP+"/requested-package.json")).version')
+          node scripts/android-pinned-build.mjs "$version" "$REQUESTED_COMMIT"
+
   # 一个 tag 只允许一个 release 对象，决定权只在这个 job：
   #   published → fail（要重发请 bump 版本号）；0 draft → 创建并输出 release_id；
   #   1 draft → 复用；>1 draft → fail-closed。
   # 后面所有 matrix job 只认这个 release_id，禁止再按 tag 各自创建/删除。
   prepare-release:
+    needs: [android-source-preflight]
     if: inputs.publish == true
     runs-on: ubuntu-latest
     timeout-minutes: 10
@@ -87,14 +112,14 @@ jobs:
           node scripts/prepare-desktop-release.mjs
 
   build-release:
-    needs: [prepare-release]
+    needs: [android-source-preflight, prepare-release]
     # 卡死自愈:2026-10-30 有一个 ubuntu deb job 在 waiting 里挂了 2.5 小时,
     # 而 concurrency group 是固定名(release-desktop-auto-update)⇒ 它把整条发布链锁死,
     # 新 run 全部 pending、取消也不生效。给三条腿都设上限,让 stuck 的腿自己超时退出。
     timeout-minutes: 120
     # publish=false 是「只构建 + smoke，不建 release」的 dry run：prepare-release 会跳过，
     # 这个 job 必须照常跑，否则 Build signed bundles without uploading a release 那套永远不执行。
-    if: always() && (inputs.publish == false || needs.prepare-release.result == 'success')
+    if: always() && needs.android-source-preflight.result == 'success' && (inputs.publish == false || needs.prepare-release.result == 'success')
     environment: macos-signing
     strategy:
       fail-fast: false
@@ -3445,6 +3470,13 @@ jobs:
             echo "::error::${why}；这一版会缺 APK，安卓用户读不到更新。确认要这样发就重新 dispatch 并设 skip_android=true"
             exit 1
           }
+          version=$(node -p 'require("./package.json").version')
+          node scripts/android-pinned-build.mjs "$version" "$COMMIT"
+          if grep -q '^artifact_id=' "$GITHUB_OUTPUT"; then
+            echo 'Reusing the immutable early Android publication run/artifact'
+            exit 0
+          fi
+          # No early publication record: use the normal exact-commit build lookup.
           # android-build is triggered by the push that produced the bump commit and
           # usually finishes after the desktop release starts. Wait for THIS commit's
           # run instead of silently skipping the attach.
@@ -3486,12 +3518,25 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ steps.find.outputs.run_id }}
+          PINNED_ARTIFACT: ${{ steps.find.outputs.artifact_id }}
+          PINNED_DIGEST: ${{ steps.find.outputs.artifact_digest }}
+          PINNED_ATTEMPT: ${{ steps.find.outputs.run_attempt }}
         run: |
           set -euo pipefail
           version=$(node -p 'require("./package.json").version')
           name="Agent.Network_${version}_android-universal.apk"
           tmp="$RUNNER_TEMP/apk"; mkdir -p "$tmp"
-          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n agent-network-android-apk -D "$tmp"
+          if [ -n "$PINNED_ARTIFACT" ]; then
+            gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID" > "$tmp/run.json"
+            jq -e --argjson attempt "$PINNED_ATTEMPT" '.head_branch == "main" and .status == "completed" and .conclusion == "success" and .path == ".github/workflows/android-build.yml" and .run_attempt == $attempt' "$tmp/run.json" >/dev/null
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PINNED_ARTIFACT" > "$tmp/artifact.json"
+            jq -e --argjson run "$RUN_ID" --arg digest "sha256:$PINNED_DIGEST" '.workflow_run.id == $run and .expired == false and .name == "agent-network-android-apk" and .digest == $digest' "$tmp/artifact.json" >/dev/null
+            gh api "repos/$GITHUB_REPOSITORY/actions/artifacts/$PINNED_ARTIFACT/zip" > "$tmp/artifact.zip"
+            printf '%s  %s\n' "$PINNED_DIGEST" "$tmp/artifact.zip" | sha256sum --check
+            unzip -q "$tmp/artifact.zip" -d "$tmp"
+          else
+            gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n agent-network-android-apk -D "$tmp"
+          fi
           apk=$(find "$tmp" -name '*.apk' -print -quit)
           [[ -n "$apk" ]] || { echo "::error::android-build artifact has no APK"; exit 1; }
           aapt2=$(find "${ANDROID_HOME:-/usr/local/lib/android/sdk}/build-tools" -name aapt2 -type f 2>/dev/null | sort -V | tail -1 || true)
@@ -3504,8 +3549,16 @@ jobs:
           else
             echo "::warning::aapt2 not found; skipping the APK versionName assertion"
           fi
+          node scripts/android-attachment-identity.mjs "$version" "${{ inputs.commit }}" "$apk"
           cp "$apk" "$tmp/$name"
-          gh release upload "desktop-v$version" "$tmp/$name" --clobber --repo "$GITHUB_REPOSITORY"
+          gh api "repos/$GITHUB_REPOSITORY/releases/tags/desktop-v$version" > "$tmp/release.json"
+          existing=$(jq -r --arg name "$name" '[.assets[] | select(.name == $name)] | if length == 0 then "" elif length == 1 then .[0].digest else error("duplicate APK assets") end' "$tmp/release.json")
+          digest="sha256:$(sha256sum "$tmp/$name" | cut -d ' ' -f1)"
+          if [ -n "$existing" ]; then
+            [ "$existing" = "$digest" ] || { echo '::error::Existing APK asset differs; cannot overwrite same version'; exit 1; }
+          else
+            gh release upload "desktop-v$version" "$tmp/$name" --repo "$GITHUB_REPOSITORY"
+          fi
           echo "attached $name to desktop-v$version"
 
   # 0.2.286 的真问题:tauri-action 生成的 latest.json 里，五个 platforms.url 是

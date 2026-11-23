@@ -67,9 +67,6 @@ jobs:
           if [ "$branch" != "main" ]; then echo "::error::run $RUN_ID was built from '$branch', only main may be published"; exit 1; fi
           if [ "$conclusion" != "success" ]; then echo "::error::run $RUN_ID concluded '$conclusion'"; exit 1; fi
           printf '%s\n' "$run" > "$RUNNER_TEMP/android-source-run.json"
-          if [ "$sha" != "$REQUESTED_COMMIT" ]; then
-            echo "VERIFY_SOURCE_METADATA=true" >> "$GITHUB_ENV"
-          fi
           echo "SOURCE_SHA=$REQUESTED_COMMIT" >> "$GITHUB_ENV"
 
       # Use the verifier from this workflow revision, not from an older APK commit.
@@ -105,7 +102,26 @@ jobs:
           RUN_ID: ${{ inputs.run_id }}
         run: |
           set -euo pipefail
-          gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n agent-network-android-apk -D "$RUNNER_TEMP/apk"
+          gh api "repos/$GITHUB_REPOSITORY/actions/runs/$RUN_ID/artifacts?per_page=100" > "$RUNNER_TEMP/android-artifacts.json"
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+          const listing = JSON.parse(readFileSync(`${process.env.RUNNER_TEMP}/android-artifacts.json`, 'utf8'));
+          if (listing.total_count > 100) throw new Error('Artifact listing requires pagination; refusing incomplete selection');
+          const artifacts = listing.artifacts.filter(a => a.name === 'agent-network-android-apk');
+          if (artifacts.length !== 1) throw new Error('Expected exactly one named APK artifact');
+          const artifact = artifacts[0];
+          if (artifact.expired !== false || !Number.isSafeInteger(artifact.id) || artifact.id <= 0
+              || String(artifact.workflow_run?.id) !== process.env.RUN_ID
+              || !/^sha256:[a-f0-9]{64}$/.test(artifact.digest || '')) throw new Error('Invalid APK artifact identity');
+          writeFileSync(`${process.env.RUNNER_TEMP}/android-apk-artifact.json`, JSON.stringify(artifact));
+          appendFileSync(process.env.GITHUB_ENV, `APK_ARTIFACT_ID=${artifact.id}\nAPK_ARTIFACT_DIGEST=${artifact.digest.slice(7)}\n`);
+          NODE
+          artifact_id=$(node -p 'JSON.parse(require("fs").readFileSync(process.env.RUNNER_TEMP+"/android-apk-artifact.json")).id')
+          artifact_digest=$(node -p 'JSON.parse(require("fs").readFileSync(process.env.RUNNER_TEMP+"/android-apk-artifact.json")).digest.slice(7)')
+          gh api -H 'Accept: application/vnd.github+json' "repos/$GITHUB_REPOSITORY/actions/artifacts/$artifact_id/zip" > "$RUNNER_TEMP/android-apk.zip"
+          printf '%s  %s\n' "$artifact_digest" "$RUNNER_TEMP/android-apk.zip" | sha256sum --check
+          mkdir -p "$RUNNER_TEMP/apk"
+          unzip -q "$RUNNER_TEMP/android-apk.zip" -d "$RUNNER_TEMP/apk"
           apks=$(find "$RUNNER_TEMP/apk" -name '*.apk')
           n=$(grep -c . <<<"$apks" || true)
           if [ "$n" != "1" ]; then echo "::error::expected exactly one APK in the artifact, found $n"; exit 1; fi
@@ -113,7 +129,6 @@ jobs:
           ls -l "$apks"
 
       - name: Verify dispatched build source and APK digest
-        if: env.VERIFY_SOURCE_METADATA == 'true'
         env:
           GH_TOKEN: ${{ github.token }}
           RUN_ID: ${{ inputs.run_id }}
@@ -122,6 +137,28 @@ jobs:
           set -euo pipefail
           gh run download "$RUN_ID" --repo "$GITHUB_REPOSITORY" -n android-build-source -D "$RUNNER_TEMP/android-source"
           node "$RUNNER_TEMP/android-build-source.mjs" "$RUNNER_TEMP/android-source/android-build-source.json" "$RUNNER_TEMP/android-source-run.json" "$GITHUB_REPOSITORY" "$REQUESTED_COMMIT" "$APK"
+
+      - name: Bind immutable publication identity
+        env:
+          REQUESTED_COMMIT: ${{ inputs.commit }}
+        run: |
+          set -euo pipefail
+          node --input-type=module <<'NODE'
+          import { readFileSync, writeFileSync, appendFileSync } from 'node:fs';
+          import { createHash } from 'node:crypto';
+          import { publicationIdentity } from './scripts/android-publication-identity.mjs';
+          const root = process.env.RUNNER_TEMP;
+          const read = path => JSON.parse(readFileSync(`${root}/${path}`, 'utf8'));
+          const identity = publicationIdentity({
+            source: read('android-source/android-build-source.json'),
+            run: read('android-source-run.json'), artifact: read('android-apk-artifact.json'),
+            repository: process.env.GITHUB_REPOSITORY, commit: process.env.REQUESTED_COMMIT,
+            apkSha256: createHash('sha256').update(readFileSync(process.env.APK)).digest('hex'),
+          });
+          const path = `${root}/android-publication.json`;
+          writeFileSync(path, JSON.stringify(identity));
+          appendFileSync(process.env.GITHUB_ENV, `PUBLICATION_IDENTITY=${path}\n`);
+          NODE
 
       # Published releases are the canonical bytes; rebuilding the same commit
       # can produce a different APK. Never replace the release asset with a rebuild.
@@ -188,7 +225,11 @@ jobs:
           set -euo pipefail
           if ! [[ "$SOURCE_SHA" =~ ^[0-9a-f]{40}$ ]]; then echo "::error::bad source sha '$SOURCE_SHA'"; exit 1; fi
           git show "$SOURCE_SHA:.github/workflows/release-desktop-auto-update.yml" > "$RUNNER_TEMP/release-workflow.yml"
-          node scripts/android-release-notes.mjs "$RUNNER_TEMP/release-workflow.yml" "$VERSION" > "$RUNNER_TEMP/notes.md"
+          # No published canonical release means Android is ahead of desktop.
+          # These same notes.md bytes are read by the in-app Android update UI.
+          notes_options=()
+          if [ -z "${CANONICAL_APK_ID:-}" ]; then notes_options+=(--desktop-pending); fi
+          node scripts/android-release-notes.mjs "$RUNNER_TEMP/release-workflow.yml" "$VERSION" "${notes_options[@]}" > "$RUNNER_TEMP/notes.md"
           echo "NOTES=$RUNNER_TEMP/notes.md" >> "$GITHUB_ENV"
           echo "notes: $(wc -c < "$RUNNER_TEMP/notes.md") bytes"; sed -n '1,12p' "$RUNNER_TEMP/notes.md"
 
@@ -204,7 +245,7 @@ jobs:
           DRY_RUN: ${{ inputs.dry_run && '--dry-run' || '' }}
         run: |
           set -euo pipefail
-          "$RUNNER_TEMP/ms/bin/python" scripts/modelscope-android-publish.py publish --apk "$APK" --version "$VERSION" --notes "$NOTES" $DRY_RUN
+          "$RUNNER_TEMP/ms/bin/python" scripts/modelscope-android-publish.py publish --apk "$APK" --version "$VERSION" --notes "$NOTES" --identity "$PUBLICATION_IDENTITY" $DRY_RUN
 
       - name: Summary
         if: success() && !inputs.dry_run
