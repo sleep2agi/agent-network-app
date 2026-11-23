@@ -1069,6 +1069,7 @@ function AppRoot() {
                         daemonMgmt={screen.daemonMgmt}
                         onBack={() => setScreen({ name: 'agents' })}
                         hideBack
+                        estimatedPaneWidth={paneAreaWidth - paneListWidth}
                         onOpenNodeSettings={() => setScreen(nodeInfoFromChat(screen))}
                         onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); setScreen({ name: 'settings' }); }}
                         onCreateNode={daemon => setScreen({ name: 'wizard', daemon, back: { name: 'chat', alias: screen.alias, networkId: screen.networkId, daemonMgmt: screen.daemonMgmt } })}

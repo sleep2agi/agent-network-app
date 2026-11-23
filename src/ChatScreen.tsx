@@ -25,7 +25,7 @@ import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardR
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
-import { bubbleLayout, desktopBubbleCap } from './bubble-layout';
+import { bubbleLayout, desktopBubbleCap, replyOuterWidth } from './bubble-layout';
 import { notifyOutboxListeners, outboxAdd, outboxEntry, outboxForAlias, outboxLiveImages, outboxMarkFailed, outboxMarkPending, outboxRemove, outboxRemoveAttachment, outboxSetFailReason, subscribeOutbox } from './outbox';
 import { imagesForResend, planResend, uploadForSend, type ResendImage } from './resend-plan';
 import { beginSend, endSend, orphanedPendingIds, settleEchoes } from './send-lifecycle';
@@ -329,6 +329,7 @@ interface Props {
   onToggleMute?: () => void;
   /** Android two-pane: the conversation sits next to the list, so no back chevron. */
   hideBack?: boolean;
+  estimatedPaneWidth?: number;
   /** 语音输入未配置时「去设置」跳到 设置 → 语音输入。不传(独立聊天窗口)就只提示位置。 */
   onOpenVoiceSettings?: () => void;
   /** 「去会话」带来的那条(task_id):打开后定位并高亮;不在已加载的那页就往前拉(message-focus.ts),拉到头没有就提示。 */
@@ -359,7 +360,7 @@ export const clearChatConversationCache = (profileId?: string, serverUrl = ''): 
   conversations.clearScope(conversationScope(profileId, serverUrl));
 };
 
-export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, onOpenVoiceSettings, focusTaskId, focusSilent = false, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, onOpenSenderChat, daemonMgmt = false }: Props) {
+export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, estimatedPaneWidth, onOpenVoiceSettings, focusTaskId, focusSilent = false, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, onOpenSenderChat, daemonMgmt = false }: Props) {
   useTranslation();
   // #769: everything below is agent-scoped — use THIS agent's network, not the account's current one.
   const cfg = useMemo(() => cfgForAgent(accountCfg, alias, networkId), [accountCfg, alias, networkId]);
@@ -597,7 +598,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     plusEvent('conversationChanged');
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [alias]);
-  const { height: plusWindowHeight } = useWindowDimensions();
+  const { height: plusWindowHeight, width: windowWidth } = useWindowDimensions();
   // 聊天信息(chat-info-model.ts):页头右侧只剩「⋯」,搜索 / 置顶 / 免打扰 / 窗口置顶 / 节点设置都在里面。
   const [infoOpen, setInfoOpen] = useState(false);
   // #4863 —— 聊天信息里的「所属部门」：值 + 节点/组织上下文（点开直接改，未归属也显示）。
@@ -638,7 +639,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 桌面气泡最大宽度:窗格的 85%,但不超过 DESKTOP_BUBBLE_MAX(宽窗口里一行字不拉满)。手机不变。
   const bubbleCap = desktopBubbleCap(desktop, paneWidth);
   // The measured chat pane already excludes the tool rail. Reserve list padding, avatar and gap once.
-  const replyCap = paneWidth > 0 ? { maxWidth: Math.max(1, Math.min(704, paneWidth - 2 * spacing.lg - ds(36) - spacing.sm)) } : bubbleCap;
+  const estimatedWidth = estimatedPaneWidth ?? windowWidth * (desktop || hideBack ? 0.6 : 1);
+  const replyCap = { maxWidth: replyOuterWidth(paneWidth, estimatedWidth, 2 * spacing.lg + ds(36) + spacing.sm) };
   const sending = false; // optimistic echo frees the input immediately
   const limitRef = useRef(PAGE);
   // #745:当前会话已拉到的 hub 行(newest-first)。轮询刷新最新一页、往上翻按游标接更早的一页,都只改它。
@@ -3087,8 +3089,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
-                          {replyCap && <MarkdownMessage contentWidth={Math.max(1, replyCap.maxWidth - 2 * spacing.lg - (item.late ? spacing.sm + 3 : 0))}
-                            mouse={pointer || (Platform.OS === 'web' && globalThis.matchMedia?.('(pointer: fine)').matches)}>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>}
+                          <MarkdownMessage contentWidth={Math.max(1, replyCap.maxWidth - 2 * spacing.lg - (item.late ? spacing.sm + 3 : 0))}
+                            mouse={pointer || (Platform.OS === 'web' && globalThis.matchMedia?.('(pointer: fine)').matches)}>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>
                           {renderAttachments(replyViews)}
                           {item._taskNotice && onOpenTask ? (
                             <Pressable

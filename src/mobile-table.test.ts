@@ -2,7 +2,7 @@
 import fs from 'node:fs';
 import path from 'node:path';
 import { reportTableLayout, stackedRows } from './table-layout';
-import { gridCellWidth, markdownLayout } from './bubble-layout';
+import { gridCellWidth, markdownLayout, replyOuterWidth } from './bubble-layout';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 
 for (const [w, expected] of [[323, 'stacked'], [324, 'grid-flex']] as const) {
@@ -11,6 +11,10 @@ for (const [w, expected] of [[323, 'stacked'], [324, 'grid-flex']] as const) {
 ck('six columns on desktop scroll at 670', reportTableLayout(6, 670, true, false) === 'grid-scroll');
 ck('unknown width retains platform behavior', reportTableLayout(3, undefined, false, false) === 'grid-scroll' && reportTableLayout(3, undefined, false, true) === 'stacked');
 
+for (const estimate of [390, 592, 864, NaN]) {
+  const content = Math.max(1, replyOuterWidth(0, estimate, 68) - 32);
+  ck(`unmeasured reply content budget at ${estimate}`, Number.isFinite(content) && content > 0);
+}
 const rows = [['变异', 'rc', '顶出'], ['M1 删掉', '1', '承重'], ['M2', '1']];
 const cards = stackedRows(rows);
 ck('one card per data row (header excluded)', cards.length === 2);
