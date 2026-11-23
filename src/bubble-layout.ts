@@ -27,6 +27,11 @@ import { spacing } from './theme';
 /** Desktop bubble max width (px). */
 export const DESKTOP_BUBBLE_MAX = 640;
 
+export function replyOuterWidth(measured: number, estimated: number, gutter: number): number {
+  const pane = measured > 0 && Number.isFinite(measured) ? measured : Number.isFinite(estimated) ? estimated : 0;
+  return Math.max(1, Math.min(704, pane - gutter));
+}
+
 /** Desktop: sent and reply bubbles share one max width — 85% of the pane, capped. Phone/tablet: none. */
 export function desktopBubbleCap(desktop: boolean, paneWidth: number): { maxWidth: number } | null {
   return desktop && paneWidth > 0 ? { maxWidth: Math.min(DESKTOP_BUBBLE_MAX, Math.floor(paneWidth * 0.85)) } : null;

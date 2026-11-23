@@ -4,6 +4,7 @@
 type SourceSpan = { line?: number; endLine?: number };
 export type MarkdownBlock = SourceSpan & (
   | { kind: 'paragraph'; text: string }
+  | { kind: 'rule'; text: '' }
   | { kind: 'heading'; level: number; text: string }
   | { kind: 'list'; ordered: boolean; items: string[]; itemLines?: number[] }
   | { kind: 'quote'; text: string }
@@ -15,6 +16,8 @@ export type MarkdownBlock = SourceSpan & (
 
 const tableCells = (line: string) =>
   line.trim().replace(/^\||\|$/g, '').split('|').map(cell => cell.trim());
+
+const thematicBreak = /^ {0,3}(?:-{3,}|\*{3,}|_{3,})[ \t]*$/;
 
 const isTableDivider = (line: string) => {
   const cells = tableCells(line);
@@ -33,6 +36,10 @@ export const parseMarkdownBlocks = (source: string, opts: { hubImages?: boolean 
     if (!line.trim()) { i++; continue; }
 
     const start = i;
+    if (thematicBreak.test(line)) {
+      blocks.push({ kind: 'rule', text: '', line: start, endLine: i++ });
+      continue;
+    }
     const img = opts.hubImages ? HUB_IMAGE_LINE.exec(line) : null;
     if (img) {
       blocks.push({ kind: 'image', alt: img[1], fileId: img[2], url: `/api/files/${img[2]}`, line: start, endLine: start });
@@ -108,6 +115,7 @@ export const parseMarkdownBlocks = (source: string, opts: { hubImages?: boolean 
     i++;
     while (
       i < lines.length && lines[i].trim() &&
+      !thematicBreak.test(lines[i]) &&
       !/^\s*(?:```|#{1,6}\s|>|[-+*]\s|\d+\.\s)/.test(lines[i]) &&
       !(opts.hubImages && HUB_IMAGE_LINE.test(lines[i])) &&
       !(i + 1 < lines.length && lines[i].includes('|') && isTableDivider(lines[i + 1]))

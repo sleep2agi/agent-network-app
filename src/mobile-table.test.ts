@@ -1,14 +1,20 @@
 // 2026-09-16 Vincent(安卓截图):「手机端的那个表格显示还是很有问题」—— 定宽列把气泡撑出屏幕、右边被裁。
 import fs from 'node:fs';
 import path from 'node:path';
-import { tableLayoutFor, stackedRows } from './table-layout';
-import { gridCellWidth, markdownLayout } from './bubble-layout';
+import { reportTableLayout, stackedRows } from './table-layout';
+import { gridCellWidth, markdownLayout, replyOuterWidth } from './bubble-layout';
 let p = 0, t = 0; const ck = (n: string, c: boolean) => { t++; if (c) { p++; console.log('✅', n); } else console.log('❌', n); };
 
-ck('web always scrolls a grid', tableLayoutFor(5, false) === 'grid-scroll' && tableLayoutFor(2, false) === 'grid-scroll');
-ck('native ≤2 columns → flexible grid', tableLayoutFor(2, true) === 'grid-flex' && tableLayoutFor(1, true) === 'grid-flex');
-ck('native ≥3 columns → stacked cards', tableLayoutFor(3, true) === 'stacked' && tableLayoutFor(6, true) === 'stacked');
+for (const [w, expected] of [[323, 'stacked'], [324, 'grid-flex']] as const) {
+  ck(`first and stable render at ${w}`, [0, 1].every(() => reportTableLayout(3, w, false, true) === expected));
+}
+ck('six columns on desktop scroll at 670', reportTableLayout(6, 670, true, false) === 'grid-scroll');
+ck('unknown width retains platform behavior', reportTableLayout(3, undefined, false, false) === 'grid-scroll' && reportTableLayout(3, undefined, false, true) === 'stacked');
 
+for (const estimate of [390, 592, 864, NaN]) {
+  const content = Math.max(1, replyOuterWidth(0, estimate, 68) - 32);
+  ck(`unmeasured reply content budget at ${estimate}`, Number.isFinite(content) && content > 0);
+}
 const rows = [['变异', 'rc', '顶出'], ['M1 删掉', '1', '承重'], ['M2', '1']];
 const cards = stackedRows(rows);
 ck('one card per data row (header excluded)', cards.length === 2);
@@ -19,11 +25,11 @@ ck('empty table → no cards', stackedRows([]).length === 0);
 
 const src = fs.readFileSync(path.join(__dirname, 'MarkdownMessage.tsx'), 'utf8').replace(/\r\n?/g, '\n');
 ck('table block delegates to TableBlock', /if \(block\.kind === 'table'\) return <TableBlock key=\{index\} rows=\{block\.rows\}[^>]*\/>;/.test(src));
-ck('TableBlock uses the layout helper with the native flag', src.includes('tableLayoutFor(columns, NATIVE)'));
+ck('TableBlock uses the layout helper with the measured width', src.includes('reportTableLayout(columns, width, mouse, NATIVE)') && !src.slice(src.indexOf('function TableBlock'),src.indexOf('function CodeBlock')).includes('useState'));
 // 2026-09-30: an equal percentage share per column (gridCellWidth), not `flex: 1` — a grow/shrink negotiation
 // inside the shrink-to-fit bubble gets its height from a different width than it is drawn at (bubble-layout.ts).
 const cell: Record<string, unknown> = markdownLayout().tableCellFlex;
 ck('flex cells have no fixed width', cell.minWidth === 0 && !('width' in cell) && !('flex' in cell) && !('flexBasis' in cell) && gridCellWidth(2).width === '50%' && gridCellWidth(1).width === '100%' && src.includes('[styles.tableCellFlex, gridCellWidth(columns)]') && !/tableCellFlex: \{[^}]*width: 150/.test(src));
-ck('stacked cards render label + value per cell', /<Text style=\{styles\.tableCardLabel\}>\{cell\.label\}<\/Text>\{'  '\}<Inline text=\{cell\.value\} \/>/.test(src));
+ck('narrow cells display a secondary label followed by their value', src.includes('{cell.label}：</Text><Inline text={cell.value}'));
 
 console.log(`\n${p}/${t} passed`); process.exit(p === t ? 0 : 1);

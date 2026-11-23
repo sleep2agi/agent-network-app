@@ -8,6 +8,13 @@ export const tableLayoutFor = (columns: number, native: boolean): TableLayout =>
   return columns >= 3 ? 'stacked' : 'grid-flex';
 };
 
+/** Room for a readable cell, measured inside this message (not the window). */
+export function reportTableLayout(columns: number, width: number | undefined, mouse: boolean, native: boolean): TableLayout {
+  if (width === undefined) return tableLayoutFor(columns, native);
+  if (columns <= 2 || width >= columns * (columns > 3 ? 120 : 108)) return 'grid-flex';
+  return mouse && !native ? 'grid-scroll' : 'stacked';
+}
+
 /** 把一张表转成卡片:每个数据行 → [{ label: 表头, value }] ,缺格补空串,多出的格用列号当表头。 */
 export const stackedRows = (rows: string[][]): Array<Array<{ label: string; value: string }>> => {
   if (rows.length === 0) return [];
