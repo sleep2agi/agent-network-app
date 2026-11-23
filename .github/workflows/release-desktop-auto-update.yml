@@ -642,6 +642,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.616:
+            ### 修复与改进
+
+            - Agent 列表按「名称前缀」分组时，有新消息的 Agent 留在自己的分组里（分组标题显示未读数），不再散在分组上方。
+
             What's new in 0.2.615:
             ### 修复与改进
 
