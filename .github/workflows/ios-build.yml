@@ -184,6 +184,7 @@ jobs:
             exit 1
           fi
           PLIST=$(sed -n '1p' "$CANDIDATES")
+          python3 scripts/check-ios-transport.py "$PLIST"
 
           # Set, never Add: app.json must already provide expo.ios.buildNumber
           # so prebuild emits the key. If the key is missing, PlistBuddy fails
@@ -351,6 +352,9 @@ jobs:
           [ -n "$IPA" ] || { echo "::error::No .ipa produced"; exit 1; }
           echo "IPA_PATH=$IPA" >> "$GITHUB_ENV"
           ls -lh "$IPA"
+
+      - name: Verify signed IPA transport policy before upload
+        run: python3 scripts/check-ios-transport.py "$IPA_PATH"
 
       # Upload the .ipa as an artifact FIRST so it is downloadable even if the
       # TestFlight upload below fails.

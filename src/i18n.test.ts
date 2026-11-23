@@ -15,6 +15,7 @@ ck('explicit preference overrides system', resolveLanguage('en', 'zh-CN') === 'e
 let changes = 0;
 const stop = subscribeLanguage(() => changes++);
 setLanguagePreference('en');
+ck('HTTP address hint uses the English preference', t('accounts.httpAddressHint') === 'This address is not encrypted. Use it only on a company or trusted network.');
 ck('instant translated text', t('language.label') === 'Language' && changes === 1);
 ck('Hub navigation uses Hub consistently in English', t('nav.server') === 'Server' && t('server.current') === 'Current Hub' && t('server.management') === 'Hub management' && t('server.navLabel', { label: 'Overview' }) === 'Hub: Overview');
 ck('Hub and Daemon integration sidebar labels in English', t('server.integrations') === 'Hub integrations' && t('daemon.integrations') === 'Daemon integrations' && t('server.integrations.daemon') === 'Daemon');
@@ -26,6 +27,7 @@ ck('user values remain verbatim', t('test.literal', { name: '用户 $& {other}' 
 ck('chat translations have both languages and matching interpolation fields', Object.values(chatTranslations).every(([zh, en]) => zh.length > 0 && en.length > 0 && JSON.stringify([...zh.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort()) === JSON.stringify([...en.matchAll(/\{(\w+)\}/g)].map(m => m[1]).sort())));
 setLanguagePreference('system');
 refreshSystemLanguage('zh-CN');
+ck('HTTP address hint follows the Chinese system locale', t('accounts.httpAddressHint') === '这个地址没有加密，建议只在公司内网或可信网络使用');
 ck('system change updates current language', currentLanguage() === 'zh');
 ck('Hub navigation uses Hub consistently in Chinese', t('nav.server') === '服务器' && t('server.current') === '当前 Hub' && t('server.management') === 'Hub 管理' && t('server.navLabel', { label: '概览' }) === 'Hub：概览');
 ck('Hub and Daemon integration sidebar labels in Chinese', t('server.integrations') === 'Hub 域集成' && t('daemon.integrations') === 'Daemon 域集成' && t('server.integrations.daemon') === 'Daemon');

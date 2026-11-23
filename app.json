@@ -23,6 +23,7 @@
       "favicon": "./assets/favicon.png"
     },
     "plugins": [
+      "./plugins/with-user-hub-transport",
       "expo-secure-store",
       "expo-build-properties",
       [
