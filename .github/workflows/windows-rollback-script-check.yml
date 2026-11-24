@@ -54,6 +54,9 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $installDir = Join-Path $env:RUNNER_TEMP 'rollback-installed'
           $logs = Join-Path $env:RUNNER_TEMP 'rollback-install-logs'
+          $env:ANET_PACKAGED_SMOKE = '1'
+          $env:ANET_PACKAGED_SMOKE_ROOT = Join-Path $env:RUNNER_TEMP 'rollback-shared-data'
+          $stage = 0
           $manifest = Get-Content scripts/windows-rollback-release-assets.json -Raw | ConvertFrom-Json
           foreach ($version in @('0.2.616', '0.2.615', '0.2.616')) {
             $assets = @($manifest.assets | Where-Object { $_.kind -eq 'nsis' -and $_.version -eq $version })
@@ -61,8 +64,15 @@ jobs:
             $asset = $assets[0]
             $installer = Join-Path $env:RUNNER_TEMP "rollback-download-nsis/$($asset.name)"
             ./scripts/windows-rollback-install-step.ps1 -Installer $installer -ExpectedSha256 $asset.sha256 -Kind nsis -InstallDirectory $installDir -LogDirectory $logs -InstalledExecutable (Join-Path $installDir 'agent-network-desktop.exe') -ExpectedVersion $version
+            $stage++
+            $smoke = Start-Process -FilePath (Join-Path $installDir 'agent-network-desktop.exe') -ArgumentList '--smoke-local-hub' -PassThru -RedirectStandardOutput (Join-Path $logs "$stage-smoke.stdout.log") -RedirectStandardError (Join-Path $logs "$stage-smoke.stderr.log")
+            if (-not $smoke.WaitForExit(60000)) { throw 'Packaged smoke timed out; stop and discard this runner' }
+            if ($smoke.ExitCode -ne 0) { throw "Packaged smoke failed for $version with exit $($smoke.ExitCode)" }
+            $database = Join-Path $env:ANET_PACKAGED_SMOKE_ROOT 'local-hub/data/commhub.db'
+            $profiles = Join-Path $env:ANET_PACKAGED_SMOKE_ROOT 'profiles/index.json'
+            if (-not (Test-Path -LiteralPath $database) -or (Get-Item -LiteralPath $database).Length -eq 0 -or -not (Test-Path -LiteralPath $profiles)) { throw 'Shared smoke database or profiles missing' }
           }
-          Write-Output 'NSIS version sequence passed; MSI, application launch and user data retention remain untested.'
+          Write-Output 'NSIS version sequence and shared-root local Hub smoke passed; MSI, historical record continuity and real user data remain untested.'
       - name: Preserve installation evidence
         if: always()
         uses: actions/upload-artifact@v4
