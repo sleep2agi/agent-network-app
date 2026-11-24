@@ -370,6 +370,8 @@ export default function AgentsScreen({
   }, []);
   // 分组视图(0.477):部门(默认) / 在线态。按设备记住;切换只影响分区方式,不改搜索/筛选/未读口径。
   const [groupBy, setGroupBy] = useState<GroupBy>('department');
+  // 分组选项那一行是否展开(#5422:从按钮里提出来,两种布局共用一份)。
+  const [groupMenuOpen, setGroupMenuOpen] = useState(false);
   // 一句临时说明(0.484):选了分组但清掉了搜索前缀时,告诉用户为什么搜索被清了。
   const [groupNote, setGroupNote] = useState('');
   useEffect(() => {
@@ -1071,11 +1073,12 @@ export default function AgentsScreen({
             {q ? searchCountLabel(q, shownCount, sessions.length, registeredRows.length) : `${sessions.length} 个 agent${headerViewSuffix(viewGroupBy)}`}
           </Text>
           {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-          <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} prefixFallback={viewGroupBy === 'department' && !deptTreeView} />
+          <ToggleGroupBy groupBy={viewGroupBy} open={groupMenuOpen} onToggle={() => setGroupMenuOpen(v => !v)} prefixFallback={viewGroupBy === 'department' && !deptTreeView} />
           <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
             <Ionicons name="add" size={24} color={colors.accent} />
           </Pressable>
         </View>
+        {groupMenuOpen ? <GroupByOptions groupBy={viewGroupBy} onPress={selectGroupBy} onClose={() => setGroupMenuOpen(false)} /> : null}
         {sessions.length > 10 || searchOpen || query ? (
           <TextInput ref={searchRef} testID="agents-search" style={[styles.search, compact && { backgroundColor: colors.subtleFill, borderWidth: 0, borderRadius: radius.control }]} placeholder={deptByAlias.size ? `${t('chat.searchAgent')} · 部门` : t('chat.searchAgent')} placeholderTextColor={colors.textMuted} autoCapitalize="none" autoCorrect={false} value={query} onChangeText={setQuery} onBlur={() => { if (!query) setSearchOpen(false); }} />
         ) : null}
@@ -1107,11 +1110,12 @@ export default function AgentsScreen({
               <Text style={[styles.listHeader, { flex: 1 }]}>{`${sessions.length} 个 agent${headerViewSuffix(viewGroupBy)}`}</Text>
             )}
             {/* 分组视图切换(0.477):一眼看出现在按什么分区,点一下换另一种;选择按设备记住。 */}
-            <ToggleGroupBy groupBy={viewGroupBy} onPress={selectGroupBy} prefixFallback={viewGroupBy === 'department' && !deptTreeView} />
+            <ToggleGroupBy groupBy={viewGroupBy} open={groupMenuOpen} onToggle={() => setGroupMenuOpen(v => !v)} prefixFallback={viewGroupBy === 'department' && !deptTreeView} />
             <Pressable onPress={onOpenPicker} hitSlop={10} accessibilityLabel="新建节点" style={({ pressed }) => [styles.addBtn, pressed && { opacity: 0.6 }]}>
               <Ionicons name="add" size={24} color={colors.accent} />
             </Pressable>
           </View>
+          {groupMenuOpen ? <GroupByOptions groupBy={viewGroupBy} onPress={selectGroupBy} onClose={() => setGroupMenuOpen(false)} /> : null}
           {q ? <Text style={[styles.listHeader, rowStyles.searchCount]} testID="agents-search-count">{searchCountLabel(q, shownCount, sessions.length, registeredRows.length)}</Text> : null}
         </View>
       )}
@@ -1481,12 +1485,12 @@ export default function AgentsScreen({
 const rowGeom = () => agentRowGeometry(uiScale().listDense, uiScale().densityFactor);
 /** 分组视图切换(0.477 起;0.479 改成「点开三档直接选」)。实现见 agent-list-grouping。
  *  单独抽出来是因为紧凑布局与宽布局各有一份列表头,两处必须完全一致(测试按 testID 找)。 */
-function ToggleGroupBy({ groupBy, onPress, prefixFallback = false }: { groupBy: GroupBy; onPress: (by: GroupBy) => void; prefixFallback?: boolean }) {
+function ToggleGroupBy({ groupBy, open, onToggle, prefixFallback = false }: { groupBy: GroupBy; open: boolean; onToggle: () => void; prefixFallback?: boolean }) {
   // 0.479:三档循环点起来容易「点过头」(想回部门要再绕两下),所以点开就给出三档让用户直接选。
-  // 仍然是这一个按钮 + 一行选项:侧栏头部很窄,放三个常驻 chip 会挤掉标题。
-  const [open, setOpen] = useState(false);
   // admin 2026-11-16「手机端的组织架构没出来」:部门数据没读到时列表其实是按名字前缀分的,
   // 以前标签照样写「部门」,看起来像组织架构坏了。读到之前如实写「名称前缀」。
+  // 0.2.618(#5422):三个选项不再挂在这颗按钮下面 —— 它们和搜索框同一行,展开后把按钮这一格撑宽,
+  // 折叠屏上搜索框被挤得只剩半个字。选项改成搜索行下面独立的一整行(GroupByOptions)。
   const label = prefixFallback ? '分组 · 名称前缀' : groupByLabel(groupBy);
   return (
     <View style={{ marginRight: 6 }}>
@@ -1495,7 +1499,7 @@ function ToggleGroupBy({ groupBy, onPress, prefixFallback = false }: { groupBy: 
         accessibilityRole="button"
         accessibilityLabel={`${label}（${groupByHint(groupBy)}）`}
         accessibilityState={{ expanded: open }}
-        onPress={() => setOpen(v => !v)}
+        onPress={onToggle}
         hitSlop={GROUP_TOGGLE_HIT_SLOP}
         style={({ pressed }) => [
           { height: GROUP_CHIP_VISUAL_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
@@ -1504,34 +1508,38 @@ function ToggleGroupBy({ groupBy, onPress, prefixFallback = false }: { groupBy: 
       >
         <Text style={{ color: colors.textSecondary, fontSize: 11 }} numberOfLines={1}>{label}</Text>
       </Pressable>
-      {open ? (
-        <View testID="agents-group-by-options" style={{ flexDirection: 'row', gap: 4, marginTop: 4 }}>
-          {GROUP_BY_CYCLE.map(by => {
-            const on = by === groupBy;
-            return (
-              <Pressable
-                key={by}
-                testID={`agents-group-by-option-${by}`}
-                accessibilityRole="button"
-                accessibilityState={{ selected: on }}
-                onPress={() => {
-                  if (!on) onPress(by);
-                  setOpen(false);
-                }}
-                hitSlop={GROUP_TOGGLE_HIT_SLOP}
-                style={({ pressed }) => [
-                  { minHeight: GROUP_OPTION_MIN_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: on ? colors.railActiveBg : colors.subtleFill },
-                  pressed && { opacity: 0.6 },
-                ]}
-              >
-                <Text style={{ color: on ? colors.accent : colors.textSecondary, fontSize: 11 }} numberOfLines={1}>
-                  {groupByLabel(by).replace('分组 · ', '')}
-                </Text>
-              </Pressable>
-            );
-          })}
-        </View>
-      ) : null}
+    </View>
+  );
+}
+
+/** 分组三档选项:搜索 / 标题那一行下面独立占一整行,不和搜索框抢宽度(#5422)。 */
+function GroupByOptions({ groupBy, onPress, onClose }: { groupBy: GroupBy; onPress: (by: GroupBy) => void; onClose: () => void }) {
+  return (
+    <View testID="agents-group-by-options" style={{ flexDirection: 'row', flexWrap: 'wrap', justifyContent: 'flex-end', gap: 4, marginTop: 4 }}>
+      {GROUP_BY_CYCLE.map(by => {
+        const on = by === groupBy;
+        return (
+          <Pressable
+            key={by}
+            testID={`agents-group-by-option-${by}`}
+            accessibilityRole="button"
+            accessibilityState={{ selected: on }}
+            onPress={() => {
+              if (!on) onPress(by);
+              onClose();
+            }}
+            hitSlop={GROUP_TOGGLE_HIT_SLOP}
+            style={({ pressed }) => [
+              { minHeight: GROUP_OPTION_MIN_HEIGHT, justifyContent: 'center', paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: on ? colors.railActiveBg : colors.subtleFill },
+              pressed && { opacity: 0.6 },
+            ]}
+          >
+            <Text style={{ color: on ? colors.accent : colors.textSecondary, fontSize: 11 }} numberOfLines={1}>
+              {groupByLabel(by).replace('分组 · ', '')}
+            </Text>
+          </Pressable>
+        );
+      })}
     </View>
   );
 }

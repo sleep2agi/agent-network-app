@@ -5,7 +5,8 @@
  * 三行钉死 #161 视觉：有未读显示数字 / 无未读完全没有红点 / 超过 99 显示 99+。
  */
 import { useMemo } from 'react';
-import { Platform, SafeAreaView, View } from 'react-native';
+import { Platform, View } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; // RN 自带的已弃用(#5426)
 import AgentsScreen from './AgentsScreen';
 import type { HubConfig, Session } from './api';
 import {
