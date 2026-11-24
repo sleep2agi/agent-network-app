@@ -38,7 +38,8 @@ ck('非法 hex 回落到深色(宁黑勿白)', JSON.stringify(hexToRgb('white'))
   ck('MacTitleStrip 透明、不写死颜色（底由整窗渐变提供）', mac.includes("backgroundColor: 'transparent'") && !/backgroundColor:\s*'#/.test(mac));
   const win = norm('./win-title-bar.tsx');
   ck('WinTitleBar 订阅主题', win.includes('useSyncExternalStore(onThemeChange, themeMode, themeMode)'));
-  ck('WinTitleBar 底色来自调色板不是字面量', /backgroundColor:\s*colors\.(railBg|bg)/.test(win) && !/backgroundColor:\s*'#/.test(win));
+  // 2026-11-24 起 Windows 标题栏与 MacTitleStrip 一致透明，底由最外层整窗渐变提供；仍不允许写死颜色字面量。
+  ck('WinTitleBar 透明、不写死颜色（底由整窗渐变提供）', win.includes("backgroundColor: 'transparent'") && !/backgroundColor:\s*'#/.test(win));
   const app = norm('../App.tsx');
   ck('主题变化时同步窗口底色', app.includes('applyWindowBackground('));
 }
