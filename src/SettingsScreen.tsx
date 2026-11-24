@@ -881,7 +881,7 @@ export default function SettingsScreen({
     : null;
 
   return (
-    <View {...(!compact ? { dataSet: { glassOpaque: 'true' } } : {})} style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone, compact && mobileGlowActive() && { backgroundColor: 'transparent' }]}>
+    <View style={[styles.root, !compact && styles.rootWide, compact && styles.rootPhone, mobileGlowActive() && { backgroundColor: 'transparent' }]}>
       {compact ? (subPage ? phoneHeader : listHeader) : sidebar}
       {compact ? (subPage ? phoneSubPage : phoneList) : (
       <View style={styles.pane} testID="settings-pane">
@@ -1626,7 +1626,8 @@ const makeStyles = () =>
   phoneHeaderAction: { flexDirection: 'row', alignItems: 'center', gap: 6, minHeight: 32, paddingHorizontal: spacing.md, borderRadius: radius.item, backgroundColor: colors.accent },
   phoneHeaderActionText: { color: colors.onAccent, fontSize: 15, fontWeight: '600' },
   // 左栏:与导航栏同一色系,细线分隔;宽屏固定宽,窄屏变成顶部一条横向分类。
-  sidebar: { width: 232, backgroundColor: colors.railBg, borderRightWidth: 1, borderRightColor: colors.border, paddingTop: spacing.lg },
+  // 2026-11-24 admin 截图「不应该是暖发光黄色吗」：左侧分类栏让出透明底色，与顶上 MacTitleStrip 和右侧内容区共用同一层暖黄整窗渐变，不再在红黄绿灯下方切出一道实色灰线。
+  sidebar: { width: 232, backgroundColor: 'transparent', borderRightWidth: 1, borderRightColor: colors.border, paddingTop: spacing.lg },
   sidebarCompact: { width: '100%', borderRightWidth: 0, borderBottomWidth: 1, borderBottomColor: colors.border, paddingBottom: spacing.sm },
   sidebarTop: { paddingHorizontal: spacing.md, gap: spacing.md, marginBottom: spacing.md },
   closeButton: { width: ds(32), height: ds(32), borderRadius: radius.item, borderWidth: 1, borderColor: colors.border, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card },

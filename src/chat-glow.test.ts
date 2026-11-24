@@ -47,4 +47,8 @@ assert.match(session, /backgroundColor: touch \? colors\.card : 'transparent'/);
 const rail = readFileSync(new URL('./ChatToolRail.tsx', import.meta.url), 'utf8');
 assert.match(rail, /backgroundColor: glass \? 'transparent' : colors\.bg/, 'right tool rail lets the window glow through');
 assert.match(app, /if \(desktop && cfg && screen\.name !== 'login'\) \{[\s\S]{0,300}style=\{\[styles\.root, rootInset, \{ backgroundColor: 'transparent' \}\]\}/, 'desktop main window root does not cover the window glow');
+// admin 2026-11-24：设置窗口（含独立设置窗）不能盖死暖黄整窗渐变，左右两栏都透出同一层光。
+const settings = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
+assert.ok(!settings.includes('glassOpaque'), 'SettingsScreen does not opt out of GlassContent (would cut the warm glow at the macOS title strip)');
+assert.match(settings, /sidebar:\s*\{[^}]*backgroundColor:\s*'transparent'/, 'SettingsScreen sidebar lets the warm window glow through');
 console.log('chat-glow: ok');
