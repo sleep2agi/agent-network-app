@@ -67,7 +67,7 @@ function glyph(op: WindowOp, maximized: boolean, restoreBg: string) {
  * PopoutWindowControls(页头兼标题栏,见 window-shell.ts)共用这一套,不各写一份。
  * `restoreBg`:「向下还原」图形里压在后面那个方框的底色,要和按钮所在的背景一致。
  */
-export function WindowControls({ restoreBg = colors.railBg }: { restoreBg?: string }) {
+export function WindowControls({ restoreBg = colors.bg }: { restoreBg?: string }) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -136,9 +136,9 @@ export default function WinTitleBar() {
         height: WINDOWS_TITLE_BAR_HEIGHT,
         flexDirection: 'row',
         alignItems: 'center',
-        backgroundColor: colors.railBg,
-        borderBottomWidth: 1,
-        borderBottomColor: colors.border,
+        // 2026-11-24 admin Windows 截图「上面的颜色不对啊」：同 MacTitleStrip，透明让最外层
+        // WindowGlowRoot 的暖黄整窗渐变从窗口最顶上透出来，不再压一条灰带和底边线。
+        backgroundColor: 'transparent',
       }}
     >
       <Text

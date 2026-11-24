@@ -29,6 +29,8 @@ assert.match(root, /return <MobileWindowGlow>/, '原生用 MobileWindowGlow');
 assert.match(root, /chatCornerGlow\(colors\.bg, mode\)/, 'web 分支仍是 CSS 渐变');
 const strip = readFileSync(new URL('./mac-title-strip.tsx', import.meta.url), 'utf8');
 assert.match(strip, /height: MAC_TITLE_STRIP_HEIGHT, backgroundColor: 'transparent'/, 'macOS drag strip no longer paints a white band');
+const winBar = readFileSync(new URL('./win-title-bar.tsx', import.meta.url), 'utf8');
+assert.match(winBar, /height: WINDOWS_TITLE_BAR_HEIGHT,[\s\S]*?backgroundColor: 'transparent'/, 'Windows title bar lets the warm window glow start at y=0 (matching macOS)');
 assert.match(app, /rail: \{ width: ds\(64\), backgroundColor: 'transparent'/);
 assert.match(app, /conversations: \{[^}]*backgroundColor: 'transparent' \}/);
 assert.match(app, /content: \{ flex: 1, minWidth: 0, backgroundColor: 'transparent' \}/);
