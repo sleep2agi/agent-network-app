@@ -13,7 +13,7 @@ import { layoutOs, useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { Ionicons } from './icons';
 import ChatSecretCard from './ChatSecretCard';
-import { chatSecretRequestFromMeta, savedSecretKeys } from './chat-secret-request';
+import { chatSecretRequestFromMeta, secretSavedAfter } from './chat-secret-request';
 import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
@@ -2213,7 +2213,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     setMessages(prev => [{ content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: [], _priority: 'normal', _original: false }, ...prev]);
     doSend(content, localId, [], 'normal', false);
   };
-  const savedSecrets = useMemo(() => savedSecretKeys(messages.map(m => m.content)), [messages]);
+  // 只认**本人**在**这张卡之后**发的「已在卡片里保存 X」：旧确认不会吞掉后来同名的换钥请求（Dash 欧评审 #463）。
+  const secretConfirmRows = useMemo(() => messages.map(m => ({ content: m.content, at: m.created_at, own: !m._failed && (!!m._localId || resolveSender(m, currentUsername).isCurrentUser) })), [messages, currentUsername]);
 
   const retry = (item: ChatItem) => {
     if (!isRetryableSendFailure(item._failReason)) return;
@@ -3104,7 +3105,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
                           {secretCard ? (
-                            <ChatSecretCard cfg={cfg} request={secretCard} alreadySaved={savedSecrets.has(secretCard.key)} onSaved={sendPlainText} />
+                            <ChatSecretCard cfg={cfg} request={secretCard} alreadySaved={secretSavedAfter(secretConfirmRows, secretCard.key, item.completed_at ?? item.created_at)} onSaved={sendPlainText} />
                           ) : (
                           <MarkdownMessage contentWidth={Math.max(1, replyCap.maxWidth - 2 * spacing.lg - (item.late ? spacing.sm + 3 : 0))}
                             mouse={pointer || (Platform.OS === 'web' && globalThis.matchMedia?.('(pointer: fine)').matches)}>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>

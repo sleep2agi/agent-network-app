@@ -1,5 +1,5 @@
 // admin 2026-11-24 —— 聊天里的密钥卡（Hub request_secret ⇒ tasks.meta_json.reply_secret_request）。
-import { chatSecretRequestFromMeta, savedSecretKeys, secretSaveErrorText, secretSavedMessage } from './chat-secret-request';
+import { chatSecretRequestFromMeta, secretSavedAfter, secretSaveErrorText, secretSavedMessage } from './chat-secret-request';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra?: unknown) => {
@@ -20,8 +20,14 @@ ck('缺 node_id ⇒ 普通回复', chatSecretRequestFromMeta(JSON.stringify({ re
 
 const msg = secretSavedMessage({ key: 'GITHUB_TOKEN', label: 'GitHub 密钥' });
 ck('保存后发出的话有名字和变量名', msg.includes('GitHub 密钥') && msg.includes('GITHUB_TOKEN'), msg);
-ck('重开聊天能认出已保存', savedSecretKeys(['你好', msg, null]).has('GITHUB_TOKEN'));
-ck('普通消息里提到变量名不算已保存', savedSecretKeys(['我把 GITHUB_TOKEN（GITHUB_TOKEN）发你了']).size === 0);
+const card1 = '2026-11-24T08:00:00Z', card2 = '2026-11-24T09:00:00Z';
+const mine = (content: string, at: string | null) => ({ content, at, own: true });
+ck('重开聊天：卡片之后本人发的确认 ⇒ 已保存', secretSavedAfter([mine('你好', '2026-11-24T08:01:00Z'), mine(msg, '2026-11-24T08:02:00Z')], 'GITHUB_TOKEN', card1));
+ck('旧确认不吞掉后来同名的换钥请求', !secretSavedAfter([mine(msg, '2026-11-24T08:02:00Z')], 'GITHUB_TOKEN', card2));
+ck('别人发的确认不算', !secretSavedAfter([{ content: msg, at: '2026-11-24T09:05:00Z', own: false }], 'GITHUB_TOKEN', card2));
+ck('别的变量名的确认不算', !secretSavedAfter([mine(secretSavedMessage({ key: 'NPM_TOKEN' }), '2026-11-24T09:05:00Z')], 'GITHUB_TOKEN', card2));
+ck('刚点保存的本地回显（无服务端时间）算', secretSavedAfter([mine(msg, null)], 'GITHUB_TOKEN', card2));
+ck('普通消息里提到变量名不算已保存', !secretSavedAfter([mine('我把 GITHUB_TOKEN（GITHUB_TOKEN）发你了', '2026-11-24T09:05:00Z')], 'GITHUB_TOKEN', card2));
 
 for (const k of ['forbidden', 'unsupported', 'invalid', 'unconfirmed', 'cancelled']) {
   const s = secretSaveErrorText(k);

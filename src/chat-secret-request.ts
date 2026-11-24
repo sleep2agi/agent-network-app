@@ -39,15 +39,23 @@ export function secretSavedMessage(req: Pick<ChatSecretRequest, 'key' | 'label'>
   return `${SAVED_PREFIX}「${req.label || req.key}」（${req.key}），下次启动后作为环境变量 ${req.key} 可用。`;
 }
 
-/** 聊天里已经出现过「已保存」的变量名（只看用户自己发出的消息正文）。 */
-export function savedSecretKeys(userMessages: readonly (string | null | undefined)[]): Set<string> {
-  const out = new Set<string>();
-  for (const m of userMessages) {
-    if (!m || !m.startsWith(SAVED_PREFIX)) continue;
-    const hit = /（([A-Za-z_][A-Za-z0-9_]*)）/.exec(m);
-    if (hit) out.add(hit[1]);
+/** 这张卡（发于 cardAt）之后，**当前用户自己**发过「已保存 KEY」吗？
+ *  只看卡片之后、只看本人：旧的确认不会吞掉后来同名的换钥请求，别人的话也不算（Dash 欧评审 #463）。 */
+export function secretSavedAfter(
+  rows: readonly { content?: string | null; at?: string | null; own: boolean }[],
+  key: string,
+  cardAt: string | null | undefined,
+): boolean {
+  const since = cardAt ? Date.parse(cardAt) : NaN;
+  for (const r of rows) {
+    if (!r.own || !r.content || !r.content.startsWith(SAVED_PREFIX)) continue;
+    const hit = /（([A-Za-z_][A-Za-z0-9_]*)）/.exec(r.content);
+    if (!hit || hit[1] !== key) continue;
+    const at = r.at ? Date.parse(r.at) : NaN;
+    // 本地回显还没有服务端时间时（刚点保存）也算：它必然在卡片之后。
+    if (Number.isNaN(since) || Number.isNaN(at) || at >= since) return true;
   }
-  return out;
+  return false;
 }
 
 /** 保存失败时给人看的话：说清原因和下一步，不出现内部错误码。 */
