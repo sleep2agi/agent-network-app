@@ -39,7 +39,7 @@ export async function runWindowOp(op: WindowOp): Promise<void> {
  *    一旦缺字体就是三个豆腐块(在 Linux 上截图时就是这样),而这三个按钮是窗口唯一的
  *    关闭入口——不能让它取决于某个字体在不在。
  */
-function glyph(op: WindowOp, maximized: boolean, restoreBg: string) {
+function glyph(op: WindowOp, maximized: boolean) {
   const c = colors.textSecondary;
   if (op === 'minimize') return <View style={{ width: 10, height: 1, backgroundColor: c }} />;
   if (op === 'close') {
@@ -51,11 +51,14 @@ function glyph(op: WindowOp, maximized: boolean, restoreBg: string) {
     );
   }
   if (maximized) {
-    // 「向下还原」:两个错开的方框
+    // 「向下还原」:两个错开的空心方框。只画后框露出前框之外的边，不再用实色背景遮罩前框内部，
+    // 这样在透明暖黄渐变和按钮悬停底色上都不会露出实色小方块。
     return (
       <View style={{ width: 10, height: 10 }}>
-        <View style={{ position: 'absolute', left: 2, top: 0, width: 8, height: 8, borderWidth: 1, borderColor: c }} />
-        <View style={{ position: 'absolute', left: 0, top: 2, width: 8, height: 8, borderWidth: 1, borderColor: c, backgroundColor: restoreBg }} />
+        <View style={{ position: 'absolute', left: 2, top: 0, width: 8, height: 8, borderTopWidth: 1, borderRightWidth: 1, borderColor: c }} />
+        <View style={{ position: 'absolute', left: 2, top: 0, width: 1, height: 2, backgroundColor: c }} />
+        <View style={{ position: 'absolute', left: 8, top: 7, width: 2, height: 1, backgroundColor: c }} />
+        <View style={{ position: 'absolute', left: 0, top: 2, width: 8, height: 8, borderWidth: 1, borderColor: c }} />
       </View>
     );
   }
@@ -65,9 +68,8 @@ function glyph(op: WindowOp, maximized: boolean, restoreBg: string) {
 /**
  * – □ × 三颗按钮(46×32,关闭悬停红底)。主窗的 WinTitleBar 和分离聊天窗的
  * PopoutWindowControls(页头兼标题栏,见 window-shell.ts)共用这一套,不各写一份。
- * `restoreBg`:「向下还原」图形里压在后面那个方框的底色,要和按钮所在的背景一致。
  */
-export function WindowControls({ restoreBg = colors.bg }: { restoreBg?: string }) {
+export function WindowControls({ restoreBg: _restoreBg }: { restoreBg?: string } = {}) {
   const [maximized, setMaximized] = useState(false);
 
   useEffect(() => {
@@ -108,7 +110,7 @@ export function WindowControls({ restoreBg = colors.bg }: { restoreBg?: string }
         pressed && { backgroundColor: danger ? '#b2271a' : colors.card },
       ]}
     >
-      {glyph(op, maximized, restoreBg)}
+      {glyph(op, maximized)}
     </Pressable>
   );
 
