@@ -2,6 +2,7 @@
 // image preview: index/navigation, gallery building, desktop keys, zoom reducer,
 // swipe/dismiss outcome, double-tap detection.
 import { strict as assert } from 'node:assert';
+import { readFileSync } from 'node:fs';
 
 const m = await import('./image-viewer-model');
 
@@ -133,5 +134,15 @@ check(!m.isDoubleTap(null, { at: 1000, x: 0, y: 0 }), 'first tap is not a double
 check(m.isDoubleTap({ at: 1000, x: 10, y: 10 }, { at: 1200, x: 20, y: 15 }), 'second tap close in time and space → double');
 check(!m.isDoubleTap({ at: 1000, x: 10, y: 10 }, { at: 1000 + m.DOUBLE_TAP_MS + 1, x: 10, y: 10 }), 'too slow → two singles');
 check(!m.isDoubleTap({ at: 1000, x: 10, y: 10 }, { at: 1100, x: 200, y: 10 }), 'too far apart → two singles');
+
+// ── RN 0.85 iOS Fabric Animated/Modal stability contracts ────────────────────
+{
+  const src = readFileSync(new URL('./ImageViewer.tsx', import.meta.url), 'utf8');
+  check(!/translateY:\s*Animated\.add\(/.test(src), 'ImageViewer never constructs Animated.add inline in render transform');
+  check(/useRef\(Animated\.add\(zy,\s*dismissY\)\)\.current/.test(src), 'combinedY Animated.add node is created once in a ref');
+  check(/useMemo\(\s*\(\)\s*=>\s*dismissY\.interpolate\(/.test(src), 'backdropOpacity interpolation is memoized by viewport height');
+  check(/<Modal[^>]*presentationStyle="overFullScreen"/.test(src), 'transparent Modal sets explicit iOS presentationStyle="overFullScreen"');
+  check(/<Image\s+key=\{uri\}/.test(src), 'ViewerPage keys Image by uri to drop stale Fabric load callbacks');
+}
 
 console.log(`image viewer model: ${ck}/${ck} checks passed`);

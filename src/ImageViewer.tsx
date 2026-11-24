@@ -1,4 +1,4 @@
-import { useEffect, useLayoutEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react';
 import { ActivityIndicator, Animated, Image, Modal, PanResponder, Platform, Pressable, StyleSheet, View, type GestureResponderEvent, type PanResponderGestureState } from 'react-native';
 import { Text } from './ui-text';
 import { useModalSafePadding } from './safe-area-runtime';
@@ -69,6 +69,9 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
   const zs = useRef(new Animated.Value(1)).current;
   const zx = useRef(new Animated.Value(0)).current;
   const zy = useRef(new Animated.Value(0)).current;
+  // Derived once so render never creates a fresh AnimatedAddition node on every paint
+  // (RN 0.85 Fabric on iOS leaks/races Animated nodes recreated during Modal presentation).
+  const combinedY = useRef(Animated.add(zy, dismissY)).current;
   const zoomRef = useRef<Zoom>(ZOOM_IDENTITY);
   const applyZoom = (z: Zoom, animate: boolean) => {
     zoomRef.current = z;
@@ -87,8 +90,10 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
     trackX.setValue(0);
     dismissY.setValue(0);
     applyZoom(ZOOM_IDENTITY, false);
-    setSaveNote(null);
     // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [index, state]);
+  useEffect(() => {
+    setSaveNote(null);
   }, [index, state]);
 
   // Latest values for the (once-created) responder.
@@ -251,29 +256,35 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
   const current = images[index];
   const currentUri = current ? (current.uri ?? resolved[current.key]) : undefined;
   const label = viewerIndexLabel(index, count);
-  const backdropOpacity = dismissY.interpolate({ inputRange: [0, Math.max(1, viewport.height)], outputRange: [1, 0.15], extrapolate: 'clamp' });
+  const backdropOpacity = useMemo(
+    () => dismissY.interpolate({ inputRange: [0, Math.max(1, viewport.height)], outputRange: [1, 0.15], extrapolate: 'clamp' }),
+    [dismissY, viewport.height],
+  );
   const pages = [index - 1, index, index + 1].filter(i => i >= 0 && i < count);
 
   return (
-    <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose} statusBarTranslucent>
+    <Modal visible={visible} transparent presentationStyle="overFullScreen" animationType="fade" onRequestClose={onClose} statusBarTranslucent>
       <View
         style={styles.root}
         testID="image-viewer"
-        onLayout={e => setViewport({ width: e.nativeEvent.layout.width, height: e.nativeEvent.layout.height })}
+        onLayout={e => {
+          const { width, height } = e.nativeEvent.layout;
+          setViewport(prev => (prev.width === width && prev.height === height ? prev : { width, height }));
+        }}
       >
         <Animated.View style={[StyleSheet.absoluteFill, styles.backdrop, { opacity: backdropOpacity }]} />
         <View style={StyleSheet.absoluteFill} {...responder.panHandlers}>
           <Animated.View style={[StyleSheet.absoluteFill, { transform: [{ translateX: trackX }] }]}>
-            {viewport.width > 0 ? pages.map(i => {
+            {visible && viewport.width > 0 ? pages.map(i => {
               const image = images[i];
               const isCurrent = i === index;
               return (
                 <Animated.View
-                  key={image.key}
+                  key={`${i}:${image.key}`}
                   style={[
                     styles.page,
                     { left: (i - index) * (viewport.width + GAP), width: viewport.width, height: viewport.height },
-                    isCurrent ? { transform: [{ translateX: zx }, { translateY: Animated.add(zy, dismissY) }, { scale: zs }] } : null,
+                    isCurrent ? { transform: [{ translateX: zx }, { translateY: combinedY }, { scale: zs }] } : null,
                   ]}
                 >
                   <ViewerPage
@@ -372,7 +383,7 @@ function ViewerPage({ image, serverUrl, token, onResolved }: {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [image.key, image.uri, serverUrl, token, attempt]);
 
-  if (uri) return <Image source={{ uri }} style={styles.image} resizeMode="contain" accessibilityLabel={image.name} />;
+  if (uri) return <Image key={uri} source={{ uri }} style={styles.image} resizeMode="contain" accessibilityLabel={image.name} />;
   if (error) {
     return (
       <Pressable accessibilityRole="button" accessibilityLabel={`${image.name} 加载失败，点击重试`} onPress={() => setAttempt(a => a + 1)} style={styles.center}>
