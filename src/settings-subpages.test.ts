@@ -91,7 +91,8 @@ const SUB_PAGE_FILES = ['SettingsPhonePages.tsx', 'SettingsEditPages.tsx'];
   const settings = read('SettingsScreen.tsx');
   ck('App:手机设置把子页状态报上来', app.includes('onPhoneSubPageChange={setSettingsSubPage}'));
   ck('App:tab 栏的判定带上子页(phoneInPageLeaf → navChromeFor)', app.includes('const inPageLeaf = phoneInPageLeaf(screen.name, settingsSubPage);') && app.includes('const navChrome = navChromeFor(layout, screen.name, inPageLeaf);'));
-  ck('App:底部安全区跟着 tab 栏走(tab 栏收起时内容自己垫)', app.includes('navChromeFor(layout, screen.name, inPageLeaf) === \'none\''));
+  // #5426:同一个 navChrome 值;rail 下的单页(没有底栏)也垫手势条。
+  ck('App:底部安全区跟着 tab 栏走(tab 栏收起时内容自己垫)', app.includes("(navChrome === 'none' || (navChrome === 'rail' && !twoPaneSelection)) && !padsItself ? tabBarInset : 0"));
   ck('SettingsScreen:子页变化时上报,卸载时还原', settings.includes('onPhoneSubPageChange?.(!!subPage);') && settings.includes('useEffect(() => () => onPhoneSubPageChange?.(false), []);'));
   ck('tab 栏可被验收脚本定位', app.includes('testID="mobile-tab-bar"'));
 }

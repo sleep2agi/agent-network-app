@@ -172,11 +172,13 @@ export default function LiveOrgMapNative(p: {
                 />
               );
             })}
+            {/* 0.2.618(#5425):名字和「x/y 在跑」以前画在圈中心,点画在它们上面 ⇒ TMAI 这种大部门的字被点盖住,
+                小圈（如 SF 0/0）文字还撑出圈外。和桌面版一致:标签放在圈下方(布局本来就给标签留了 ~45px,见 corePosition)。 */}
             {clusters.map(c => (
               <SvgText
                 key={`name-${c.id}`}
                 x={c.x}
-                y={c.y - 2}
+                y={c.y + c.r + 18}
                 fill={colors.text}
                 fontSize={c.r > 46 ? 13 : 11}
                 fontWeight="600"
@@ -189,7 +191,7 @@ export default function LiveOrgMapNative(p: {
               <SvgText
                 key={`meta-${c.id}`}
                 x={c.x}
-                y={c.y + 14}
+                y={c.y + c.r + 32}
                 fill={colors.textSecondary}
                 fontSize={10}
                 textAnchor="middle"

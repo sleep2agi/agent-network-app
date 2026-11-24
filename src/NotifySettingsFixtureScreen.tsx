@@ -6,7 +6,8 @@
  * 藏起来 —— 夹具通过 SettingsScreen 的 notifyPreview 按指定平台渲染,占位数据:
  * 两个免打扰的 agent、「后台保持连接」开着且在运行、通知权限已授予。
  */
-import { Platform, SafeAreaView } from 'react-native';
+import { Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; // RN 自带的已弃用(#5426)
 import SettingsScreen from './SettingsScreen';
 import type { HubConfig } from './api';
 import { DEFAULT_NOTIFY_SETTINGS, saveNotifySettings } from './notify-settings';
