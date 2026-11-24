@@ -4,7 +4,9 @@
  * 左边是 Daemon 设置导航，全览是默认项。托管的节点和集成只标出名字。
  */
 import { useState } from 'react';
-import { Platform, Pressable, SafeAreaView, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { Platform, Pressable, ScrollView, StyleSheet, View, useWindowDimensions } from 'react-native';
+// RN 的 SafeAreaView 已弃用(启动时 W/ReactNativeJS 告警,#5426):用 safe-area-context 的同名组件。
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import DaemonOverviewSection from './DaemonOverviewSection';

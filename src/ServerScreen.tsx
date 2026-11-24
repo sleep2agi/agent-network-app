@@ -5,7 +5,7 @@ import { Ionicons } from './icons';
 import * as Clipboard from 'expo-clipboard';
 import { fetchHostSupervisors, fetchNodeStatus, fetchServerVersion, fetchStatus, HubConfig, Session, type HostSupervisorDaemon } from './api';
 import { hostLevels, HOSTS_COLLAPSED, type HostLevel, type LevelTone, type Meter } from './host-levels';
-import { pingHealth } from './server-ping';
+import { probeHealth } from './server-ping';
 import { displayHubAddress, maskHubAddress } from './mask-hub-address';
 import { PANE_BACK_TEST_ID } from './pane-header';
 import {
@@ -123,9 +123,10 @@ export default function ServerScreen({
     setLoaded(true);
     setRefreshing(false);
     setRetrying(false);
-    const [v, ms] = await Promise.all([fetchServerVersion(cfg), ok ? pingHealth(cfg) : Promise.resolve(null)]);
-    setVersion(v);
-    setLatency(ms);
+    // 版本先从 /health 拿(现在的 Hub 都有);拿不到再试旧的 /api/version(很老的 Hub)。
+    const probe = ok ? await probeHealth(cfg) : { ms: null, version: undefined };
+    setVersion(probe.version ?? await fetchServerVersion(cfg));
+    setLatency(probe.ms);
   }, [cfg]);
 
   usePoll(load, 10000, [load]);
@@ -619,7 +620,8 @@ function HostRow({ host: h, wide, first, onPress }: { host: HostLevel; wide: boo
                 <Text style={[styles.meterPct, { color: pctColor(h[m.key]) }]}>{h[m.key].value}</Text>
               </View>
               <MeterBar meter={h[m.key]} stale={h.stale} testID={`server-host-bar-${m.key}-${h.hostname}`} />
-              <Text style={styles.meterDetail} numberOfLines={1}>{h[m.key].detail}</Text>
+              {/* #5429:宽屏一行三列,「load 33.16 / 16 核」放不下时以前截成「16...」丢了单位;允许折到第二行。 */}
+              <Text style={styles.meterDetail} numberOfLines={2}>{h[m.key].detail}</Text>
             </View>
           ))}
         </View>
