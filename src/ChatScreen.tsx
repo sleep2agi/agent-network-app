@@ -3054,7 +3054,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </Pressable>
                 ) : null}
                 <View style={selectionMode ? styles.selectBody : undefined} pointerEvents={selectionMode ? 'none' : 'auto'}>
-                {!item._proactive ? isRecalledTask(item) ? (
+                {isRecalledTask(item) ? (
                 <View style={styles.recalledRow} testID="chat-recalled-row">
                   <Text style={styles.recalledText}>{t('chat.recalled')}</Text>
                   {reeditContentOf(item.content) ? (
@@ -3071,7 +3071,9 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                     </Pressable>
                   ) : null}
                 </View>
-                ) : (sender.isCurrentUser || outgoing) ? (
+                ) : (
+                <>
+                {!item._proactive ? (sender.isCurrentUser || outgoing) ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent, bubbleCap]}>
                     <ChatMetaLine name={sentAuthor} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="chat-author-sent" />
@@ -3136,6 +3138,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </View>
                 </View>
                 ) : null}
+                </>
+                )}
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <Pressable accessibilityRole="button" accessibilityLabel={replyOutgoing ? outgoingReplyAuthor(item, alias) : alias} testID="chat-sender-avatar-reply" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'reply', outgoing: replyOutgoing, currentAlias: alias, currentUserId, row: item }))}>
@@ -3208,7 +3212,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                       {item._failReason ? <Text style={styles.failReasonText} testID="chat-fail-reason">{t(`chat.failReason.${item._failReason}`)}</Text> : null}
                     </View>
                   )
-                ) : sender.isCurrentUser && !isRecalledTask(item) && !(item.result ?? item.reply) ? (
+                ) : sender.isCurrentUser && !(item.result ?? item.reply) && !isRecalledTask(item) ? (
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
                   // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
                   // 只对自己发出的消息成立:别人派来的任务标「已送达」等于说这条是你发的。
