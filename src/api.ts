@@ -2329,7 +2329,7 @@ export type RecallTaskResult =
 export const recallTask = async (cfg: HubConfig, taskId: string): Promise<RecallTaskResult> => {
   const url = `${cfg.serverUrl.replace(/\/$/, '')}/api/tasks/${encodeURIComponent(taskId)}/recall`;
   try {
-    const res = await appFetch(cfg, url, {
+    const res = await appFetch(url, {
       method: 'POST',
       headers: { Authorization: `Bearer ${cfg.token}` },
     });

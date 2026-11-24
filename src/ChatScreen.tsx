@@ -1584,6 +1584,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   };
 
   // ── 菜单动作(0.2.78) ────────────────────────────────────────────────────
+  const [turnReport, setTurnReport] = useState<{ cfg: typeof cfg; alias: string; session: Session | null } | null>(null);
+  const turnCaps = turnCapabilities(turnReport?.cfg === cfg && turnReport.alias === alias ? turnReport.session : null);
   const recallCheckFor = (sel: MessageSelection | null | undefined) => {
     if (!sel) return { allowed: false as const, reason: 'none' };
     const sender = resolveSender(sel.item, currentUsername);
@@ -2307,8 +2309,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const interruptBusy = interrupt.phase === 'sending' || interrupt.phase === 'waiting';
   const interruptIdOf = (m: { task_id?: string; created_at?: string; content?: string }) => `${m.task_id ?? ''}|${m.created_at ?? ''}|${m.content ?? ''}`;
   const [controlSession, setControlSession] = useState<Session | null>(null);
-  const [turnReport, setTurnReport] = useState<{ cfg: typeof cfg; alias: string; session: Session | null } | null>(null);
-  const turnCaps = turnCapabilities(turnReport?.cfg === cfg && turnReport.alias === alias ? turnReport.session : null);
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
   const [sessionModel, setSessionModel] = useState('');
