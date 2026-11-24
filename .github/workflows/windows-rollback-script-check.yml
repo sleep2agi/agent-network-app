@@ -48,3 +48,25 @@ jobs:
             if ($records.Count -ne 2) { throw "Expected two verified $kind downloads" }
             $records | ConvertTo-Json | Write-Output
           }
+      - name: Exercise NSIS 616 to 615 to 616 installation
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $installDir = Join-Path $env:RUNNER_TEMP 'rollback-installed'
+          $logs = Join-Path $env:RUNNER_TEMP 'rollback-install-logs'
+          $manifest = Get-Content scripts/windows-rollback-release-assets.json -Raw | ConvertFrom-Json
+          foreach ($version in @('0.2.616', '0.2.615', '0.2.616')) {
+            $assets = @($manifest.assets | Where-Object { $_.kind -eq 'nsis' -and $_.version -eq $version })
+            if ($assets.Count -ne 1) { throw 'Expected one pinned NSIS asset' }
+            $asset = $assets[0]
+            $installer = Join-Path $env:RUNNER_TEMP "rollback-download-nsis/$($asset.name)"
+            ./scripts/windows-rollback-install-step.ps1 -Installer $installer -ExpectedSha256 $asset.sha256 -Kind nsis -InstallDirectory $installDir -LogDirectory $logs -InstalledExecutable (Join-Path $installDir 'agent-network-desktop.exe') -ExpectedVersion $version
+          }
+          Write-Output 'NSIS version sequence passed; MSI, application launch and user data retention remain untested.'
+      - name: Preserve installation evidence
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-rollback-install-evidence
+          path: ${{ runner.temp }}/rollback-install-logs/
+          if-no-files-found: warn
