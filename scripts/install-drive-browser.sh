@@ -24,6 +24,24 @@ pw="$DRIVE_PW_PREFIX/node_modules/.bin/playwright"
 # A prior timed-out apt attempt may have unpacked packages. Repair that state
 # before retrying; never delete dpkg locks or ignore configuration failures.
 phase dpkg-repair sudo timeout --signal=TERM --kill-after=5s 30s dpkg --configure -a
+# 2026-11-24: the runners' only mirror (us-east-2.ec2.archive.ubuntu.com) served
+# a few hundred KB in 10-25 s and os-dependencies hit its 180 s limit on every
+# retry (app#1701). Ubuntu 24.04 runners pick mirrors from apt-mirrors.txt and
+# fail over in order, so put two other official mirrors first, and skip the
+# Translation-* indexes nobody here reads. Best effort: a runner without the
+# mirror list keeps its sources untouched.
+apt_mirror_fallback() {
+  local list=/etc/apt/apt-mirrors.txt
+  echo 'Acquire::Languages "none"; Acquire::http::Timeout "20"; Acquire::Retries "2";' \
+    | sudo tee /etc/apt/apt.conf.d/90-drive-install >/dev/null
+  [[ -f "$list" ]] || return 0
+  grep -q '^http://azure.archive.ubuntu.com/ubuntu' "$list" && return 0
+  { printf 'http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n'
+    printf 'http://archive.ubuntu.com/ubuntu/\tpriority:2\n'
+    cat "$list"; } | sudo tee "$list.new" >/dev/null
+  sudo mv "$list.new" "$list"
+}
+phase apt-mirror-fallback apt_mirror_fallback
 # Browser caches do not contain OS libraries. Install these separately; the caller
 # bounds the entire attempt, including npm/apt, to 270 seconds.
 # Playwright otherwise spawns sudo/apt itself: an unprivileged outer timeout
