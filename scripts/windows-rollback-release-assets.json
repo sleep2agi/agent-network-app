@@ -1,0 +1,37 @@
+{
+  "repository": "sleep2agi/agent-network-app",
+  "assets": [
+    {
+      "version": "0.2.615",
+      "kind": "nsis",
+      "id": 783755837,
+      "name": "ANet_0.2.615_x64-setup.exe",
+      "size": 36530175,
+      "sha256": "e555d247f3643ce4b36507be5c56fcb7b6bb4a28e29539591eeb37c163bf2d1c"
+    },
+    {
+      "version": "0.2.615",
+      "kind": "msi",
+      "id": 783755657,
+      "name": "ANet_0.2.615_x64_en-US.msi",
+      "size": 50483200,
+      "sha256": "848030c7985c8662a80ccf1f975413c96f60ef597a7d67dd63ac7ce615a1855a"
+    },
+    {
+      "version": "0.2.616",
+      "kind": "nsis",
+      "id": 784057963,
+      "name": "ANet_0.2.616_x64-setup.exe",
+      "size": 36570650,
+      "sha256": "28dfbc7eb964e14673d8983e8aefa0aa114ca18f6c156ba1591141dc131d223b"
+    },
+    {
+      "version": "0.2.616",
+      "kind": "msi",
+      "id": 784057783,
+      "name": "ANet_0.2.616_x64_en-US.msi",
+      "size": 50483200,
+      "sha256": "2bdd6bd9b66fb3774aed7bceaf95e6d487e92c0b8a0d1871371a0dcaabdddf74"
+    }
+  ]
+}
