@@ -69,9 +69,9 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
   const zs = useRef(new Animated.Value(1)).current;
   const zx = useRef(new Animated.Value(0)).current;
   const zy = useRef(new Animated.Value(0)).current;
-  // Derived once so render never creates a fresh AnimatedAddition node on every paint
+  // Memoized so render never creates a fresh AnimatedAddition node on every paint
   // (RN 0.85 Fabric on iOS leaks/races Animated nodes recreated during Modal presentation).
-  const combinedY = useRef(Animated.add(zy, dismissY)).current;
+  const combinedY = useMemo(() => Animated.add(zy, dismissY), [zy, dismissY]);
   const zoomRef = useRef<Zoom>(ZOOM_IDENTITY);
   const applyZoom = (z: Zoom, animate: boolean) => {
     zoomRef.current = z;

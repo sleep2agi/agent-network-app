@@ -139,7 +139,7 @@ check(!m.isDoubleTap({ at: 1000, x: 10, y: 10 }, { at: 1100, x: 200, y: 10 }), '
 {
   const src = readFileSync(new URL('./ImageViewer.tsx', import.meta.url), 'utf8');
   check(!/translateY:\s*Animated\.add\(/.test(src), 'ImageViewer never constructs Animated.add inline in render transform');
-  check(/useRef\(Animated\.add\(zy,\s*dismissY\)\)\.current/.test(src), 'combinedY Animated.add node is created once in a ref');
+  check(/useMemo\(\(\)\s*=>\s*Animated\.add\(zy,\s*dismissY\),\s*\[zy,\s*dismissY\]\)/.test(src), 'combinedY Animated.add node is lazily memoized instead of evaluated on every render');
   check(/useMemo\(\s*\(\)\s*=>\s*dismissY\.interpolate\(/.test(src), 'backdropOpacity interpolation is memoized by viewport height');
   check(/<Modal[^>]*presentationStyle="overFullScreen"/.test(src), 'transparent Modal sets explicit iOS presentationStyle="overFullScreen"');
   check(/<Image\s+key=\{uri\}/.test(src), 'ViewerPage keys Image by uri to drop stale Fabric load callbacks');
