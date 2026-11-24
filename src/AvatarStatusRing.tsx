@@ -18,7 +18,9 @@ const NATIVE_DRIVER = Platform.OS !== 'web';
 export const AVATAR_TICK_MS = 100;
 const tickListeners = new Set<(now: number) => void>();
 let tickTimer: ReturnType<typeof setInterval> | null = null;
-let appActive = true;
+// 以当前状态起步：模块若在后台首次加载（例如推送唤醒），不能先跑起来再等 change 事件。
+// currentState 可能是 null / 'unknown'（启动早期）：按「在前台」处理，等第一条 change 再校正。
+let appActive = !NATIVE_DRIVER || (AppState.currentState !== 'background' && AppState.currentState !== 'inactive');
 function syncTicker() {
   const shouldRun = appActive && tickListeners.size > 0;
   if (shouldRun && !tickTimer) {
