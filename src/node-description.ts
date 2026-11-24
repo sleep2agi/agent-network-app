@@ -39,3 +39,67 @@ export function saveErrorKey(error: string, status?: number): string {
   if (status === 404) return 'nodeDesc.notFound';
   return 'nodeDesc.failed';
 }
+
+const TEMPLATE_LINE_RE = /^(负责|能干什么|什么事找我|不做|职责|简介|个性签名|签名)[：:]\s*(.*)$/;
+
+/**
+ * 列表行 / 聊天顶栏用的单行摘要（admin 2026-11-25 截图需求 #5501）：
+ * - 空串 / 纯空白 / 未填写的模板骨架 → ''（不占位）；
+ * - 跳过空模板行，取第一条有实质内容的行，并去掉冗余前缀（如「负责：」），压缩空白；
+ * - 超出 maxLen 个 Unicode 码点时补省略号（界面侧仍配 numberOfLines={1} 兜底视觉宽度）。
+ */
+export function descriptionSummary(raw: string | null | undefined, maxLen = 80): string {
+  const normalized = normalizeDraft(raw ?? '');
+  if (!normalized) return '';
+  let picked = '';
+  for (const rawLine of normalized.split('\n')) {
+    const line = rawLine.trim();
+    if (!line) continue;
+    const m = TEMPLATE_LINE_RE.exec(line);
+    const body = (m ? m[2] : line).replace(/\s+/g, ' ').trim();
+    if (body) { picked = body; break; }
+  }
+  if (!picked) return '';
+  if (maxLen > 1) {
+    const chars = [...picked];
+    if (chars.length > maxLen) return chars.slice(0, maxLen - 1).join('') + '…';
+  }
+  return picked;
+}
+
+export interface NodeDescriptionRow {
+  node_id?: string | null;
+  alias?: string | null;
+  description?: string | null;
+  updated_at?: string | null;
+}
+
+/** 按 alias 建「最新一行 → 单行摘要」索引；同 alias 多行时取 updated_at 最新者，无有效摘要时不入表。 */
+export function descriptionByAlias(nodes: ReadonlyArray<NodeDescriptionRow> | null | undefined): Map<string, string> {
+  const best = new Map<string, NodeDescriptionRow>();
+  for (const n of nodes ?? []) {
+    const key = n.alias?.trim();
+    if (!key) continue;
+    const prev = best.get(key);
+    if (!prev || (n.updated_at ?? '') >= (prev.updated_at ?? '')) best.set(key, n);
+  }
+  const out = new Map<string, string>();
+  for (const [alias, row] of best) {
+    const summary = descriptionSummary(row.description);
+    if (summary) out.set(alias, summary);
+  }
+  return out;
+}
+
+/** 聊天顶栏按权威 node_id 优先匹配（缺失时退回最新 alias 行），返回单行摘要。 */
+export function descriptionForNode(
+  nodes: ReadonlyArray<NodeDescriptionRow> | null | undefined,
+  target: { nodeId?: string | null; alias: string },
+): string {
+  const list = nodes ?? [];
+  if (target.nodeId) {
+    const exact = list.find(n => n.node_id === target.nodeId);
+    if (exact) return descriptionSummary(exact.description);
+  }
+  return descriptionByAlias(list).get(target.alias) ?? '';
+}

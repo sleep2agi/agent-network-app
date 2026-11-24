@@ -69,6 +69,7 @@ import { ds, uiScale } from './ui-scale';
 import { shouldShowTimeHeader } from './time';
 import { localizedChatHeader as formatChatHeader } from './i18n-chat-time';
 import { canShowPermissionSection } from './node-permission-model';
+import { descriptionForNode } from './node-description';
 import AvatarStatusRing from './AvatarStatusRing';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
 import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
@@ -2466,6 +2467,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   useEffect(() => { setFullCaps(null); setControlSession(null); }, [cfg, alias]);
   // #4591 真机回访：停止的「未确认」提示是**这个会话**的状态，切到别的节点必须清掉，
   // 否则上一次的提示会挂在另一个节点的聊天框上（用户会以为这个节点也没停）。
+  const [nodeDescription, setNodeDescription] = useState<string>('');
   useEffect(() => {
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     interruptSeenRef.current = new Set();
@@ -2473,7 +2475,19 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     interruptBaselineRef.current = '';
     setInterrupt(idleInterrupt());
     setComposerNotice(null);
+    setNodeDescription('');
   }, [cfg, alias]);
+  // #5501 —— 聊天顶栏「在线 · 职责/签名」单行摘要；打开/关闭聊天信息面板时刷新，编辑完立即生效。
+  useEffect(() => {
+    let live = true;
+    void fetchHubNodes(cfg)
+      .then(({ nodes }) => {
+        if (!live) return;
+        setNodeDescription(descriptionForNode(nodes ?? [], { nodeId: controlSession?.node_id, alias }));
+      })
+      .catch(() => { /* keep previous */ });
+    return () => { live = false; };
+  }, [cfg, alias, controlSession?.node_id, infoOpen]);
   useEffect(() => {
     let live = true;
     fetchNodeStatus(cfg, alias)
@@ -2728,17 +2742,32 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                       没区别——加一个小箭头，别让人靠「下意识点一下试试」才发现。 */}
                   {!windowChrome && onOpenNodeSettings ? <Ionicons name="chevron-forward" size={14} color={colors.textMuted} /> : null}
                 </View>
-                {subtitle ? (
-                  <Text
-                    style={[
-                      styles.subtitle,
-                      processing && { color: colors.accent },
-                      sessionStatus === 'offline' && !processing && { color: colors.textMuted },
-                    ]}
-                    numberOfLines={1}
-                  >
-                    {subtitle}
-                  </Text>
+                {subtitle || nodeDescription ? (
+                  <View style={styles.subtitleRow}>
+                    {subtitle ? (
+                      <Text
+                        style={[
+                          styles.subtitle,
+                          { marginTop: 0, flexShrink: 0 },
+                          processing && { color: colors.accent },
+                          sessionStatus === 'offline' && !processing && { color: colors.textMuted },
+                        ]}
+                        numberOfLines={1}
+                      >
+                        {subtitle}
+                      </Text>
+                    ) : null}
+                    {nodeDescription ? (
+                      <Text
+                        style={[styles.subtitleDesc, { color: colors.textMuted }]}
+                        numberOfLines={1}
+                        ellipsizeMode="tail"
+                        testID="chat-header-desc"
+                      >
+                        {subtitle ? ` · ${nodeDescription}` : nodeDescription}
+                      </Text>
+                    ) : null}
+                  </View>
                 ) : null}
               </View>
             </>
@@ -3863,6 +3892,8 @@ const makeStyles = (B = bubbleLayout()) =>
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
+  subtitleRow: { flexDirection: 'row', alignItems: 'center', minWidth: 0, marginTop: 1 },
+  subtitleDesc: { flex: 1, minWidth: 0, fontSize: 11 },
   // The single ⋯: a 36 dp target flush with the right padding. Icon buttons are measured by their box
   // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
