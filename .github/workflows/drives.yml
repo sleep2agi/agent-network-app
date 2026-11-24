@@ -63,7 +63,7 @@ jobs:
             exit 0
           fi
           # App-code paths: the old pull_request.paths filter.
-          if git diff --name-only "$BASE...$HEAD" | grep -qE '^(src/|App\.tsx$|index\.ts$|assets/|tests/|package(-lock)?\.json$|scripts/run-drives\.mjs$|\.github/workflows/drives\.yml$)'; then
+          if git diff --name-only "$BASE...$HEAD" | grep -qE '^(src/|App\.tsx$|index\.ts$|assets/|tests/|package(-lock)?\.json$|scripts/run-drives\.mjs$|scripts/install-drive-browser\.sh$|\.github/workflows/drives\.yml$)'; then
             echo "app=true" >> "$GITHUB_OUTPUT"
           else
             echo "app=false" >> "$GITHUB_OUTPUT"
