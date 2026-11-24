@@ -70,7 +70,7 @@ ck('五个 kind 各有各的文案(不是同一句兜底)',
     restartChoiceText({ kind: k as never, countdownSeconds: 5, command: 'c', inFlightCount: 1 } as never))).size === 5);
 
 // ── 源码契约:页面真的用了这套逻辑,而不是各写各的 ──────────────────
-const secrets = readFileSync(new URL('./NodeSecretsSection.tsx', import.meta.url), 'utf8');
+const secrets = readFileSync(new URL('./ScopedSecretsSection.tsx', import.meta.url), 'utf8');
 ck('密钥页引入本模块', secrets.includes("from './node-restart-after-secret'"));
 ck('密钥页调用 restartChoiceAfterSecret', secrets.includes('restartChoiceAfterSecret('));
 ck('密钥页按 choice 出文案(restartChoiceText)', secrets.includes('restartChoiceText('));
@@ -79,8 +79,9 @@ ck('密钥页按 choice 出文案(restartChoiceText)', secrets.includes('restart
 ck('密钥页把 config_update_capable 当 prop 收下', secrets.includes('configUpdateCapable'));
 ck('密钥页不自拉 config(复用父级那份,避免多打一次接口)', !secrets.includes('fetchNodeConfig('));
 const detail = readFileSync(new URL('./NodeDetailScreen.tsx', import.meta.url), 'utf8');
-ck('父级把 configUpdateCapable + online 传给密钥页', /<NodeSecretsSection[\s\S]*?configUpdateCapable=\{configUpdateCapable\}[\s\S]*?online=\{online\}/.test(detail));
+ck('父级把 configUpdateCapable + online 传给统一后的密钥页', /<ScopedSecretsSection[\s\S]*?configUpdateCapable=\{[\s\S]*?configUpdateCapable[\s\S]*?\}[\s\S]*?online=\{online\}/.test(detail));
 ck('父级确实读了 config_update_capable(fetchNodeConfig)', detail.includes('fetchNodeConfig('));
+ck('技能 Tab 不再重复渲染 NodeSecretsSection (#5505)', !detail.includes('<NodeSecretsSection'));
 
 console.log(`\n${p}/${t} 通过`);
 if (p !== t) process.exit(1);

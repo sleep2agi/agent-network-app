@@ -7,6 +7,7 @@
 //   · 值只存在于这张卡片的输入框状态与 onSubmit 的参数里；
 //   · 不写日志、不进消息正文、不进任何提示文案；保存后父级发的是「{KEY} 已保存。」；
 //   · agent 从头到尾看不到值。
+import type { ReactNode } from 'react';
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Ionicons } from './icons';
@@ -17,13 +18,15 @@ import type { SecretRequest } from './secret-request';
 export type SecretRequestPhase = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function SecretRequestCard({
-  request, phase, error, onSave, testID = 'secret-request-card', bare = false,
+  request, phase, error, onSave, savedFooter, testID = 'secret-request-card', bare = false,
 }: {
   request: SecretRequest;
   phase: SecretRequestPhase;
   error?: string;
   /** 只在用户点保存时调用；值作为参数传出，不落到卡片以外的地方。 */
   onSave: (value: string) => void;
+  /** 保存完成后可选的底部操作区（例如 #5505 的「立即重启使其生效」按钮）。 */
+  savedFooter?: ReactNode;
   testID?: string;
   /** 放在聊天回复气泡里时不再画自己的边框（气泡已经是框）。 */
   bare?: boolean;
@@ -55,9 +58,12 @@ export default function SecretRequestCard({
       </View>
 
       {saved ? (
-        <Text testID={`${testID}-saved`} style={{ color: colors.running, fontSize: type.small }}>
-          {`${request.key} 已保存。`}
-        </Text>
+        <View style={{ gap: spacing.xs }}>
+          <Text testID={`${testID}-saved`} style={{ color: colors.running, fontSize: type.small }}>
+            {`${request.key} 已保存。`}
+          </Text>
+          {savedFooter ?? null}
+        </View>
       ) : (
         <>
           <Text style={{ color: colors.textSecondary, fontSize: type.small }}>{request.hint || '内容不会出现在聊天里，agent 也看不到。'}</Text>

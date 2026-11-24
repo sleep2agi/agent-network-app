@@ -99,7 +99,6 @@ import NodeDaemonProviderSection from './NodeDaemonProviderSection';
 import { daemonProviderNodeRuntime } from './node-provider-target';
 import { isCodexRuntime } from './provider-create-options';
 import NodeSkillsSection from './NodeSkillsSection';
-import NodeSecretsSection from './NodeSecretsSection';
 import { envTransportHint } from './env-transport-hint';
 import { parseSecretKeys } from './node-secret-keys';
 import ScopedSecretsSection from './ScopedSecretsSection';
@@ -381,8 +380,8 @@ export default function NodeDetailScreen({
   // undefined = 读取中,null = Hub 没这个接口或读失败(按不支持说)。
   const [configUpdateCapable, setConfigUpdateCapable] = useState<boolean | null | undefined>(undefined);
   const handStartedNodeId = node?.lifecycle_controllable === false ? node.node_id : null;
-  // board #694 —— 「概览」里也画重启 / 停止(节点操作卡片),同样要知道能不能自己重启。
-  const onDangerTab = activeSection === 'danger' || activeSection === 'overview';
+  // board #694 / #5505 —— 「概览」「危险操作」「密钥」都需要知道节点能否自己重启。
+  const onDangerTab = activeSection === 'danger' || activeSection === 'overview' || activeSection === 'secrets';
   useEffect(() => {
     setConfigUpdateCapable(undefined);
     if (!handStartedNodeId || !onDangerTab) return;
@@ -905,7 +904,16 @@ export default function NodeDetailScreen({
     if (section === 'secrets') return (
       <View>
         <SectionTitle title="密钥" />
-        <ScopedSecretsSection cfg={cfg} daemonId={node?.lifecycle_daemon_node_id} nodeId={node?.node_id} nodeRuntimeVersion={s.version} nodeSecretsCapable={s.node_secrets_capable === true} />
+        <ScopedSecretsSection
+          cfg={cfg}
+          daemonId={node?.lifecycle_daemon_node_id}
+          nodeId={node?.node_id}
+          nodeRuntimeVersion={s.version}
+          nodeSecretsCapable={s.node_secrets_capable === true}
+          alias={alias}
+          configUpdateCapable={node?.lifecycle_controllable ? true : configUpdateCapable}
+          online={online}
+        />
       </View>
     );
     if (section === 'rules') return (
@@ -922,17 +930,6 @@ export default function NodeDetailScreen({
       <View>
         <SectionTitle title="技能" />
         <NodeSkillsSection cfg={cfg} alias={alias} node={rulesTarget} session={s} readOnly={readOnly} />
-        {/* #1491 E2 — 节点密钥。只有节点上报了 node_secrets_capable 才显示：
-            没升级的节点没有这条 lane，显示一个永远失败的按钮比不显示更糟。 */}
-        {!readOnly && s.node_secrets_capable && s.node_id ? (
-          <NodeSecretsSection
-            cfg={cfg}
-            nodeId={s.node_id}
-            alias={alias}
-            configUpdateCapable={configUpdateCapable}
-            online={online}
-          />
-        ) : null}
       </View>
     );
     if (section === 'files') return (

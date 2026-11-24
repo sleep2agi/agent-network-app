@@ -1,5 +1,5 @@
 // admin 2026-11-24 —— 聊天里的密钥卡（Hub request_secret ⇒ tasks.meta_json.reply_secret_request）。
-import { chatSecretRequestFromMeta, secretSavedAfter, secretSaveErrorText, secretSavedMessage } from './chat-secret-request';
+import { chatSecretRequestFromMeta, secretSavedAfter, secretSaveErrorText, secretSavedMessage, selectChatSecretScopes } from './chat-secret-request';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra?: unknown) => {
@@ -37,6 +37,15 @@ for (const k of ['forbidden', 'unsupported', 'invalid', 'unconfirmed', 'cancelle
   const s = secretSaveErrorText(k);
   ck(`失败文案说人话（${k}）`, s.length > 5 && !/forbidden|unsupported|unconfirmed|cancelled|_/.test(s), s);
 }
+
+ck('Daemon 托管节点优先写 Daemon 作用域，再回退独立节点 (#5505)', same(
+  selectChatSecretScopes('net_1', 'n_1', 'd_1'),
+  [{ networkId: 'net_1', daemonId: 'd_1', nodeId: 'n_1' }, { networkId: 'net_1', daemonId: null, nodeId: 'n_1' }],
+));
+ck('独立节点只走独立节点作用域 (#5505)', same(
+  selectChatSecretScopes('net_1', 'n_1', null),
+  [{ networkId: 'net_1', daemonId: null, nodeId: 'n_1' }],
+));
 
 console.log(`chat-secret-request: ${p}/${t} passed`);
 if (p !== t) process.exit(1);

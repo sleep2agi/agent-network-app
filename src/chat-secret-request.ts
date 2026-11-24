@@ -59,6 +59,18 @@ export function secretSavedAfter(
   return false;
 }
 
+/** #5505 —— 聊天卡片保存密钥的候选作用域：若节点挂在 Daemon 下，先走 Daemon 作用域
+ * （与「节点信息 → 密钥」页对齐），失败时再回退到独立节点作用域（node-secrets.json）。 */
+export function selectChatSecretScopes(
+  networkId: string,
+  nodeId: string,
+  daemonId?: string | null,
+): Array<{ networkId: string; daemonId: string | null; nodeId: string }> {
+  const cleanDaemon = typeof daemonId === 'string' && daemonId.trim() ? daemonId.trim() : null;
+  const independent = { networkId, daemonId: null, nodeId };
+  return cleanDaemon ? [{ networkId, daemonId: cleanDaemon, nodeId }, independent] : [independent];
+}
+
 /** 保存失败时给人看的话：说清原因和下一步，不出现内部错误码。 */
 export function secretSaveErrorText(kind: string): string {
   switch (kind) {
