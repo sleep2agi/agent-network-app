@@ -5,7 +5,9 @@
  * 集成分段（SKILLS / 令牌 / Provider）同样可点，只标出名字，不替换三栏演示壳。
  */
 import { useState } from 'react';
-import { Platform, SafeAreaView, View } from 'react-native';
+import { Platform, View } from 'react-native';
+// RN 的 SafeAreaView 已弃用(启动时 W/ReactNativeJS 告警,#5426):用 safe-area-context 的同名组件。
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { Text } from './ui-text';
 import ServerSidebar, { type ServerSection } from './ServerSidebar';
 import HubScopeScreen from './HubScopeScreen';

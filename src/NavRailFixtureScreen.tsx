@@ -2,7 +2,9 @@
 // 折叠屏宽窗左侧导航:带标签(<=900 dp)与纯图标(>=900 dp,对齐桌面端)并排对比,改版前后截图用。
 // 带 `hub=` 时右侧渲染 Hub 设置页,复现 admin 2026-10-24 那张小米折叠屏截图(导航 + Hub 设置)。
 // 只存在于 web 自检构建,不进原生包。
-import { SafeAreaView, View } from 'react-native';
+import { View } from 'react-native';
+// RN 的 SafeAreaView 已弃用(启动时 W/ReactNativeJS 告警,#5426):用 safe-area-context 的同名组件。
+import { SafeAreaView } from 'react-native-safe-area-context';
 import MobileNavRail, { MobileNavTab } from './MobileNavRail';
 import HubScopeScreen from './HubScopeScreen';
 import { isHubSection } from './hub-scope-demo';
