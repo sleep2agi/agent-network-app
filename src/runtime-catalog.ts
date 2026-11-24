@@ -25,5 +25,6 @@ export const RUNTIME_MODEL_SUGGESTIONS: Record<string, string[]> = {
 /** Suggested model ids for a runtime; unknown/missing runtime → []. */
 export function suggestedModels(runtime: string | null | undefined): string[] {
   if (!runtime) return [];
+  if (runtime === 'antigravity-sdk') return RUNTIME_MODEL_SUGGESTIONS['antigravity-acp'] ?? [];
   return RUNTIME_MODEL_SUGGESTIONS[runtime] ?? [];
 }

@@ -26,7 +26,7 @@ import {
   type OpenCodeCatalogPoll,
 } from './api';
 import { catalogErrorText, isOpenCodeV2Node, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
-import { ACP_MODEL_SUGGESTIONS, acpModelErrorText, isAcpModelRuntime, normalizeAcpModelId } from './acp-model-edit';
+import { acpModelChoices, acpModelErrorText, isAcpModelRuntime, normalizeAcpModelId } from './acp-model-edit';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { buildConfigPatch, variantAfterModelSwitch, variantValueError, variantWritable } from './node-variant-patch';
@@ -574,6 +574,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         setAcpSaving(false);
       }
     };
+    const acpChoices = acpModelChoices({ runtime: node?.runtime, agyModels: node?.agy_models });
+    const draftTrim = acpDraft.trim();
     return (
       <View style={styles.card} testID="composer-model-sheet">
         <View style={styles.searchBar} testID="model-palette-acp">
@@ -599,6 +601,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         <Text style={styles.source} testID="model-palette-acp-configured">
           {t('chat.modelPicker.acpConfigured', { value: (config?.model ?? '').trim() || t('chat.modelUnknown') })}
         </Text>
+        {acpChoices.source === 'reported' ? (
+          <Text style={styles.source} testID="model-palette-acp-reported-count">
+            {`agy models · ${acpChoices.models.length}`}
+          </Text>
+        ) : null}
         <TextInput
           testID="model-palette-acp-input"
           value={acpDraft}
@@ -609,19 +616,22 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
           style={styles.acpInput}
           onSubmitEditing={() => { void saveAcpModel(); }}
         />
-        <View style={styles.acpChips}>
-          {ACP_MODEL_SUGGESTIONS.flatMap(group => group.ids.map(id => (
-            <Pressable
-              key={id}
-              testID={`model-palette-acp-suggest-${id}`}
-              accessibilityRole="button"
-              onPress={() => { setAcpDraft(id); setAcpError(null); setAcpNotice(null); }}
-              style={styles.acpChip}
-            >
-              <Text style={styles.acpChipText}>{id}</Text>
-            </Pressable>
-          )))}
-        </View>
+        <ScrollView style={{ maxHeight: 196 }} contentContainerStyle={styles.acpChips} keyboardShouldPersistTaps="handled">
+          {acpChoices.models.map(id => {
+            const active = id === draftTrim || (!draftTrim && id === currentModel);
+            return (
+              <Pressable
+                key={id}
+                testID={`model-palette-acp-suggest-${id}`}
+                accessibilityRole="button"
+                onPress={() => { setAcpDraft(id); setAcpError(null); setAcpNotice(null); }}
+                style={[styles.acpChip, active && { borderColor: colors.accent }]}
+              >
+                <Text style={[styles.acpChipText, active && { color: colors.accent }]}>{id}</Text>
+              </Pressable>
+            );
+          })}
+        </ScrollView>
         <Pressable
           testID="model-palette-acp-save"
           accessibilityRole="button"
