@@ -18,6 +18,8 @@ mock.module('react-native', () => ({
   useWindowDimensions: () => ({ width: 390, height: 844, scale: 1, fontScale: 1 }),
   // 手机行的左滑(TaskSwipeRow):手势本身由 drive.mjs 在浏览器里拖;这里直接调 onOpenChange 打开。
   PanResponder: { create: () => ({ panHandlers: {} }) },
+  // 甘特图表头(#5424)改用 Animated.View + Animated.Value 跟随滚动;这里只需要能渲染。
+  Animated: { View: 'View', Value: class { v: number; constructor(v: number) { this.v = v; } setValue(v: number) { this.v = v; } interpolate() { return this; } } },
 }));
 mock.module('./src/ui-text', () => ({ Text: 'Text', TextInput: 'TextInput' }));
 mock.module('./src/icons', () => ({ Ionicons: () => null }));
