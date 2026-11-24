@@ -26,7 +26,11 @@ ck('重开聊天：卡片之后本人发的确认 ⇒ 已保存', secretSavedAft
 ck('旧确认不吞掉后来同名的换钥请求', !secretSavedAfter([mine(msg, '2026-11-24T08:02:00Z')], 'GITHUB_TOKEN', card2));
 ck('别人发的确认不算', !secretSavedAfter([{ content: msg, at: '2026-11-24T09:05:00Z', own: false }], 'GITHUB_TOKEN', card2));
 ck('别的变量名的确认不算', !secretSavedAfter([mine(secretSavedMessage({ key: 'NPM_TOKEN' }), '2026-11-24T09:05:00Z')], 'GITHUB_TOKEN', card2));
-ck('刚点保存的本地回显（无服务端时间）算', secretSavedAfter([mine(msg, null)], 'GITHUB_TOKEN', card2));
+ck('本地回显带真实时间（卡片之后）算', secretSavedAfter([mine(msg, '2026-11-24T09:00:01Z')], 'GITHUB_TOKEN', card2));
+ck('确认缺时间 ⇒ 不算', !secretSavedAfter([mine(msg, null)], 'GITHUB_TOKEN', card2));
+ck('确认时间不可解析 ⇒ 不算', !secretSavedAfter([mine(msg, 'not-a-date')], 'GITHUB_TOKEN', card2));
+ck('卡片缺时间 ⇒ 任何旧确认都不算', !secretSavedAfter([mine(msg, '2026-11-24T09:05:00Z')], 'GITHUB_TOKEN', null));
+ck('卡片时间不可解析 ⇒ 不算', !secretSavedAfter([mine(msg, '2026-11-24T09:05:00Z')], 'GITHUB_TOKEN', 'garbage'));
 ck('普通消息里提到变量名不算已保存', !secretSavedAfter([mine('我把 GITHUB_TOKEN（GITHUB_TOKEN）发你了', '2026-11-24T09:05:00Z')], 'GITHUB_TOKEN', card2));
 
 for (const k of ['forbidden', 'unsupported', 'invalid', 'unconfirmed', 'cancelled']) {

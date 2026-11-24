@@ -52,8 +52,9 @@ export function secretSavedAfter(
     const hit = /（([A-Za-z_][A-Za-z0-9_]*)）/.exec(r.content);
     if (!hit || hit[1] !== key) continue;
     const at = r.at ? Date.parse(r.at) : NaN;
-    // 本地回显还没有服务端时间时（刚点保存）也算：它必然在卡片之后。
-    if (Number.isNaN(since) || Number.isNaN(at) || at >= since) return true;
+    // 时间未知（卡片或确认缺时间 / 不可解析）一律**不算**：宁可让人再填一次，也不能把新请求误判成已保存
+    // （客户端欧评审 #1712）。刚点保存的那一刻由卡片自己的 phase=saved 保持；本地回显也带真实时间。
+    if (!Number.isNaN(since) && !Number.isNaN(at) && at >= since) return true;
   }
   return false;
 }
