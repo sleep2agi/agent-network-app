@@ -71,7 +71,9 @@ ck('rail renders only when navChrome is rail', app.includes("const railShown = n
 ck('bottom tab bar renders only when navChrome is bottomTabs (exactly one call site)', (app.match(/mobileTabBar\(/g) ?? []).length === 1 && app.includes("{navChrome === 'bottomTabs' ? mobileTabBar(navActive) : null}"));
 ck('left rail adds 任务; the phone tab bar does not', /<MobileNavRail[\s\S]*?tabs=\{MOBILE_RAIL_TABS\}/.test(app) && app.includes('{MOBILE_TABS.map(tab => ('));
 ck('rail and tabs share one active key and one press handler', /<MobileNavRail[\s\S]*?active=\{navActive\}[\s\S]*?onSelect=\{onNavPress\}/.test(app) && app.includes('onPress={() => onNavPress(tab.key)}'));
-ck('press on the current destination is a no-op (keeps the open chat)', app.includes('const next = screenForNavPress(key, screen.name);') && app.includes('if (next) setScreen(next as Screen);'));
+// #5428:the press goes through agentTabReturnScreen, which returns null for the current
+// destination (agent-tab-return.test.ts pins that) — same no-op, plus the two-pane restore.
+ck('press on the current destination is a no-op (keeps the open chat)', /const next = agentTabReturnScreen\(key, screen\.name, layout, remembered\);/.test(app) && app.includes('if (next) setScreen(next as Screen);'));
 ck('brand/version hidden on short windows via railShowsBrand(height)', app.includes('showBrand={railShowsBrand(height)}'));
 // Tree stability: the rail is a slot *before* the content inside the same shell, so the
 // content element keeps its position when the rail appears/disappears (fold/unfold).

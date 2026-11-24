@@ -126,7 +126,7 @@ import { bumpLayoutGeneration } from './src/layout-handoff';
 import MobileNavRail from './src/MobileNavRail';
 import { comboFromEvent, shortcutAction, shortcutForCombo } from './src/shortcuts-model';
 import { isMacKeyboard, requestAgentSearchFocus, shortcutBindings, shortcutCaptureActive } from './src/shortcuts-store';
-import { contentWidthBesideRail, iconRailWidth, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, phoneSettingsBackTarget, railIconsOnly, railShowsBrand, screenForNavPress } from './src/nav-chrome';
+import { contentWidthBesideRail, iconRailWidth, mobileRailWidth, navActiveKey, navChromeFor, phoneInPageLeaf, phoneSettingsBackTarget, railIconsOnly, railShowsBrand, screenForNavPress, agentTabReturnScreen, agentQueryScope, rememberAgentPane, type AgentPaneMemory } from './src/nav-chrome';
 import { elevated, buttonStyle, buttonTextStyle } from './src/elevation';
 
 // #653 弱密码横幅在手机上出现的页面(各 tab 的首页)。
@@ -559,8 +559,14 @@ function AppRoot() {
   }, []);
   const onListPaneWidth = (w: number) => { setListPaneWidth(w); void saveListPaneWidth(w); };
   const paneListWidth = twoPaneListWidth(paneAreaWidth, listPaneWidth);
+  // #5428:折叠屏双栏里最后一个「列表 + 会话」画面,切到别的 tab 再点回 Agent 时还原。
+  // 绑定当前账号 + Hub + 网络:换账号 / 换网络后不能还原上一个账号里的会话。
+  const lastAgentPane = useRef<AgentPaneMemory<Screen> | null>(null);
+  const paneScope = cfg ? agentQueryScope(cfg) : '';
+  lastAgentPane.current = rememberAgentPane(lastAgentPane.current, paneScope, screen);
   const onNavPress = (key: string) => {
-    const next = screenForNavPress(key, screen.name);
+    const remembered = lastAgentPane.current?.scope === paneScope ? lastAgentPane.current.screen : null;
+    const next = agentTabReturnScreen(key, screen.name, layout, remembered);
     if (next) setScreen(next as Screen);
   };
   const dedicatedChatWindow = tauriDesktop && !!initialChat;

@@ -92,6 +92,44 @@ export function screenForNavPress(key: string, currentScreenName: string): { nam
   return navActiveKey(currentScreenName) === key ? null : { name: key };
 }
 
+/** 记 Agent 搜索词 / 双栏会话用的键:账号(profileId,旧档案退回用户名)+ Hub + 网络。不含 token。 */
+export function agentQueryScope(cfg: { serverUrl: string; networkId?: string; profileId?: string; username?: string }): string {
+  return [cfg.profileId || cfg.username || '', cfg.serverUrl, cfg.networkId ?? ''].join('|');
+}
+
+/** Screens the折叠屏 two-pane can put back when you return to the Agent tab (list + the chat on the right). */
+const AGENT_PANE_SCREENS = new Set(['agents', 'chat', 'dm', 'group']);
+
+/**
+ * 0.2.618(#5428):折叠屏上从「组织」等 tab 回到「Agent」,右侧打开的会话被清掉(以前一律回到空列表)。
+ * 双栏布局下记住最后一个「列表 + 会话」画面,从别的 tab 点回 Agent 时还原它;手机单栏不变(会话是全屏页)。
+ */
+export function agentTabReturnScreen<S extends { name: string }>(key: string, currentScreenName: string, layout: string, remembered: S | null): S | { name: string } | null {
+  const plain = screenForNavPress(key, currentScreenName);
+  if (!plain) return null;
+  if (key === 'agents' && layout === 'twoPane' && remembered && AGENT_PANE_SCREENS.has(remembered.name)) return remembered;
+  return plain;
+}
+
+/** 双栏「回到 Agent」的记忆:当前 scope(账号+Hub+网络)下最后一个列表/会话画面。 */
+export interface AgentPaneMemory<S> { scope: string; screen: S | null; stale: S | null }
+
+/**
+ * 每次渲染更新记忆(#1710 评审):scope 一变就清空,并把**当时正显示的画面**记为 stale ——
+ * 网络纠正只改 cfg、不换 screen 时,旧网络的会话不会被重新记到新网络名下;用户在新 scope
+ * 里真正打开新的画面(新对象)后才开始记。
+ */
+export function rememberAgentPane<S extends { name: string }>(mem: AgentPaneMemory<S> | null, scope: string, screen: S): AgentPaneMemory<S> {
+  if (!mem || mem.scope !== scope) return { scope, screen: null, stale: screen };
+  if (AGENT_PANE_SCREENS.has(screen.name) && screen !== mem.stale) return mem.screen === screen ? mem : { ...mem, screen };
+  return mem;
+}
+
+/** 这个画面值得被「回到 Agent」还原吗(只记双栏里的列表 / 会话)。 */
+export function isAgentPaneScreen(screenName: string): boolean {
+  return AGENT_PANE_SCREENS.has(screenName);
+}
+
 /** Rail width in dp (Material's compact rail is 72–80). Excludes the left safe-area inset. */
 export const MOBILE_RAIL_WIDTH = 72;
 /** Each rail item's hit box. Both sides must stay ≥ 44 (Apple HIG) / 48 (Material). */
