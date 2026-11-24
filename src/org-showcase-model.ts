@@ -17,15 +17,16 @@ export const isRunning = (a: Pick<PlacedAgent, 'lifecycleState'> & { updatedAt?:
 
 /**
  * 统一在线/运行中口径（#5427）：
- * - 已拿到 Hub 实时会话状态（statusByAlias 非空）时，与组织架构图（LiveOrgMap/LiveOrgMapNative）
- *   及服务器面板一致：`!!s && s !== 'offline'`，避免同模块两屏（组织首页 vs 架构图）数值打架；
- * - 实时状态尚未到达或单测未传时，回退到静态活跃口径 `isRunning`。
+ * - 传入实时会话表 `statusByAlias`（含空表：加载中或全员离线）时，严格按与组织架构图
+ *   （LiveOrgMap / LiveOrgMapNative）和服务器面板完全一致的实时口径判定：`!!s && s !== 'offline'`，
+ *   绝不回退到静态 `isRunning` 混用两种口径；
+ * - 仅在调用方未传入 `statusByAlias`（`undefined`，历史纯静态单测/无实时通道场景）时沿用 `isRunning`。
  */
 export function isAgentLive(
   a: Pick<PlacedAgent, 'alias' | 'lifecycleState'> & { updatedAt?: string | null },
   statusByAlias?: ReadonlyMap<string, string> | null,
 ): boolean {
-  if (statusByAlias && statusByAlias.size > 0) {
+  if (statusByAlias != null) {
     const s = statusByAlias.get(a.alias) ?? '';
     return !!s && s !== 'offline';
   }

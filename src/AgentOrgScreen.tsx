@@ -319,7 +319,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                 ? <LiveOrgMapNative cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} />
                 : (!p.phone && Platform.OS === 'web'
                   ? <LiveOrgMap cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} />
-                  : <OrgShowcase compact={!!p.phone} data={data} placed={placed} statusByAlias={statusByAlias} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />)}
+                  : <OrgShowcase compact={!!p.phone} data={data} placed={placed} statusByAlias={p.phone ? statusByAlias : undefined} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />)}
             </View>
           ) : p.fill && view === 'members' && p.renderMembers ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-members">

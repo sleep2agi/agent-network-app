@@ -54,7 +54,7 @@ ck('drill: trail root → department', deptTrail(data, 'a11').map(d => d.id).joi
   const liveStats = showcaseStats(data, placed, null, liveMap);
   const liveCols = showcaseColumns(data, placed, { statusByAlias: liveMap });
   ck('#5427: showcaseStats and showcaseColumns agree with live session map (2 total, 1 in A)', liveStats.running === 2 && liveCols[0].running === 1);
-  ck('#5427: empty statusByAlias falls back to static isRunning', showcaseStats(data, placed, null, new Map()).running === 3);
+  ck('#5427: empty live statusByAlias reports 0 (strict live semantics, never falls back to static isRunning)', showcaseStats(data, placed, null, new Map()).running === 0);
 }
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
