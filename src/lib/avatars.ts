@@ -143,14 +143,22 @@ export function useAvatarsVersion(): number {
 }
 
 const REMOTE_SOURCE_CACHE = new Map<string, { uri: string }>();
+const MAX_REMOTE_SOURCE_CACHE = 256;
 function remoteSourceFor(uri: string): { uri: string } {
-  let cached = REMOTE_SOURCE_CACHE.get(uri);
-  if (!cached) {
-    if (REMOTE_SOURCE_CACHE.size > 256) REMOTE_SOURCE_CACHE.clear();
-    cached = { uri };
-    REMOTE_SOURCE_CACHE.set(uri, cached);
+  const existing = REMOTE_SOURCE_CACHE.get(uri);
+  if (existing) {
+    // Refresh recency so active list avatars stay referentially stable.
+    REMOTE_SOURCE_CACHE.delete(uri);
+    REMOTE_SOURCE_CACHE.set(uri, existing);
+    return existing;
   }
-  return cached;
+  if (REMOTE_SOURCE_CACHE.size >= MAX_REMOTE_SOURCE_CACHE) {
+    const oldest = REMOTE_SOURCE_CACHE.keys().next().value;
+    if (oldest !== undefined) REMOTE_SOURCE_CACHE.delete(oldest);
+  }
+  const created = { uri };
+  REMOTE_SOURCE_CACHE.set(uri, created);
+  return created;
 }
 
 /**
