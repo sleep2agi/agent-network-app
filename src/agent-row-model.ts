@@ -10,7 +10,7 @@
 
 import type { HubMessage, HubUserMessage, Session } from './api';
 import { hubTimeMs } from './agent-unread-counts';
-import { markdownToPlainText } from './message-plain-text';
+import { markdownToPlainText } from './markdown-plain-text';
 
 /** Row height (dp): 12 + 44 avatar + 12. WeChat's list row is 64–72. */
 export const AGENT_ROW_HEIGHT = 68;
