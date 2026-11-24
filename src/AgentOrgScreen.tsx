@@ -24,8 +24,8 @@ import './i18n-agent-org';
 import OrgShowcase from './OrgShowcase';
 import LiveOrgMap from './LiveOrgMap';
 import LiveOrgMapNative, { nativeOrgMapActive } from './LiveOrgMapNative';
-import { attentionAgents, needsAttention, phoneDeptFacts, phoneLevel, phoneSearch } from './org-phone-list';
-import { isRunning } from './org-showcase-model';
+import { attentionAgents, needsAttention, PHONE_AVATAR_STACK, phoneDeptFacts, phoneLevel, phoneSearch } from './org-phone-list';
+import { isAgentLive } from './org-showcase-model';
 import { peekOrg, recallOrg, rememberOrg } from './swr-cache';
 
 /** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
@@ -297,7 +297,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                   {infoOpen ? <View style={{ gap: spacing.xs }}><Text style={styles.note}>{t('agentOrg.infoSummary')}</Text>{infoBody}</View> : null}
                 </View>
               </> : <>
-                {p.phone ? <PhoneChartCard data={data} placed={placed} onPress={() => setView('chart')} /> : null}
+                {p.phone ? <PhoneChartCard data={data} placed={placed} statusByAlias={statusByAlias} onPress={() => setView('chart')} /> : null}
                 {p.phone
                   ? <PhoneDepartmentList data={data} placed={placed} statusByAlias={statusByAlias} onOpenAgent={p.onOpenAgent} onFocus={setFocus} hint={canEditAnyDepartment(data.departments, p.canManageStructure, treeApi)} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />
                   : <DepartmentTree data={data} placed={placed} focus={focus} onFocus={setFocus} onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, true); }} />}
@@ -319,7 +319,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                 ? <LiveOrgMapNative cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} />
                 : (!p.phone && Platform.OS === 'web'
                   ? <LiveOrgMap cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} />
-                  : <OrgShowcase compact={!!p.phone} data={data} placed={placed} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />)}
+                  : <OrgShowcase compact={!!p.phone} data={data} placed={placed} statusByAlias={statusByAlias} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />)}
             </View>
           ) : p.fill && view === 'members' && p.renderMembers ? (
             <View style={{ flex: 1, minWidth: 0, minHeight: 0 }} testID="agent-org-members">
@@ -575,9 +575,9 @@ function DepartmentTree(p: { data: AgentOrgData; placed: PlacedAgent[]; focus: s
 // admin 2026-11-17「这个里面真的是有点太丑了……要有那种很舒适的感觉」：手机「组织」页。
 // 不再是「外框 + 一段说明 + 设置风格的一行 + 文件夹图标列表」：顶上一张架构图卡片（顺带给总数），
 // 下面每个部门一行 —— 头像叠 + 名字 + 「N 个 Agent · M 个运行中」+ 箭头；说明压成底部一行小字。
-function PhoneChartCard(p: { data: AgentOrgData; placed: PlacedAgent[]; onPress: () => void }) {
+function PhoneChartCard(p: { data: AgentOrgData; placed: PlacedAgent[]; statusByAlias?: ReadonlyMap<string, string>; onPress: () => void }) {
   const { t } = useTranslation();
-  const running = p.placed.filter(isRunning).length;
+  const running = p.placed.filter(a => isAgentLive(a, p.statusByAlias)).length;
   return <Pressable testID="agent-org-chart-open" accessibilityRole="button" onPress={p.onPress}
     style={({ pressed }) => [styles.phoneChartCard, pressed && { opacity: 0.85 }]}>
     <View style={styles.phoneChartIcon}><Ionicons name="git-network-outline" size={22} color={colors.accent} /></View>
@@ -607,7 +607,7 @@ function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onF
   const [attentionOpen, setAttentionOpen] = useState(false);
   // 只列一级部门；点进去是部门页（子部门 + 成员），不在一屏里摊开整棵树。
   const rows = phoneLevel(p.data, null);
-  const unowned = phoneDeptFacts(p.placed, p.data, null);
+  const unowned = phoneDeptFacts(p.placed, p.data, null, PHONE_AVATAR_STACK, p.statusByAlias);
   const found = phoneSearch(p.data, p.placed, query);
   const attention = attentionAgents(p.placed, p.statusByAlias);
   const sub = (f: { count: number; running: number }) => f.count === 0 ? t('agentOrg.phone.deptEmpty') : f.running > 0 ? t('agentOrg.phone.deptSub', f) : t('agentOrg.phone.deptSubIdle', f);
@@ -641,7 +641,7 @@ function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onF
         <Text style={styles.phoneSection}>{t('agentOrg.departments')}</Text>
         <View style={styles.phoneGroup}>
           {found.departments.map((d, i) => {
-            const f = phoneDeptFacts(p.placed, p.data, d.id);
+            const f = phoneDeptFacts(p.placed, p.data, d.id, PHONE_AVATAR_STACK, p.statusByAlias);
             return <Pressable key={d.id} testID={`agent-org-search-dept-${d.id}`} accessibilityRole="button" onPress={() => p.onFocus(d.id)}
               style={({ pressed }) => [styles.phoneRow, { paddingLeft: spacing.md }, i > 0 && styles.phoneRowDivider, pressed && { backgroundColor: colors.rowHover }]}>
               <AvatarStack aliases={f.avatars} />
@@ -676,7 +676,7 @@ function PhoneDepartmentList(p: { data: AgentOrgData; placed: PlacedAgent[]; onF
     <Text style={[styles.phoneSection, { marginTop: spacing.lg }]}>{t('agentOrg.departments')}</Text>
     <View style={styles.phoneGroup}>
       {rows.length ? rows.map((row, i) => {
-        const f = phoneDeptFacts(p.placed, p.data, row.dept.id);
+        const f = phoneDeptFacts(p.placed, p.data, row.dept.id, PHONE_AVATAR_STACK, p.statusByAlias);
         return <Pressable key={row.dept.id} testID={`agent-org-dept-${row.dept.id}`} accessibilityRole="button" accessibilityLabel={`${row.dept.name}, ${sub(f)}`}
           {...({ dataSet: { orgDept: row.dept.id } } as object)}
           onPress={() => p.onFocus(row.dept.id)}

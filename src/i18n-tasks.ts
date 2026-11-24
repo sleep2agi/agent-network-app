@@ -517,7 +517,7 @@ registerTranslations({
   'dash.vsLastWeek': ['较上周同期', 'vs last week'],
   'dash.yesterdayN': ['昨天 {n}', 'Yesterday {n}'],
   'dash.lastWeekN': ['上周同期 {n}', 'Last week {n}'],
-  'dash.doingNote': ['当前未归档', 'Open now'],
+  'dash.doingNote': ['全部进行中（未归档）', 'All in progress (unarchived)'],
   'dash.recent': ['最近完成', 'Recently completed'],
   'dash.recentEmpty': ['{period}还没有完成的任务', 'Nothing completed {period} yet'],
   'dash.expand': ['展开', 'Show more'],
