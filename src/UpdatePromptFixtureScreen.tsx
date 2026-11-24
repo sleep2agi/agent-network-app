@@ -8,7 +8,8 @@
  * 浏览器里 Platform.OS 恒为 web,App 不会挂 AndroidUpdatePrompt —— 这里直接挂。
  */
 import { useState } from 'react';
-import { Platform, SafeAreaView } from 'react-native';
+import { Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context'; // RN 自带的已弃用(#5426)
 import SettingsScreen from './SettingsScreen';
 import AndroidUpdatePrompt from './AndroidUpdatePrompt';
 import DesktopUpdatePrompt from './DesktopUpdatePrompt';
