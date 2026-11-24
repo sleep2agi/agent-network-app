@@ -31,5 +31,12 @@ ck('both agent list layouts wrap the avatar in the ring', (agents.match(/<Avatar
 const chat = read('./ChatScreen.tsx');
 ck('chat header avatar shows the ring with local processing', chat.includes('<AvatarStatusRing status={sessionStatus} processing={processing} size={ds(32)} testID="chat-header-ring">'));
 
+// #5420 (BUG-09 second half): avoid Android Fresco EmptyDrawable rounding spam on poll re-renders.
+const aliasAvatar = read('./AliasAvatar.tsx');
+const avatarsLib = read('./lib/avatars.ts');
+ck('AliasAvatar is wrapped in React.memo to skip redundant poll re-renders', /const AliasAvatar = memo\(function AliasAvatar/.test(aliasAvatar));
+ck('AliasAvatar omits leaf Image borderRadius on Android (parent View clips with overflow:hidden)', aliasAvatar.includes("Platform.OS === 'android' ? null : { borderRadius: avatarRadius(size) }"));
+ck('getAvatarSource caches remote { uri } objects for referential stability', avatarsLib.includes('REMOTE_SOURCE_CACHE') && avatarsLib.includes('remoteSourceFor('));
+
 console.log(`avatar-motion: ${pass}/${pass + fails.length}`);
 if (fails.length) { console.error('FAILED:', fails.join(' | ')); process.exit(1); }

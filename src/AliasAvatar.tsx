@@ -1,5 +1,5 @@
-import { useEffect, useState } from 'react';
-import { Image, View } from 'react-native';
+import { memo, useCallback, useEffect, useState } from 'react';
+import { Image, Platform, View } from 'react-native';
 import { Text } from './ui-text';
 
 import { getAvatarSource, useAvatarsVersion } from './lib/avatars';
@@ -66,7 +66,7 @@ export const aliasInitial = (alias?: string): string => {
   }
 };
 
-export default function AliasAvatar({ alias, size: baseSize = 32, fixedSize = false }: { alias: string; size?: number; fixedSize?: boolean }) {
+const AliasAvatar = memo(function AliasAvatar({ alias, size: baseSize = 32, fixedSize = false }: { alias: string; size?: number; fixedSize?: boolean }) {
   // 界面密度 (src/ui-scale.ts): every avatar scales here, so callers keep passing the design size.
   // A container sized to the avatar must use ds() on the same number — or pass an already resolved
   // size with `fixedSize` (the agent list rows: agentRowGeometry has its own 更紧凑 table).
@@ -77,6 +77,7 @@ export default function AliasAvatar({ alias, size: baseSize = 32, fixedSize = fa
   const version = useAvatarsVersion();
   const source = getAvatarSource(alias);
   const [errored, setErrored] = useState(false);
+  const handleError = useCallback(() => setErrored(true), []);
   // A new alias, or a hub hydration that swaps the source, must clear a prior
   // image error so we retry the (possibly now-valid) illustration.
   useEffect(() => { setErrored(false); }, [alias, version]);
@@ -106,17 +107,22 @@ export default function AliasAvatar({ alias, size: baseSize = 32, fixedSize = fa
       {showImage ? (
         <Image
           source={source!}
-          onError={() => setErrored(true)}
+          onError={handleError}
           style={{
             position: 'absolute',
             top: 0,
             left: 0,
             width: size,
             height: size,
-            borderRadius: avatarRadius(size),
+            // Android Fresco logs `WrappingUtils: Don't know how to round that drawable:
+            // ReactImageDownloadListener$EmptyDrawable` on every load/rebind when `<Image>`
+            // sets borderRadius; the outer View already clips with borderRadius + overflow:'hidden' (#5420).
+            ...(Platform.OS === 'android' ? null : { borderRadius: avatarRadius(size) }),
           }}
         />
       ) : null}
     </View>
   );
-}
+});
+
+export default AliasAvatar;
