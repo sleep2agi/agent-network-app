@@ -26,20 +26,24 @@ pw="$DRIVE_PW_PREFIX/node_modules/.bin/playwright"
 phase dpkg-repair sudo timeout --signal=TERM --kill-after=5s 30s dpkg --configure -a
 # 2026-11-24: the runners' only mirror (us-east-2.ec2.archive.ubuntu.com) served
 # a few hundred KB in 10-25 s and os-dependencies hit its 180 s limit on every
-# retry (app#1701). Ubuntu 24.04 runners pick mirrors from apt-mirrors.txt and
-# fail over in order, so put two other official mirrors first, and skip the
+# retry (app#1701). Ubuntu 24.04 runners read mirrors from apt-mirrors.txt, and
+# apt spreads one download across *every* listed mirror: a slow mirror trickles
+# rather than fails, so it is never failed over (app#1711 run: azure files took
+# seconds, the three fonts sent to us-east-2 stalled the 180 s limit). So drop
+# the *.ec2.archive mirrors and use two other official ones; also skip the
 # Translation-* indexes nobody here reads. Best effort: a runner without the
-# mirror list keeps its sources untouched.
+# mirror list keeps its sources untouched (the apt config below still applies).
 apt_mirror_fallback() {
   local list=/etc/apt/apt-mirrors.txt
   echo 'Acquire::Languages "none"; Acquire::http::Timeout "20"; Acquire::Retries "2";' \
     | sudo tee /etc/apt/apt.conf.d/90-drive-install >/dev/null
   [[ -f "$list" ]] || return 0
-  grep -q '^http://azure.archive.ubuntu.com/ubuntu' "$list" && return 0
   { printf 'http://azure.archive.ubuntu.com/ubuntu/\tpriority:1\n'
     printf 'http://archive.ubuntu.com/ubuntu/\tpriority:2\n'
-    cat "$list"; } | sudo tee "$list.new" >/dev/null
+    grep -vE '^https?://([a-z0-9-]+\.ec2\.archive|azure\.archive|archive)\.ubuntu\.com/' "$list" || true
+  } | sudo tee "$list.new" >/dev/null
   sudo mv "$list.new" "$list"
+  cat "$list"
 }
 phase apt-mirror-fallback apt_mirror_fallback
 # Browser caches do not contain OS libraries. Install these separately; the caller
