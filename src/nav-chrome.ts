@@ -92,6 +92,25 @@ export function screenForNavPress(key: string, currentScreenName: string): { nam
   return navActiveKey(currentScreenName) === key ? null : { name: key };
 }
 
+/** Screens the折叠屏 two-pane can put back when you return to the Agent tab (list + the chat on the right). */
+const AGENT_PANE_SCREENS = new Set(['agents', 'chat', 'dm', 'group']);
+
+/**
+ * 0.2.618(#5428):折叠屏上从「组织」等 tab 回到「Agent」,右侧打开的会话被清掉(以前一律回到空列表)。
+ * 双栏布局下记住最后一个「列表 + 会话」画面,从别的 tab 点回 Agent 时还原它;手机单栏不变(会话是全屏页)。
+ */
+export function agentTabReturnScreen<S extends { name: string }>(key: string, currentScreenName: string, layout: string, remembered: S | null): S | { name: string } | null {
+  const plain = screenForNavPress(key, currentScreenName);
+  if (!plain) return null;
+  if (key === 'agents' && layout === 'twoPane' && remembered && AGENT_PANE_SCREENS.has(remembered.name)) return remembered;
+  return plain;
+}
+
+/** 这个画面值得被「回到 Agent」还原吗(只记双栏里的列表 / 会话)。 */
+export function isAgentPaneScreen(screenName: string): boolean {
+  return AGENT_PANE_SCREENS.has(screenName);
+}
+
 /** Rail width in dp (Material's compact rail is 72–80). Excludes the left safe-area inset. */
 export const MOBILE_RAIL_WIDTH = 72;
 /** Each rail item's hit box. Both sides must stay ≥ 44 (Apple HIG) / 48 (Material). */
