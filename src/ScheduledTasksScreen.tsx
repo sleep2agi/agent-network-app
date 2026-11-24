@@ -50,7 +50,7 @@ import {
   externalSchedulesMatching,
   externalScopeActive,
   filterChips,
-  filterExternalNodes,
+  filterExternalNodes, externalSilentNodes,
   filterNodeOptions,
   formatAbsolute,
   formatRelative,
@@ -240,6 +240,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
   const extTextScope = useMemo(() => ({ query: extQuery, nodeId: extNodeIdLive }), [extQuery, extNodeIdLive]);
   const extMatching = useMemo(() => externalSchedulesMatching(external, extTextScope), [external, extTextScope]);
   const extVisible = useMemo(() => filterExternalNodes(external, { ...extTextScope, enabled: extEnabled }), [external, extTextScope, extEnabled]);
+  const extSilent = useMemo(() => externalSilentNodes(external, { ...extTextScope, enabled: extEnabled }), [external, extTextScope, extEnabled]);
   const extNarrowed = externalScopeActive({ ...extTextScope, enabled: extEnabled });
   const pickerOptions = nodePicker === 'node' ? extNodeOptions : hubNodeOptions;
   const pickerSelected = nodePicker === 'node' ? extNodeIdLive : hubNodeIdLive;
@@ -495,6 +496,7 @@ export default function ScheduledTasksScreen({ cfg, onOpenChat, open }: {
               refreshControl={<RefreshControl refreshing={refreshing} onRefresh={() => loadExternal(true)} tintColor={colors.accent} />}
             >
               <Text style={[styles.muted, { marginBottom: spacing.md }]}>节点上报的本机计划 · owner 可改托管 cron</Text>
+              {extSilent > 0 ? <Text style={[styles.muted, { marginBottom: spacing.md }]} testID="external-silent-nodes">{`另有 ${extSilent} 台机器没有上报计划`}</Text> : null}
               {extVisible.length === 0 ? (() => {
                 const empty = externalEmptyState(external.length, extNarrowed);
                 return (

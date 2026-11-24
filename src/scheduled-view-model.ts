@@ -411,10 +411,19 @@ export function filterExternalNodes(nodes: readonly HubNodeExternalSchedules[], 
   for (const node of nodes) {
     if (nodeId && node.node_id !== nodeId) continue;
     const schedules = node.schedules.filter(schedule => matchesEnabled(schedule.enabled, enabled) && externalScheduleMatchesQuery(schedule, query));
-    if (schedules.length === 0 && (textOrStatus || node.schedules.length > 0)) continue;
+    // 0.2.618(#5428):没上报计划的机器不再在总列表里各占一张「该节点未上报计划」空卡 —— 上面的
+    // 全部 / 启用 / 停用数的是计划,0 条计划配一长串空卡对不上。只在用户点名选了这台机器时留空卡;
+    // 总列表用一行「另有 N 台机器没有上报计划」交代(externalSilentNodes)。
+    if (schedules.length === 0 && (textOrStatus || node.schedules.length > 0 || !nodeId)) continue;
     out.push(schedules.length === node.schedules.length ? node : { ...node, schedules });
   }
   return out;
+}
+
+/** 总列表里被省掉的机器数:上报了快照但一条计划都没有(选了具体机器时不省,返回 0)。 */
+export function externalSilentNodes(nodes: readonly HubNodeExternalSchedules[], scope: ExternalListScope): number {
+  if (scope.nodeId || (scope.query ?? '').trim() || (scope.enabled ?? 'all') !== 'all') return 0;
+  return nodes.filter(node => node.schedules.length === 0).length;
 }
 
 export function externalEnabledChips(
