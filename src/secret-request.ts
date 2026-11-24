@@ -16,6 +16,8 @@ export interface SecretRequest {
   key: string;
   /** 人话提示（如「GitHub 密钥」）；没有就用 key。 */
   label?: string;
+  /** 标题下一行：这是做什么用的（request_secret 的 hint）。 */
+  hint?: string;
 }
 
 /** Hub 侧可能叫的名字，按优先级匹配。 */

@@ -12,6 +12,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layoutOs, useModalSafePadding } from './safe-area-runtime';
 import { withBasePadding } from './modal-safe-area';
 import { Ionicons } from './icons';
+import ChatSecretCard from './ChatSecretCard';
+import { chatSecretRequestFromMeta, secretSavedAfter } from './chat-secret-request';
 import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
@@ -2203,6 +2205,17 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     doSend(content, localId, imgs, priority, original);
   };
 
+  // admin 2026-11-24 —— 聊天密钥卡保存成功后，以用户身份发一句「已在卡片里保存 X」（只含名字，不含值），
+  // 走和手打消息完全相同的乐观发送 / 落盘 / 重试路径；AI 收到它才继续。
+  const sendPlainText = (content: string) => {
+    const localId = createDashboardRequestId();
+    outboxAdd({ id: localId, alias, content, createdAt: Date.now(), state: 'pending', hadImage: false, priority: 'normal', original: false }, []);
+    setMessages(prev => [{ content, created_at: new Date().toISOString(), _localId: localId, _pending: true, _imgs: [], _priority: 'normal', _original: false }, ...prev]);
+    doSend(content, localId, [], 'normal', false);
+  };
+  // 只认**本人**在**这张卡之后**发的「已在卡片里保存 X」：旧确认不会吞掉后来同名的换钥请求（Dash 欧评审 #463）。
+  const secretConfirmRows = useMemo(() => messages.map(m => ({ content: m.content, at: m.created_at, own: !m._failed && (!!m._localId || resolveSender(m, currentUsername).isCurrentUser) })), [messages, currentUsername]);
+
   const retry = (item: ChatItem) => {
     if (!isRetryableSendFailure(item._failReason)) return;
     // #527:重试发的是「这条消息」——字和图一起。图拿不回来就不发,让用户删掉重选(绝不只发文字)。
@@ -2989,6 +3002,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             const replyQuoted = parseQuoted(item.result ?? item.reply ?? '');
             // #296 —— 主动消息的附件画在回复侧;先算出来,正文占位才有东西可压。
             const replyViews = replyAttachmentViews(item, cfg.serverUrl);
+            // admin 2026-11-24 —— AI 调 request_secret 回的那条：画成密钥卡，代替兜底文字。
+            const secretCard = chatSecretRequestFromMeta((item as any).meta_json);
             // 2026-09-17 Vincent:「Agent 节点回复人类也要这个引用啊」—— 回复没自带引用行时,
             // 挂一条指向它所回的那条请求的引用条,点击定位原文。
             const replyQuote = replyQuoted.quote ? null : replyQuoteFor(item, currentUsername, byTaskId);
@@ -3089,8 +3104,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                           {pointer && hoverKey === `${msgKey(item)}:reply` ? (
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
+                          {secretCard ? (
+                            <ChatSecretCard cfg={cfg} request={secretCard} alreadySaved={secretSavedAfter(secretConfirmRows, secretCard.key, item.completed_at ?? item.created_at)} onSaved={sendPlainText} />
+                          ) : (
                           <MarkdownMessage contentWidth={Math.max(1, replyCap.maxWidth - 2 * spacing.lg - (item.late ? spacing.sm + 3 : 0))}
                             mouse={pointer || (Platform.OS === 'web' && globalThis.matchMedia?.('(pointer: fine)').matches)}>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>
+                          )}
                           {renderAttachments(replyViews)}
                           {item._taskNotice && onOpenTask ? (
                             <Pressable

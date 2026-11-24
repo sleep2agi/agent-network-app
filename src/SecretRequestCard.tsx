@@ -9,6 +9,7 @@
 //   · agent 从头到尾看不到值。
 import { useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
+import { Ionicons } from './icons';
 import { Text, TextInput } from './ui-text';
 import { colors, radius, spacing, type, weight } from './theme';
 import type { SecretRequest } from './secret-request';
@@ -16,7 +17,7 @@ import type { SecretRequest } from './secret-request';
 export type SecretRequestPhase = 'idle' | 'saving' | 'saved' | 'error';
 
 export default function SecretRequestCard({
-  request, phase, error, onSave, testID = 'secret-request-card',
+  request, phase, error, onSave, testID = 'secret-request-card', bare = false,
 }: {
   request: SecretRequest;
   phase: SecretRequestPhase;
@@ -24,15 +25,18 @@ export default function SecretRequestCard({
   /** 只在用户点保存时调用；值作为参数传出，不落到卡片以外的地方。 */
   onSave: (value: string) => void;
   testID?: string;
+  /** 放在聊天回复气泡里时不再画自己的边框（气泡已经是框）。 */
+  bare?: boolean;
 }) {
   const [value, setValue] = useState('');
+  const [shown, setShown] = useState(false);
   const title = request.label ? request.label : request.key;
   const saved = phase === 'saved';
   const saving = phase === 'saving';
   const disabled = saved || saving || !value.trim();
 
   return (
-    <View testID={testID} style={{
+    <View testID={testID} style={bare ? { maxWidth: 420, gap: spacing.sm } : {
       maxWidth: 420,
       gap: spacing.sm,
       padding: spacing.md,
@@ -43,7 +47,7 @@ export default function SecretRequestCard({
     }}>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
         <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong }} numberOfLines={1}>
-          {`需要你的${title}`}
+          {request.hint ? title : `需要你的${title}`}
         </Text>
         <Text style={{ color: colors.textMuted, fontSize: type.small }} numberOfLines={1} testID={`${testID}-key`}>
           {request.key}
@@ -56,7 +60,7 @@ export default function SecretRequestCard({
         </Text>
       ) : (
         <>
-          <Text style={{ color: colors.textSecondary, fontSize: type.small }}>内容不会出现在聊天里，agent 也看不到。</Text>
+          <Text style={{ color: colors.textSecondary, fontSize: type.small }}>{request.hint || '内容不会出现在聊天里，agent 也看不到。'}</Text>
           <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
             <TextInput
               testID={`${testID}-input`}
@@ -64,7 +68,7 @@ export default function SecretRequestCard({
               onChangeText={setValue}
               placeholder={`粘贴 ${request.key}`}
               placeholderTextColor={colors.textMuted}
-              secureTextEntry
+              secureTextEntry={!shown}
               autoCapitalize="none"
               autoCorrect={false}
               editable={!saving}
@@ -84,6 +88,15 @@ export default function SecretRequestCard({
               } as object}
             />
             <Pressable
+              testID={`${testID}-reveal`}
+              accessibilityRole="button"
+              accessibilityLabel={shown ? '隐藏' : '显示'}
+              hitSlop={8}
+              onPress={() => setShown(s => !s)}
+            >
+              <Ionicons name={shown ? 'eye-off-outline' : 'eye-outline'} size={18} color={colors.textMuted} />
+            </Pressable>
+            <Pressable
               testID={`${testID}-submit`}
               accessibilityRole="button"
               accessibilityLabel={`保存 ${request.key}`}
@@ -102,6 +115,9 @@ export default function SecretRequestCard({
                 : <Text style={{ color: colors.onAccent, fontSize: type.small, fontWeight: weight.strong }}>{saved ? '已保存' : '保存'}</Text>}
             </Pressable>
           </View>
+          {request.hint ? (
+            <Text style={{ color: colors.textMuted, fontSize: type.small }}>安全保存，AI 看不到内容；这个 AI 下次启动后可用（环境变量 {request.key}）。</Text>
+          ) : null}
           {phase === 'error' && error ? (
             <Text testID={`${testID}-error`} style={{ color: colors.failed, fontSize: type.small }}>{error}</Text>
           ) : null}

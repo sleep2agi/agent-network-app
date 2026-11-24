@@ -5,6 +5,10 @@
       "kind": "manual",
       "why": "Before/after screenshot capture for report tables at 390/960/1440 in light and dark; writes PNGs to /out and needs PHASE, so it is run by hand for visual review, not as a CI shard. The layout rules it shows are asserted in src/mobile-table.test.ts and src/markdown-model.test.ts."
     },
+    "test-chat-secret-card/drive.mjs": {
+      "kind": "stub",
+      "secs": 20
+    },
     "composer-agent/drive.mjs": {
       "kind": "stub",
       "secs": 55
