@@ -5,6 +5,13 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.618:",
+  "### 新功能与修复",
+  "",
+  "- 聊天内安全密钥卡片：AI 索要密钥时直接在对话里弹出加密输入卡，提交后安全写入节点密钥库，不进入聊天正文。",
+  "- 桌面端视觉与窗口修整：恢复 macOS 独立设置窗与 Windows 顶栏的整窗暖黄渐变（还原图标改为透明空心），修复 Windows 分离聊天窗右上角关闭键遮挡工具条首图标的问题。",
+  "- iOS 与 Android 稳定性/性能提升：优化 iOS 图片预览弹窗与动画节点稳定性；降低 Android Agent 列表待机重绘与头像告警，并修复切 Tab 保留搜索/会话、底部手势条避让、组织图标签、甘特图日期栏、仪表盘 KPI 遮挡及列表预览去 Markdown 符号等体验问题。",
+  "",
   "What's new in 0.2.617:",
   "### 修复与改进",
   "",
