@@ -3,7 +3,8 @@
  * → sha256 校验 → 系统安装器。
  *
  * 检查顺序(0.2.100 真机「检查更新失败：GitHub 限流」之后改的):
- *   1. 并行读镜像 desktop/latest/VERSION 与安卓通道 android/latest/VERSION(各 10 s,布局见 android-update-core.ts)。
+ *   1. 并行读两个镜像 VERSION 和官网 latest.json 的版本信号(各 10 s)。官网头缺失/fallback/失败不参与；
+ *      仅官网高于两个镜像且高于已装版本时，视为镜像包未同步，进入原有 GitHub 兜底。
  *      取较高的那个(同版本取 desktop);读不到/认不出的那个不参与。都不比当前新 → 已是最新,**不再问 GitHub**。
  *   2. 更新 → desktop 通道:desktop/<ver>/SHA256SUMS(必需)+ HEAD APK(大小,可缺);
  *      安卓通道:android/agent-network-<ver>.apk.sha256(必需,缺了报错不装)+ HEAD APK。
@@ -14,7 +15,8 @@
  *   4. 只有两种情况才打 GitHub REST(未登录每 IP 每小时 60 次):镜像本身失败(网络/超时/非 2xx/格式不对),
  *      或两个通道都还没有可校验的安卓包。
  *   两个 VERSION 都读不到/认不出也算「镜像本身失败」。
- *   为了镜像滞后去让每次检查都打 GitHub,正是 0.2.100 用光配额的原因,所以不这么做;滞后靠安卓通道解决
+ *   不让每次检查都打 GitHub，避免 0.2.100 的配额事故；官网只提供服务端代查的版本信号。
+ *   安卓通道仍负责独立发布
  *   (发版时安卓包、sha、android/latest/VERSION 由 modelscope-android-publish 一次写入)。
  * 下载:镜像带版本号的路径优先,硬失败(HTTP 错误/网络错误/校验不符)换 GitHub 资产直链;停滞则保留断点、下次续传同一来源。
  *
@@ -200,6 +202,20 @@ async function mirrorVersion(fetchImpl: typeof fetch, url: string): Promise<stri
   }
 }
 
+// Server-side release lookup: never spend the phone's GitHub API quota just to
+// compare versions. A fallback response is not an independent freshness signal.
+async function officialVersion(fetchImpl: typeof fetch): Promise<string | null> {
+  try {
+    return await withTimeout((async () => {
+      const res = await fetchWithTimeout(fetchImpl, 'https://anet.sh/desktop/update/latest.json', {}, timeouts.mirror);
+      const source = res.headers?.get?.('X-Anet-Update-Source')?.trim();
+      if (!res.ok || !source || source.toLowerCase() === 'fallback') return null;
+      const body = await res.json();
+      return typeof body?.version === 'string' ? parseMirrorVersion(body.version) : null;
+    })(), timeouts.mirror);
+  } catch { return null; }
+}
+
 /** 镜像 HEAD 安装包拿大小;拿不到 = undefined(大小只用于进度和完整性,不挡更新)。 */
 function mirrorSize(fetchImpl: typeof fetch, url: string): Promise<number | undefined> {
   return withTimeout(fetchWithTimeout(fetchImpl, url, { method: 'HEAD' }, timeouts.extras), timeouts.extras)
@@ -209,10 +225,16 @@ function mirrorSize(fetchImpl: typeof fetch, url: string): Promise<number | unde
 }
 
 async function checkMirror(fetchImpl: typeof fetch, currentVersion: string): Promise<MirrorResult> {
-  const [desktop, android] = await Promise.all([
+  const [desktop, android, official] = await Promise.all([
     mirrorVersion(fetchImpl, MIRROR_VERSION_URL),
     mirrorVersion(fetchImpl, ANDROID_CHANNEL_VERSION_URL),
+    officialVersion(fetchImpl),
   ]);
+  if (official && compareVersions(official, currentVersion) === 1
+    && (!desktop || compareVersions(official, desktop) === 1)
+    && (!android || compareVersions(official, android) === 1)) {
+    return { kind: 'incomplete', version: official };
+  }
   if (!desktop && !android) throw new Error('mirror VERSION unavailable or unparseable on both channels');
   if (android && (!desktop || compareVersions(android, desktop) === 1)) return checkAndroidChannel(fetchImpl, android, currentVersion);
   const desktopResult = await checkDesktopChannel(fetchImpl, desktop!, currentVersion);
@@ -312,7 +334,8 @@ async function resolveUpdate(fetchImpl: typeof fetch, currentVersion: string): P
   if (mirror && mirror.kind !== 'incomplete') return { verdict: mirror, route: 'mirror' };
   try {
     const gh = await checkGithub(fetchImpl, currentVersion);
-    if (!mirror || gh.kind === 'available') return { verdict: gh, route: 'github' };
+    if (!mirror || (gh.kind === 'available'
+      && compareVersions(gh.version, mirror.version) !== -1)) return { verdict: gh, route: 'github' };
   } catch (error) {
     if (!mirror) throw error;
   }

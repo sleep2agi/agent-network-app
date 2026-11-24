@@ -123,7 +123,8 @@ const CACHED = (v: string) => `file:///cache/updates/${apkName(v)}`;
   const s = await checkAndroidUpdate('0.2.101', { fetchImpl: f.fetchImpl, ...noSleep });
   ck('mirror OK + same version → up-to-date', s.kind === 'up-to-date' && s.latest === '0.2.101');
   // 两个通道的 VERSION 各一次(android/latest/VERSION 这里没配 → 404 → 只看 desktop),不打 GitHub。
-  ck('up-to-date check costs the two channel VERSION requests and zero GitHub requests', f.calls.length === 2 && f.calls[0] === MIRROR_VERSION_URL && f.calls[1] === ANDROID_CHANNEL_VERSION_URL && f.gh() === 0);
+  // 多出的一次请求是官网版本信号请求，GitHub 请求仍为零。
+  ck('up-to-date check costs the two channel VERSION requests and zero GitHub requests', f.calls.length === 3 && f.calls[0] === MIRROR_VERSION_URL && f.calls[1] === ANDROID_CHANNEL_VERSION_URL && f.gh() === 0);
 }
 // 2. mirror OK, newer → available from the mirror (0.2.100 installed → 0.2.101)
 {
