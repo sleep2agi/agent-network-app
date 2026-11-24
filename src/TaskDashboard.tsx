@@ -188,14 +188,29 @@ function Delta({ cur, prev, label, c }: { cur: number; prev: number; label: stri
   );
 }
 
+/** 数字 + 「↑33% 较上周同期」至少要这么宽,剩下的才给趋势柱(#5423)。 */
+const HERO_MAIN_MIN = 150;
+const HERO_SPARK_MAX = 110;
+/** 柱图窄于这个就不画:十几根柱子挤成一条线没有意义。 */
+const HERO_SPARK_MIN = 56;
+
 function Hero({ label, value, suffix, dot, foot, c, featured, testID, spark }: { label: string; value: number; suffix?: string; dot: string; foot: React.ReactNode; c: DashStyles; featured?: boolean; testID: string; spark?: number[] }) {
   const shown = useCountUp(value);
+  // 趋势柱只是陪衬:数字和对比文案先占地方(至少 HERO_MAIN_MIN),剩下的才给柱图,太窄就不画。
+  const [bodyW, setBodyW] = useState(0);
+  const sparkW = spark && bodyW ? Math.min(HERO_SPARK_MAX, bodyW - HERO_MAIN_MIN - spacing.md) : 0;
   return (
     <View style={[c.card, c.hero, featured && c.heroFeatured]} testID={testID}>
       <View style={c.heroLabelRow}><View style={[c.dot, { backgroundColor: dot }]} /><Text style={c.heroLabel} numberOfLines={1}>{label}</Text></View>
-      <Text style={c.heroValue} testID={`${testID}-value`} numberOfLines={1}>{shown}{suffix ? <Text style={c.heroSuffix}>{suffix}</Text> : null}</Text>
-      {foot}
-      {spark ? <View style={c.heroSpark}><MiniBars values={spark} color={dot} height={36} width={110} /></View> : null}
+      {/* 0.2.618(#5423):趋势柱以前绝对定位压在右下角,卡片一窄(折叠屏一行四张)就盖住「较昨天 / 较上周同期」。
+          改成同一行两列:左边数字 + 对比文案(可收缩),右边柱图固定宽度,谁也不压谁。 */}
+      <View style={c.heroBody} onLayout={e => setBodyW(e.nativeEvent.layout.width)}>
+        <View style={c.heroMain}>
+          <Text style={c.heroValue} testID={`${testID}-value`} numberOfLines={1}>{shown}{suffix ? <Text style={c.heroSuffix}>{suffix}</Text> : null}</Text>
+          {foot}
+        </View>
+        {spark && sparkW >= HERO_SPARK_MIN ? <View style={c.heroSpark} testID={`${testID}-spark`}><MiniBars values={spark} color={dot} height={36} width={sparkW} /></View> : null}
+      </View>
     </View>
   );
 }
@@ -690,7 +705,9 @@ const makeDashStyles = () => {
     heroLabel: { color: colors.textSecondary, fontSize: 13 },
     heroValue: { color: colors.text, fontSize: 44, lineHeight: 52, fontWeight: weight.strong, marginTop: 4, fontVariant: ['tabular-nums'] },
     heroSuffix: { fontSize: 18, color: colors.textSecondary, fontWeight: weight.medium },
-    heroSpark: { position: 'absolute', right: spacing.lg, bottom: spacing.lg },
+    heroBody: { flexDirection: 'row', alignItems: 'flex-end', gap: spacing.md },
+    heroMain: { flex: 1, minWidth: 0 },
+    heroSpark: { flexShrink: 0, marginBottom: 2 },
     dot: { width: 8, height: 8, borderRadius: radius.pill },
     footRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minWidth: 0 },
     foot: { color: colors.textMuted, fontSize: typeScale.small, flexShrink: 1 },
