@@ -92,6 +92,11 @@ export function screenForNavPress(key: string, currentScreenName: string): { nam
   return navActiveKey(currentScreenName) === key ? null : { name: key };
 }
 
+/** 记 Agent 搜索词 / 双栏会话用的键:账号(profileId,旧档案退回用户名)+ Hub + 网络。不含 token。 */
+export function agentQueryScope(cfg: { serverUrl: string; networkId?: string; profileId?: string; username?: string }): string {
+  return [cfg.profileId || cfg.username || '', cfg.serverUrl, cfg.networkId ?? ''].join('|');
+}
+
 /** Screens the折叠屏 two-pane can put back when you return to the Agent tab (list + the chat on the right). */
 const AGENT_PANE_SCREENS = new Set(['agents', 'chat', 'dm', 'group']);
 

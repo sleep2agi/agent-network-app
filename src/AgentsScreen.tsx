@@ -108,12 +108,14 @@ import { pointerUi } from './pointer-ui';
 import { conversationDraftKey, draftPreview, draftTextFor, useDraftsVersion, type DraftConversation } from './composer-drafts';
 import { rememberAgentNetworks } from './agent-network';
 import AvatarStatusRing from './AvatarStatusRing';
+import { agentQueryScope } from './nav-chrome';
 
 // 受限成员的空态文案比「还没有 agent」长,窄屏会折行:居中并留出与列表同宽的边距。
 const restrictedEmptyCopy = () => ({ textAlign: 'center' as const, paddingHorizontal: spacing.xl });
 
 /** 本次打开 App 期间各账号最后的 Agent 搜索词(只在内存里,重启清空)。 */
 const rememberedQueries = new Map<string, string>();
+
 
 export default function AgentsScreen({
   cfg,
@@ -198,10 +200,17 @@ export default function AgentsScreen({
   const [loading, setLoading] = useState(!preview);
   const [refreshing, setRefreshing] = useState(false);
   const [failed, setFailed] = useState(false);
-  // #5428:切到别的 tab 再回来,搜索词不再清空(按 Hub + 网络记,换账号不串)。
-  const queryScope = `${cfg.serverUrl}|${cfg.networkId ?? ''}`;
+  // #5428:切到别的 tab 再回来,搜索词不再清空。按 账号(profile / 用户名)+ Hub + 网络 记,
+  // 同一 Hub 的不同账号、不同网络互不串;组件没卸载但换了账号 / 网络时,也换成那一份。
+  const queryScope = agentQueryScope(cfg);
   const [query, setQueryState] = useState(() => rememberedQueries.get(queryScope) ?? '');
   const setQuery = useCallback((q: string) => { rememberedQueries.set(queryScope, q); setQueryState(q); }, [queryScope]);
+  const lastQueryScope = useRef(queryScope);
+  useEffect(() => {
+    if (lastQueryScope.current === queryScope) return;
+    lastQueryScope.current = queryScope;
+    setQueryState(rememberedQueries.get(queryScope) ?? '');
+  }, [queryScope]);
   // 多用户 Agent 权限:当前网络里我是不是受限成员(只看管理员分配的 Agent)。决定空列表说什么。
   const [restricted, setRestricted] = useState(false);
   const [selfUserId, setSelfUserId] = useState<string | undefined>(undefined);
