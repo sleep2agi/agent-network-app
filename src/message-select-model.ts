@@ -56,7 +56,7 @@ export const acceptSelectionEvent = (next: TextSelection, msSinceOpen: number, g
 
 // ── 菜单 ────────────────────────────────────────────────────────────────────
 
-export type SelectMenuKey = 'copy' | 'selectAll' | 'forward' | 'quote' | 'multiSelect' | 'selectText' | 'expand' | 'delete';
+export type SelectMenuKey = 'copy' | 'selectAll' | 'forward' | 'quote' | 'multiSelect' | 'selectText' | 'expand' | 'recall' | 'delete';
 
 export interface SelectMenuItem {
   readonly key: SelectMenuKey;
@@ -83,11 +83,13 @@ export interface SelectMenuContext {
   readonly canForward?: boolean;
   /** 默认 'menu'(长按刚松手)。 */
   readonly phase?: SelectOverlayPhase;
+  /** #5502 —— 自己发出且尚未回复的排队/可中断任务允许在菜单段展示「撤回」。 */
+  readonly canRecall?: boolean;
 }
 
 /**
  * 浮动菜单的项,顺序照微信:复制 · 转发 · 引用 —— 然后是我们原有长按菜单里的其余动作,一个不丢:
- * 多选 · 选择文本(就地进入划选,#650 起不再开全屏页)· 放大阅读 · 删除(最后,红色)。
+ * 多选 · 选择文本(就地进入划选,#650 起不再开全屏页)· 放大阅读 · 撤回(条件满足时) · 删除(最后,红色)。
  * 'select' 段:复制 · 全选 · 转发 · 引用 · 多选 · 放大阅读 · 删除(已经在选了,不再给「选择文本」)。
  * 微信的「收藏 / 搜一搜」我们没有对应功能,不放空按钮。
  */
@@ -102,6 +104,7 @@ export const selectMenuItems = (ctx: SelectMenuContext): SelectMenuItem[] => {
     ...(ctx.selectionMode ? [] : [{ key: 'multiSelect' as const, icon: 'checkmark-circle-outline' }]),
     ...(ctx.hasText && !selecting ? [{ key: 'selectText' as const, icon: 'scan-outline' }] : []),
     ...(ctx.hasText ? [{ key: 'expand' as const, icon: 'expand-outline' }] : []),
+    ...(ctx.canRecall && !selecting ? [{ key: 'recall' as const, icon: 'arrow-undo-outline' }] : []),
     { key: 'delete' as const, icon: 'trash-outline', danger: true },
   ];
 };

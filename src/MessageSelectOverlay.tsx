@@ -41,9 +41,10 @@ export interface MessageSelectTarget {
  *     先放选区起点行上方,放不下放终点行下方,都不行放在不碰任何可见手柄的空档里;始终整块在屏内。
  *     手指按在选区上 / 选区在变(拖手柄)时菜单隐藏,松手且选区停下 SELECT_MENU_SETTLE_MS 后按新选区重新放(微信同款)。
  */
-export default function MessageSelectOverlay({ target, selectionMode, onAction, onClose }: {
+export default function MessageSelectOverlay({ target, selectionMode, canRecall, onAction, onClose }: {
   target: MessageSelectTarget | null;
   selectionMode?: boolean;
+  canRecall?: boolean;
   /** 菜单动作。payload:整条 or 选中的那段(message-select-model selectionPayload)。 */
   onAction: (key: SelectMenuKey, payload: SelectionPayload) => void;
   onClose: () => void;
@@ -132,7 +133,7 @@ export default function MessageSelectOverlay({ target, selectionMode, onAction, 
     return () => { done = true; clearTimeout(fallback); events.forEach(ev => document.removeEventListener(ev, arm, true)); };
   }, [target, selecting, armed]);
 
-  const items = useMemo(() => selectMenuItems({ hasText, selectionMode, phase }), [hasText, selectionMode, phase]);
+  const items = useMemo(() => selectMenuItems({ hasText, selectionMode, phase, canRecall }), [hasText, selectionMode, phase, canRecall]);
   const rows = useMemo(() => chunkMenuRows(items), [items]);
   const card = target ? placeSelectCard({ anchor: target.rect, viewportHeight: vh, edge, keyboardHeight }) : null;
   // 菜单锚在「看得见的那块」上:在划选 = 选区卡片(可能比气泡高);只有菜单 / 没文字 = 原气泡本身。
