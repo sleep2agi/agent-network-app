@@ -11,6 +11,7 @@ import {
   externalSchedulesMatching,
   externalScopeActive,
   filterExternalNodes,
+  externalSilentNodes,
   filterNodeOptions,
   nodeFilterLabel,
   reconcileNodeFilter,
@@ -173,7 +174,10 @@ ck('滤空不提供新建', !emptyStateFor('all', 0, true).showCreate);
   ck('类型中文命中', externalScheduleMatchesQuery(dev.schedules[1], 'systemd'));
   ck('节点别名不在计划搜索里', !externalScheduleMatchesQuery(dev.schedules[0], 'daemon-dev'));
 
-  eq('不筛选:空节点也留着', filterExternalNodes(nodes, {}).map(row => row.node_id), ['node-dev', 'node-tma', 'node-empty']);
+  // #5428:总列表不再放「未上报计划」空卡(计数是 0 却一长串卡片),改成一行汇总。
+  eq('不筛选:空节点不占卡片', filterExternalNodes(nodes, {}).map(row => row.node_id), ['node-dev', 'node-tma']);
+  eq('不筛选:汇总里数到 1 台空机器', externalSilentNodes(nodes, {}), 1);
+  eq('选了具体机器:不汇总', externalSilentNodes(nodes, { nodeId: 'node-empty' }), 0);
   eq('标题搜索只留命中的那一行', filterExternalNodes(nodes, { query: '更新最新的任务列表' }).map(row => row.schedules.map(schedule => schedule.id)), [['listed']]);
   eq('类型 + 停用', filterExternalNodes(nodes, { query: 'systemd', enabled: 'disabled' }).map(row => row.schedules.map(schedule => schedule.id)), [['night']]);
   eq('节点 + 启用', filterExternalNodes(nodes, { nodeId: 'node-dev', enabled: 'enabled' }).map(row => row.schedules.map(schedule => schedule.id)), [['listed']]);
