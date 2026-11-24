@@ -1,6 +1,7 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CHAT_MIN_WIDTH_WITH_PANEL, CHAT_TOOL_RAIL_WIDTH, COMPOSER_HINT_MIN_WIDTH, chatToolRailReserve, composerShowsShortcutHint, dockedPanelWidth, PANEL_MIN_WIDTH } from './chat-tool-rail-layout';
+import { CHAT_MIN_WIDTH_WITH_PANEL, CHAT_TOOL_RAIL_WIDTH, COMPOSER_HINT_MIN_WIDTH, chatToolRailReserve, chatToolRailTopInset, composerShowsShortcutHint, dockedPanelWidth, PANEL_MIN_WIDTH } from './chat-tool-rail-layout';
+import { WINDOWS_TITLE_BAR_HEIGHT } from './window-shell';
 const chatSrc = () => readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 import { SHOW_CHAT_TOOL_RAIL } from './chat-entry-flags';
 
@@ -44,4 +45,11 @@ console.log('chat-tool-rail-layout: ok');
   assert.match(rail, /<NodeSchedulesSection cfg=\{cfg\} nodeId=\{scheduleNodeId\} editable createSeq=\{scheduleCreateSeq\} emptyCreate=\{false\} \/>/);
   assert.match(rail, /testID="chat-tool-schedule-create"/);
   assert.match(rail, /testID="chat-tool-schedules-no-node"/);
+  // admin 2026-11-24 Windows 分离聊天窗截图：右上角 – □ × 压住右侧工具条首个图标。
+  assert.equal(chatToolRailTopInset('windows'), WINDOWS_TITLE_BAR_HEIGHT);
+  assert.equal(chatToolRailTopInset('mac'), 0);
+  assert.equal(chatToolRailTopInset(null), 0);
+  assert.match(rail, /const topInset = chatToolRailTopInset\(popoutChatChrome\(Platform\.OS\)\);/);
+  assert.match(rail, /testID="chat-tool-panel"[^>]*top: topInset/);
+  assert.match(rail, /testID="chat-tool-rail"[^>]*top: topInset/);
 }

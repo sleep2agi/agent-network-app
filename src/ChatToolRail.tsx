@@ -9,7 +9,7 @@
 // chatToolRailReserve() 给自己留右边距,侧栏占自己的列宽,不再压住气泡(0.2.368 隐藏它的原因)。
 // 展开状态、当前工具、面板宽度都按设备记忆(localStorage)。
 import { useEffect, useState } from 'react';
-import { Pressable, ScrollView, View } from 'react-native';
+import { Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import NodeFilesSection from './NodeFilesSection';
@@ -20,7 +20,8 @@ import { colors, radius, spacing, type as typeScale } from './theme';
 import { useGlassChrome } from './glass-chrome';
 import NodeSchedulesSection from './NodeSchedulesSection';
 import RailTasksPanel from './RailTasksPanel';
-import { CHAT_TOOL_RAIL_WIDTH } from './chat-tool-rail-layout';
+import { CHAT_TOOL_RAIL_WIDTH, chatToolRailTopInset } from './chat-tool-rail-layout';
+import { popoutChatChrome } from './window-shell';
 
 const KEY = 'anet_chat_toolrail_v1';
 type Tool = 'tasks' | 'schedules' | 'skills' | 'files' | 'logs';
@@ -68,6 +69,8 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
 }) {
   // 桌面整窗渐变时图标条透明，不在右下角把光切断；展开的面板仍是实底（要读文字）。
   const glass = useGlassChrome();
+  // Windows 分离聊天窗右上角有 32px 高的 – □ ×（PopoutWindowControls），工具条和面板从其下方开始。
+  const topInset = chatToolRailTopInset(popoutChatChrome(Platform.OS));
   const pick = (tool: Tool) => setState(s => (s.open && s.tool === tool ? { ...s, open: false } : { ...s, open: true, tool }));
   const active = state.open ? state.tool : null;
   // 只读区块要一个 session 形状;聊天页没有完整的 node 上下文,退到按 alias 发。
@@ -79,7 +82,7 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
   return (
     <>
       {state.open ? (
-        <View testID="chat-tool-panel" style={{ position: 'absolute', right: CHAT_TOOL_RAIL_WIDTH, top: 0, bottom: 0, width: dockedWidth ?? state.width, zIndex: 25,
+        <View testID="chat-tool-panel" style={{ position: 'absolute', right: CHAT_TOOL_RAIL_WIDTH, top: topInset, bottom: 0, width: dockedWidth ?? state.width, zIndex: 25,
           // 停靠时(聊天已经让出这块宽度)且整窗渐变打开:面板透明,和左边聊天、右边图标条连成一片;
           // 浮层(窗口太窄)时盖在聊天上面,必须实底,否则文字叠在一起。
           backgroundColor: glass && dockedWidth !== null ? 'transparent' : colors.bg, borderLeftWidth: 1, borderLeftColor: colors.border }}>
@@ -128,7 +131,7 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
         所以这里改成绝对定位：不参与列流、不占高度、永远贴右边。
         zIndex 低于工具面板（面板是 25），面板浮在它左侧（right: 44）。
       */}
-      <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: 0, bottom: 0, zIndex: 20, width: CHAT_TOOL_RAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: glass ? 'transparent' : colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
+      <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: topInset, bottom: 0, zIndex: 20, width: CHAT_TOOL_RAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: glass ? 'transparent' : colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
         {TOOLS.map(t => {
           const on = active === t.key;
           const disabled = !!t.needSession && !realSession;
