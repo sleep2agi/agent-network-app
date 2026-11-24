@@ -634,7 +634,10 @@ function AppRoot() {
   // Bottom inset owner (rule 1): the tab bar when it shows; the chat composer pads itself
   // (ChatScreen composerInset) and so does the two-pane (panes below); any other full-screen
   // leaf gets it from navContent, so its last row is not under the gesture bar.
-  const contentBottomInset = navChromeFor(layout, screen.name, inPageLeaf) === 'none' && screen.name !== 'chat' && screen.name !== 'dm' && screen.name !== 'group' && screen.name !== 'login' ? tabBarInset : 0;
+  // 0.2.618(#5426):折叠屏展开是 rail 布局、没有底栏。以前只有「双栏」(列表 + 聊天)自己垫了手势条,
+  // 设置 / 定时任务 / 任务 / 组织这些 rail 下的单页没人垫 ⇒ 最后一行(「点一下切换 · 点 ⋯ 管理」)压在系统手势条上。
+  const padsItself = screen.name === 'chat' || screen.name === 'dm' || screen.name === 'group' || screen.name === 'login';
+  const contentBottomInset = (navChrome === 'none' || (navChrome === 'rail' && !twoPaneSelection)) && !padsItself ? tabBarInset : 0;
   // Web layout sweep only: lets tests/test-layout-sweep/run.mjs open screens the phone has no
   // tab for (taskDetail, logs, wizard). Never set on a device (SAFE_AREA_SIM is web-only).
   useEffect(() => {

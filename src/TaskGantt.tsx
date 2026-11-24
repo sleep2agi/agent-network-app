@@ -15,7 +15,7 @@ import { ownerLabel, personName } from './i18n-task-presentation';
 //
 // 🔴 没设开始(或 Hub 还没有开始字段)时,开始 = 创建时间,工具栏上写明。
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, View } from 'react-native';
+import { Animated, Pressable, ScrollView, StyleSheet, View } from 'react-native';
 import { Text } from './ui-text';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
@@ -124,20 +124,22 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [dragging, px]);
 
-  const headRef = useRef<ScrollView>(null);
+  // 0.2.618(#5424):表头以前是第二个横向 ScrollView(scrollEnabled=false)靠 scrollTo 跟着正文走,
+  // 小米折叠屏上整条日期刻度是空白。改成普通 View 按同一个滚动位移 translateX,不再依赖
+  // 「不可滚动的 ScrollView 还能被 scrollTo」这件事,也给它一个固定高度。
+  const headX = useRef(new Animated.Value(0)).current;
   const bodyRef = useRef<ScrollView>(null);
   const [viewW, setViewW] = useState(0);
   const scrollX = useRef(0);
   // 钉住的月份只让它自己重画(PinnedMonth 订阅滚动),不因为滚动重画整张图。
   const scrollSubs = useRef(new Set<(x: number) => void>());
-  const emitScroll = (x: number) => { scrollX.current = x; scrollSubs.current.forEach(f => f(x)); };
+  const emitScroll = (x: number) => { scrollX.current = x; headX.setValue(-x); scrollSubs.current.forEach(f => f(x)); };
   const subscribeScroll = useCallback((f: (x: number) => void) => { scrollSubs.current.add(f); f(scrollX.current); return () => { scrollSubs.current.delete(f); }; }, []);
   const goToday = (animated: boolean) => {
     if (tx === null) return;
     const x = Math.max(0, Math.min(totalW - viewW, tx - viewW * 0.3));
     emitScroll(x);
     bodyRef.current?.scrollTo({ x, animated });
-    headRef.current?.scrollTo({ x, animated });
   };
   // 打开 / 换刻度 / 范围变了:把今天放在可视区左边三分之一处。
   // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -169,9 +171,8 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
         {/* 图上画的数 + 没画的(未设期限),和左栏的总数对得上。 */}
         {undated.length ? <Text style={s.muted} numberOfLines={1} testID="gantt-head-undated">{tr('gantt.undatedCount', { n: undated.length })}</Text> : null}
       </View>
-      <View style={{ flex: 1, overflow: 'hidden' }}>
-      <ScrollView ref={headRef} horizontal scrollEnabled={false} showsHorizontalScrollIndicator={false} style={{ flex: 1 }}>
-        <View style={{ width: totalW, height: HEAD_H }}>
+      <View style={{ flex: 1, height: HEAD_H, overflow: 'hidden' }} testID="gantt-head-strip">
+        <Animated.View style={{ width: totalW, height: HEAD_H, transform: [{ translateX: headX }] }}>
           {/* 每月 1 日写一次月份;最左边那个月由 PinnedMonth 钉住。 */}
           {ticks.filter(t => t.monthStart && t.x > 0).map(t => (
             <Text key={`m-${t.date}`} style={[g.month, { left: t.x + 6 }]} numberOfLines={1}>{tr('gantt.month', { y: t.year, m: t.month })}</Text>
@@ -186,8 +187,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
               </View>
             );
           })}
-        </View>
-      </ScrollView>
+        </Animated.View>
       <PinnedMonth subscribe={subscribeScroll} range={range} px={px} g={g} />
       </View>
     </View>
@@ -224,7 +224,7 @@ function GanttChart({ items, projects, people, today, s, onOpen, selectedId, sta
       horizontal
       style={{ flex: 1 }}
       onLayout={e => setViewW(e.nativeEvent.layout.width)}
-      onScroll={e => { emitScroll(e.nativeEvent.contentOffset.x); headRef.current?.scrollTo({ x: scrollX.current, animated: false }); }}
+      onScroll={e => emitScroll(e.nativeEvent.contentOffset.x)}
       scrollEventThrottle={16}
       testID="gantt-timeline"
     >
