@@ -14,3 +14,23 @@ let failed = 0;
 for (const [name, got, want] of cases) if (got !== want) { failed++; console.log(`✗ ${name}: ${JSON.stringify(got)} ≠ ${JSON.stringify(want)}`); }
 console.log(failed ? `agent-tab-return: ${failed} failed` : `agent-tab-return: ${cases.length}/${cases.length} passed`);
 if (failed) process.exit(1);
+
+// #1710 评审:打开会话 → 网络切换(screen 不变)→ 切 Tab 返回,不能还原旧网络的会话。
+import { rememberAgentPane } from './nav-chrome';
+{
+  const chatN1 = { name: 'chat', alias: '旧网络里的会话' };
+  let mem = rememberAgentPane(null, 'acct|hub|n1', { name: 'agents' });
+  mem = rememberAgentPane(mem, 'acct|hub|n1', chatN1);
+  const before = mem.screen === chatN1;
+  mem = rememberAgentPane(mem, 'acct|hub|n2', chatN1); // 网络纠正:cfg 变了,screen 还是旧对象
+  const clearedOnSwitch = mem.screen === null;
+  mem = rememberAgentPane(mem, 'acct|hub|n2', chatN1); // 下一次渲染,仍是旧画面
+  const staleNotAdopted = mem.screen === null;
+  const back = agentTabReturnScreen('agents', 'org', 'twoPane', mem.screen);
+  const chatN2 = { name: 'chat', alias: '新网络里打开的' };
+  mem = rememberAgentPane(mem, 'acct|hub|n2', chatN2);
+  const newOneKept = mem.screen === chatN2;
+  const ok = before && clearedOnSwitch && staleNotAdopted && back?.name === 'agents' && newOneKept;
+  console.log(ok ? 'agent-pane-memory: 5/5 passed' : `agent-pane-memory FAILED ${JSON.stringify({ before, clearedOnSwitch, staleNotAdopted, back, newOneKept })}`);
+  if (!ok) process.exit(1);
+}

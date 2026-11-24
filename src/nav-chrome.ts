@@ -111,6 +111,20 @@ export function agentTabReturnScreen<S extends { name: string }>(key: string, cu
   return plain;
 }
 
+/** 双栏「回到 Agent」的记忆:当前 scope(账号+Hub+网络)下最后一个列表/会话画面。 */
+export interface AgentPaneMemory<S> { scope: string; screen: S | null; stale: S | null }
+
+/**
+ * 每次渲染更新记忆(#1710 评审):scope 一变就清空,并把**当时正显示的画面**记为 stale ——
+ * 网络纠正只改 cfg、不换 screen 时,旧网络的会话不会被重新记到新网络名下;用户在新 scope
+ * 里真正打开新的画面(新对象)后才开始记。
+ */
+export function rememberAgentPane<S extends { name: string }>(mem: AgentPaneMemory<S> | null, scope: string, screen: S): AgentPaneMemory<S> {
+  if (!mem || mem.scope !== scope) return { scope, screen: null, stale: screen };
+  if (AGENT_PANE_SCREENS.has(screen.name) && screen !== mem.stale) return mem.screen === screen ? mem : { ...mem, screen };
+  return mem;
+}
+
 /** 这个画面值得被「回到 Agent」还原吗(只记双栏里的列表 / 会话)。 */
 export function isAgentPaneScreen(screenName: string): boolean {
   return AGENT_PANE_SCREENS.has(screenName);
