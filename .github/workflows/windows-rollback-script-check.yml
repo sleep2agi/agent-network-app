@@ -4,6 +4,7 @@ on:
   pull_request:
     paths:
       - 'scripts/windows-rollback-*.ps1'
+      - 'scripts/windows-rollback-release-assets.json'
       - '.github/workflows/windows-rollback-script-check.yml'
 permissions:
   contents: read
@@ -17,7 +18,7 @@ jobs:
         shell: pwsh
         run: |
           $ErrorActionPreference = 'Stop'
-          foreach ($path in @('scripts/windows-rollback-install-step.ps1', 'scripts/windows-rollback-data-check.ps1')) {
+          foreach ($path in @('scripts/windows-rollback-install-step.ps1', 'scripts/windows-rollback-data-check.ps1', 'scripts/windows-rollback-download.ps1')) {
             $tokens = $null
             $parseErrors = $null
             [System.Management.Automation.Language.Parser]::ParseFile((Join-Path $pwd $path), [ref]$tokens, [ref]$parseErrors) | Out-Null
@@ -37,3 +38,13 @@ jobs:
           catch { $rejected = $true }
           if (-not $rejected) { throw 'Changed fixture was accepted' }
           Write-Output 'Parser and fixture checks passed; installer execution and rollback are not tested.'
+      - name: Verify pinned release downloads
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          foreach ($kind in @('nsis', 'msi')) {
+            $destination = Join-Path $env:RUNNER_TEMP "rollback-download-$kind"
+            $records = @(./scripts/windows-rollback-download.ps1 -Kind $kind -Destination $destination)
+            if ($records.Count -ne 2) { throw "Expected two verified $kind downloads" }
+            $records | ConvertTo-Json | Write-Output
+          }
