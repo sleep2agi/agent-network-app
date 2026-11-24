@@ -109,6 +109,7 @@ import { conversationDraftKey, draftPreview, draftTextFor, useDraftsVersion, typ
 import { rememberAgentNetworks } from './agent-network';
 import AvatarStatusRing from './AvatarStatusRing';
 import { agentQueryScope } from './nav-chrome';
+import { descriptionByAlias } from './node-description';
 
 // 受限成员的空态文案比「还没有 agent」长,窄屏会折行:居中并留出与列表同宽的边距。
 const restrictedEmptyCopy = () => ({ textAlign: 'center' as const, paddingHorizontal: spacing.xl });
@@ -242,6 +243,8 @@ export default function AgentsScreen({
   /** alias → 部门名(Hub 的真实归属)。空 Map = 退回 alias 前缀分组,行为与以前一致。
    *  admin 2026-10-26:「军团里面能分组吗…有明显的划分区」—— 按部门分比猜前缀可靠。 */
   const [deptByAlias, setDeptByAlias] = useState<Map<string, string>>(new Map());
+  /** alias → 节点职责/签名单行摘要（Hub nodes.description，#5501）。无摘要时不占位。 */
+  const [descByAlias, setDescByAlias] = useState<Map<string, string>>(new Map());
   /** 刚被「不显示该对话」的那条 + 撤销条(误点一次就消失,用户会以为丢了)。 */
   const [lastHidden, setLastHidden] = useState<{ alias: string; at: number } | null>(null);
   // 群会话(RFC-042):和私信同一次 /api/dm/threads 拿到。null = 这个 Hub 没有群(没有 group_threads 字段)→ 区块不画。
@@ -625,6 +628,16 @@ export default function AgentsScreen({
   const groupsShown = groupsCollapsed ? [] : groupsMatched;
   const groupsHeaderHRef = useRef<number | null>(null);
   const groupsSectionHRef = useRef<number | null>(null);
+  // 节点职责/签名摘要（#5501）：复用 /api/nodes，不依赖是否配置了组织部门。
+  const hasSessions = sessions.length > 0;
+  useEffect(() => {
+    let alive = true;
+    void fetchHubNodes(cfg)
+      .then(hub => { if (alive) setDescByAlias(descriptionByAlias(hub.nodes ?? [])); })
+      .catch(() => { /* keep previous map */ });
+    return () => { alive = false; };
+  }, [cfg, hasSessions]);
+
   // 部门归属:优先用节点自己的部门(nodes.department_id,/api/nodes 一次拿全),分组标题是部门路径。
   // admin 2026-11-10「组织架构在列表里没看见,还是前缀的样子」—— 旧做法按「负责人所在部门」查,
   // 负责人没分部门时整张表为空 ⇒ 退回前缀分组。旧 Hub(/api/nodes 不带 department_id)才走旧查法。
@@ -772,6 +785,7 @@ export default function AgentsScreen({
   // Desktop (Tauri) sidebar row — unchanged by the 0.2.106 phone / two-pane redesign.
   const renderCompactRow = (item: Session) => {
     const rowDraft = draftFor({ kind: 'node', alias: item.alias }, selectedAlias === item.alias);
+    const rowDesc = descByAlias.get(item.alias) ?? '';
     return (
     <Pressable
       testID={`agent-row-${item.alias}`}
@@ -825,6 +839,11 @@ export default function AgentsScreen({
           {machineLineFor(item) ? (
             <Text dense selectable={false} numberOfLines={1} style={[styles.machineChip, compact && { fontSize: 10 }]} testID={`agent-machine-${item.alias}`}>
               {machineLineFor(item)}
+            </Text>
+          ) : null}
+          {rowDesc ? (
+            <Text dense selectable={false} numberOfLines={1} ellipsizeMode="tail" style={{ flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, fontSize: 11, color: colors.textMuted }} testID={`agent-desc-${item.alias}`}>
+              {rowDesc}
             </Text>
           ) : null}
           {/* #460 降级:App Server 断开 / TUI 不在 / 需要重新登录 —— Hub 会拒收发给它的新任务。不知道时不画。 */}
@@ -996,6 +1015,7 @@ export default function AgentsScreen({
     const model = agentRowModel(item, { latest: rowLatest(item), taskAt: taskTimes.timeFor(item.alias, item.task), pinned, nowMs });
     const selected = selectedAlias === item.alias;
     const rowDraft = draftFor({ kind: 'node', alias: item.alias }, selected);
+    const rowDesc = descByAlias.get(item.alias) ?? '';
     // 手机上整窗渐变时行底色让出来（选中/按下仍给一档，否则光被一行行盖掉）。
     const rowBg = selected ? colors.rowActive : mobileGlowActive() ? 'transparent' : colors.bg;
     const badge = rowBadge(item.alias);
@@ -1040,6 +1060,11 @@ export default function AgentsScreen({
             {machineLineFor(item) ? (
               <Text dense selectable={false} numberOfLines={1} style={[rowStyles.machine, { color: colors.textMuted }]} testID={`agent-machine-${item.alias}`}>
                 {machineLineFor(item)}
+              </Text>
+            ) : null}
+            {rowDesc ? (
+              <Text dense selectable={false} numberOfLines={1} ellipsizeMode="tail" style={[rowStyles.desc, { color: colors.textMuted }]} testID={`agent-desc-${item.alias}`}>
+                {rowDesc}
               </Text>
             ) : null}
             <Text dense selectable={false} numberOfLines={1} style={[rowStyles.time, { color: colors.textMuted }]}>{model.time}</Text>
@@ -1547,6 +1572,8 @@ function GroupByOptions({ groupBy, onPress, onClose }: { groupBy: GroupBy; onPre
 const makeRowStyles = () => ({
   // Hub #3711 —— 机器别名：行内一小段弱化文字，不抢名字。
   machine: { fontSize: type.small, flexShrink: 1 },
+  // #5501 —— 节点职责/签名摘要：只吃名字与时间之间的剩余空白，不挤名字、不挤时间戳。
+  desc: { flexGrow: 1, flexShrink: 1, flexBasis: 0, minWidth: 0, ...listText('meta') },
   head: { paddingHorizontal: ds(AGENT_ROW_PAD_X), paddingTop: spacing.sm, paddingBottom: spacing.xs },
   headRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: ds(36) },
   searchBox: { flex: 1, flexDirection: 'row', alignItems: 'center', gap: ds(6), minHeight: ds(36), borderRadius: radius.control, paddingHorizontal: ds(10) },
