@@ -10,6 +10,7 @@
 
 import type { HubMessage, HubUserMessage, Session } from './api';
 import { hubTimeMs } from './agent-unread-counts';
+import { markdownToPlainText } from './message-plain-text';
 
 /** Row height (dp): 12 + 44 avatar + 12. WeChat's list row is 64–72. */
 export const AGENT_ROW_HEIGHT = 68;
@@ -135,10 +136,15 @@ export function formatRowTime(ms: number, nowMs: number = Date.now()): string {
 
 export interface LatestMessage { at: number; text: string }
 
-/** Collapse whitespace so a multi-line / markdown message fits one preview line. */
+/** One preview line: Markdown rendered to the words the bubble shows, whitespace collapsed.
+ *  0.2.618(#5429):以前只合并空白,列表预览里露出 `**加粗**`、```` ```text ```` 这些记号(安卓真机报告 BUG-08)。
+ *  只解析开头一段(PREVIEW_PARSE_CHARS):列表每行都调,长消息整段解析不划算。 */
+const PREVIEW_PARSE_CHARS = 600;
 export const previewText = (raw: unknown, max = 80): string => {
   if (typeof raw !== 'string') return '';
-  const one = raw.replace(/\s+/g, ' ').trim();
+  let plain = raw;
+  try { plain = markdownToPlainText(raw.slice(0, PREVIEW_PARSE_CHARS)); } catch { /* 解析失败就用原文 */ }
+  const one = plain.replace(/\s+/g, ' ').trim();
   return one.length > max ? one.slice(0, max) : one;
 };
 
