@@ -142,6 +142,17 @@ export function useAvatarsVersion(): number {
   return useSyncExternalStore(subscribeAvatars, () => avatarVersion, () => avatarVersion);
 }
 
+const REMOTE_SOURCE_CACHE = new Map<string, { uri: string }>();
+function remoteSourceFor(uri: string): { uri: string } {
+  let cached = REMOTE_SOURCE_CACHE.get(uri);
+  if (!cached) {
+    if (REMOTE_SOURCE_CACHE.size > 256) REMOTE_SOURCE_CACHE.clear();
+    cached = { uri };
+    REMOTE_SOURCE_CACHE.set(uri, cached);
+  }
+  return cached;
+}
+
 /**
  * Resolve an alias to a renderable source, or null (caller shows the letter
  * pill). Materialises the pure plan from planAvatarFile against the current
@@ -150,7 +161,7 @@ export function useAvatarsVersion(): number {
 export function getAvatarSource(alias?: string | null): ImageSourcePropType | null {
   const plan = planAvatarFile(alias, { nodeAliases: hubNodeAliases, map: hubMap }, localMap);
   if (plan === 'none') return null;
-  if (plan.startsWith('remote:')) return { uri: plan.slice('remote:'.length) };
+  if (plan.startsWith('remote:')) return remoteSourceFor(plan.slice('remote:'.length));
   return BUNDLED_BY_FILENAME[plan.slice('file:'.length)] ?? null;
 }
 
