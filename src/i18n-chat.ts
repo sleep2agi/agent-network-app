@@ -294,6 +294,10 @@ export const chatTranslations = {
   'chat.mention.online': ['在线', 'Online'],
   'chat.mention.offline': ['离线', 'Offline'],
   'chat.mention.empty': ['没有匹配的 Agent', 'No matching agents'],
+  'chat.mention.loading': ['正在加载 Agent 列表…', 'Loading agents…'],
+  'chat.mention.failed': ['Agent 列表加载失败', 'Failed to load agents'],
+  'chat.mention.retry': ['重试', 'Retry'],
+  'chat.mention.keyHint': ['↑↓ 选择 · Enter 确认 · Esc 关闭', '↑↓ Move · Enter Pick · Esc Close'],
 
   'chat.shortcutMod': ['{modifier}+Enter 发送 · Enter 换行', '{modifier}+Enter to send · Enter for a new line'],
   'chat.shortcutEnter': ['Enter 发送 · Shift/Ctrl/⌘+Enter 换行', 'Enter to send · Shift/Ctrl/⌘+Enter for a new line'],

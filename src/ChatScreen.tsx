@@ -136,7 +136,7 @@ import { sendConfirmationFromResponse, sendNoticeFor, type SendConfirmation } fr
 import { beginForward, confirmForward, markForwardAmbiguous, mayProjectForward, resetForwardWithoutResend } from './forward-controller';
 import { parseBtwFirstToken } from './btw-command';
 import { slashCandidates, slashGroupLabel, slashMenuOpen, moveSlashIndex } from './slash-menu';
-import { mentionCandidates, mentionMenuOpen } from './mention-menu';
+import { mentionCandidates, mentionMenuOpen, mergeMentionAgents, type MentionAgent } from './mention-menu';
 import { ComposerSuggest } from './ComposerSuggest';
 import { parseSkillsPayload, skillsTarget, type SkillSummary } from './node-skills';
 import { isTerminal, nextPollDelayMs, requestIdToFollow, resultProblem } from './node-rules';
@@ -360,8 +360,19 @@ interface Props {
 // returning to a conversation is a blank list and a fetch all over again.
 const conversations = createConversationStore<ChatItem>();
 
+// 60s in-memory cache of @ mention candidates per (profile, server, network) so
+// opening `@` is instantaneous instead of flashing "没有匹配的 Agent" on every keystroke.
+const MENTION_CACHE_TTL_MS = 60_000;
+const mentionAgentsCache = new Map<string, { at: number; agents: MentionAgent[] }>();
+const mentionCacheKeyOf = (cfg: Pick<HubConfig, 'profileId' | 'serverUrl' | 'networkId'>) =>
+  `${cfg.profileId ?? ''}|${cfg.serverUrl}|${cfg.networkId ?? ''}`;
+
 export const clearChatConversationCache = (profileId?: string, serverUrl = ''): void => {
   conversations.clearScope(conversationScope(profileId, serverUrl));
+  const prefix = `${profileId ?? ''}|${serverUrl}|`;
+  for (const k of mentionAgentsCache.keys()) {
+    if (k.startsWith(prefix)) mentionAgentsCache.delete(k);
+  }
 };
 
 export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, desktop = false, onOpenNodeSettings, pinned = false, onTogglePin, muted = false, onToggleMute, hideBack = false, estimatedPaneWidth, onOpenVoiceSettings, focusTaskId, focusSilent = false, windowChrome = null, onOpenTask, onCreateNode, onOpenManagedChat, onOpenSenderChat, daemonMgmt = false }: Props) {
@@ -394,35 +405,56 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [hasOlder, setHasOlder] = useState(true);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [draft, setDraftState] = useState('');
+  const [draftCursor, setDraftCursor] = useState<number | undefined>(undefined);
+  const [dismissedMentionDraft, setDismissedMentionDraft] = useState<string | null>(null);
   const [slashSkills, setSlashSkills] = useState<SkillSummary[]>([]);
   const [slashSkillNote, setSlashSkillNote] = useState('');
-  const [mentionAgents, setMentionAgents] = useState<Array<{ alias: string; online: boolean }>>([]);
+  const mentionCacheKey = mentionCacheKeyOf(cfg);
+  const [mentionAgents, setMentionAgents] = useState<MentionAgent[]>(() => mentionAgentsCache.get(mentionCacheKey)?.agents ?? []);
+  const [mentionLoading, setMentionLoading] = useState(false);
+  const [mentionError, setMentionError] = useState<string | null>(null);
+  const [mentionFetchTick, setMentionFetchTick] = useState(0);
   const [suggestIndex, setSuggestIndex] = useState(0);
   // #632 草稿(微信同款):按 账号 + Hub + 网络 + 会话 存在本机,离开 / 切会话 / 退后台 / 重启后放回。
   // 主窗口复用同一个 ChatScreen 切会话 —— key 变就等于离开旧会话、进新会话(composer-drafts.ts)。
 
-  const slashRows = useMemo(() => slashMenuOpen(draft) ? slashCandidates(draft, slashSkills).map(item => ({
+  const slashOpen = slashMenuOpen(draft);
+  const mentionOpen = !slashOpen && dismissedMentionDraft !== draft && mentionMenuOpen(draft, draftCursor);
+
+  const slashRows = useMemo(() => slashOpen ? slashCandidates(draft, slashSkills).map(item => ({
     id: item.id,
     kind: item.group,
     group: item.group === "command" ? t("chat.slash.commands") : t("chat.slash.skills"),
     label: item.label,
     description: item.description,
     insert: item.insert,
-  })) : [], [draft, slashSkills]);
+    cursor: undefined as number | undefined,
+    avatarAlias: undefined as string | undefined,
+    sublabel: undefined as string | undefined,
+    online: undefined as boolean | undefined,
+  })) : [], [draft, slashOpen, slashSkills]);
   // #886 —— 列表里出现技能时给一句边界：技能是给 Agent 的提示，不是 Runtime 原生命令。
   const slashSkillBoundaryNote = useMemo(() => slashRows.some(row => row.kind === 'skill') ? t('chat.slash.skillNote') : undefined, [slashRows]);
-  const mentionRows = useMemo(() => mentionMenuOpen(draft) ? mentionCandidates(draft, mentionAgents).map(item => ({
+  const mentionRows = useMemo(() => mentionOpen ? mentionCandidates(draft, mentionAgents, draftCursor).map(item => ({
     id: `agent:${item.alias}`,
+    kind: 'mention' as const,
     group: t("chat.mention.agents"),
     label: `@${item.alias}`,
-    description: item.online ? t("chat.mention.online") : t("chat.mention.offline"),
+    sublabel: item.label !== item.alias ? item.label : undefined,
+    description: item.description,
+    avatarAlias: item.alias,
+    online: item.online,
     insert: item.insert,
-  })) : [], [draft, mentionAgents]);
-  const suggestRows = slashRows.length || slashMenuOpen(draft) ? slashRows : mentionRows;
-  const suggestOpen = slashMenuOpen(draft) || mentionMenuOpen(draft);
-  useEffect(() => { setSuggestIndex(0); }, [draft, suggestRows.length]);
+    cursor: item.cursor,
+  })) : [], [draft, draftCursor, mentionOpen, mentionAgents]);
+  const suggestRows = slashRows.length || slashOpen ? slashRows : mentionRows;
+  const suggestOpen = slashOpen || mentionOpen;
+  useEffect(() => { setSuggestIndex(0); }, [draft, draftCursor, suggestRows.length]);
   useEffect(() => {
-    if (!slashMenuOpen(draft)) return;
+    if (dismissedMentionDraft !== null && dismissedMentionDraft !== draft) setDismissedMentionDraft(null);
+  }, [draft, dismissedMentionDraft]);
+  useEffect(() => {
+    if (!slashOpen) return;
     let live = true;
     setSlashSkillNote(t("chat.slash.loading"));
     (async () => {
@@ -456,31 +488,80 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       }
     })();
     return () => { live = false; };
-  }, [cfg, alias, slashMenuOpen(draft)]);
+  }, [cfg, alias, slashOpen]);
+  // Preload & refresh @ mention candidates progressively:
+  // 1) Serve warm cache immediately so typing `@` never flashes "没有匹配的 Agent".
+  // 2) Fetch lightweight `/api/status?light=1` and `/api/nodes` independently so either
+  //    source failing or lagging never blanks out the list.
   useEffect(() => {
-    if (!mentionMenuOpen(draft)) return;
+    const cached = mentionAgentsCache.get(mentionCacheKey);
+    const fresh = cached && Date.now() - cached.at < MENTION_CACHE_TTL_MS;
+    if (cached) setMentionAgents(cached.agents);
+    else setMentionAgents([]);
+    if (fresh && mentionFetchTick === 0) {
+      setMentionLoading(false);
+      setMentionError(null);
+      return;
+    }
     let live = true;
-    Promise.all([fetchHubNodes(cfg), fetchStatus(cfg)]).then(([nodes, status]) => {
+    let statusRows: Session[] | null = null;
+    let nodeRows: HubNode[] | null = null;
+    let statusDone = false;
+    let nodesDone = false;
+    let statusFailed = false;
+    let nodesFailed = false;
+    setMentionLoading(true);
+    setMentionError(null);
+
+    const publish = () => {
       if (!live) return;
-      const online = new Set((status.sessions ?? []).filter(item => item.status && item.status !== 'offline').map(item => item.alias));
-      const fromNodes = (nodes.nodes ?? []).map(item => ({ alias: item.alias, online: online.has(item.alias) }));
-      const extras = (status.sessions ?? []).filter(item => item.alias && !fromNodes.some(row => row.alias === item.alias)).map(item => ({ alias: item.alias, online: item.status !== 'offline' }));
-      setMentionAgents([...fromNodes, ...extras]);
-    }).catch(() => { if (live) setMentionAgents([]); });
+      if (statusRows !== null || nodeRows !== null) {
+        const merged = mergeMentionAgents(nodeRows, statusRows);
+        mentionAgentsCache.set(mentionCacheKey, { at: Date.now(), agents: merged });
+        setMentionAgents(merged);
+        setMentionLoading(false);
+        setMentionError(null);
+      } else if (statusDone && nodesDone && statusFailed && nodesFailed) {
+        setMentionLoading(false);
+        setMentionError(t('chat.mention.failed'));
+      }
+    };
+
+    void fetchStatus(cfg).then(
+      res => { statusDone = true; statusRows = res.sessions ?? []; publish(); },
+      () => { statusDone = true; statusFailed = true; publish(); },
+    );
+    void fetchHubNodes(cfg).then(
+      res => { nodesDone = true; nodeRows = res.nodes ?? []; publish(); },
+      () => { nodesDone = true; nodesFailed = true; publish(); },
+    );
     return () => { live = false; };
-  }, [cfg, mentionMenuOpen(draft)]);
+  }, [cfg, mentionCacheKey, mentionOpen, mentionFetchTick]);
   const pickSuggest = (index: number) => {
     const row = suggestRows[index];
     if (!row) return;
     setDraft(row.insert);
+    if (typeof row.cursor === 'number') {
+      setDraftCursor(row.cursor);
+      placeCursor(row.cursor);
+    } else {
+      setDraftCursor(row.insert.length);
+    }
     setSuggestIndex(0);
     mainComposerRef.current?.focus?.();
   };
   const onSuggestKey = (event: { key?: string; preventDefault?: () => void; nativeEvent?: { key?: string; isComposing?: boolean } }) => {
-    if (!suggestOpen || suggestRows.length === 0) return false;
+    if (!suggestOpen) return false;
     // #886：中文输入法正在组字时，Enter/Tab 是在确认候选，不是选菜单 —— 一律不拦。
     if (event.nativeEvent?.isComposing) return false;
     const key = event.key || event.nativeEvent?.key;
+    if (key === 'Escape') {
+      event.preventDefault?.();
+      if (slashOpen) setDraft(draft.replace(/^\s*\//, ''));
+      else setDismissedMentionDraft(draft);
+      return true;
+    }
+    if (suggestRows.length === 0) return false;
     if (key === 'ArrowDown' || key === 'ArrowUp') {
       event.preventDefault?.();
       setSuggestIndex(index => moveSlashIndex(index, suggestRows.length, key === 'ArrowDown' ? 'down' : 'up'));
@@ -489,11 +570,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     if (key === 'Enter' || key === 'Tab') {
       event.preventDefault?.();
       pickSuggest(suggestIndex);
-      return true;
-    }
-    if (key === 'Escape') {
-      event.preventDefault?.();
-      setDraft(draft.replace(/^\s*[\/@]/, ''));
       return true;
     }
     return false;
@@ -545,7 +621,15 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     const id = setTimeout(() => setForcedSelection(undefined), 120);
     return () => clearTimeout(id);
   }, [forcedSelection]);
-  const onComposerSelectionChange = (e: { nativeEvent: { selection: TextSelection } }) => selectionCaptureRef.current.track(e.nativeEvent.selection);
+  const onComposerSelectionChange = (e: { nativeEvent: { selection: TextSelection } }) => {
+    selectionCaptureRef.current.track(e.nativeEvent.selection);
+    setDraftCursor(e.nativeEvent.selection.end);
+  };
+  const handleComposerChangeText = (next: string) => {
+    setDraft(next);
+    const host = hostSelection(mainComposerRef.current);
+    setDraftCursor(host ? host.end : next.length);
+  };
   // app#237 —— 桌面端输入区高度可拖拽:根容器高度决定上界(消息区至少留 200px),
   // 值全局持久化(切会话 / 重启保持)。分隔条在输入区上沿,向上拖变高。
   const [rootHeight, setRootHeight] = useState(0);
@@ -3536,16 +3620,22 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Pressable>
           </View>
         ) : null}
-{suggestOpen ? (
-          <ComposerSuggest
-            rows={suggestRows}
-            active={suggestIndex}
-            empty={slashMenuOpen(draft) ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
-            note={slashSkillBoundaryNote}
-            onPick={pickSuggest}
-          />
-        ) : null}
         <View style={styles.desktopComposerWrap} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
+        {suggestOpen ? (
+          <View style={styles.composerSuggestAnchor} pointerEvents="box-none">
+            <ComposerSuggest
+              rows={suggestRows}
+              active={suggestIndex}
+              loading={!slashOpen && mentionLoading}
+              loadingText={t('chat.mention.loading')}
+              error={!slashOpen ? mentionError : null}
+              onRetry={!slashOpen ? () => setMentionFetchTick(n => n + 1) : undefined}
+              empty={slashOpen ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
+              note={slashSkillBoundaryNote}
+              onPick={pickSuggest}
+            />
+          </View>
+        ) : null}
         {modelPaletteOverlay}
         <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]} testID="desktop-composer-card">
           {/* 内容高度量尺:同宽、同字号行高的隐形文字。不用 TextInput 的 onContentSizeChange —— web 上那是
@@ -3565,7 +3655,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             placeholder={t('chat.messagePlaceholder', { alias })}
             placeholderTextColor={colors.textMuted}
             value={draft}
-            onChangeText={setDraft}
+            onChangeText={handleComposerChangeText}
             onSelectionChange={onComposerSelectionChange}
             selection={forcedSelection}
             onKeyPress={(event) => {
@@ -3694,16 +3784,22 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onClear={() => { setDraft(''); selectionCaptureRef.current.reset(); }}
         />
       ) : null}
-{suggestOpen ? (
+      <View style={styles.composerFooterBlock} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
+      {suggestOpen ? (
+        <View style={styles.composerSuggestAnchor} pointerEvents="box-none">
           <ComposerSuggest
             rows={suggestRows}
             active={suggestIndex}
-            empty={slashMenuOpen(draft) ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
+            loading={!slashOpen && mentionLoading}
+            loadingText={t('chat.mention.loading')}
+            error={!slashOpen ? mentionError : null}
+            onRetry={!slashOpen ? () => setMentionFetchTick(n => n + 1) : undefined}
+            empty={slashOpen ? (slashSkillNote || t("chat.slash.empty")) : t("chat.mention.empty")}
             note={slashSkillBoundaryNote}
             onPick={pickSuggest}
           />
-        ) : null}
-      <View style={styles.composerFooterBlock} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
+        </View>
+      ) : null}
       {modelPaletteOverlay}
       {/* admin 2026-11-10：模型 / 思考档位放在输入行**上面**。原来在「按住 说话」下面、贴着屏幕底边，
           切语音 / 键盘时很容易误触。底部安全区改由输入行垫。 */}
@@ -3798,7 +3894,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           placeholder={t('chat.messagePlaceholder', { alias })}
           placeholderTextColor={colors.textMuted}
           value={draft}
-          onChangeText={setDraft}
+          onChangeText={handleComposerChangeText}
           onSelectionChange={onComposerSelectionChange}
           selection={forcedSelection}
           onContentSizeChange={event => onInputContentSize(event.nativeEvent.contentSize.height)}
@@ -3983,6 +4079,7 @@ const makeStyles = (B = bubbleLayout()) =>
   // #4130 follow-up：模型命令面板贴着输入卡片上沿浮出（OpenCode 风格），
   // 桌面挂在 desktopComposerWrap、手机挂在输入行 + 模型行所在块的上方。
   composerPaletteAnchor: { position: 'absolute', left: 0, right: 0, bottom: '100%', zIndex: 9999, elevation: 14, alignItems: 'center', paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: 8 },
+  composerSuggestAnchor: { position: 'absolute', left: 0, right: 0, bottom: '100%', zIndex: 9998, elevation: 13, alignItems: 'flex-start', paddingHorizontal: COMPOSER_CARD_INSET, paddingBottom: 8 },
   composerFooterBlock: { position: 'relative' },
   // 手机：输入行下面一行「模型 + 思考档位」控件；未知就写未知，不摆默认值。
   // Build/agent 下拉没有可信数据源（catalog 不含 agent 列表），按需求不显示，不造假。
