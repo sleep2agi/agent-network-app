@@ -2325,6 +2325,42 @@ export type InterruptSendResult =
   | { ok: true; payload: any }
   | { ok: false; unsupported: boolean; error: string };
 
+export type RecallTaskResult =
+  | { ok: true; recalled: true; alreadyRecalled: boolean; recalledAt: string | null }
+  | { ok: false; reason: 'already_terminal' | 'unsupported' | 'forbidden' | 'failed'; error: string };
+
+/** #5502 —— 撤回一条自己发出的未回复任务（POST /api/tasks/:id/recall）。 */
+export const recallTask = async (cfg: HubConfig, taskId: string): Promise<RecallTaskResult> => {
+  const url = `${cfg.serverUrl.replace(/\/$/, '')}/api/tasks/${encodeURIComponent(taskId)}/recall`;
+  try {
+    const res = await appFetch(url, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${cfg.token}` },
+    });
+    const body = await res.json().catch(() => null);
+    if (res.ok && body?.ok) {
+      return {
+        ok: true,
+        recalled: true,
+        alreadyRecalled: body.already_recalled === true,
+        recalledAt: typeof body.recalled_at === 'string' ? body.recalled_at : null,
+      };
+    }
+    if (res.status === 404 && body?.error === 'not_found') {
+      return { ok: false, reason: 'unsupported', error: 'not_found' };
+    }
+    if (res.status === 409 || body?.error === 'task_already_terminal') {
+      return { ok: false, reason: 'already_terminal', error: body?.error || 'task_already_terminal' };
+    }
+    if (res.status === 403) {
+      return { ok: false, reason: 'forbidden', error: body?.error || 'forbidden' };
+    }
+    return { ok: false, reason: 'failed', error: body?.error || `HTTP ${res.status}` };
+  } catch (e: any) {
+    return { ok: false, reason: 'failed', error: String(e?.message ?? e) };
+  }
+};
+
 /** 发一条「停止当前回合」的控制消息。**不改协议**：走已有 /mcp tools/call 桥，
  *  工具与参数由 Hub 侧 `send_message(control:"interrupt")` 定义（server/src/tools.ts:2469）。 */
 export const interruptTurn = async (cfg: HubConfig, alias: string): Promise<InterruptSendResult> => {

@@ -243,6 +243,7 @@ export const chatTranslations = {
   'chat.menu.forward': ['转发…', 'Forward…'],
   'chat.menu.multiSelect': ['多选', 'Select messages'],
   'chat.menu.expand': ['放大阅读', 'Expand message'],
+  'chat.menu.recall': ['撤回', 'Recall'],
   'chat.menu.delete': ['删除', 'Delete'],
   // #537 手机长按就地选区的浮动菜单(微信同款:图标 + 两字短标签)
   'chat.select.copy': ['复制', 'Copy'],
@@ -252,7 +253,14 @@ export const chatTranslations = {
   'chat.select.multiSelect': ['多选', 'Multi-select'],
   'chat.select.selectText': ['选择文本', 'Select text'],
   'chat.select.expand': ['放大阅读', 'Expand'],
+  'chat.select.recall': ['撤回', 'Recall'],
   'chat.select.delete': ['删除', 'Delete'],
+  // #5502 撤回与重新编辑
+  'chat.recalled': ['你撤回了一条消息', 'You recalled a message'],
+  'chat.recalled.reedit': ['重新编辑', 'Re-edit'],
+  'chat.recall.alreadyTerminal': ['对方已回复或任务已结束，无法撤回', 'Already answered; cannot recall'],
+  'chat.recall.unsupported': ['当前 Hub 版本暂不支持撤回', 'Hub does not support recall yet'],
+  'chat.recall.failed': ['撤回失败，请重试', 'Failed to recall'],
   'chat.select.exit': ['退出选择', 'Exit selection'],
   'chat.select.text': ['消息文字(可拖动选区)', 'Message text (drag to select)'],
   'chat.selection.forward': ['转发…（{count}）', 'Forward… ({count})'],

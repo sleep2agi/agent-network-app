@@ -23,7 +23,8 @@ import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './Authed
 import AuthedWebThumb from './AuthedWebThumb';
 import { isDefiniteSendRejection, isRetryableSendFailure, sendFailureReason, type SendFailureReason } from './send-failure-reason';
 import { runWithSendAutoRetry } from './send-auto-retry';
-import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, interruptTurn, steerInFlight, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
+import { ackAgentMessages, ackUserMessages, createDashboardRequestId, dashboardRequestIdForLocalId, fetchNodeStatus, waitForRulesFileResult, listNodeSkills, fetchHubNodes, fetchStatus, fetchChatUserMessages, fetchTasks, sendTask, interruptTurn, recallTask, steerInFlight, HubConfig, HubTask, Session, TaskAttachment, TaskPriority, type HostSupervisorDaemon } from './api';
+import { isRecalledTask, markTaskRecalled, recallEligibility, reeditContentOf } from './message-recall';
 import { proactiveItemsForAgent } from './proactive-messages';
 import { replyQuoteFor } from './reply-quote';
 import { nextFocusStep } from './message-focus';
@@ -1228,7 +1229,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // 量不到(极少:气泡刚被回收)就退回原来的底部菜单,长按至少有反应。
     if (!el?.measureInWindow) { setMenuFor({ ...selection, kind: tone }); return; }
     el.measureInWindow((x, y, width, height) => {
-      if (!(width > 0 && height > 0)) { setMenuFor(selection); return; }
+      if (!(width > 0 && height > 0)) { setMenuFor({ ...selection, kind: tone }); return; }
       setSelectFor({ rect: { x, y, width, height }, raw: selection.text, tone, selection: { ...selection, kind: tone } });
     });
   };
@@ -1479,7 +1480,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       setMenuAt(x !== null && y !== null ? { x, y } : null);
       // 我们的右键菜单替掉了浏览器自带的「复制」:拖选完再右键,要能只复制选中的那段。
       const selectedText = selectedTextWithin(bubble, (globalThis as any).getSelection?.());
-      setMenuFor({ item, text, author, selectedText });
+      setMenuFor({ item, text, author, selectedText, kind: part === 'reply' ? 'reply' : 'sent' });
     };
     doc.addEventListener('contextmenu', handleMessageContextMenu, true);
     return () => doc.removeEventListener('contextmenu', handleMessageContextMenu, true);
@@ -1584,9 +1585,41 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   };
 
   // ── 菜单动作(0.2.78) ────────────────────────────────────────────────────
+  const [turnReport, setTurnReport] = useState<{ cfg: typeof cfg; alias: string; session: Session | null } | null>(null);
+  const turnCaps = turnCapabilities(turnReport?.cfg === cfg && turnReport.alias === alias ? turnReport.session : null);
+  const recallCheckFor = (sel: MessageSelection | null | undefined) => {
+    if (!sel) return { allowed: false as const, reason: 'none' };
+    const sender = resolveSender(sel.item, currentUsername);
+    return recallEligibility({
+      item: sel.item,
+      kind: sel.kind,
+      isMine: sender.isCurrentUser && !isOutgoingRow(sel.item, alias),
+      canInterrupt: turnCaps.interrupt,
+    });
+  };
+  const recallMessage = async (selection: MessageSelection) => {
+    const check = recallCheckFor(selection);
+    if (!check.allowed || !selection.item.task_id) return;
+    if (check.needsInterrupt) {
+      await interruptTurn(cfg, alias).catch(() => null);
+    }
+    const res = await recallTask(cfg, selection.item.task_id);
+    if (res.ok) {
+      const targetId = selection.item.task_id;
+      setMessages(prev => prev.map(row => (row.task_id === targetId ? markTaskRecalled(row, res.recalledAt) : row)));
+      return;
+    }
+    setComposerNotice(
+      res.reason === 'already_terminal'
+        ? t('chat.recall.alreadyTerminal')
+        : res.reason === 'unsupported'
+          ? t('chat.recall.unsupported')
+          : t('chat.recall.failed'),
+    );
+  };
   const menuGroups = useMemo(
-    () => messageMenuGroups({ hasText: !!menuFor?.text, selectionMode, canForward: true, touch: !pointer, selectedText: menuFor?.selectedText }),
-    [menuFor, selectionMode, pointer],
+    () => messageMenuGroups({ hasText: !!menuFor?.text, selectionMode, canForward: true, touch: !pointer, selectedText: menuFor?.selectedText, canRecall: recallCheckFor(menuFor).allowed }),
+    [menuFor, selectionMode, pointer, currentUsername, alias, turnCaps.interrupt],
   );
   const onMenuAction = (key: MessageMenuKey) => {
     const selection = menuFor;
@@ -1599,6 +1632,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       mainComposerRef.current?.focus?.();
       return;
     }
+    if (key === 'recall') { setMenuFor(null); void recallMessage(selection); return; }
     if (key === 'forward') { void openForwardPicker(selection); return; }
     if (key === 'multiSelect') {
       setMenuFor(null);
@@ -1625,6 +1659,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       mainComposerRef.current?.focus?.();
       return;
     }
+    if (key === 'recall') { void recallMessage(selection); return; }
     if (key === 'multiSelect') { setSelectionMode(true); setSelectedKeys([msgKey(selection.item)]); return; }
     // 'selectText' 由浮层自己就地切到划选(#650),不会传到这里;不再开全屏「选择文本」页。
     if (key === 'expand') { setExpandFor(selection); return; }
@@ -2275,8 +2310,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const interruptBusy = interrupt.phase === 'sending' || interrupt.phase === 'waiting';
   const interruptIdOf = (m: { task_id?: string; created_at?: string; content?: string }) => `${m.task_id ?? ''}|${m.created_at ?? ''}|${m.content ?? ''}`;
   const [controlSession, setControlSession] = useState<Session | null>(null);
-  const [turnReport, setTurnReport] = useState<{ cfg: typeof cfg; alias: string; session: Session | null } | null>(null);
-  const turnCaps = turnCapabilities(turnReport?.cfg === cfg && turnReport.alias === alias ? turnReport.session : null);
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
   const [sessionModel, setSessionModel] = useState('');
@@ -3050,6 +3083,25 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </Pressable>
                 ) : null}
                 <View style={selectionMode ? styles.selectBody : undefined} pointerEvents={selectionMode ? 'none' : 'auto'}>
+                {isRecalledTask(item) ? (
+                <View style={styles.recalledRow} testID="chat-recalled-row">
+                  <Text style={styles.recalledText}>{t('chat.recalled')}</Text>
+                  {reeditContentOf(item.content) ? (
+                    <Pressable
+                      accessibilityRole="button"
+                      hitSlop={8}
+                      testID="chat-recalled-reedit"
+                      onPress={() => {
+                        setDraft(reeditContentOf(item.content));
+                        mainComposerRef.current?.focus?.();
+                      }}
+                    >
+                      <Text style={styles.recalledAction}>{t('chat.recalled.reedit')}</Text>
+                    </Pressable>
+                  ) : null}
+                </View>
+                ) : (
+                <>
                 {!item._proactive ? (sender.isCurrentUser || outgoing) ? (
                 <View style={[styles.messageRow, styles.sentRow]}>
                   <View style={[styles.messageContent, styles.sentContent, bubbleCap]}>
@@ -3066,7 +3118,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                       <View style={[styles.bubble, agentSent && styles.agentSentBubble]} ref={bubbleRef(`${msgKey(item)}:sent`)}>
                         <MineBubble value={!agentSent}>
                         {pointer && hoverKey === `${msgKey(item)}:sent` && item.content ? (
-                          <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias })} />
+                          <MessageHoverActions side="sent" styles={styles} onCopy={() => void copyMessage(item.content ?? '')} onMore={at => openMenuAt(at, { item, text: item.content ?? '', author: sender.alias, kind: 'sent' })} />
                         ) : null}
                         {agentSent ? <MarkdownMessage>{sentBody}</MarkdownMessage> : <MarkdownMessage tone="mine">{sentBody}</MarkdownMessage>}
                         {renderAttachments(sentAttachmentViews(item, cfg.serverUrl), item, !agentSent)}
@@ -3115,6 +3167,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </View>
                 </View>
                 ) : null}
+                </>
+                )}
                 {item.result || item.reply ? (
                   <View style={[styles.messageRow, styles.replyRow]}>
                     <Pressable accessibilityRole="button" accessibilityLabel={replyOutgoing ? outgoingReplyAuthor(item, alias) : alias} testID="chat-sender-avatar-reply" onPress={() => setSenderProfile(messageAvatarAuthor({ part: 'reply', outgoing: replyOutgoing, currentAlias: alias, currentUserId, row: item }))}>
@@ -3187,7 +3241,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                       {item._failReason ? <Text style={styles.failReasonText} testID="chat-fail-reason">{t(`chat.failReason.${item._failReason}`)}</Text> : null}
                     </View>
                   )
-                ) : sender.isCurrentUser && !(item.result ?? item.reply) ? (
+                ) : sender.isCurrentUser && !(item.result ?? item.reply) && !isRecalledTask(item) ? (
                   // PR3 要求2:「送达了但对方没回」≠「未送达」——前者灰勾不可点(不用重试),
                   // 后者红字带重试。服务器行(无 _localId 标志)= hub 已收 = 已送达。
                   // 只对自己发出的消息成立:别人派来的任务标「已送达」等于说这条是你发的。
@@ -3387,6 +3441,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       {pointer ? null : <MessageSelectOverlay
         target={selectFor}
         selectionMode={selectionMode}
+        canRecall={recallCheckFor(selectFor?.selection).allowed}
         onAction={onSelectAction}
         onClose={() => setSelectFor(null)}
       />}
@@ -3930,6 +3985,15 @@ const makeStyles = (B = bubbleLayout()) =>
     textAlign: 'center',
     marginVertical: spacing.md,
   },
+  recalledRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: spacing.sm,
+    paddingVertical: spacing.xs,
+  },
+  recalledText: { color: colors.textMuted, fontSize: 12 },
+  recalledAction: { color: colors.accent, fontSize: 12, fontWeight: '500' },
   bubbleWrap: { marginBottom: spacing.md, gap: spacing.xs },
   // app#166 —— 搜索定位后的临时高亮(2 s)
   bubbleHighlight: { backgroundColor: colors.accent + '22', borderRadius: radius.bubble, marginHorizontal: -spacing.xs, paddingHorizontal: spacing.xs },

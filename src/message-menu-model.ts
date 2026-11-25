@@ -17,7 +17,7 @@ export interface MessageMenuItem {
   readonly danger?: boolean;
 }
 
-export type MessageMenuKey = 'copySelection' | 'copy' | 'selectText' | 'quote' | 'forward' | 'multiSelect' | 'expand' | 'delete';
+export type MessageMenuKey = 'copySelection' | 'copy' | 'selectText' | 'quote' | 'forward' | 'multiSelect' | 'expand' | 'recall' | 'delete';
 
 export type MessageMenuGroup = readonly MessageMenuItem[];
 
@@ -38,6 +38,8 @@ export interface MessageMenuContext {
    * 不补这一项的话,用户拖选完右键只能复制整条 —— 正是 Vincent 要解决的那件事。
    */
   readonly selectedText?: string;
+  /** #5502 —— 自己发出且尚未回复的排队/可中断任务允许「撤回」。 */
+  readonly canRecall?: boolean;
 }
 
 /**
@@ -50,6 +52,7 @@ export function messageMenuGroups(ctx: MessageMenuContext): MessageMenuGroup[] {
       ...(ctx.hasText && ctx.selectedText?.trim() ? [{ key: 'copySelection' as const, label: '复制选中内容' }] : []),
       ...(ctx.hasText ? [{ key: 'copy' as const, label: '复制' }] : []),
       ...(ctx.hasText ? [{ key: 'quote' as const, label: '引用' }] : []),
+      ...(ctx.canRecall ? [{ key: 'recall' as const, label: '撤回' }] : []),
     ],
     [
       ...(canForward ? [{ key: 'forward' as const, label: '转发…' }] : []),
