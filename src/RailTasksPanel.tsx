@@ -16,7 +16,7 @@ import { usePoll } from './usePoll';
 
 const POLL_MS = 60_000;
 
-export default function RailTasksPanel({ cfg, alias, nodeId }: { cfg: HubConfig; alias: string; nodeId?: string | null }) {
+export default function RailTasksPanel({ cfg, alias, nodeId, onJumpToTask }: { cfg: HubConfig; alias: string; nodeId?: string | null; onJumpToTask?: (taskId: string) => void }) {
   const [tab, setTab] = useState<'sent' | 'board' | null>(null);
   const [rows, setRows] = useState<Requirement[] | null>(null);
   const [error, setError] = useState('');
@@ -51,7 +51,7 @@ export default function RailTasksPanel({ cfg, alias, nodeId }: { cfg: HubConfig;
         {tabBtn('sent', '派给它的')}
         {tabBtn('board', '项管', mine ? boardCount : undefined)}
       </View>
-      {current === 'sent' ? <NodeTasksSection cfg={cfg} alias={alias} embedded /> : (
+      {current === 'sent' ? <NodeTasksSection cfg={cfg} alias={alias} embedded onJumpToTask={onJumpToTask} /> : (
         <View style={{ gap: spacing.md }} testID="rail-tasks-board">
           {!rows && !error ? (
             <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>

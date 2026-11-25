@@ -3849,7 +3849,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
-      {showToolRail ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} state={toolRail} setState={setToolRail} dockedWidth={dockedPanelWidth(toolRail.width, rootWidth)} /> : null}
+      {showToolRail ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} state={toolRail} setState={setToolRail} dockedWidth={dockedPanelWidth(toolRail.width, rootWidth)} onJumpToTask={goToMessage} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}

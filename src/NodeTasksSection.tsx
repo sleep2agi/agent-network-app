@@ -11,6 +11,7 @@
 import { useCallback, useEffect, useState } from 'react';
 import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
+import { Ionicons } from './icons';
 import { fetchTasks, type HubConfig } from './api';
 import AliasAvatar from './AliasAvatar';
 import MarkdownMessage, { WRAP_ANYWHERE } from './MarkdownMessage';
@@ -43,7 +44,7 @@ function Pill({ label, tone }: { label: string; tone: PillTone }) {
   );
 }
 
-function TaskRow({ row, index, kind, now }: { row: NodeTaskRow & { repeat?: number }; index: number; kind: RowKind; now: Date }) {
+function TaskRow({ row, index, kind, now, onJumpToTask }: { row: NodeTaskRow & { repeat?: number }; index: number; kind: RowKind; now: Date; onJumpToTask?: (taskId: string) => void }) {
   const [expanded, setExpanded] = useState(false);
   const when = relativeTime(kind === 'running' || kind === 'stale' ? row.lastActivity ?? row.since : row.since, now);
   const preview = taskPreview(row.content || row.summary, row.from);
@@ -52,40 +53,84 @@ function TaskRow({ row, index, kind, now }: { row: NodeTaskRow & { repeat?: numb
   const repeat = row.repeat ?? 1;
   const failed = kind === 'done' && ['failed', 'timeout', 'expired'].includes(row.status);
   const muted = kind === 'stale' || kind === 'self';
+  const replyText = (row.result ?? '').trim();
   return (
-    <Pressable
-      onPress={() => setExpanded(v => !v)}
-      accessibilityRole="button"
-      accessibilityState={{ expanded }}
-      accessibilityLabel={`来自 ${who}:${preview}`}
-      style={(state: { pressed: boolean; hovered?: boolean }) => [
-        { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, marginHorizontal: -spacing.sm, borderRadius: radius.control },
-        (state.hovered || expanded) && { backgroundColor: colors.rowHover },
-        state.pressed && { opacity: 0.8 },
-      ]}
-    >
-      <View style={{ opacity: muted ? 0.6 : 1 }}>
-        <AliasAvatar alias={row.from} size={28} />
-      </View>
-      <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
-        <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
-          <Text style={{ color: muted ? colors.textMuted : colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.strong }} numberOfLines={1}>{who}</Text>
-          {when ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{repeat > 1 ? `最近 ${repeat} 次 · 最后一次` : ''}{when}{TIME_SUFFIX[kind]}</Text> : null}
-          {pill ? <Pill label={pill.label} tone={pill.tone} /> : null}
-          {failed ? <Pill label="失败" tone="danger" /> : null}
+    <View style={[{ marginHorizontal: -spacing.sm, borderRadius: radius.control }, expanded && { backgroundColor: colors.rowHover }]}>
+      <Pressable
+        onPress={() => setExpanded(v => !v)}
+        accessibilityRole="button"
+        accessibilityState={{ expanded }}
+        accessibilityLabel={`来自 ${who}:${preview}`}
+        style={(state: { pressed: boolean; hovered?: boolean }) => [
+          { flexDirection: 'row', gap: spacing.md, paddingVertical: spacing.sm, paddingHorizontal: spacing.sm, borderRadius: radius.control },
+          state.hovered && !expanded && { backgroundColor: colors.rowHover },
+          state.pressed && { opacity: 0.8 },
+        ]}
+      >
+        <View style={{ opacity: muted ? 0.6 : 1 }}>
+          <AliasAvatar alias={row.from} size={28} />
         </View>
-        {kind === 'running' || kind === 'stale' || kind === 'queue' ? <TaskExecutionNotice task={{ status: row.status, runtime_submitted_at: row.runtimeSubmittedAt, consumed_at: row.consumedAt }} /> : null}
-        {expanded ? (
-          <View style={{ paddingTop: 2 }}>
-            <MarkdownMessage>{row.content || row.summary}</MarkdownMessage>
+        <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+          <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+            <View style={{ flex: 1, minWidth: 0, flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
+              <Text style={{ color: muted ? colors.textMuted : colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.strong }} numberOfLines={1}>{who}</Text>
+              {when ? <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{repeat > 1 ? `最近 ${repeat} 次 · 最后一次` : ''}{when}{TIME_SUFFIX[kind]}</Text> : null}
+              {pill ? <Pill label={pill.label} tone={pill.tone} /> : null}
+              {failed ? <Pill label="失败" tone="danger" /> : null}
+            </View>
+            <Ionicons name={expanded ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
           </View>
-        ) : (
-          <Text style={[{ color: muted ? colors.textSecondary : colors.text, fontSize: typeScale.body, lineHeight: 21 }, WRAP_ANYWHERE]} numberOfLines={2}>
-            {preview}
-          </Text>
-        )}
-      </View>
-    </Pressable>
+          {kind === 'running' || kind === 'stale' || kind === 'queue' ? <TaskExecutionNotice task={{ status: row.status, runtime_submitted_at: row.runtimeSubmittedAt, consumed_at: row.consumedAt }} /> : null}
+          {!expanded ? (
+            <Text style={[{ color: muted ? colors.textSecondary : colors.text, fontSize: typeScale.body, lineHeight: 21 }, WRAP_ANYWHERE]} numberOfLines={2}>
+              {preview}
+            </Text>
+          ) : null}
+        </View>
+      </Pressable>
+      {expanded ? (
+        <View testID={`node-task-expanded-${row.taskId}`} style={{ paddingHorizontal: spacing.sm, paddingBottom: spacing.sm, gap: spacing.sm }}>
+          <View style={{ backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: spacing.sm, gap: spacing.sm }}>
+            <View style={{ gap: 4 }}>
+              <Text style={{ color: colors.textMuted, fontSize: typeScale.small, fontWeight: weight.strong }}>任务内容</Text>
+              <MarkdownMessage>{row.content || row.summary}</MarkdownMessage>
+            </View>
+            {kind === 'done' ? (
+              <View style={{ borderTopWidth: 1, borderTopColor: colors.border, paddingTop: spacing.sm, gap: 4 }}>
+                <Text style={{ color: colors.textMuted, fontSize: typeScale.small, fontWeight: weight.strong }}>回复结果</Text>
+                {replyText ? (
+                  <MarkdownMessage>{replyText}</MarkdownMessage>
+                ) : (
+                  <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>暂无回复内容</Text>
+                )}
+              </View>
+            ) : null}
+          </View>
+          <View style={{ flexDirection: 'row', alignItems: 'center', justifyContent: onJumpToTask ? 'space-between' : 'flex-end', paddingHorizontal: 2 }}>
+            {onJumpToTask ? (
+              <Pressable
+                onPress={() => onJumpToTask(row.taskId)}
+                hitSlop={6}
+                accessibilityRole="button"
+                testID={`node-task-jump-${row.taskId}`}
+                style={({ pressed }) => ({ flexDirection: 'row', alignItems: 'center', gap: 4, opacity: pressed ? 0.7 : 1 })}
+              >
+                <Ionicons name="chatbubble-ellipses-outline" size={13} color={colors.accent} />
+                <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.strong }}>定位到聊天</Text>
+              </Pressable>
+            ) : null}
+            <Pressable
+              onPress={() => setExpanded(false)}
+              hitSlop={6}
+              accessibilityRole="button"
+              style={({ pressed }) => ({ opacity: pressed ? 0.7 : 1 })}
+            >
+              <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>收起</Text>
+            </Pressable>
+          </View>
+        </View>
+      ) : null}
+    </View>
   );
 }
 
@@ -115,7 +160,7 @@ function Group({ title, count, children, collapsible, defaultOpen = true, hint, 
   );
 }
 
-export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg: HubConfig; alias: string; embedded?: boolean }) {
+export default function NodeTasksSection({ cfg, alias, embedded = false, onJumpToTask }: { cfg: HubConfig; alias: string; embedded?: boolean; onJumpToTask?: (taskId: string) => void }) {
   const [state, setState] = useState<Load>({ kind: 'loading' });
   const [, setThemeTick] = useState(0);
   useEffect(() => onThemeChange(() => setThemeTick(t => t + 1)), []);
@@ -162,12 +207,12 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
           {/* admin 2026-11-19：没有进行中的任务时不占一整张卡，只留一行灰字。 */}
           {split.active.length ? (
             <Group title="进行中" count={split.active.length}>
-              {split.active.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="running" now={now} />)}
+              {split.active.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="running" now={now} onJumpToTask={onJumpToTask} />)}
             </Group>
           ) : <Text style={{ color: colors.textMuted, fontSize: typeScale.small }} testID="node-tasks-idle">{split.stale.length ? '最近一天没有在动的任务' : '现在没有正在进行的任务'}</Text>}
           {g.queue.length ? (
             <Group title="排队" count={g.queue.length} hint="按创建时间展示，当前没有精确执行名次">
-              {collapseRepeats(g.queue).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="queue" now={now} />)}
+              {collapseRepeats(g.queue).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="queue" now={now} onJumpToTask={onJumpToTask} />)}
             </Group>
           ) : null}
           {split.stale.length ? (
@@ -179,11 +224,11 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
               quiet
               hint="签收后超过一天没动静。多半是节点收到了但没有回件,不一定还在跑。"
             >
-              {split.stale.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="stale" now={now} />)}
+              {split.stale.map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="stale" now={now} onJumpToTask={onJumpToTask} />)}
             </Group>
           ) : null}
           <Group title="最近完成" count={g.recent.length} collapsible defaultOpen>
-            {g.recent.length ? collapseRepeats(g.recent).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="done" now={now} />) : empty('最近没有结束的任务')}
+            {g.recent.length ? collapseRepeats(g.recent).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="done" now={now} onJumpToTask={onJumpToTask} />) : empty('最近没有结束的任务')}
           </Group>
           {g.selfOpen.length ? (
             <Group
@@ -193,7 +238,7 @@ export default function NodeTasksSection({ cfg, alias, embedded = false }: { cfg
               defaultOpen={false}
               hint="节点给自己发的定时提醒,收到只标已读、不回件,所以一直停在未结束。它们不算「运行中」。"
             >
-              {g.selfOpen.slice(0, 20).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="self" now={now} />)}
+              {g.selfOpen.slice(0, 20).map((row, i) => <TaskRow key={row.taskId} row={row} index={i} kind="self" now={now} onJumpToTask={onJumpToTask} />)}
               {g.selfOpen.length > 20 ? empty(`还有 ${g.selfOpen.length - 20} 条更早的`) : null}
             </Group>
           ) : null}

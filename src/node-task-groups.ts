@@ -46,11 +46,11 @@ export function groupNodeTasks(tasks: readonly HubTask[] | undefined | null, ali
   const selfOpen = selfOpenTasks
     .slice()
     .sort((a, b) => (b.created_at ?? '').localeCompare(a.created_at ?? ''))
-    .map(t => ({ taskId: t.task_id!, status: t.status ?? '', from: t.from_name ?? 'hub', summary: summarizeTask(t.content), content: t.content ?? '', createdAt: t.created_at, since: t.created_at, priority: t.priority }));
+    .map(t => ({ taskId: t.task_id!, status: t.status ?? '', from: t.from_name ?? 'hub', summary: summarizeTask(t.content), content: t.content ?? '', result: t.result, createdAt: t.created_at, since: t.created_at, priority: t.priority }));
   const recent = done
     .slice()
     .sort((a, b) => endKey(b).localeCompare(endKey(a)))
     .slice(0, Math.max(0, recentLimit))
-    .map(t => ({ taskId: t.task_id!, status: t.status ?? '', from: t.from_name ?? 'hub', summary: summarizeTask(t.content), content: t.content ?? '', createdAt: t.created_at, since: t.completed_at ?? t.updated_at ?? t.created_at, priority: t.priority }));
+    .map(t => ({ taskId: t.task_id!, status: t.status ?? '', from: t.from_name ?? 'hub', summary: summarizeTask(t.content), content: t.content ?? '', result: t.result, createdAt: t.created_at, since: t.completed_at ?? t.updated_at ?? t.created_at, priority: t.priority }));
   return { running, queue, selfOpen, recent };
 }

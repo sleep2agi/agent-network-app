@@ -61,11 +61,12 @@ export function useChatToolRail(): [ChatToolRailState, (f: (s: ChatToolRailState
   return [state, setState];
 }
 
-export default function ChatToolRail({ cfg, alias, session, state, setState, dockedWidth = null }: {
+export default function ChatToolRail({ cfg, alias, session, state, setState, dockedWidth = null, onJumpToTask }: {
   cfg: HubConfig; alias: string; session?: Session | null;
   state: ChatToolRailState; setState: (f: (s: ChatToolRailState) => ChatToolRailState) => void;
   /** 停靠时的实际面板宽度(chat-tool-rail-layout.dockedPanelWidth);null = 窗口太窄,面板浮在聊天上。 */
   dockedWidth?: number | null;
+  onJumpToTask?: (taskId: string) => void;
 }) {
   // 桌面整窗渐变时图标条透明，不在右下角把光切断；展开的面板仍是实底（要读文字）。
   const glass = useGlassChrome();
@@ -103,7 +104,7 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
             </Pressable>
           </View>
           <ScrollView contentContainerStyle={{ padding: spacing.md }} testID="chat-tool-body">
-            {active === 'tasks' ? <RailTasksPanel cfg={cfg} alias={alias} nodeId={(realSession as { node_id?: string | null } | null)?.node_id ?? null} /> : null}
+            {active === 'tasks' ? <RailTasksPanel cfg={cfg} alias={alias} nodeId={(realSession as { node_id?: string | null } | null)?.node_id ?? null} onJumpToTask={onJumpToTask} /> : null}
             {active === 'schedules' ? (
               scheduleNodeId
                 ? <NodeSchedulesSection cfg={cfg} nodeId={scheduleNodeId} editable createSeq={scheduleCreateSeq} emptyCreate={false} />
