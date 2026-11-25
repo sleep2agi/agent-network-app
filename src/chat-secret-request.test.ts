@@ -1,5 +1,5 @@
 // admin 2026-11-24 —— 聊天里的密钥卡（Hub request_secret ⇒ tasks.meta_json.reply_secret_request）。
-import { chatSecretRequestFromMeta, secretSavedAfter, secretSaveErrorText, secretSavedMessage, selectChatSecretScopes } from './chat-secret-request';
+import { secretDisplayName, chatSecretRequestFromMeta, secretSavedAfter, secretSaveErrorText, secretSavedMessage, selectChatSecretScopes } from './chat-secret-request';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean, extra?: unknown) => {
@@ -46,6 +46,11 @@ ck('独立节点只走独立节点作用域 (#5505)', same(
   selectChatSecretScopes('net_1', 'n_1', null),
   [{ networkId: 'net_1', daemonId: null, nodeId: 'n_1' }],
 ));
+
+ck('标题里带变量名(半角括号)时去掉', secretDisplayName({ key: 'GITHUB_TOKEN', label: '更新 GitHub 密钥 (GITHUB_TOKEN)' }) === '更新 GitHub 密钥', secretDisplayName({ key: 'GITHUB_TOKEN', label: '更新 GitHub 密钥 (GITHUB_TOKEN)' }));
+ck('全角括号同样去掉', secretDisplayName({ key: 'NPM_TOKEN', label: 'npm 令牌（NPM_TOKEN）' }) === 'npm 令牌');
+ck('标题只有变量名 / 没标题 ⇒ 用变量名', secretDisplayName({ key: 'K', label: '(K)' }) === 'K' && secretDisplayName({ key: 'K' }) === 'K');
+ck('保存消息不再重复变量名', secretSavedMessage({ key: 'GITHUB_TOKEN', label: 'GitHub 密钥 (GITHUB_TOKEN)' }).startsWith('🔑 已在卡片里保存「GitHub 密钥」（GITHUB_TOKEN）'));
 
 console.log(`chat-secret-request: ${p}/${t} passed`);
 if (p !== t) process.exit(1);

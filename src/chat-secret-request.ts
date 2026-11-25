@@ -35,8 +35,15 @@ export function chatSecretRequestFromMeta(metaJson: unknown): ChatSecretRequest 
 const SAVED_PREFIX = '🔑 已在卡片里保存';
 
 /** 保存成功后以用户身份发出的一句话：只有名字和变量名，没有值。 */
+/** 卡片上显示的名字:AI 常把变量名也写进 label(「更新 GitHub 密钥 (GITHUB_TOKEN)」),去掉它,变量名由卡片另行显示一次。 */
+export function secretDisplayName(req: Pick<ChatSecretRequest, 'key' | 'label'>): string {
+  const esc = req.key.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  const name = (req.label ?? '').replace(new RegExp(`\\s*[（(]\\s*${esc}\\s*[)）]\\s*`, 'g'), ' ').trim();
+  return name || req.key;
+}
+
 export function secretSavedMessage(req: Pick<ChatSecretRequest, 'key' | 'label'>): string {
-  return `${SAVED_PREFIX}「${req.label || req.key}」（${req.key}），下次启动后作为环境变量 ${req.key} 可用。`;
+  return `${SAVED_PREFIX}「${secretDisplayName(req)}」（${req.key}），下次启动后作为环境变量 ${req.key} 可用。`;
 }
 
 /** 这张卡（发于 cardAt）之后，**当前用户自己**发过「已保存 KEY」吗？

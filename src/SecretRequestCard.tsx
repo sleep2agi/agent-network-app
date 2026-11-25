@@ -14,6 +14,7 @@ import { Ionicons } from './icons';
 import { Text, TextInput } from './ui-text';
 import { colors, radius, spacing, type, weight } from './theme';
 import type { SecretRequest } from './secret-request';
+import { secretDisplayName } from './chat-secret-request';
 
 export type SecretRequestPhase = 'idle' | 'saving' | 'saved' | 'error';
 
@@ -33,7 +34,8 @@ export default function SecretRequestCard({
 }) {
   const [value, setValue] = useState('');
   const [shown, setShown] = useState(false);
-  const title = request.label ? request.label : request.key;
+  // AI 常把变量名也写进标题(「更新 GitHub 密钥 (GITHUB_TOKEN)」):去掉,变量名在右边单独显示一次。
+  const title = secretDisplayName(request);
   const saved = phase === 'saved';
   const saving = phase === 'saving';
   const disabled = saved || saving || !value.trim();
@@ -48,11 +50,12 @@ export default function SecretRequestCard({
       borderColor: colors.border,
       backgroundColor: colors.card,
     }}>
-      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6 }}>
-        <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong }} numberOfLines={1}>
+      {/* 标题可缩、最多两行;变量名徽章可缩、中间省略 —— 长标题不再把它挤出卡片(安卓真机 0.2.619 实拍) */}
+      <View style={{ flexDirection: 'row', alignItems: 'center', gap: 6, minWidth: 0 }}>
+        <Text style={{ color: colors.text, fontSize: type.body, fontWeight: weight.strong, flexShrink: 1 }} numberOfLines={2}>
           {request.hint ? title : `需要你的${title}`}
         </Text>
-        <Text style={{ color: colors.textMuted, fontSize: type.small }} numberOfLines={1} testID={`${testID}-key`}>
+        <Text style={{ color: colors.textMuted, fontSize: type.small, flexShrink: 1, maxWidth: '45%' }} numberOfLines={1} ellipsizeMode="middle" testID={`${testID}-key`}>
           {request.key}
         </Text>
       </View>
