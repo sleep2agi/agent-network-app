@@ -642,6 +642,19 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.621:
+            ### 新功能与修复
+
+            - Windows 独立设置窗改用透明自绘标题栏（#1730）：去掉系统纯白标题栏，融入整窗暖色渐变，保留 Win11 圆角/阴影与边缘缩放，与主窗保持一致。
+            - 聊天右侧「任务 → 项管」卡片重做与弹窗打开（#1733）：重做为独立圆角卡片（带状态圆点、优先级徽标、截止日期、子任务进度、短号与标签胶囊），点击卡片直接弹出独立任务详情窗。
+            - 聊天右侧「任务 → 最近完成」展开体验优化（#1728）：点开已完成任务分区展示「任务内容」与「回复结果」，支持选中复制与一键「定位到聊天」。
+            - 「新消息 ↓ / 回到最新」胶囊定位修复（#1729）：桌面端正确跟随输入卡顶部不再被压在输入框背后，展开右侧任务栏时始终在聊天列内居中不再越界。
+            - 任务与服务器左栏暖光配色对齐（#1732）：任务「视图」左栏与服务器左栏透出整窗暖黄渐变，浅色看板列改用低透明中性色，不再出现生硬白块。
+
+            ### 验证状态与已知问题
+
+            - 上述 5 项的单元测试、类型检查与 Playwright stub drives 已在 PR CI 全量通过；Windows 设置窗标题栏与右侧任务弹窗的真机手感需在 0.2.621 安装包上抽检确认。
+
             What's new in 0.2.620:
             ### 新功能与修复
 
