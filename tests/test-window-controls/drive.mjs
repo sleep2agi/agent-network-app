@@ -84,9 +84,9 @@ for (const c of cases) {
     const m = await page.evaluate(measure);
     table.push({ case: c.name, ...m, closes: JSON.stringify(m.closes) });
     if (c.name === 'win-settings') {
-      ck('win settings 窗:页面里 0 条自绘标题栏(原生标题栏已经有 – □ ×)', m.bars === 0, String(m.bars));
-      ck('win settings 窗:页面里 0 个 最小化/最大化/关闭 自绘控件', m.winControls === 0, String(m.winControls));
-      ck('win settings 窗:页面里 0 个关闭键 ⇒ 整窗恰好 1 个 ×(系统的)', m.closes.length === 0, JSON.stringify(m.closes));
+      ck('win settings 窗:恰好 1 条透明自绘标题栏(关原生白条,融入暖光)', m.bars === 1, String(m.bars));
+      ck('win settings 窗:3 个自绘窗口控件(– □ ×)', m.winControls === 3, String(m.winControls));
+      ck('win settings 窗:恰好 1 个关闭键', m.closes.length === 1, JSON.stringify(m.closes));
       ck('win settings 窗:侧栏左上角没有 ✕', m.sidebarCloses === 0, String(m.sidebarCloses));
     } else if (c.name === 'win-main') {
       ck('win 主窗(正控):恰好 1 条自绘标题栏', m.bars === 1, String(m.bars));
