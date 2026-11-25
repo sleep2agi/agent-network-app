@@ -1,4 +1,5 @@
 import assert from 'node:assert/strict';
+import { readFileSync } from 'node:fs';
 import { requirementsForAgent } from './rail-requirements';
 
 const base = { due: '', assignee: '', priority: 'P2', column: 'pool' } as const;
@@ -16,4 +17,13 @@ assert.deepEqual(r.pool.map(x => x.id), ['2']);
 assert.deepEqual(r.done.map(x => x.id), ['3']);
 // 没有 node_id 时只按 alias
 assert.deepEqual(requirementsForAgent(rows, { alias: 'A', nodeId: null }).doing.map(x => x.id), []);
+
+// admin 2026-11-25 截图：右侧「任务 → 项管」卡片重做（独立卡片 + 优先级/截止/短号/标签胶囊），点进去弹任务详情窗（回退 onOpenTask）。
+const panel = readFileSync(new URL('./RailTasksPanel.tsx', import.meta.url), 'utf8');
+assert.match(panel, /openTaskWindow\(/, 'clicking a rail requirement opens the task detail window');
+assert.match(panel, /if \(!opened\) onOpenTask\?\.\(req\.id, cfg\.networkId \?\? null\)/, 'falls back to onOpenTask when popout window unavailable');
+assert.match(panel, /shortIdLabel\(req\)/, 'renders short task seq #N');
+assert.match(panel, /PRIORITY_CODE\[req\.priority\]/, 'renders priority badge');
+const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
+assert.match(chat, /<ChatToolRail[^>]*onOpenTask=\{onOpenTask\}/, 'ChatScreen forwards onOpenTask to ChatToolRail');
 console.log('rail-requirements: ok');
