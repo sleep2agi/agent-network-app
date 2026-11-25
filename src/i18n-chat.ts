@@ -203,6 +203,10 @@ export const chatTranslations = {
   'voice.preparing': ['准备录音…', 'Preparing…'],
   'voice.recordingDesktop': ['正在录音 · Enter 完成 · Esc 取消', 'Recording · Enter to finish · Esc to cancel'],
   'voice.releaseText': ['松开 转文字', 'Release to transcribe'],
+  // admin 2026-11-24「学豆包」:按住浮层里的一行提示。
+  'voice.holdSendHint': ['松手发送，上移取消', 'Release to send · slide up to cancel'],
+  'voice.holdTextHint': ['松手转文字，上移取消', 'Release to transcribe · slide up to cancel'],
+  'voice.transcribingSend': ['正在识别，马上发送…', 'Transcribing, sending…'],
   'voice.holdSpaced': ['按住 说话', 'Hold to talk'],
   'voice.slideCancel': ['上滑到这里取消', 'Slide here to cancel'],
   'voice.releaseHint': ['松开 转文字 · 上滑 取消', 'Release to transcribe · Slide up to cancel'],

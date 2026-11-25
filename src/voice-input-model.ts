@@ -53,6 +53,8 @@ export type VoiceState = {
   startedAt: number;
   /** 最近一次提示(给界面显示,几秒后由界面清掉)。 */
   notice: string | null;
+  /** admin 2026-11-24「学豆包」:聊天里按住说话、在中间区松手 = 识别完直接发出去(而不是进输入框)。 */
+  sendOnDone?: boolean;
 };
 
 export type VoiceEvent =
@@ -62,7 +64,8 @@ export type VoiceEvent =
   | { type: 'move'; dy: number }
   /** 手机:手指进 / 出某个区(命中判定 + 滞回在 voice-hold-overlay-model.ts zoneAt)。 */
   | { type: 'zone'; zone: VoiceZone }
-  | { type: 'release'; now: number }
+  /** send:调用方允许「松手即发送」(只有聊天页、且输入框是空的时候)。 */
+  | { type: 'release'; now: number; send?: boolean }
   | { type: 'terminate' }
   | { type: 'tick'; now: number }
   | { type: 'transcribed'; text: string }
@@ -76,6 +79,8 @@ export type VoiceEffect =
   /** 停止录音并把音频送去识别。 */
   | { kind: 'stopAndTranscribe' }
   | { kind: 'insertText'; text: string }
+  /** 识别结果直接作为一条消息发出(豆包式「松手发送」)。 */
+  | { kind: 'sendText'; text: string }
   | { kind: 'routeToSettings' };
 
 /** 按住不够 minSeconds 就松手(微信同款文案)。 */
@@ -123,7 +128,7 @@ export function voiceStep(state: VoiceState, ev: VoiceEvent, limits: Limits = DE
       const outcome = releaseOutcome(zoneOfPhase(state.phase), (ev.now - state.startedAt) / 1000, limits.minSeconds);
       if (outcome === 'discard') return { state: { ...IDLE, notice: '已取消' }, effect: { kind: 'discardRecording' } };
       if (outcome === 'tooShort') return { state: { ...IDLE, notice: TOO_SHORT_NOTICE }, effect: { kind: 'discardRecording' } };
-      return { state: { ...state, phase: 'transcribing' }, effect: { kind: 'stopAndTranscribe' } };
+      return { state: { ...state, phase: 'transcribing', sendOnDone: !!ev.send && zoneOfPhase(state.phase) === 'neutral' }, effect: { kind: 'stopAndTranscribe' } };
     }
 
     // 手势被系统夺走(来电、滚动容器抢了 responder):按取消处理,绝不偷偷发出去。
@@ -143,7 +148,7 @@ export function voiceStep(state: VoiceState, ev: VoiceEvent, limits: Limits = DE
     case 'transcribed':
       if (state.phase !== 'transcribing') return { state, effect: none };
       if (!ev.text.trim()) return { state: { ...IDLE, notice: '没有识别到文字' }, effect: none };
-      return { state: { ...IDLE }, effect: { kind: 'insertText', text: ev.text.trim() } };
+      return { state: { ...IDLE }, effect: { kind: state.sendOnDone ? 'sendText' : 'insertText', text: ev.text.trim() } };
 
     case 'failed':
       if (state.phase !== 'transcribing') return { state, effect: none };

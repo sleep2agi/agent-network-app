@@ -15,7 +15,7 @@
 //
 // 坐标系 = 浮层宿主(聊天页根视图)的本地坐标;宿主在窗口里的原点由 ChatScreen 量出来再减掉。
 
-import { holdBarLabel, isLivePhase, zoneOfPhase, type VoicePhase, type VoiceZone } from './voice-input-model';
+import { isLivePhase, zoneOfPhase, type VoicePhase, type VoiceZone } from './voice-input-model';
 import { isAndroidLike } from './wide-layout';
 
 export type Point = { x: number; y: number };
@@ -54,6 +54,8 @@ export type HoldOverlayLayout = {
   bubbleWidth: number;
   /** 气泡(含尾巴)的底边 y:气泡往上长,字多了底边不动。 */
   bubbleBottom: number;
+  /** 豆包式「上移取消」:手指高过这条线 = 取消区(离开时多给 CANCEL_HYSTERESIS 的余量)。 */
+  cancelLineY: number;
 };
 
 const clamp = (v: number, lo: number, hi: number) => Math.max(lo, Math.min(hi, v));
@@ -67,7 +69,7 @@ export const HOLD_OVERLAY = {
   /** 气泡里流式文字最多直接显示几行,再多在气泡里滚。 */
   interimMaxLines: 3,
   interimLineHeight: 22,
-  bars: 21,
+  bars: 41,
   /** 气泡出现:缩放 + 淡入的时长(reduce-motion 时为 0)。 */
   scaleInMs: 150,
   /** 「说话时间太短」提示停留多久。 */
@@ -110,26 +112,31 @@ export function holdOverlayLayout(width: number, height: number, bottomInset: nu
     hitExit: HOLD_OVERLAY.hitExit,
     bubbleWidth: Math.round(Math.min(width - 112, 300)),
     bubbleBottom: circleY - HOLD_OVERLAY.circleSizeActive / 2 - 36,
+    // 光晕顶端再往上 40px:手指从底部「按住」条往上滑过整个光晕才算取消,不会手一抖就取消。
+    cancelLineY: arcTop - 40,
   };
 }
 
+/** 已经在取消区时,手指要回到线下方这么多才算离开(滞回,边界上抖动不会反复震)。 */
+export const CANCEL_HYSTERESIS = 24;
+
 /**
- * 手指在哪个区。滞回:已经在某个圈里时,离开要超过 hitExit(比 hitEnter 大 20px),
- * 边界上抖动不会反复进出(每次进出都有触感,抖起来会一直震)。两个圈相距很远,不会同时命中。
+ * 手指在哪个区(admin 2026-11-24「学豆包」):只有一个动作 —— **上移取消**。
+ * 高过 cancelLineY 进取消区;已经在取消区时要低过 cancelLineY + CANCEL_HYSTERESIS 才回到中间区。
+ * 以前的 ✕ / 文 两个圈去掉了:「文」(放进输入框)在聊天页变成「输入框里已有字时松手」的默认行为,
+ * 任务描述编辑器里松手本来就是插入,圈是多余的。
  */
 export function zoneAt(pt: Point, layout: HoldOverlayLayout, prev: VoiceZone): VoiceZone {
-  const within = (x: number, zone: VoiceZone) => Math.hypot(pt.x - x, pt.y - layout.circleY) <= (prev === zone ? layout.hitExit : layout.hitEnter);
-  if (within(layout.cancelX, 'cancel')) return 'cancel';
-  if (within(layout.textX, 'toText')) return 'toText';
-  return 'neutral';
+  const line = prev === 'cancel' ? layout.cancelLineY + CANCEL_HYSTERESIS : layout.cancelLineY;
+  return pt.y < line ? 'cancel' : 'neutral';
 }
 
-/** 状态文案(面板上方那一行)。中间区沿用「按住 说话」条的文案(不承诺「发送」,见 holdBarLabel)。 */
-export function holdOverlayLabel(phase: VoicePhase): string {
+/** 状态文案(波形上方那一行)。sends:这次松手会直接发出去(聊天页且输入框为空)。 */
+export function holdOverlayLabel(phase: VoicePhase, sends = false): string {
   if (phase === 'cancelArmed') return '松开手指，取消';
-  if (phase === 'toTextArmed') return '松开 放进草稿';
-  if (phase === 'transcribing') return '正在识别…';
-  return holdBarLabel(phase === 'idle' ? 'recording' : phase);
+  if (phase === 'transcribing') return sends ? '正在识别，马上发送…' : '正在识别…';
+  if (phase === 'starting') return '准备录音…';
+  return sends ? '松手发送，上移取消' : '松手转文字，上移取消';
 }
 
 export type HoldOverlayTone = 'neutral' | 'cancel' | 'toText';

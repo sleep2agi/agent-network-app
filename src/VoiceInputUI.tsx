@@ -18,6 +18,7 @@ import { ds, uiScale } from './ui-scale';
 import { composerControlSize } from './composer-row-layout';
 import { formatElapsed, holdBarTone, isLivePhase, toggleButtonShows, TOO_SHORT_NOTICE, VOICE_DRAFT_CARD_MAX_LINES, VOICE_TOGGLE_ICON, type ComposerInputMode, type VoicePhase } from './voice-input-model';
 import { barScale, HOLD_OVERLAY, holdOverlayTone, pushLevel, type HoldOverlayLayout } from './voice-hold-overlay-model';
+import Svg, { Defs, LinearGradient as SvgLinearGradient, Rect, Stop } from 'react-native-svg';
 import type { VoiceInput } from './useVoiceInput';
 import { elevated } from './elevation';
 
@@ -26,7 +27,12 @@ type MicHandlers = VoiceInput['micHandlers'];
 const holdBarLabel = (phase: VoicePhase) => t(phase === 'cancelArmed' ? 'voice.releaseCancel' : phase === 'transcribing' ? 'voice.transcribing' : ['starting', 'recording', 'toTextArmed'].includes(phase) ? 'voice.releaseText' : 'voice.holdSpaced');
 const cancelZoneLabel = (phase: VoicePhase) => t(phase === 'cancelArmed' ? 'voice.releaseCancel' : 'voice.slideCancel');
 const overlayHint = (phase: VoicePhase) => t(phase === 'cancelArmed' ? 'voice.releaseCancel' : phase === 'transcribing' ? 'voice.transcribing' : phase === 'starting' ? 'voice.preparing' : 'voice.releaseHint');
-const holdOverlayLabel = (phase: VoicePhase) => phase === 'toTextArmed' ? t('voice.releaseDraft') : holdBarLabel(phase === 'idle' ? 'recording' : phase);
+// 按住浮层的状态行(与 voice-hold-overlay-model.ts holdOverlayLabel 同一套文案,这里走 i18n)。
+const holdOverlayLabel = (phase: VoicePhase, sends = false) =>
+  phase === 'cancelArmed' ? t('voice.releaseCancel')
+    : phase === 'transcribing' ? t(sends ? 'voice.transcribingSend' : 'voice.transcribing')
+      : phase === 'starting' ? t('voice.preparing')
+        : t(sends ? 'voice.holdSendHint' : 'voice.holdTextHint');
 
 /**
  * 网页 / 桌面 webview:mousedown 的默认动作会把焦点从输入框挪到按钮上(textarea 失焦)。
@@ -191,7 +197,10 @@ function HoldWaveform({ level, live, reduceMotion, color }: { level: number; liv
   useEffect(() => {
     if (!live) { historyRef.current = []; return; }
     historyRef.current = pushLevel(historyRef.current, level, n);
-    const anims = historyRef.current.map((v, i) => Animated.timing(scales[i], { toValue: barScale(v, i, n), duration: reduceMotion ? 0 : 110, useNativeDriver: NATIVE_DRIVER }));
+    // 豆包式:最新的电平在正中,往两边对称散开(第 i 根取「离中间 |i-mid| 次之前」的电平)。
+    const mid = (n - 1) / 2;
+    const h = historyRef.current;
+    const anims = scales.map((sc, i) => Animated.timing(sc, { toValue: barScale(h[h.length - 1 - Math.abs(i - mid)] ?? 0, i, n), duration: reduceMotion ? 0 : 110, useNativeDriver: NATIVE_DRIVER }));
     Animated.parallel(anims).start();
   }, [level, live, reduceMotion, n, scales]);
   return (
@@ -202,14 +211,14 @@ function HoldWaveform({ level, live, reduceMotion, color }: { level: number; liv
 }
 
 /**
- * 手机「按住 说话」浮层(微信式)。不接收触摸(手势留在下面的大条上,命中判定在 ChatScreen 用同一份 layout 做)。
- *   · 全屏 50% 压暗;中间偏下一个带尾巴的晴蓝气泡(#609,原微信绿):电平波形 + 秒数 + 流式中间结果(≤3 行,再多在气泡里滚)
- *   · 左上 ✕(进去变红放大 →「松开手指，取消」),右上「文」(进去高亮 → 松开把文字放进草稿、不发送)
- *   · 底部弧形大面板盖住原来的大条,面板上方一行状态文案
+ * 手机「按住 说话」浮层 —— admin 2026-11-24「学豆包」。不接收触摸(手势留在下面的大条上,命中判定在 ChatScreen 用同一份 layout 做)。
+ *   · 不压暗聊天:底部升起一片蓝色光晕(上移进取消区变红),聊天内容照常看得见
+ *   · 光晕里:一行状态(「松手发送，上移取消」)+ 一条贯穿的细波形
+ *   · 边说边出字:识别中的文字以「自己发的蓝色气泡」出现在光晕上方(右对齐),说多了在气泡里滚
  *   · 松开太快:中间一个「说话时间太短」提示,停一会儿自己消失
- * `layout` 来自 voice-hold-overlay-model.ts holdOverlayLayout(宿主宽高 + 底部安全区)。
+ * sends:这次松手会直接发出去(聊天页且输入框为空)—— 只影响文案,行为在 useVoiceInput。
  */
-export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout: HoldOverlayLayout | null }) {
+export function VoiceHoldOverlay({ voice, layout, sends = false }: { voice: VoiceInput; layout: HoldOverlayLayout | null; sends?: boolean }) {
   useTranslation();
   const { phase, notice } = voice.state;
   const reduceMotion = useReduceMotion();
@@ -235,26 +244,8 @@ export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout:
     Animated.timing(appear, { toValue: 1, duration: HOLD_OVERLAY.scaleInMs, useNativeDriver: NATIVE_DRIVER }).start();
   }, [shown, reduceMotion, appear]);
 
-  const tone = holdOverlayTone(phase);
-  const circleScale = { cancel: useRef(new Animated.Value(1)).current, toText: useRef(new Animated.Value(1)).current };
-  useEffect(() => {
-    const to = (v: Animated.Value, on: boolean) => {
-      const target = on ? HOLD_OVERLAY.circleSizeActive / HOLD_OVERLAY.circleSize : 1;
-      if (reduceMotion) v.setValue(target);
-      else Animated.spring(v, { toValue: target, speed: 40, bounciness: 6, useNativeDriver: NATIVE_DRIVER }).start();
-    };
-    to(circleScale.cancel, tone === 'cancel');
-    to(circleScale.toText, tone === 'toText');
-  }, [tone, reduceMotion, circleScale.cancel, circleScale.toText]);
-
   const scrollRef = useRef<ScrollView>(null);
   if (!layout || (!shown && !toast)) return null;
-  const W = layout.width;
-  const live = isLivePhase(phase);
-  const cancel = tone === 'cancel';
-  const bubbleBg = cancel ? colors.failed : colors.voiceBubble;
-  const bubbleFg = cancel ? '#ffffff' : colors.onVoiceBubble;
-  const circleBox = (x: number) => ({ left: x - HOLD_OVERLAY.circleSize / 2, top: layout.circleY - HOLD_OVERLAY.circleSize / 2 });
 
   if (!shown) {
     return (
@@ -267,50 +258,55 @@ export function VoiceHoldOverlay({ voice, layout }: { voice: VoiceInput; layout:
     );
   }
 
+  const tone = holdOverlayTone(phase);
+  const cancel = tone === 'cancel';
+  const live = isLivePhase(phase);
+  // 光晕从光晕顶端再往上 96px 开始淡入,铺到宿主底部。
+  const glowTop = Math.max(0, layout.arcTop - 96);
+  const glowH = layout.height - glowTop;
+  const glowColor = cancel ? colors.voiceGlowCancel : colors.voiceGlow;
+  const waveY = layout.height - layout.bottomInset - 44;
+  const labelY = waveY - 44;
+  const bubbleBottom = layout.height - glowTop + 8;
   return (
     <View pointerEvents="none" style={styles.holdWrap} testID="voice-overlay" {...({ dataSet: { zone: tone, phase } } as object)}>
-      <Animated.View
-        testID="voice-hold-bubble"
-        style={[styles.holdBubbleBox, { width: layout.bubbleWidth, left: (W - layout.bubbleWidth) / 2, bottom: layout.height - layout.bubbleBottom }, { opacity: appear, transform: [{ scale: appear.interpolate({ inputRange: [0, 1], outputRange: [0.8, 1] }) }] }]}
-      >
-        <View style={[styles.holdBubble, { backgroundColor: bubbleBg }]}>
-          {phase === 'transcribing'
-            ? <ActivityIndicator color={bubbleFg} />
-            : <View style={styles.holdBubbleHead}>
-                <HoldWaveform level={voice.level} live={live} reduceMotion={reduceMotion} color={bubbleFg} />
-                <Text style={[styles.holdElapsed, { color: bubbleFg }]} testID="voice-elapsed">{formatElapsed(voice.elapsedMs)}</Text>
-              </View>}
-          {voice.interim ? (
-            <ScrollView
-              ref={scrollRef}
-              style={{ maxHeight: HOLD_OVERLAY.interimLineHeight * HOLD_OVERLAY.interimMaxLines }}
-              onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
-              showsVerticalScrollIndicator={false}
-              testID="voice-interim-scroll"
-            >
-              <Text style={[styles.holdInterim, { color: bubbleFg }, cancel && styles.interimCancel]} testID="voice-interim">{voice.interim}</Text>
-            </ScrollView>
-          ) : null}
-        </View>
-        <View style={[styles.holdTail, { backgroundColor: bubbleBg }]} />
+      <Animated.View style={[styles.holdGlow, { top: glowTop, height: glowH, opacity: appear }]} testID="voice-hold-glow">
+        <Svg width="100%" height="100%">
+          <Defs>
+            <SvgLinearGradient id="voiceGlow" x1="0" y1="0" x2="0" y2="1">
+              {/* 上沿淡入;到一半就完全不透明,把下面的输入区(模型 / 思考档位、大条、键盘与 + 按钮)整个盖住 */}
+              <Stop offset="0" stopColor={glowColor} stopOpacity="0" />
+              <Stop offset="0.3" stopColor={glowColor} stopOpacity="0.75" />
+              <Stop offset="0.5" stopColor={glowColor} stopOpacity="1" />
+              <Stop offset="1" stopColor={glowColor} stopOpacity="1" />
+            </SvgLinearGradient>
+          </Defs>
+          <Rect x="0" y="0" width="100%" height="100%" fill="url(#voiceGlow)" />
+        </Svg>
       </Animated.View>
-      {live ? (
-        <>
-          <Animated.View testID="voice-hold-cancel" style={[styles.holdCircle, circleBox(layout.cancelX), cancel && styles.holdCircleCancel, { transform: [{ scale: circleScale.cancel }] }]}>
-            <Ionicons name="close" size={28} color={cancel ? '#ffffff' : '#e5e7eb'} />
-          </Animated.View>
-          <Animated.View testID="voice-hold-totext" style={[styles.holdCircle, circleBox(layout.textX), tone === 'toText' && styles.holdCircleOn, { transform: [{ scale: circleScale.toText }] }]}>
-            <Text style={[styles.holdCircleGlyph, tone === 'toText' && { color: colors.onVoiceBubble }]}>{t('voice.textGlyph')}</Text>
-          </Animated.View>
-          <Text style={[styles.holdLabel, { top: layout.labelCenterY - 11 }]} testID="voice-hold-label">{holdOverlayLabel(phase)}</Text>
-          <View style={[styles.holdArcWrap, { top: layout.arcTop }]} testID="voice-hold-arc">
-            <View style={[styles.holdArc, { width: layout.arcDiameter, height: layout.arcDiameter, borderRadius: radius.pill, left: (W - layout.arcDiameter) / 2 }, tone !== 'neutral' && styles.holdArcDim]} />
-            <View style={[styles.holdArcContent, { bottom: layout.bottomInset, top: layout.arcSag }]} testID="voice-hold-arc-content">
-              <Ionicons name="mic" size={30} color={tone !== 'neutral' ? colors.textMuted : colors.voiceArcText} />
-            </View>
+      {voice.interim || phase === 'transcribing' ? (
+        <Animated.View testID="voice-hold-bubble" style={[styles.holdBubbleBox, { right: spacing.lg, maxWidth: Math.min(layout.width - 64, 340), bottom: bubbleBottom, opacity: appear }]}>
+          <View style={[styles.holdBubble, { backgroundColor: cancel ? colors.failed : colors.voiceBubble }]}>
+            {voice.interim ? (
+              <ScrollView
+                ref={scrollRef}
+                style={{ maxHeight: HOLD_OVERLAY.interimLineHeight * HOLD_OVERLAY.interimMaxLines }}
+                onContentSizeChange={() => scrollRef.current?.scrollToEnd({ animated: false })}
+                showsVerticalScrollIndicator={false}
+                testID="voice-interim-scroll"
+              >
+                <Text style={[styles.holdInterim, { color: colors.onVoiceBubble }, cancel && styles.interimCancel]} testID="voice-interim">{voice.interim}</Text>
+              </ScrollView>
+            ) : <ActivityIndicator color={colors.onVoiceBubble} />}
           </View>
-        </>
+        </Animated.View>
       ) : null}
+      <Text style={[styles.holdLabel, { top: labelY }]} testID="voice-hold-label">{holdOverlayLabel(phase, sends)}</Text>
+      <View style={[styles.holdWaveRow, { top: waveY - 16 }]} testID="voice-hold-wave">
+        {phase === 'transcribing'
+          ? <ActivityIndicator color="#ffffff" />
+          : <HoldWaveform level={voice.level} live={live} reduceMotion={reduceMotion} color="#ffffff" />}
+      </View>
     </View>
   );
 }
@@ -440,25 +436,15 @@ const makeStyles = () => StyleSheet.create({
   cancelZoneOn: { width: 76, height: 76, borderRadius: radius.pill, borderColor: '#fff', backgroundColor: '#dc2626' },
   cancelZoneText: { color: '#f3f4f6', fontSize: 12, fontWeight: '600', textShadowColor: 'rgba(0,0,0,0.6)', textShadowRadius: 3 },
   cancelZoneTextOn: { color: '#fff' },
-  holdWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 30, backgroundColor: 'rgba(0,0,0,0.5)', overflow: 'hidden' },
-  holdBubbleBox: { position: 'absolute', alignItems: 'center' },
-  holdBubble: { alignSelf: 'stretch', borderRadius: radius.bubble, paddingVertical: 12, paddingHorizontal: 14, gap: 8, minHeight: 64, justifyContent: 'center' },
-  holdBubbleHead: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10 },
-  holdBars: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 28 },
-  holdBar1: { width: 3, height: 28, borderRadius: radius.pill },
-  holdElapsed: { fontSize: 14, fontWeight: '600', fontVariant: ['tabular-nums'] },
+  holdWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 30, overflow: 'hidden' },
+  holdGlow: { position: 'absolute', left: 0, right: 0 },
+  holdBubbleBox: { position: 'absolute' },
+  holdBubble: { borderRadius: radius.bubble, borderBottomRightRadius: radius.mark, paddingVertical: 10, paddingHorizontal: 14, minHeight: 44, justifyContent: 'center' },
+  holdBars: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 32 },
+  holdBar1: { width: 3, height: 32, borderRadius: 2 },
   holdInterim: { fontSize: 16, lineHeight: HOLD_OVERLAY.interimLineHeight },
-  // 尾巴:转 45° 的小方块,一半藏在气泡下面。
-  holdTail: { width: HOLD_OVERLAY.bubbleTail * 2, height: HOLD_OVERLAY.bubbleTail * 2, marginTop: -HOLD_OVERLAY.bubbleTail, transform: [{ rotate: '45deg' }], borderRadius: 2 },
-  holdCircle: { position: 'absolute', width: HOLD_OVERLAY.circleSize, height: HOLD_OVERLAY.circleSize, borderRadius: radius.pill, backgroundColor: 'rgba(60,60,64,0.92)', alignItems: 'center', justifyContent: 'center' },
-  holdCircleCancel: { backgroundColor: '#e5484d' },
-  holdCircleOn: { backgroundColor: colors.voiceBubble },
-  holdCircleGlyph: { color: '#e5e7eb', fontSize: 22, fontWeight: '600' },
-  holdLabel: { position: 'absolute', left: 0, right: 0, height: 22, lineHeight: 22, textAlign: 'center', color: '#f3f4f6', fontSize: 15, fontWeight: '600' },
-  holdArcWrap: { position: 'absolute', left: 0, right: 0, bottom: 0, overflow: 'hidden' },
-  holdArc: { position: 'absolute', top: 0, backgroundColor: colors.voiceArc },
-  holdArcDim: { backgroundColor: colors.voiceArcDim },
-  holdArcContent: { position: 'absolute', left: 0, right: 0, alignItems: 'center', justifyContent: 'center' },
+  holdLabel: { position: 'absolute', left: 0, right: 0, height: 22, lineHeight: 22, textAlign: 'center', color: '#ffffff', fontSize: 15, fontWeight: '500' },
+  holdWaveRow: { position: 'absolute', left: 0, right: 0, height: 32, alignItems: 'center', justifyContent: 'center' },
   holdToastWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 30, alignItems: 'center', justifyContent: 'center' },
   holdToast: { width: 140, paddingVertical: 18, borderRadius: radius.control, backgroundColor: 'rgba(20,20,24,0.88)', alignItems: 'center', gap: 8 },
   holdToastText: { color: '#ffffff', fontSize: 14 },

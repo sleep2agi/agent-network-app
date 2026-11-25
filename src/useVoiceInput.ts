@@ -119,7 +119,15 @@ const simSnapshot = () => voiceSimStore.get();
  */
 export type VoiceZoneAt = (pageX: number, pageY: number, prev: VoiceZone) => VoiceZone | null;
 
-export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice: (text: string) => void; zoneAt?: VoiceZoneAt }): VoiceInput {
+export function useVoiceInput(opts: {
+  onInsert: (text: string) => void;
+  onNotice: (text: string) => void;
+  zoneAt?: VoiceZoneAt;
+  /** admin 2026-11-24「学豆包」:松手时问一次「这次能直接发吗」(聊天页 + 输入框为空才返回 true)。不传 = 永远进输入框。 */
+  sendOnRelease?: () => boolean;
+  /** sendOnRelease 生效时,识别结果从这里发出去;不传就退回 onInsert。 */
+  onSend?: (text: string) => void;
+}): VoiceInput {
   const recorder = useVoiceRecorder();
   const sim = useSyncExternalStore(VOICE_SIM ? voiceSimStore.subscribe : noSim, simSnapshot, simSnapshot);
   const configured = useSyncExternalStore(subscribeConfigured, getConfigured, getConfigured);
@@ -190,6 +198,9 @@ export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice
       case 'insertText':
         optsRef.current.onInsert(effect.text);
         break;
+      case 'sendText':
+        (optsRef.current.onSend ?? optsRef.current.onInsert)(effect.text);
+        break;
       case 'routeToSettings':
         setSettingsPrompt(true);
         break;
@@ -246,7 +257,7 @@ export function useVoiceInput(opts: { onInsert: (text: string) => void; onNotice
         if (zone) dispatch({ type: 'zone', zone });
         else dispatch({ type: 'move', dy: e.nativeEvent.pageY - startYRef.current });
       },
-      onResponderRelease: () => dispatch({ type: 'release', now: Date.now() }),
+      onResponderRelease: () => dispatch({ type: 'release', now: Date.now(), send: optsRef.current.sendOnRelease?.() === true }),
       onResponderTerminate: () => dispatch({ type: 'terminate' }),
     },
   };
