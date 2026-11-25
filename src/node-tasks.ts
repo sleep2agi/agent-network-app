@@ -15,6 +15,8 @@ export interface NodeTaskRow {
   /** 第一行、最多 140 字的摘要;完整内容看 detail。 */
   summary: string;
   content: string;
+  /** 节点回复/执行结果(终态任务展示用)。 */
+  result?: string;
   createdAt?: string;
   /** 运行中:started_at ?? delivered_at ?? created_at;排队:created_at。 */
   since?: string;
@@ -54,6 +56,7 @@ function toRow(t: HubTask, since?: string): NodeTaskRow | null {
     from: t.from_name ?? 'hub',
     summary: summarizeTask(t.content),
     content: t.content ?? '',
+    result: t.result,
     createdAt: t.created_at,
     since,
     lastActivity: latestActivity(t),

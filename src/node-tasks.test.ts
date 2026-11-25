@@ -36,5 +36,10 @@ check('NodeTasksSection 按 to_name=alias 拉任务并分组', section.includes(
 // 2026-11-19 admin「任务的界面也很丑」：优先级只给「紧急」挂标（quietPriorityPill），相同定时派活合并（collapseRepeats）。
 check('NodeTasksSection 用 taskPreview / splitStale / quietPriorityPill / collapseRepeats / AliasAvatar / MarkdownMessage',
   ['taskPreview(', 'splitStale(', 'quietPriorityPill(', 'collapseRepeats(', '<AliasAvatar', '<MarkdownMessage'].every(s => section.includes(s)));
+// 2026-11-25 admin「完成 点进去也有点奇怪」：点开「最近完成」同时展示任务内容与回复结果，展开区独立于 Pressable 且支持定位到聊天。
+check('NodeTasksSection 展开态分区展示任务内容 + 回复结果，并支持定位到聊天',
+  ['任务内容', '回复结果', '定位到聊天', 'onJumpToTask'].every(s => section.includes(s)));
+const chatScreen = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
+check('ChatScreen 把 goToMessage 传给 ChatToolRail(onJumpToTask)', chatScreen.includes('onJumpToTask={goToMessage}'));
 console.log(`node tasks: ${passed}/${total} checks passed`);
 if (passed !== total) process.exit(1);

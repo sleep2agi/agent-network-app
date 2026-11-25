@@ -14,7 +14,7 @@ const tasks = [
   { task_id: 'r1', from_name: 'admin', to_name: A, status: 'acked', created_at: '2026-09-24 01:00:00', content: '真在跑的活' },
   { task_id: 'q1', from_name: '通信龙', to_name: A, status: 'pending', created_at: '2026-09-24 01:05:00', content: '排队的活' },
   ...Array.from({ length: 30 }, (_, i) => ({ task_id: `s${i}`, from_name: A, to_name: A, status: 'acked', created_at: `2026-09-24 00:${String(i).padStart(2, '0')}:00`, content: `自投提醒 ${i}` })),
-  { task_id: 'd1', from_name: 'admin', to_name: A, status: 'replied', created_at: '2026-09-23 10:00:00', completed_at: '2026-09-23 10:05:00', content: '旧的完成' },
+  { task_id: 'd1', from_name: 'admin', to_name: A, status: 'replied', created_at: '2026-09-23 10:00:00', completed_at: '2026-09-23 10:05:00', content: '旧的完成', result: '旧任务的回复结果' },
   { task_id: 'd2', from_name: 'admin', to_name: A, status: 'failed', created_at: '2026-09-24 00:10:00', completed_at: '2026-09-24 00:20:00', content: '新的失败' },
   { task_id: 'sd', from_name: A, to_name: A, status: 'replied', created_at: '2026-09-24 00:30:00', completed_at: '2026-09-24 00:31:00', content: '自投但回了' },
 ];
@@ -25,6 +25,7 @@ ck('自投提醒单独成组,30 条都在', g.selfOpen.length === 30);
 ck('自投提醒最新的在前', g.selfOpen[0]?.taskId === 's29');
 ck('排队的活仍在队列', g.queue.length === 1 && g.queue[0].taskId === 'q1');
 ck('最近完成按结束时间倒序(新的失败在前)', g.recent[0].taskId === 'sd' && g.recent.map(r => r.taskId).indexOf('d2') < g.recent.map(r => r.taskId).indexOf('d1'));
+ck('最近完成保留任务回复 result(点开能看回复结果)', g.recent.find(r => r.taskId === 'd1')?.result === '旧任务的回复结果');
 ck('最近完成受上限控制', groupNodeTasks(tasks, A, 2).recent.length === 2);
 ck('旧的 partitionNodeTasks 会把自投提醒算进运行中(这正是要修的)', partitionNodeTasks(tasks).running.length === 31);
 ck('isSelfTask:发件人是别人 → 否', !isSelfTask({ from_name: 'admin', to_name: A }, A));
