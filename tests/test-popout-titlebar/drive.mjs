@@ -88,7 +88,7 @@ const measure = () => {
     .filter(el => ['最小化', '最大化', '向下还原', '关闭'].includes(el.getAttribute('aria-label') || ''))
     .map(el => ({ label: el.getAttribute('aria-label'), ...box(el) }));
   const header = [...document.querySelectorAll('[data-testid="chat-header"],[data-testid="screen-header"]')].filter(vis)[0] ?? null;
-  const more = document.querySelector('[data-testid="chat-header-more"]');
+  const more = document.querySelector('[data-testid="chat-header-more"]') ?? document.querySelector('[data-testid="chat-tool-more"]');
   const avatar = header ? header.firstElementChild : null;
   const title = document.querySelector('[data-testid="chat-header-title"]');
   const back = header ? [...header.querySelectorAll('[role="button"]')].find(el => el.getAttribute('aria-label') === '返回') : null;
@@ -139,12 +139,13 @@ try {
   ck('win-chat: 控件贴右边(关闭键右沿 = 窗口右沿)', right === W, String(right));
   ck('win-chat: 控件在页头这一行里(不压到消息区)', m.controls.every(c => c.b <= m.header.b), `${m.controls[0]?.b} ≤ ${m.header?.b}`);
   const ctrlLeft = Math.min(...m.controls.map(c => c.x));
-  ck('win-chat: ⋯ 不和控件重叠(右沿 ≤ 控件左沿 − 4)', !!m.more && m.more.r <= ctrlLeft - 4 && !m.controls.some(c => overlap(c, m.more)), `⋯.r=${m.more?.r} ctrl.x=${ctrlLeft}`);
+  const ctrlBottom = Math.max(...m.controls.map(c => c.b));
+  ck('win-chat: ⋯ 不和控件重叠(控件左侧或右侧工具栏下方)', !!m.more && (m.more.r <= ctrlLeft - 4 || m.more.y >= ctrlBottom) && !m.controls.some(c => overlap(c, m.more)), `⋯=${JSON.stringify(m.more)} ctrl.x=${ctrlLeft} ctrl.b=${ctrlBottom}`);
   ck('win-chat: 名字列不压到控件', !!m.title && m.title.r <= ctrlLeft, `${m.title?.r} ≤ ${ctrlLeft}`);
   ck('win-chat: 页头是 deep 拖动区', m.headerDrag === 'deep', String(m.headerDrag));
 
-  // 真实鼠标:页头空白(名字列右边、⋯ 左边,页头垂直中线)按下 = 拖动
-  const blankX = Math.round((m.title.r + m.more.x) / 2) - 40, midY = Math.round(m.header.y + m.header.h / 2);
+  // 真实鼠标:页头空白(名字列右边、控件左边,页头垂直中线)按下 = 拖动
+  const blankX = Math.round((m.title.r + Math.min(ctrlLeft, m.more.x)) / 2) - 40, midY = Math.round(m.header.y + m.header.h / 2);
   await invoked(page);
   await page.mouse.move(blankX, midY); await page.mouse.down(); await page.mouse.up();
   ck('win-chat: 页头空白处按下 → start_dragging', (await invoked(page)).includes('plugin:window|start_dragging'));
@@ -208,9 +209,9 @@ try {
 // ── win-node:分离窗里的「节点信息」页 ───────────────────────────────────────────
 try {
   const { ctx, page, errors } = await open({ ua: WIN_UA, label: CHAT_LABEL, osName: 'windows' });
-  await page.locator('[data-testid="chat-header-more"]').first().waitFor({ timeout: 20000 });
+  await page.locator('[data-testid="chat-header-more"], [data-testid="chat-tool-more"]').first().waitFor({ timeout: 20000 });
   await page.waitForTimeout(400);
-  await page.locator('[data-testid="chat-header-more"]').first().click();
+  await page.locator('[data-testid="chat-header-more"], [data-testid="chat-tool-more"]').first().click();
   // 聊天信息第一行是 agent 的资料行(label = alias,chat-info-model.ts 'node'),点它进「节点信息」
   await page.locator('[data-testid="chat-info-panel"]').getByText('示例-A').first().click({ timeout: 5000 });
   await page.locator('[data-testid="screen-header"]').first().waitFor({ timeout: 10000 });
