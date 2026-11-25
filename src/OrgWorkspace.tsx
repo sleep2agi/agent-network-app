@@ -18,7 +18,7 @@ import { fetchAuthMe } from './user-admin-api';
 import { canManageUsers, type AuthMe } from './user-admin';
 import { mobileGlowActive } from './glow-mode';
 
-export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled }: { cfg: HubConfig; phone?: boolean; onOpenScheduled?: (request: ScheduleOpenRequest) => void }) {
+export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled, onOpenAgentChat }: { cfg: HubConfig; phone?: boolean; onOpenScheduled?: (request: ScheduleOpenRequest) => void; onOpenAgentChat?: (target: { alias: string; networkId?: string }) => void }) {
   useTranslation();
   // 管理员 2026-11-15「点击 AGENT,设置不了权限什么鬼」:点 Agent 行 → 在这一页里打开它的节点页(落在「权限」),
   // 左上「← 组织」回来。组织页不卸载(只藏起来),回来时部门、搜索、滚动位置都还在。
@@ -68,7 +68,7 @@ export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled }: { 
             <Text style={styles.crumbSep}>/</Text>
             <Text numberOfLines={1} style={styles.crumbHere}>{openAlias}</Text>
           </View>}
-          <NodeDetailScreen key={openAlias} cfg={cfg} alias={openAlias} desktop={!phone} initialSection="permissions" onBack={() => setOpenAlias(null)} onOpenScheduled={onOpenScheduled} />
+          <NodeDetailScreen key={openAlias} cfg={cfg} alias={openAlias} desktop={!phone} initialSection="permissions" onBack={() => setOpenAlias(null)} onOpenScheduled={onOpenScheduled} onOpenChat={onOpenAgentChat ? (a, net) => onOpenAgentChat({ alias: a, networkId: net ?? networkId }) : undefined} />
         </View>
       ) : null}
     </View>

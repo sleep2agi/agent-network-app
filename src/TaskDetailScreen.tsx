@@ -62,12 +62,15 @@ export default function TaskDetailScreen({
   taskId,
   onBack,
   desktop = false,
+  onOpenChat,
 }: {
   cfg: HubConfig;
   taskId: string;
   onBack: () => void;
   /** Tauri desktop workspace: the rail's 任务 is the way back — no phone back (pane-header.ts). */
   desktop?: boolean;
+  /** 点击发起方/接收方头像与名字跳转至对应 Agent 对话。 */
+  onOpenChat?: (alias: string) => void;
 }) {
   useTranslation();
   const [task, setTask] = useState<HubTask | null>(null);
@@ -197,21 +200,41 @@ export default function TaskDetailScreen({
             />
             <InfoRow
               label={tr('tasks.copy.154')}
-              valueNode={
-                <View style={styles.aliasInline}>
-                  <AliasAvatar alias={task.from_name || '?'} size={20} />
-                  <Text style={styles.infoVal}>{task.from_name || '?'}</Text>
-                </View>
-              }
+              valueNode={(() => {
+                const name = task.from_name?.trim();
+                const clickable = !!onOpenChat && !!name && name !== '?' && name !== 'api';
+                const inner = (
+                  <View style={styles.aliasInline}>
+                    <AliasAvatar alias={name || '?'} size={20} />
+                    <Text style={[styles.infoVal, clickable && { color: colors.accent }]}>{name || '?'}</Text>
+                    {clickable ? <Ionicons name="chevron-forward" size={14} color={colors.textMuted} /> : null}
+                  </View>
+                );
+                return clickable ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel={name} testID="task-detail-from-chat" onPress={() => onOpenChat!(name!)} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
+                    {inner}
+                  </Pressable>
+                ) : inner;
+              })()}
             />
             <InfoRow
               label={tr('tasks.copy.155')}
-              valueNode={
-                <View style={styles.aliasInline}>
-                  <AliasAvatar alias={task.to_name || '?'} size={20} />
-                  <Text style={styles.infoVal}>{task.to_name || '?'}</Text>
-                </View>
-              }
+              valueNode={(() => {
+                const name = task.to_name?.trim();
+                const clickable = !!onOpenChat && !!name && name !== '?' && name !== 'api';
+                const inner = (
+                  <View style={styles.aliasInline}>
+                    <AliasAvatar alias={name || '?'} size={20} />
+                    <Text style={[styles.infoVal, clickable && { color: colors.accent }]}>{name || '?'}</Text>
+                    {clickable ? <Ionicons name="chevron-forward" size={14} color={colors.textMuted} /> : null}
+                  </View>
+                );
+                return clickable ? (
+                  <Pressable accessibilityRole="button" accessibilityLabel={name} testID="task-detail-to-chat" onPress={() => onOpenChat!(name!)} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
+                    {inner}
+                  </Pressable>
+                ) : inner;
+              })()}
             />
             {task.expires_at ? (
               <InfoRow label={tr('tasks.copy.156')} value={formatTime(task.expires_at)} />

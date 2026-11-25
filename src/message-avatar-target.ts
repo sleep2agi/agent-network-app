@@ -12,6 +12,7 @@ export function messageAvatarAuthor(input: {
   currentUserId?: string | null;
   row: {
     from_node_id?: string | null;
+    to_node_id?: string | null;
     from_name?: string;
     to_name?: string;
     _localId?: string;
@@ -20,6 +21,10 @@ export function messageAvatarAuthor(input: {
   const { row } = input;
   if (input.part === 'reply') {
     // A reply to an outgoing task is authored by its recipient, not the viewed node.
+    if (input.outgoing) {
+      const toNodeId = row.to_node_id?.trim();
+      if (toNodeId) return { nodeId: toNodeId };
+    }
     const label = (input.outgoing ? row.to_name : input.currentAlias)?.trim();
     return label ? { label } : {};
   }

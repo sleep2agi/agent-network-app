@@ -79,7 +79,7 @@ export type GroupChatRef = { group_id: string; name: string };
 
 // 私信和群聊共用这一页(输入区、附件、乐观发送 + client_request_id 重试、看图都一样);不同的只有取数 / 发送 / 已读,
 // 以及群里收到的消息按各自的发信人画头像和名字。peer 与 group 二选一。
-export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, onBack, desktop = false, hideBack = false, onOpenTask }: {
+export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, onBack, desktop = false, hideBack = false, onOpenTask, onOpenSenderDm }: {
   cfg: HubConfig;
   networkId: string;
   peer?: Human;
@@ -89,6 +89,8 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   hideBack?: boolean;
   /** 任务通知私信(meta.task_notice):气泡下「查看任务 ›」打开那张任务。不传 = 不画。 */
   onOpenTask?: (requirementId: string) => void;
+  /** 群聊里点他人头像跳转到私信。 */
+  onOpenSenderDm?: (person: Human) => void;
 }) {
   const glass = useGlassChrome();
   useTranslation();
@@ -504,11 +506,21 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
             const taskNotice = onOpenTask && !isGroup ? taskNoticeOf(item.meta_json) : null;
             // 群里收到的消息:各画各的发信人;私信:对方。
             const from = isGroup && !out ? senderOf(item, groupPeople) : { username: peer.username, name };
+            const groupSender = isGroup && !out && onOpenSenderDm
+              ? (item.sender_user_id ? groupPeople.find(x => x.user_id === item.sender_user_id) : undefined)
+                ?? groupPeople.find(x => x.username === from.username)
+              : undefined;
             return (
               <View style={styles.bubbleWrap} testID={`dm-msg-${out ? 'out' : 'in'}`}>
                 {showHeader && item.created_at ? <ChatTimePill time={formatChatHeader(item.created_at)} boxStyle={styles.timePill} textStyle={styles.timePillText} testID="dm-time-pill" /> : null}
                 <View style={[styles.messageRow, out ? styles.sentRow : styles.replyRow]}>
-                  {out ? null : isGroup ? <AliasAvatar alias={from.username} size={36} /> : <HumanAvatar hubUrl={cfg.serverUrl} token={cfg.token} person={peer} size={36} testID="dm-incoming-avatar" />}
+                  {out ? null : isGroup ? (
+                    groupSender ? (
+                      <Pressable accessibilityRole="button" accessibilityLabel={from.name} testID="group-sender-avatar" onPress={() => onOpenSenderDm!(groupSender)} style={({ pressed }) => [pressed && { opacity: 0.7 }]}>
+                        <AliasAvatar alias={from.username} size={36} />
+                      </Pressable>
+                    ) : <AliasAvatar alias={from.username} size={36} />
+                  ) : <HumanAvatar hubUrl={cfg.serverUrl} token={cfg.token} person={peer} size={36} testID="dm-incoming-avatar" />}
                   <View style={[styles.messageContent, out && styles.sentContent, !out && bubbleCap]}>
                     <ChatMetaLine name={out ? me : from.name} time={item.created_at ? formatChatHeader(item.created_at) : ''} textStyle={styles.messageAuthor} style={styles.authorRow} testID="dm-author" />
                     <View style={[styles.bubble, !out && styles.replyBubble, !out && desktop && styles.replyBubbleDesktop]} testID="dm-bubble">

@@ -232,6 +232,7 @@ export default function NodeDetailScreen({
   touch = false,
   desktop = false,
   onOpenScheduled,
+  onOpenChat,
   windowChrome = null,
   initialSection = 'overview',
 }: {
@@ -249,6 +250,8 @@ export default function NodeDetailScreen({
   /** 「定时任务」分区:点一行 / 「＋ 新建」→ 定时任务页落在那一条 / 打开预填了这个节点的新建表单。
    *  没有(独立聊天窗口)时分区只读:行不可点,不画新建。 */
   onOpenScheduled?: (request: ScheduleOpenRequest) => void;
+  /** 从组织页 / 节点详情点头像或「发消息」直接跳去与该节点聊天。 */
+  onOpenChat?: (alias: string, networkId?: string) => void;
   /** 打开时落在哪一节(默认概览)。一级栏「组织」点 Agent 直接落在「权限」(管理员 2026-11-15「点击 AGENT,设置不了权限」)。 */
   initialSection?: NodeSectionKey;
   /** 分离聊天窗:页头兼当标题栏(window-shell.ts popoutChatChrome)。其他地方不传。 */
@@ -576,10 +579,25 @@ export default function NodeDetailScreen({
   // agent-node 的版本由节点自己上报在 status 行的 `version` 上（实测 `2.5.0-preview.198`）。
   const versionPair = versionPairHint({ cliVersion: node?.launched_by_cli_version, nodeVersion: (s as Session & { version?: string | null }).version });
 
+  const canOpenChat = !!onOpenChat && !(node ? isHostSupervisorNode(node) : false);
+  const openNodeChat = () => onOpenChat?.(s.alias, s.network_id ?? cfg.networkId);
+
   // 头部卡片:头像 + 名字 + 在线状态 + 运行时/模型/版本/主机小标签。常驻,切分区不动。
   const headerCard = (
     <View style={[localStyles.headerCard, { borderBottomColor: colors.border }]}>
-      <AliasAvatar alias={s.alias} size={compact ? 44 : 56} />
+      {canOpenChat ? (
+        <Pressable
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.sender.message')}
+          testID="node-detail-avatar-chat"
+          onPress={openNodeChat}
+          style={({ pressed }) => [pressed && { opacity: 0.7 }]}
+        >
+          <AliasAvatar alias={s.alias} size={compact ? 44 : 56} />
+        </Pressable>
+      ) : (
+        <AliasAvatar alias={s.alias} size={compact ? 44 : 56} />
+      )}
       <View style={{ flex: 1, minWidth: 0, gap: 6 }}>
         <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }}>
           <Text style={{ color: colors.text, fontSize: typeScale.heading, fontWeight: weight.strong }} selectable numberOfLines={1}>
@@ -637,6 +655,22 @@ export default function NodeDetailScreen({
             <View style={{ width: 7, height: 7, borderRadius: radius.pill, backgroundColor: chipColor }} />
             <Text style={{ color: colors.textSecondary, fontSize: typeScale.small }}>{online ? s.status : 'offline'}</Text>
           </View>
+          {canOpenChat ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.sender.message')}
+              testID="node-detail-open-chat"
+              onPress={openNodeChat}
+              style={({ pressed }) => [
+                localStyles.statusPill,
+                { borderColor: colors.accent, backgroundColor: colors.accent + '14' },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons name="chatbubble-ellipses-outline" size={13} color={colors.accent} />
+              <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: weight.medium }}>{t('chat.sender.message')}</Text>
+            </Pressable>
+          ) : null}
           {/* 所属部门:有部门表且这个节点有归属时才出现(admin 2026-10-26 按部门分区之后,
               从军团点进来就能对上「它归谁」,不用再翻组织架构页)。 */}
           {/* #4863 —— 「所属部门」这一行**始终出现**（未归属也显示），可点开直接改；
