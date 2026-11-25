@@ -104,13 +104,18 @@ const popoutControlsShow = (label: string): boolean => {
   }
 };
 const COMPUTED_DECORATIONS = 'chatPopoutDecorations(tauriShellPlatform())';
+const SETTINGS_DECORATIONS = 'settingsWindowDecorations(tauriShellPlatform())';
 const decorationsOn = (expr: string, platform: 'windows' | 'mac'): boolean =>
-  expr === COMPUTED_DECORATIONS ? (shell as any).chatPopoutDecorations(platform) : expr !== 'false'; // Tauri 默认 true
+  expr === COMPUTED_DECORATIONS
+    ? (shell as any).chatPopoutDecorations(platform)
+    : expr === SETTINGS_DECORATIONS
+      ? (shell as any).settingsWindowDecorations(platform)
+      : expr !== 'false'; // Tauri 默认 true
 
 for (const s of sites) {
   const reg = REGISTRY[`${s.file} ${s.labelExpr}`];
   if (!reg) continue;
-  const deco = s.options.match(/\bdecorations:\s*(true|false|chatPopoutDecorations\(tauriShellPlatform\(\)\))/)?.[1];
+  const deco = s.options.match(/\bdecorations:\s*(true|false|chatPopoutDecorations\(tauriShellPlatform\(\)\)|settingsWindowDecorations\(tauriShellPlatform\(\)\))/)?.[1];
   ck(`${reg.name}: decorations 显式写明(不靠默认值)`, !!deco, deco ?? 'missing');
   if (!deco) continue;
   const native = decorationsOn(deco, 'windows');
@@ -120,6 +125,13 @@ for (const s of sites) {
     Number(native) + Number(bar) + Number(popout) === 1);
   ck(`${reg.name}: macOS 上保留 decorations(红黄绿灯是系统的)`, decorationsOn(deco, 'mac'));
 }
+
+// ── 独立设置窗:Windows 同样改用透明自绘 WinTitleBar(admin 2026-11-25「这个也挺难看的」) ───────
+const settingsSite = sites.find(s => s.labelExpr === 'SETTINGS_WINDOW_LABEL');
+ck('设置窗 decorations 按平台算(Windows 关原生白条标题栏)', settingsSite?.options.includes(`decorations: ${SETTINGS_DECORATIONS}`) === true);
+ck('设置窗:Windows → decorations false + 挂 WinTitleBar,macOS → decorations true',
+  (shell as any).settingsWindowDecorations?.('windows') === false && (shell as any).settingsWindowDecorations?.('mac') === true && winTitleBarShows(SETTINGS_WINDOW_LABEL));
+ck('设置窗:无边框保留阴影 + 可缩放(Win11 圆角/阴影与边缘缩放)', /\bshadow:\s*true\b/.test(settingsSite?.options ?? '') && /\bresizable:\s*true\b/.test(settingsSite?.options ?? ''));
 
 // ── 分离聊天窗:页头兼当标题栏(Vincent 2026-09-30「上面那个还是挺多余的」)──────────────
 const chatSite = sites.find(s => s.labelExpr === 'chatWindowLabel()');

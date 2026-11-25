@@ -48,8 +48,11 @@ export const isWindowsTauriShell = (platformOS: string = 'web'): boolean =>
 // 设置窗于是叠出两排 – □ ×。规则:只有主窗画自绘标题栏,其余窗口一律交给系统标题栏。
 // 新开一种窗口时,在 src/window-chrome.test.ts 的清单里登记它的 decorations。
 
-/** 唯一一个 decorations=false(Windows)、自己画标题栏的窗口:tauri.conf.json 的默认窗口。 */
+/** 默认主窗 label（tauri.conf.json 的唯一窗口）。 */
 export const CUSTOM_TITLE_BAR_WINDOW_LABEL = 'main';
+
+/** Windows 上关掉原生标题栏、改画透明自绘 WinTitleBar 的窗口集合（主窗 + 独立设置窗）。 */
+export const CUSTOM_TITLE_BAR_WINDOW_LABELS = new Set([CUSTOM_TITLE_BAR_WINDOW_LABEL, 'settings']);
 
 /** 当前 webview 所在窗口的 label(Tauri v2 在页面加载前注入)。不在壳里或拿不到时为 null。 */
 export const currentWindowLabel = (): string | null => {
@@ -59,11 +62,14 @@ export const currentWindowLabel = (): string | null => {
 };
 
 /**
- * 这个窗口要不要画自绘标题栏 / 窗口控件。只有主窗要;拿不到 label(真壳里不会发生)按主窗处理,
+ * 这个窗口要不要画自绘标题栏 / 窗口控件。主窗与独立设置窗要;拿不到 label(真壳里不会发生)按主窗处理,
  * 免得主窗丢掉唯一的关闭按钮。
  */
 export const windowDrawsOwnTitleBar = (label: string | null = currentWindowLabel()): boolean =>
-  label === null || label === CUSTOM_TITLE_BAR_WINDOW_LABEL;
+  label === null || CUSTOM_TITLE_BAR_WINDOW_LABELS.has(label);
+
+/** 独立设置窗创建时的 decorations:Windows 关掉原生白条标题栏(改由 WinTitleBar 接管),macOS 保留 overlay 红黄绿灯。 */
+export const settingsWindowDecorations = (platform: ShellPlatform | null): boolean => platform !== 'windows';
 
 // ── 分离聊天窗:页头就是标题栏(Vincent 2026-09-30「上面那个还是挺多余的」)────────────────
 // Windows 上分离聊天窗原来是原生标题栏「<agent> · admin · Agent Network」,紧下面页头又是一遍
