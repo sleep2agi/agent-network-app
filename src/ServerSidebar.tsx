@@ -5,6 +5,8 @@ import { Ionicons } from './icons';
 import { fetchStatus, type HubConfig } from './api';
 import { railBadgeText } from './rail-nav';
 import { colors, onThemeChange, spacing, radius } from './theme';
+import { useGlassChrome } from './glass-chrome';
+import { mobileGlowActive } from './glow-mode';
 import { usePoll } from './usePoll';
 import { summarize } from './server-stats';
 import { displayHubAddress } from './mask-hub-address';
@@ -48,6 +50,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
   onSelect: (section: ServerSection) => void;
 }) {
   const { t } = useTranslation();
+  const glass = useGlassChrome();
   const pendingActive = isHubPendingSection(active) ? active : null;
   // 在线 / 总数 —— 与服务器页、Agent 列表分组头同一口径(server-stats.ts)。
   // 以前这里是 `sessions.length`,把全部已注册会话当成「在线节点」。
@@ -68,7 +71,7 @@ export default function ServerSidebar({ cfg, active, onSelect }: {
   // #649:侧栏常驻在桌面窗口里,一律打码(展开完整地址在「概览 → 连接 → 地址」的眼睛按钮)。
   const host = displayHubAddress(cfg.serverUrl, false);
   return (
-    <View style={styles.root} testID="server-sidebar">
+    <View style={[styles.root, (glass || mobileGlowActive()) && { backgroundColor: 'transparent' }]} testID="server-sidebar">
       <View style={styles.header}>
         <View style={styles.titleRow}>
           <View style={[styles.serverIcon, reachable === false && styles.serverIconFailed]}>
