@@ -439,7 +439,7 @@ const makeStyles = () => StyleSheet.create({
   holdWrap: { position: 'absolute', left: 0, right: 0, top: 0, bottom: 0, zIndex: 30, overflow: 'hidden' },
   holdGlow: { position: 'absolute', left: 0, right: 0 },
   holdBubbleBox: { position: 'absolute' },
-  holdBubble: { borderRadius: radius.bubble, borderBottomRightRadius: 6, paddingVertical: 10, paddingHorizontal: 14, minHeight: 44, justifyContent: 'center' },
+  holdBubble: { borderRadius: radius.bubble, borderBottomRightRadius: radius.mark, paddingVertical: 10, paddingHorizontal: 14, minHeight: 44, justifyContent: 'center' },
   holdBars: { flexDirection: 'row', alignItems: 'center', gap: 3, height: 32 },
   holdBar1: { width: 3, height: 32, borderRadius: 2 },
   holdInterim: { fontSize: 16, lineHeight: HOLD_OVERLAY.interimLineHeight },

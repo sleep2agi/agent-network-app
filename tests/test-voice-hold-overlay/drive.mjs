@@ -193,6 +193,7 @@ for (const scheme of ['light', 'dark']) {
   await press(page);
   await page.evaluate(() => window.__anetVoiceSim.partial('帮我创建一个定时任务，每早整理行业新闻'));
   await page.waitForTimeout(1300);
+  await page.waitForFunction(() => { const l = document.querySelector('[data-testid="voice-hold-label"]')?.textContent; return !!l && l !== '准备录音…'; }, null, { timeout: 5000 }).catch(() => {});
   const wrapBg = await bg(page, '[data-testid="voice-overlay"]');
   ck(tag, '不压暗聊天(浮层根透明)', !wrapBg || wrapBg === 'rgba(0, 0, 0, 0)', wrapBg);
   ck(tag, '底部有光晕', !!(await box(page, 'voice-hold-glow')));
@@ -237,6 +238,8 @@ for (const scheme of ['light', 'dark']) {
     await page.evaluate(() => { window.__flash = { text: '再补一句', fail: false }; });
     const n0 = (await hubPosts(page)).length;
     await press(page);
+    // CI 机器慢:按下后先是「准备录音…」(starting),等录音真起来再读文案。
+    await page.waitForFunction(() => { const l = document.querySelector('[data-testid="voice-hold-label"]')?.textContent; return !!l && l !== '准备录音…'; }, null, { timeout: 5000 }).catch(() => {});
     ck(tag, '已有字时文案「松手转文字，上移取消」', (await label(page)) === '松手转文字，上移取消', await label(page));
     await page.waitForTimeout(1200);
     await releaseAndSettle(page);
