@@ -74,6 +74,9 @@ const DARK = {
   // 手指离开中间区(在 ✕ / 文 上)时面板暗一档 —— 实色,不能用透明度(会透出下面的大条)。
   voiceArcDim: '#1c1c1f',
   voiceArcText: '#ededef',
+  // admin 2026-11-24「学豆包」:按住说话时底部升起的光晕;上移进取消区变红。
+  voiceGlow: ACCENT.dark.solidBrand,
+  voiceGlowCancel: '#e5484d',
   // 浮起的面(见 ELEVATION):深色下没有阴影可用,靠「亮一档的面 + 细边」把它从地面上分出来。
   floatingBg: '#1c1c20',
   floatingBorder: '#2e2e33',
@@ -113,6 +116,9 @@ const LIGHT: typeof DARK = {
   voiceArc: '#f2f2f4',
   voiceArcDim: '#d4d4d8',
   voiceArcText: '#1d2026',
+  // admin 2026-11-24「学豆包」:按住说话时底部升起的光晕;上移进取消区变红。
+  voiceGlow: ACCENT.light.solidBrand,
+  voiceGlowCancel: '#e5484d',
   floatingBg: '#ffffff',
   // 浅色下浮起的面靠阴影,不画边:透明边只为了与深色同尺寸(不让内容在切主题时挪 1px)。
   floatingBorder: 'transparent',

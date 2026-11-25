@@ -969,6 +969,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     onInsert: text => {
       insertVoiceText(text);
     },
+    // admin 2026-11-24「学豆包」:手机按住说话、输入框是空的 ⇒ 松手识别完直接发出去;
+    // 输入框里已经有字(正在写)⇒ 照旧插到光标处,不替用户把半句话发出去。
+    sendOnRelease: () => voiceSourceRef.current === 'holdBar' && holdLayoutRef.current !== null && !(draftRef.current ?? '').trim(),
+    onSend: text => sendPlainText(text),
     // 手机:「说话时间太短」由浮层在屏幕中间提示(微信式),不再在输入区上方重复一条。
     onNotice: text => { if (holdLayoutRef.current && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },
     zoneAt: (pageX, pageY, prev) => {
@@ -3833,7 +3837,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       </>
       )}
       {voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}
-      {holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}
+      {holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} sends={!draft.trim()} /> : null}
       <View ref={originProbeRef} collapsable={false} pointerEvents="none" style={styles.originProbe} />
       <SideThreadDrawer
         cfg={cfg}

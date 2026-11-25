@@ -112,5 +112,29 @@ ck('草稿末尾已有空白 → 不重复补', insertRecognized('hello ', 'worl
 ck('空识别 → 草稿不变', insertRecognized('草稿', '  ') === '草稿');
 ck('计时格式', formatElapsed(7_900) === '00:07' && formatElapsed(65_000) === '01:05' && formatElapsed(-5) === '00:00');
 
+// admin 2026-11-24「学豆包」:聊天里按住说话、松手直接发送(只有调用方允许 send 时)。
+{
+  const drive = (events: VoiceEvent[]) => {
+    let s: VoiceState = IDLE; const effects: string[] = [];
+    for (const ev of events) { const r = voiceStep(s, ev); s = r.state; effects.push(r.effect.kind + ('text' in r.effect ? ':' + (r.effect as any).text : '')); }
+    return { s, effects };
+  };
+  const held: VoiceEvent[] = [{ type: 'press', configured: true, now: 0 }, { type: 'started', now: 0 }];
+  const sent = drive([...held, { type: 'release', now: 2000, send: true }, { type: 'transcribed', text: ' 帮我建个定时任务 ' }]);
+  ck('send:中间区松手 → 识别完 sendText(去掉首尾空白)', sent.effects[2] === 'stopAndTranscribe' && sent.effects[3] === 'sendText:帮我建个定时任务' && sent.s.phase === 'idle');
+  const ins = drive([...held, { type: 'release', now: 2000 }, { type: 'transcribed', text: '写一半' }]);
+  ck('不带 send:照旧 insertText(任务描述 / 输入框已有字)', ins.effects[3] === 'insertText:写一半');
+  const cancel = drive([...held, { type: 'zone', zone: 'cancel' }, { type: 'release', now: 2000, send: true }]);
+  ck('send 但在取消区松手 → 丢弃,不发', cancel.effects[3] === 'discardRecording' && cancel.s.notice === '已取消');
+  const empty = drive([...held, { type: 'release', now: 2000, send: true }, { type: 'transcribed', text: '   ' }]);
+  ck('send 但没识别到字 → 不发,提示「没有识别到文字」', empty.effects[3] === 'none' && empty.s.notice === '没有识别到文字');
+  const short = drive([...held, { type: 'release', now: 300, send: true }]);
+  ck('send 但按得太短 → 不发,「说话时间太短」', short.effects[2] === 'discardRecording');
+  const term = drive([...held, { type: 'terminate' }]);
+  ck('send 场景下手势被系统夺走 → 取消,绝不偷偷发出去', term.effects[2] === 'discardRecording' && term.s.phase === 'idle');
+  const next = drive([...held, { type: 'release', now: 2000, send: true }, { type: 'transcribed', text: 'a' }, ...held, { type: 'release', now: 2000 }, { type: 'transcribed', text: 'b' }]);
+  ck('上一句的 send 不会带到下一句(sendOnDone 每次重算)', next.effects[3] === 'sendText:a' && next.effects[7] === 'insertText:b');
+}
+
 console.log(`voice input model: ${p}/${t} checks passed`);
 process.exit(p === t ? 0 : 1);

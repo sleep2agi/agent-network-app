@@ -6,7 +6,7 @@ import {
   hapticFor, IDLE, NEUTRAL_RELEASE, releaseOutcome, TOO_SHORT_NOTICE, voiceStep, ZONE_RELEASE, zoneOfPhase,
   type VoiceEvent, type VoicePhase, type VoiceState, type VoiceZone,
 } from './voice-input-model';
-import { barScale, HOLD_OVERLAY, holdOverlayApplies, holdOverlayLabel, holdOverlayLayout, holdOverlayTone, pushLevel, zoneAt } from './voice-hold-overlay-model';
+import { barScale, CANCEL_HYSTERESIS, HOLD_OVERLAY, holdOverlayApplies, holdOverlayLabel, holdOverlayLayout, holdOverlayTone, pushLevel, zoneAt } from './voice-hold-overlay-model';
 import { installVoiceSim, parseVoiceSim } from './voice-sim';
 
 let p = 0, t = 0;
@@ -53,24 +53,18 @@ ck('放大后的圈也不出屏', L.cancelX - L.circleSizeActive / 2 >= 0 && L.t
   ck('面板最多 45% 高(矮窗不被吃掉半屏)', holdOverlayLayout(390, 400, 0, 50).arcHeight === 180);
 }
 
-// ── 区判定 ──
+// ── 区判定(admin 2026-11-24「学豆包」:只有「上移取消」,✕ / 文 两个圈去掉了)──
 const holdBarPoint = { x: L.width / 2, y: L.height - L.bottomInset - 30 };
 ck('按下的位置(大条上)= 中间区', zoneAt(holdBarPoint, L, 'neutral') === 'neutral');
-ck('手指到 ✕ 圆心 = 取消区', zoneAt({ x: L.cancelX, y: L.circleY }, L, 'neutral') === 'cancel');
-ck('手指到 文 圆心 = 转文字区', zoneAt({ x: L.textX, y: L.circleY }, L, 'neutral') === 'toText');
-ck('正上方(两圈之间)仍是中间区', zoneAt({ x: L.width / 2, y: L.circleY }, L, 'neutral') === 'neutral');
-ck('一路上滑到气泡上(没往两边)仍是中间区', zoneAt({ x: L.width / 2, y: L.bubbleBottom - 40 }, L, 'neutral') === 'neutral');
-{
-  const at = (d: number, prev: VoiceZone, side: 'cancel' | 'toText' = 'cancel') => zoneAt({ x: (side === 'cancel' ? L.cancelX : L.textX) + d, y: L.circleY }, L, prev);
-  ck(`进区边界:距圆心 = hitEnter(${L.hitEnter})算进`, at(L.hitEnter, 'neutral') === 'cancel');
-  ck('进区边界:hitEnter + 1 不算', at(L.hitEnter + 1, 'neutral') === 'neutral');
-  ck('滞回:已在 ✕ 里,退到 hitEnter + 10 仍在区里', at(L.hitEnter + 10, 'cancel') === 'cancel');
-  ck('正控:同一点从中间区过来 = 不进(滞回是 prev 决定的,不是半径本身大)', at(L.hitEnter + 10, 'neutral') === 'neutral');
-  ck(`滞回:退到 hitExit(${L.hitExit})仍在,hitExit + 1 才出`, at(L.hitExit, 'cancel') === 'cancel' && at(L.hitExit + 1, 'cancel') === 'neutral');
-  ck('滞回对 文 圈同样成立', at(-(L.hitEnter + 10), 'toText', 'toText') === 'toText' && at(-(L.hitEnter + 10), 'neutral', 'toText') === 'neutral');
-  ck('滞回带宽 ≥ 16px(手指抖动不会来回进出)', L.hitExit - L.hitEnter >= 16);
-  ck('在 ✕ 区时,别的圈照常判定(不会卡在旧区)', zoneAt({ x: L.textX, y: L.circleY }, L, 'cancel') === 'toText');
-}
+ck('取消线在光晕顶端之上 40px', L.cancelLineY === L.arcTop - 40);
+ck('上移过取消线 = 取消区', zoneAt({ x: L.width / 2, y: L.cancelLineY - 1 }, L, 'neutral') === 'cancel');
+ck('没过线(哪怕到了光晕顶端)仍是中间区', zoneAt({ x: L.width / 2, y: L.arcTop }, L, 'neutral') === 'neutral');
+ck('左右滑不影响(只看高度)', zoneAt({ x: 4, y: L.cancelLineY - 1 }, L, 'neutral') === 'cancel' && zoneAt({ x: L.width - 4, y: holdBarPoint.y }, L, 'neutral') === 'neutral');
+ck('滞回:已在取消区,退回线下 CANCEL_HYSTERESIS 以内仍算取消', zoneAt({ x: 0, y: L.cancelLineY + CANCEL_HYSTERESIS - 1 }, L, 'cancel') === 'cancel');
+ck('滞回:退过 CANCEL_HYSTERESIS 才回到中间区', zoneAt({ x: 0, y: L.cancelLineY + CANCEL_HYSTERESIS }, L, 'cancel') === 'neutral');
+ck('正控:同一点从中间区过来 = 不算取消', zoneAt({ x: 0, y: L.cancelLineY + 10 }, L, 'neutral') === 'neutral');
+ck('滞回带宽 ≥ 16px', CANCEL_HYSTERESIS >= 16);
+ck('不会再判出「文」区', [0, 0.25, 0.5, 0.75, 1].every(f => zoneAt({ x: L.width * f, y: L.circleY }, L, 'neutral') !== 'toText'));
 
 // ── 状态机:zone 事件 ──
 {
@@ -128,13 +122,13 @@ ck('zoneOfPhase 往返', zoneOfPhase('cancelArmed') === 'cancel' && zoneOfPhase(
   ck('触感:按下 press;进文、文→✕、✕→中间 各一次 zone;同区重复 / 松手 / 识别完不震', r.haptics.join(',') === 'press,-,zone,-,zone,zone,-,-', r.haptics.join(','));
 }
 
-// ── 文案 / 配色档 ──
+// ── 文案 / 配色档(admin 2026-11-24「学豆包」)──
 {
-  const phases: VoicePhase[] = ['idle', 'starting', 'recording', 'cancelArmed', 'toTextArmed', 'transcribing'];
-  ck('浮层文案都不承诺「发送」(松手只进草稿)', !phases.some(ph => holdOverlayLabel(ph).includes('发送')), phases.map(holdOverlayLabel).join('|'));
-  ck('中间区文案 = 大条的「松开 转文字」', holdOverlayLabel('recording') === '松开 转文字');
-  ck('✕ 区:「松开手指，取消」;文 区:「松开 放进草稿」', holdOverlayLabel('cancelArmed') === '松开手指，取消' && holdOverlayLabel('toTextArmed') === '松开 放进草稿');
-  ck('配色档跟着区走', holdOverlayTone('cancelArmed') === 'cancel' && holdOverlayTone('toTextArmed') === 'toText' && holdOverlayTone('recording') === 'neutral' && holdOverlayTone('transcribing') === 'neutral');
+  ck('聊天页且输入框为空:「松手发送，上移取消」', holdOverlayLabel('recording', true) === '松手发送，上移取消');
+  ck('不发送时(任务描述 / 输入框已有字):「松手转文字，上移取消」', holdOverlayLabel('recording') === '松手转文字，上移取消' && holdOverlayLabel('recording', false) === '松手转文字，上移取消');
+  ck('取消区:「松开手指，取消」(发不发都一样)', holdOverlayLabel('cancelArmed') === '松开手指，取消' && holdOverlayLabel('cancelArmed', true) === '松开手指，取消');
+  ck('识别中:会发送时说「马上发送」', holdOverlayLabel('transcribing', true).includes('发送') && !holdOverlayLabel('transcribing').includes('发送'));
+  ck('配色档跟着区走', holdOverlayTone('cancelArmed') === 'cancel' && holdOverlayTone('recording') === 'neutral');
 }
 
 // ── 波形 ──
@@ -143,7 +137,7 @@ ck('zoneOfPhase 往返', zoneOfPhase('cancelArmed') === 'cancel' && zoneOfPhase(
   for (const v of [0.1, 0.5, 2, NaN, -1]) h = pushLevel(h, v, 5);
   ck('pushLevel:定长、新的在右、越界夹到 0..1、NaN 当 0', h.join(',') === '0.1,0.5,1,0,0', h.join(','));
   ck('pushLevel:不足 n 时左边补 0', pushLevel([], 0.4, 4).join(',') === '0,0,0,0.4');
-  ck('barScale:静音也留底高、满电平 = 1(中间那根)、单调', barScale(0, 10) > 0 && barScale(1, 10) === 1 && barScale(0.2, 10) > barScale(0.05, 10));
+  { const mid = (HOLD_OVERLAY.bars - 1) / 2; ck('barScale:静音也留底高、满电平 = 1(中间那根)、单调', barScale(0, mid) > 0 && barScale(1, mid) === 1 && barScale(0.2, mid) > barScale(0.05, mid)); }
   ck('barScale:两边比中间矮', barScale(0.5, 0) < barScale(0.5, (HOLD_OVERLAY.bars - 1) / 2));
 }
 
@@ -168,12 +162,12 @@ ck('voiceSim 在设备上恒不开(os ≠ web)', !installVoiceSim('android') && 
   const hook = read('src', 'useVoiceInput.ts');
   const ov = ui.slice(ui.indexOf('function useReduceMotion'), ui.indexOf('/** 未配置时按麦克风'));
   ck('浮层用 ui-text 的 Text(字体大小设置生效)', /import \{ Text, TextInput \} from '\.\/ui-text';/.test(ui) && !/import \{[^}]*\bText\b[^}]*\} from 'react-native'/.test(ui));
-  ck('动画都走 NATIVE_DRIVER(安卓 / iOS 原生驱动)', (ov.match(/useNativeDriver: NATIVE_DRIVER/g) ?? []).length >= 3 && !/useNativeDriver: false/.test(ov) && ui.includes("const NATIVE_DRIVER = Platform.OS !== 'web';"));
+  ck('动画都走 NATIVE_DRIVER(安卓 / iOS 原生驱动)', (ov.match(/useNativeDriver: NATIVE_DRIVER/g) ?? []).length >= 2 && !/useNativeDriver: false/.test(ov) && ui.includes("const NATIVE_DRIVER = Platform.OS !== 'web';"));
   ck('减弱动态效果:读系统设置并跳过缩放 / 补帧', ov.includes('AccessibilityInfo.isReduceMotionEnabled()') && ov.includes("'reduceMotionChanged'") && /reduceMotion \? 0 : 110/.test(ov) && /if \(reduceMotion\) \{ appear\.setValue\(1\)/.test(ov));
   ck(`气泡缩放淡入 ${HOLD_OVERLAY.scaleInMs}ms`, HOLD_OVERLAY.scaleInMs === 150 && ov.includes('duration: HOLD_OVERLAY.scaleInMs'));
   ck('浮层不接收触摸(手势留在大条上)', /<View pointerEvents="none" style=\{styles\.holdWrap\}/.test(ov));
   ck('流式文字 ≤3 行,再多在气泡里滚到最新', HOLD_OVERLAY.interimMaxLines === 3 && ov.includes('maxHeight: HOLD_OVERLAY.interimLineHeight * HOLD_OVERLAY.interimMaxLines') && ov.includes('scrollToEnd'));
-  ck('只在手机挂微信式浮层(holdOverlayOn);#463 的卡片在手机上被 hidden,只留给窄桌面窗口', chat.includes('{holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}') && chat.includes("{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}") && ui.includes("if (hidden || phase === 'idle') return null;") && chat.includes('const holdOverlayOn = holdOverlayApplies({ desktop, os: Platform.OS,') && chat.includes('const holdLayout = holdOverlayOn && paneWidth > 0'));
+  ck('只在手机挂微信式浮层(holdOverlayOn);#463 的卡片在手机上被 hidden,只留给窄桌面窗口', chat.includes('{holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} sends={!draft.trim()} /> : null}') && chat.includes("{voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}") && ui.includes("if (hidden || phase === 'idle') return null;") && chat.includes('const holdOverlayOn = holdOverlayApplies({ desktop, os: Platform.OS,') && chat.includes('const holdLayout = holdOverlayOn && paneWidth > 0'));
   ck('phone-only 门认得 holdOverlayOn、登记了 VoiceHoldOverlay', read('src', 'phone-only-registry.ts').includes("'holdOverlayOn',") && read('src', 'phone-only-registry.ts').includes('site: /<VoiceHoldOverlay\\b/,'));
   ck('VoiceHoldOverlay 只有一处挂载(在 holdOverlayOn 分支里)', (chat.match(/<VoiceHoldOverlay\b/g) ?? []).length === 1);
   ck('命中判定和浮层用同一份 layout(holdLayoutRef)', /zoneAt: \(pageX, pageY, prev\) => \{\s*const l = holdLayoutRef\.current;/.test(chat) && chat.includes('holdZoneAt({ x: pageX - rootOriginRef.current.x, y: pageY - rootOriginRef.current.y }, l, prev)'));

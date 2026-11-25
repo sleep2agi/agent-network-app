@@ -1,4 +1,4 @@
-// 手机「按住 说话」微信式浮层 —— 真应用(expo web 导出 + Tauri 桥桩)端到端 + 量尺寸。不进 CI:要 Playwright + Chromium。
+// 手机「按住 说话」浮层(admin 2026-11-24 改豆包式)—— 真应用(expo web 导出 + Tauri 桥桩)端到端 + 量尺寸。不进 CI:要 Playwright + Chromium。
 //
 //   WEB_DIR=<expo export 目录> OUT=<截图目录> [PLAYWRIGHT_MODULE=<…/playwright/index.mjs>] \
 //   node tests/test-voice-hold-overlay/drive.mjs
@@ -179,248 +179,79 @@ const draft = (page) => page.evaluate(() => document.querySelector('[data-testid
 const notice = (page) => page.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? null);
 const sendPosts = (page) => page.evaluate(() => window.__posts.filter(p => /\/api\/(send|tasks?|messages)\b/.test(new URL(p.url).pathname)).length);
 
+// admin 2026-11-24「学豆包」:不压暗、底部蓝色光晕 + 细波形 + 一行「松手发送，上移取消」;流式文字是右侧蓝色气泡;
+// 输入框为空时中间松手 = 直接发出去;输入框已有字 = 插进草稿;上移过线 = 取消(变红)。
+const hubPosts = (page) => page.evaluate(() => window.__posts.filter(p => { try { return /\/api\/(send|tasks?|messages)\b/.test(new URL(p.url).pathname); } catch { return false; } }).map(p => p.body));
 for (const scheme of ['light', 'dark']) {
   const tag = `phone-390x844-${scheme}`;
   const { ctx, page } = await open(scheme);
   const shot = async (name) => { const f = `${OUT}/holdoverlay-${tag}-${name}.png`; await page.screenshot({ path: f }); shots.push(f); };
+  await shot('0-idle');
 
-  await shot('0-idle'); // #609:未按下时的「按住 说话」大条(换色前后对照用)
-  // ── 1 按住:中间区 ──
+  // ── 1 按住:光晕 + 波形 + 文案 + 流式气泡,不压暗 ──
   await startLevels(page);
-  const bar = await press(page);
-  await page.evaluate(() => window.__anetVoiceSim.partial('帮我看一下昨天的构建'));
+  await press(page);
+  await page.evaluate(() => window.__anetVoiceSim.partial('帮我创建一个定时任务，每早整理行业新闻'));
   await page.waitForTimeout(1300);
-  const hA = await barHeights(page);
-  await page.waitForTimeout(350);
-  const hB = await barHeights(page);
-  ck(tag, '电平条随输入电平变化(两次采样不同、高低不齐)', hA.length === 21 && hA.join() !== hB.join() && Math.max(...hB) - Math.min(...hB) > 3, `${hA.length} bars, range ${r1(Math.min(...hB))}–${r1(Math.max(...hB))}`);
-  const elP = await painted(page, 'voice-elapsed');
-  ck(tag, '秒数在走(≥ 00:01)', /^00:0[1-9]$/.test(await page.evaluate(() => document.querySelector('[data-testid="voice-elapsed"]')?.textContent ?? '')) && seen(elP), `painted ${pd(elP)}`);
+  const wrapBg = await bg(page, '[data-testid="voice-overlay"]');
+  ck(tag, '不压暗聊天(浮层根透明)', !wrapBg || wrapBg === 'rgba(0, 0, 0, 0)', wrapBg);
+  ck(tag, '底部有光晕', !!(await box(page, 'voice-hold-glow')));
+  ck(tag, '文案「松手发送，上移取消」(输入框为空)', (await label(page)) === '松手发送，上移取消', await label(page));
+  const hA = await barHeights(page); await page.waitForTimeout(350); const hB = await barHeights(page);
+  ck(tag, '41 根细波形随电平跳动', hA.length === 41 && hA.join() !== hB.join(), `${hA.length} bars`);
   const imP = await painted(page, 'voice-interim');
-  ck(tag, '气泡里显示流式文字', (await page.evaluate(() => document.querySelector('[data-testid="voice-interim"]')?.textContent)) === '帮我看一下昨天的构建' && seen(imP), `painted ${pd(imP)}`);
-  const lbN = await painted(page, 'voice-hold-label');
-  ck(tag, '中间区:「松开 转文字」、zone=neutral', (await label(page)) === '松开 转文字' && (await zone(page)) === 'neutral' && seen(lbN), `${await label(page)} / ${await zone(page)} / painted ${pd(lbN)}`);
-  const dim = await bg(page, '[data-testid="voice-overlay"]');
-  ck(tag, '全屏压暗 50% 黑', dim === 'rgba(0, 0, 0, 0.5)', dim);
-  const bubbleBg = await bg(page, '[data-testid="voice-hold-bubble"] > div');
-  ck(tag, '气泡是品牌蓝(#609:亮 #375ada / 暗 #3a55d0,= solidBrand;2026-11-19 起偏靛;聊天气泡 2026-11-17 起是中性灰)', bubbleBg === (scheme === 'light' ? 'rgb(55, 90, 218)' : 'rgb(58, 85, 208)'), bubbleBg);
-
-  // ── 2 几何 ──
-  const pane = await box(page, 'chat-pane');
-  const ov = await box(page, 'voice-overlay');
+  ck(tag, '流式文字在蓝色气泡里', seen(imP), pd(imP));
   const bub = await box(page, 'voice-hold-bubble');
-  const cx = await box(page, 'voice-hold-cancel');
-  const tx = await box(page, 'voice-hold-totext');
-  const arc = await box(page, 'voice-hold-arc');
-  const arcContent = await box(page, 'voice-hold-arc-content');
-  const vh = 844;
-  {
-    const centre = ov.x + ov.w / 2;
-    const dBubble = bub.cx - centre;
-    const dCancel = centre - cx.cx, dText = tx.cx - centre;
-    rows.push({ scheme, state: 'neutral', overlayW: r1(ov.w), overlayCx: r1(centre), bubbleCx: r1(bub.cx), dBubble: r1(dBubble), cancelCx: r1(cx.cx), textCx: r1(tx.cx), symL: r1(dCancel), symR: r1(dText), dCircleCy: r1(tx.cy - cx.cy), arcX: r1(arc.x), arcW: r1(arc.w), arcBottom: r1(arc.b), arcContentBottom: r1(arcContent.b), safeBottom: vh - INSETS.bottom });
-    ck(tag, '浮层铺满聊天页(和 chat-pane 同框)', Math.abs(ov.x - pane.x) <= 0.5 && Math.abs(ov.w - pane.w) <= 0.5 && Math.abs(ov.y - pane.y) <= 0.5 && Math.abs(ov.h - pane.h) <= 0.5, `${r1(ov.x)},${r1(ov.y)} ${r1(ov.w)}×${r1(ov.h)}`);
-    ck(tag, '气泡水平居中(≤1px)', Math.abs(dBubble) <= 1, `d=${r1(dBubble)}`);
-    ck(tag, '✕ / 文 关于中线对称(≤1px)且同高', Math.abs(dCancel - dText) <= 1 && Math.abs(tx.cy - cx.cy) <= 1 && Math.abs(cx.w - tx.w) <= 1, `${r1(dCancel)}/${r1(dText)} dy=${r1(tx.cy - cx.cy)}`);
-    ck(tag, '弧形面板满宽、贴到屏幕底', Math.abs(arc.x) <= 0.5 && Math.abs(arc.w - 390) <= 0.5 && Math.abs(arc.b - vh) <= 0.5, `${r1(arc.x)} ${r1(arc.w)} bottom=${r1(arc.b)}`);
-    ck(tag, `面板内容在底部安全区(${INSETS.bottom}px)之上`, arcContent.b <= vh - INSETS.bottom + 0.5, `content.bottom=${r1(arcContent.b)}`);
-    ck(tag, '面板盖住原来的大条', arc.y <= bar.y && arc.b >= bar.b, `arc.top=${r1(arc.y)} bar=${r1(bar.y)}–${r1(bar.b)}`);
-    ck(tag, '气泡 < 圈 < 文案 < 面板(自上而下不重叠)', bub.b <= cx.y && cx.b <= arc.y);
-    // 正控:同一个居中判据喂一个右移 2px 的气泡必须报红。
-    const shifted = await page.evaluate(() => { const el = document.querySelector('[data-testid="voice-hold-bubble"]'); const old = el.style.marginLeft; el.style.marginLeft = '2px'; const r = el.getBoundingClientRect(); el.style.marginLeft = old; return r.x + r.width / 2; });
-    ck(tag, '正控:气泡右移 2px 时居中判据会报红', Math.abs(shifted - centre) > 1, `d=${r1(shifted - centre)}`);
-  }
-  await shot('1-neutral');
+  ck(tag, '气泡靠右(像自己发的消息)', !!bub && bub.r > 390 - 40, bub && `right ${r1(bub.r)}`);
+  ck(tag, '不再有 ✕ / 文 两个圈', !(await box(page, 'voice-hold-cancel')) && !(await box(page, 'voice-hold-totext')));
+  await shot('1-holding');
 
-  // ── 3 滑到 文 / ✕ + 滞回 ──
-  const start = { x: bar.cx, y: bar.cy };
-  await slide(page, start, { x: tx.cx, y: tx.cy });
-  const txOn = await box(page, 'voice-hold-totext');
-  const lbT = await painted(page, 'voice-hold-label');
-  ck(tag, '滑到 文:zone=toText、「松开 放进草稿」、圈高亮放大', (await zone(page)) === 'toText' && (await label(page)) === '松开 放进草稿' && seen(lbT) && txOn.w > tx.w + 10, `${await zone(page)} / ${await label(page)} / ${r1(tx.w)}→${r1(txOn.w)} / painted ${pd(lbT)}`);
-  await shot('2-totext');
-  await slide(page, { x: tx.cx, y: tx.cy }, { x: cx.cx, y: cx.cy }, 16);
-  const cxOn = await box(page, 'voice-hold-cancel');
-  const cancelBg = await bg(page, '[data-testid="voice-hold-cancel"]');
-  const bubbleCancelBg = await bg(page, '[data-testid="voice-hold-bubble"] > div');
-  const lbC = await painted(page, 'voice-hold-label');
-  ck(tag, '滑到 ✕:zone=cancel、「松开手指，取消」', (await zone(page)) === 'cancel' && (await label(page)) === '松开手指，取消' && seen(lbC), `painted ${pd(lbC)}`);
-  ck(tag, '✕ 变红放大、气泡变红', cancelBg === 'rgb(229, 72, 77)' && cxOn.w > cx.w + 10 && /^rgb\((220|239), (38|68), (38|68)\)$/.test(bubbleCancelBg), `${cancelBg} ${r1(cx.w)}→${r1(cxOn.w)} bubble=${bubbleCancelBg}`);
-  // 面板暗一档也必须是实色:半透明会透出下面红色的「松开 取消」大条(第一版就是这样)。
-  const arcPaint = await page.evaluate(() => { const el = document.querySelector('[data-testid="voice-hold-arc"] > div'); const cs = getComputedStyle(el); return { bg: cs.backgroundColor, opacity: cs.opacity }; });
-  ck(tag, '✕ 区时弧形面板仍是不透明实色(不透出大条)', /^rgb\(/.test(arcPaint.bg) && arcPaint.opacity === '1', JSON.stringify(arcPaint));
-  await shot('3-cancel');
-  // 滞回:出圈到 hitEnter+10(66px)仍在;到 hitExit+10(86px)才出。圈心取静止时的位置(放大是 transform,圆心不动)。
-  await slide(page, { x: cx.cx, y: cx.cy }, { x: cx.cx + 66, y: cx.cy }, 6);
-  const zIn = await zone(page);
-  await slide(page, { x: cx.cx + 66, y: cx.cy }, { x: cx.cx + 86, y: cx.cy }, 3);
-  const zOut = await zone(page);
-  await slide(page, { x: cx.cx + 86, y: cx.cy }, { x: cx.cx + 66, y: cx.cy }, 3);
-  const zBack = await zone(page);
-  ck(tag, '滞回:出圈 66px 仍在 ✕;86px 出区;再回到 66px 不重新进', zIn === 'cancel' && zOut === 'neutral' && zBack === 'neutral', `${zIn}/${zOut}/${zBack}`);
-  await slide(page, { x: cx.cx + 66, y: cx.cy }, { x: cx.cx, y: cx.cy }, 4);
-
-  // ── 4 松手结果 ──
-  await page.evaluate(() => { window.__flash.text = '不该出现'; });
+  // ── 2 上移取消 ──
+  const bar = await box(page, 'voice-hold-bar');
+  await slide(page, { x: bar.cx, y: bar.cy }, { x: bar.cx, y: bar.cy - 260 });
+  ck(tag, '上移过线 → 取消区、文案「松开手指，取消」', (await zone(page)) === 'cancel' && (await label(page)) === '松开手指，取消', `${await zone(page)} / ${await label(page)}`);
+  await shot('2-cancel');
+  const before = (await hubPosts(page)).length;
   await releaseAndSettle(page);
-  const ntX = await painted(page, 'composer-notice');
-  ck(tag, '✕ 区松手:丢弃(没有草稿卡片)、提示「已取消」', (await draft(page)) === null && (await notice(page)) === '已取消' && seen(ntX), `${await draft(page)} / ${await notice(page)} / painted ${pd(ntX)}`);
+  ck(tag, '取消区松手:什么都不发', (await hubPosts(page)).length === before);
 
-  await page.evaluate(() => { window.__flash.text = '转成文字的内容'; });
-  const b2 = await press(page);
-  await page.waitForTimeout(1100);
-  await slide(page, { x: b2.cx, y: b2.cy }, { x: tx.cx, y: tx.cy });
-  await releaseAndSettle(page);
-  ck(tag, '文 区松手:文字进草稿卡片、没有发送', (await draft(page)) === '转成文字的内容' && (await sendPosts(page)) === 0, `${await draft(page)} posts=${await sendPosts(page)}`);
-
-  await page.evaluate(() => { window.__flash.text = '中间松手'; });
+  // ── 3 中间松手 = 直接发送 ──
+  await page.evaluate(() => { window.__flash = { text: '帮我建个每早八点的定时任务', fail: false }; });
   await press(page);
-  await page.waitForTimeout(1100);
+  await page.waitForTimeout(1200);
   await releaseAndSettle(page);
-  ck(tag, '中间区松手 = 现状:接在草稿光标后、没有发送', (await draft(page)) === '转成文字的内容中间松手' && (await sendPosts(page)) === 0, `${await draft(page)} posts=${await sendPosts(page)}`);
-
-  // ── 5 长文字:≤3 行后在气泡里滚 ──
-  await press(page);
-  await page.evaluate(() => window.__anetVoiceSim.partial('这是一段很长的流式识别中间结果,用来确认气泡最多长到三行,再多的时候在气泡里面滚动,并且始终停在最新说出来的那一截上面,不会把整张气泡撑出屏幕。'));
-  await page.waitForTimeout(500);
-  const sc = await page.evaluate(() => {
-    const t = document.querySelector('[data-testid="voice-interim"]');
-    let el = t.parentElement; while (el && getComputedStyle(el).overflowY !== 'auto' && getComputedStyle(el).overflowY !== 'scroll') el = el.parentElement;
-    return el ? { h: el.clientHeight, sh: el.scrollHeight, top: el.scrollTop } : null;
-  });
-  ck(tag, '长文字:可见高度 = 3 行(66px),超出部分在气泡里滚到最底', sc && Math.abs(sc.h - 66) <= 1 && sc.sh > sc.h && Math.abs(sc.top - (sc.sh - sc.h)) <= 1, JSON.stringify(sc));
-  const bubLong = await box(page, 'voice-hold-bubble');
-  const cxNow = await box(page, 'voice-hold-cancel');
-  ck(tag, '长文字时气泡仍居中、不压到圈', Math.abs(bubLong.cx - (ov.x + ov.w / 2)) <= 1 && bubLong.b <= cxNow.y, `cx=${r1(bubLong.cx)} bottom=${r1(bubLong.b)} circle.top=${r1(cxNow.y)}`);
-  // 草稿卡片(按住期间显示光标处预览,#440)这时有草稿 + 长预览 = 长到最高;面板必须整个盖住它。
-  const cardNow = await box(page, 'voice-draft-card');
-  const arcNow = await box(page, 'voice-hold-arc');
-  const labelNow = await box(page, 'voice-hold-label');
-  ck(tag, '草稿卡片长到最高时,面板仍整个盖住它;状态文案在面板之上', cardNow && arcNow.y <= cardNow.y && labelNow.b <= arcNow.y, `card.top=${cardNow && r1(cardNow.y)} arc.top=${r1(arcNow.y)} label.bottom=${r1(labelNow.b)}`);
-  rows.push({ scheme, state: 'long-text+card', overlayW: r1(ov.w), overlayCx: r1(ov.x + ov.w / 2), bubbleCx: r1(bubLong.cx), dBubble: r1(bubLong.cx - (ov.x + ov.w / 2)), cancelCx: r1(cxNow.cx), textCx: r1((await box(page, 'voice-hold-totext')).cx), symL: r1(ov.x + ov.w / 2 - cxNow.cx), symR: r1((await box(page, 'voice-hold-totext')).cx - (ov.x + ov.w / 2)), dCircleCy: r1((await box(page, 'voice-hold-totext')).cy - cxNow.cy), arcX: r1(arcNow.x), arcW: r1(arcNow.w), arcBottom: r1(arcNow.b), arcContentBottom: r1((await box(page, 'voice-hold-arc-content')).b), safeBottom: vh - INSETS.bottom });
-  await shot('4-long-text');
-  // 有草稿卡片时面板更高、圈跟着上移:用现在量到的圈心,别用第一次的。
-  await slide(page, { x: bar.cx, y: bar.cy }, { x: cxNow.cx, y: cxNow.cy });
-  ck(tag, '面板变高后滑到(上移了的)✕ 仍进取消区', (await zone(page)) === 'cancel');
-  await releaseAndSettle(page);
-
-  // ── 6 太短 / 识别报错 ──
-  await press(page);
-  await page.waitForTimeout(150);
-  await page.mouse.up();
-  await page.waitForSelector('[data-testid="voice-hold-toast"]', { timeout: 3000 }).catch(() => {});
-  const toast = await page.evaluate(() => document.querySelector('[data-testid="voice-hold-toast"]')?.textContent ?? null);
-  // textContent 里还有 Ionicons 的字形字符(网页上图标是一个私用区字符),只比文字部分。
-  const toastBox = await box(page, 'voice-hold-toast');
-  const toastCard = await page.evaluate(() => { const r = document.querySelector('[data-testid="voice-hold-toast"] > div')?.getBoundingClientRect(); return r ? { cx: r.x + r.width / 2, cy: r.y + r.height / 2 } : null; });
-  // 量文字本身那个元素(voice-hold-toast 是铺满聊天页的定位层,量它恒为真)。
-  const toastP = await paintedText(page, '[data-testid="voice-hold-toast"] *', '说话时间太短');
-  ck(tag, '太短:「说话时间太短」提示、输入区不重复提示', (toast ?? '').replace(/[\uE000-\uF8FF]/g, '') === '说话时间太短' && seen(toastP) && (await notice(page)) !== '说话时间太短', `${toast} / ${await notice(page)} / painted ${pd(toastP)}`);
-  ck(tag, '太短提示在聊天页正中(≤1px)', toastCard && toastBox && Math.abs(toastCard.cx - toastBox.cx) <= 1 && Math.abs(toastCard.cy - toastBox.cy) <= 1, JSON.stringify(toastCard));
-  await shot('5-too-short');
-  await page.waitForTimeout(1500);
-  ck(tag, '太短提示自己消失', (await box(page, 'voice-hold-toast')) === null);
-  ck(tag, '太短:草稿不变', (await draft(page)) === '转成文字的内容中间松手');
-
-  await page.evaluate(() => { window.__flash.fail = true; });
-  await press(page);
-  await page.waitForTimeout(1100);
-  await releaseAndSettle(page);
-  const ntE = await painted(page, 'composer-notice');
-  ck(tag, '识别报错:输入区提示原因、浮层收起、草稿不变', /频繁/.test((await notice(page)) ?? '') && seen(ntE) && (await draft(page)) === '转成文字的内容中间松手', `${await notice(page)} / painted ${pd(ntE)}`);
-  await page.evaluate(() => { window.__flash.fail = false; });
-  await stopLevels(page);
-  await ctx.close();
-
-  // ── 麦克风被拒 ──
-  {
-    const { ctx: c2, page: p2 } = await open(scheme, { denyMic: true });
-    const b = await box(p2, 'voice-hold-bar');
-    await p2.mouse.move(b.cx, b.cy);
-    await p2.mouse.down();
-    await p2.waitForTimeout(800);
-    const overlayGone = (await box(p2, 'voice-overlay')) === null;
-    await p2.mouse.up();
-    await p2.waitForTimeout(300);
-    const ntM = await painted(p2, 'composer-notice');
-    ck(tag, '麦克风被拒:浮层收起、输入区提示', overlayGone && (await p2.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? '')) === '麦克风权限被拒绝' && seen(ntM), `${await p2.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? '')} / painted ${pd(ntM)}`);
-    await c2.close();
-  }
-
-  // ── 减弱动态效果 ──
-  {
-    const { ctx: c3, page: p3 } = await open(scheme, { context: { reducedMotion: process.env.VOICE_HOLD_MOTION || 'reduce' } });
-    const b = await box(p3, 'voice-hold-bar');
-    await p3.mouse.move(b.cx, b.cy);
-    // Not one sample taken right after the overlay appears: the bubble is committed with the Animated value's initial
-    // 0 (opacity 0, scale 0.8) and the effect that jumps it to 1 under reduced motion runs after that commit. Whether a
-    // single read lands before or after it is timing — CI caught the 0/0.8 frame now and then (2026-10-02, #666 and
-    // #668, light and dark), locally it showed up for 1–3 frames with the CPU throttled 6×. That initial frame is
-    // invisible (opacity 0) and is not motion. What reduced motion must rule out is the 150 ms scale-in: so record
-    // every style the bubble ever has (MutationObserver on style + every animation frame) from before the press on,
-    // and require no in-between value and that it ends at full size. With the motion on (VOICE_HOLD_MOTION=no-preference)
-    // this records ~20 in-between values and goes red. No time bound on the jump: that is the same timing again.
-    await p3.evaluate(() => {
-      const out = window.__bubbleFrames = []; const t0 = performance.now();
-      const snap = () => {
-        const el = document.querySelector('[data-testid="voice-hold-bubble"]');
-        if (!el) return;
-        const cs = getComputedStyle(el);
-        const scale = cs.transform === 'none' ? 1 : Number(cs.transform.slice(7).split(',')[0]);
-        out.push({ t: Math.round(performance.now() - t0), opacity: Number(cs.opacity), scale: Math.round(scale * 1000) / 1000 });
-      };
-      new MutationObserver(snap).observe(document.body, { childList: true, subtree: true, attributes: true, attributeFilter: ['style'] });
-      const tick = () => { snap(); if (performance.now() - t0 < 2000) requestAnimationFrame(tick); };
-      requestAnimationFrame(tick);
-    });
-    await p3.mouse.down();
-    await p3.waitForSelector('[data-testid="voice-overlay"]', { timeout: 5000 });
-    await p3.waitForTimeout(400);
-    const frames = await p3.evaluate(() => window.__bubbleFrames);
-    const first = frames[0]?.t ?? null;
-    const between = frames.filter(f => !((f.opacity === 0 && f.scale === 0.8) || (f.opacity === 1 && f.scale === 1)));
-    const last = frames.at(-1);
-    const full = frames.find(f => f.opacity === 1 && f.scale === 1);
-    ck(tag, '减弱动态效果:气泡不做缩放淡入(没有中间值),最后完整大小、不透明',
-      frames.length > 0 && between.length === 0 && last?.opacity === 1 && last?.scale === 1,
-      `${frames.length} samples, in-between ${between.length}${between.length ? ` e.g. ${JSON.stringify(between[0])}` : ''}, full ${full && first !== null ? `${full.t - first}ms after it appeared` : 'never'}`);
-    await p3.mouse.up();
-    await c3.close();
-  }
-}
-// ── 桌面:微信式浮层永远不画(另有桌面自己的录音 UI)。窄桌面窗口会落回 phone 布局、也有「按住 说话」条 ——
-// 那里同样不能画手机浮层。宽桌面(1200×850)只有工具栏麦克风。无安卓 UA、无 safeAreaSim = Tauri 桌面。
-for (const vp of [{ width: 390, height: 844, name: 'desktop-narrow-390x844' }, { width: 1200, height: 850, name: 'desktop-1200x850' }]) {
-  const tag = vp.name;
-  const ctx = await browser.newContext({ viewport: { width: vp.width, height: vp.height }, colorScheme: 'light', permissions: ['microphone'] });
-  const page = await ctx.newPage();
-  page.on('pageerror', e => console.log('PAGEERROR', e.message.split('\n')[0]));
-  await page.addInitScript(initScript, { theme: 'light', denyMic: false });
-  await page.goto(WEB_URL);
-  await page.getByText(ALIAS, { exact: true }).first().click({ timeout: 20000 });
   await page.waitForTimeout(800);
-  const target = (await page.locator('[data-testid="voice-hold-bar"]').count()) ? 'voice-hold-bar' : 'voice-mic';
-  const b = await box(page, target);
-  if (!b) { ck(tag, '找到语音入口', false, target); await ctx.close(); continue; }
-  await page.mouse.move(b.cx, b.cy);
-  await page.mouse.down();
-  // 宽桌面的 🎤 是点一下开始(#463),松开也不结束;窄窗口的大条是按住。
-  if (target === 'voice-mic') await page.mouse.up();
-  await page.waitForSelector('[data-testid="voice-overlay"], [data-testid="voice-bar"]', { timeout: 5000 }).catch(() => {});
-  await page.waitForTimeout(600);
-  const s = await page.evaluate(() => ({ voiceBar: !!document.querySelector('[data-testid="voice-bar"]'), card: !!document.querySelector('[data-testid="voice-overlay-card"]'), bubble: !!document.querySelector('[data-testid="voice-hold-bubble"]'), arc: !!document.querySelector('[data-testid="voice-hold-arc"]'), overlay: !!document.querySelector('[data-testid="voice-overlay"]') }));
-  // 宽桌面走 #463 的行内录音条(不是任何浮层);窄桌面窗口仍是 #463 留下的卡片。两者都不能出现手机的气泡 / 弧形面板。
-  ck(tag, `桌面(${target}):不画手机浮层(无气泡 / 弧形面板)`, !s.bubble && !s.arc && (target === 'voice-hold-bar' ? s.card : s.voiceBar && !s.overlay), JSON.stringify(s));
-  const f = `${OUT}/holdoverlay-${tag}.png`; await page.screenshot({ path: f }); shots.push(f);
-  if (target === 'voice-hold-bar') await page.mouse.up();
-  else await page.keyboard.press('Escape');
+  const posts = await hubPosts(page);
+  ck(tag, '输入框为空、中间松手 → 识别完直接发出去', posts.some(b => b.includes('帮我建个每早八点的定时任务')), `${posts.length} posts`);
+  ck(tag, '发送后输入框仍为空(没塞进草稿)', !((await draft(page)) ?? '').trim(), JSON.stringify(await draft(page)));
+  await shot('3-sent');
+
+  // ── 4 输入框已有字 → 插进草稿,不发送 ──
+  // 输入框先有字:切到键盘模式写半句,再切回语音模式(语音模式下草稿卡片只在有字时出现)。
+  await page.locator('[data-testid="composer-mode-toggle"]').click();
+  await page.locator('textarea').first().fill('先写一半，');
+  await page.locator('[data-testid="composer-mode-toggle"]').click();
+  await page.locator('[data-testid="voice-hold-bar"]').waitFor({ timeout: 5000 });
+  await page.waitForTimeout(300);
+  if (((await draft(page)) ?? '').trim()) {
+    await page.evaluate(() => { window.__flash = { text: '再补一句', fail: false }; });
+    const n0 = (await hubPosts(page)).length;
+    await press(page);
+    ck(tag, '已有字时文案「松手转文字，上移取消」', (await label(page)) === '松手转文字，上移取消', await label(page));
+    await page.waitForTimeout(1200);
+    await releaseAndSettle(page);
+    ck(tag, '已有字时松手 → 进草稿、不发送', ((await draft(page)) ?? '').includes('再补一句') && (await hubPosts(page)).length === n0, JSON.stringify(await draft(page)));
+  } else ck(tag, '能往草稿卡片写字(前置)', false, 'draft card not editable');
+
+  // ── 5 太短 ──
+  await page.locator('[data-testid="composer-mode-toggle"]').click(); await page.locator('textarea').first().fill(''); await page.locator('[data-testid="composer-mode-toggle"]').click(); await page.waitForTimeout(300);
+  await press(page);
+  await page.mouse.up();
+  await page.waitForSelector('[data-testid="voice-hold-toast"]', { timeout: 3000 }).then(() => ck(tag, '太短 → 「说话时间太短」', true), () => ck(tag, '太短 → 「说话时间太短」', false));
+  await stopLevels(page);
   await ctx.close();
 }
 await browser.close(); web.close();
-
-const cols = ['scheme', 'state', 'overlayW', 'overlayCx', 'bubbleCx', 'dBubble', 'cancelCx', 'textCx', 'symL', 'symR', 'dCircleCy', 'arcX', 'arcW', 'arcBottom', 'arcContentBottom', 'safeBottom'];
-console.log(`\n| ${cols.join(' | ')} |\n|${cols.map(() => '---').join('|')}|`);
-for (const r of rows) console.log(`| ${cols.map(c => r[c]).join(' | ')} |`);
 console.log(`\nscreenshots:\n${shots.join('\n')}`);
 console.log(`\n${total - failures}/${total} passed`);
 process.exit(failures ? 1 : 0);
