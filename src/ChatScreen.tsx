@@ -83,7 +83,7 @@ import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
 import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
 import ChatToolRail, { useChatToolRail } from './ChatToolRail';
-import { chatToolRailReserve, composerShowsShortcutHint, dockedPanelWidth } from './chat-tool-rail-layout';
+import { chatMoreInToolRail, chatToolRailReserve, composerShowsShortcutHint, dockedPanelWidth } from './chat-tool-rail-layout';
 import { mobileGlowActive } from './glow-mode';
 import { chatCornerGlow } from './chat-glow';
 import { useGlassChrome } from './glass-chrome';
@@ -616,6 +616,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [rootWidth, setRootWidth] = useState(0);
   const [toolRail, setToolRail] = useChatToolRail();
   const showToolRail = desktop && SHOW_CHAT_TOOL_RAIL;
+  const moreInToolRail = chatMoreInToolRail(windowChrome, showToolRail);
   const toolRailReserve = showToolRail ? chatToolRailReserve(toolRail.open, toolRail.width, rootWidth) : 0;
   const paneWidth = rootWidth > 0 ? Math.max(0, rootWidth - toolRailReserve) : 0;
   const [headerHeight, setHeaderHeight] = useState(0);
@@ -2826,17 +2827,19 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             </Pressable>
           );
         })()}
-        <Pressable
-          accessibilityRole="button"
-          accessibilityLabel={t('chat.info')}
-          accessibilityHint={t('chat.infoHint')}
-          onPress={() => setInfoOpen(true)}
-          hitSlop={10}
-          style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
-          testID="chat-header-more"
-        >
-          <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
-        </Pressable>
+        {!moreInToolRail ? (
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.info')}
+            accessibilityHint={t('chat.infoHint')}
+            onPress={() => setInfoOpen(true)}
+            hitSlop={10}
+            style={({ pressed }) => [styles.headerMore, pressed && { opacity: 0.6 }]}
+            testID="chat-header-more"
+          >
+            <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
+          </Pressable>
+        ) : null}
       </View>
       {/* admin 2026-11-22「把上面这一样放到下面一列」：模型胶囊单独一行，不再和头像/名字/⋯
           挤在标题那一行里抢宽度——整行都归它，不用靠加宽上限去凑合。 */}
@@ -3873,7 +3876,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
       ) : null}
-      {showToolRail ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} state={toolRail} setState={setToolRail} dockedWidth={dockedPanelWidth(toolRail.width, rootWidth)} onJumpToTask={goToMessage} onOpenTask={onOpenTask} /> : null}
+      {showToolRail ? <ChatToolRail cfg={cfg} alias={alias} session={controlSession} state={toolRail} setState={setToolRail} dockedWidth={dockedPanelWidth(toolRail.width, rootWidth)} onJumpToTask={goToMessage} onOpenTask={onOpenTask} onOpenInfo={moreInToolRail ? () => setInfoOpen(true) : undefined} infoLabel={t('chat.info')} /> : null}
       <ChatInfoPanel
         visible={infoOpen}
         presentation={chatInfoPresentation({ desktop, hideBack })}

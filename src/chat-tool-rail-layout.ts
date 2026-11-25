@@ -12,6 +12,15 @@ export const CHAT_TOOL_RAIL_WIDTH = 44;
 export function chatToolRailTopInset(chrome: PopoutChrome): number {
   return chrome === 'windows' ? WINDOWS_TITLE_BAR_HEIGHT : 0;
 }
+
+/**
+ * Windows 分离聊天窗中，页头需让出右上角 – □ ×（146px）且外层已让出右侧工具条（44px），
+ * 原页头右上角 ⋯ 会悬在距右边缘 190px 的半空显得突兀（admin 2026-11-25 截图）。
+ * 当右侧工具条可见时，将 ⋯ 移到工具条顶部（× 正下方），页头保持整洁拖动区。
+ */
+export function chatMoreInToolRail(chrome: PopoutChrome, showToolRail: boolean): boolean {
+  return chrome === 'windows' && showToolRail;
+}
 /** 聊天区最少留这么宽;窗口太窄时面板不展开占位(只留图标条),避免把聊天挤没。
  *  2026-11-19 admin「右下角你觉得丑吗」:420 太保守,1000 宽左右的窗口面板就浮起来盖住输入框和发送。
  *  改成 340,并让面板自己收窄到 PANEL_MIN_WIDTH 再放弃停靠。 */

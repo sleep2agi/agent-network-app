@@ -1,6 +1,6 @@
 import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
-import { CHAT_MIN_WIDTH_WITH_PANEL, CHAT_TOOL_RAIL_WIDTH, COMPOSER_HINT_MIN_WIDTH, chatToolRailReserve, chatToolRailTopInset, composerShowsShortcutHint, dockedPanelWidth, PANEL_MIN_WIDTH } from './chat-tool-rail-layout';
+import { CHAT_MIN_WIDTH_WITH_PANEL, CHAT_TOOL_RAIL_WIDTH, COMPOSER_HINT_MIN_WIDTH, chatMoreInToolRail, chatToolRailReserve, chatToolRailTopInset, composerShowsShortcutHint, dockedPanelWidth, PANEL_MIN_WIDTH } from './chat-tool-rail-layout';
 import { WINDOWS_TITLE_BAR_HEIGHT } from './window-shell';
 const chatSrc = () => readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 import { SHOW_CHAT_TOOL_RAIL } from './chat-entry-flags';
@@ -56,4 +56,12 @@ console.log('chat-tool-rail-layout: ok');
   assert.match(rail, /const topInset = chatToolRailTopInset\(popoutChatChrome\(Platform\.OS\)\);/);
   assert.match(rail, /testID="chat-tool-panel"[^>]*top: topInset/);
   assert.match(rail, /testID="chat-tool-rail"[^>]*top: topInset/);
+  // admin 2026-11-25 Windows 分离聊天窗截图：原页头 ⋯ 悬在 – □ × 左侧半空，移到右侧工具条顶部（× 正下方）。
+  assert.equal(chatMoreInToolRail('windows', true), true);
+  assert.equal(chatMoreInToolRail('windows', false), false);
+  assert.equal(chatMoreInToolRail('mac', true), false);
+  assert.equal(chatMoreInToolRail(null, true), false);
+  assert.match(rail, /testID="chat-tool-more"/);
+  assert.match(chat, /const moreInToolRail = chatMoreInToolRail\(windowChrome, showToolRail\);/);
+  assert.match(chat, /onOpenInfo=\{moreInToolRail \? \(\) => setInfoOpen\(true\) : undefined\}/);
 }

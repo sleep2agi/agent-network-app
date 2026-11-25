@@ -61,13 +61,16 @@ export function useChatToolRail(): [ChatToolRailState, (f: (s: ChatToolRailState
   return [state, setState];
 }
 
-export default function ChatToolRail({ cfg, alias, session, state, setState, dockedWidth = null, onJumpToTask, onOpenTask }: {
+export default function ChatToolRail({ cfg, alias, session, state, setState, dockedWidth = null, onJumpToTask, onOpenTask, onOpenInfo, infoLabel }: {
   cfg: HubConfig; alias: string; session?: Session | null;
   state: ChatToolRailState; setState: (f: (s: ChatToolRailState) => ChatToolRailState) => void;
   /** 停靠时的实际面板宽度(chat-tool-rail-layout.dockedPanelWidth);null = 窗口太窄,面板浮在聊天上。 */
   dockedWidth?: number | null;
   onJumpToTask?: (taskId: string) => void;
   onOpenTask?: (requirementId: string, networkId: string | null) => void;
+  /** Windows 分离聊天窗：把原页头悬空的 ⋯（聊天信息）移到工具条顶部（× 正下方）。 */
+  onOpenInfo?: () => void;
+  infoLabel?: string;
 }) {
   // 桌面整窗渐变时图标条透明，不在右下角把光切断；展开的面板仍是实底（要读文字）。
   const glass = useGlassChrome();
@@ -134,6 +137,20 @@ export default function ChatToolRail({ cfg, alias, session, state, setState, doc
         zIndex 低于工具面板（面板是 25），面板浮在它左侧（right: 44）。
       */}
       <View testID="chat-tool-rail" style={{ position: 'absolute', right: 0, top: topInset, bottom: 0, zIndex: 20, width: CHAT_TOOL_RAIL_WIDTH, borderLeftWidth: 1, borderLeftColor: colors.border, backgroundColor: glass ? 'transparent' : colors.bg, paddingTop: spacing.sm, gap: spacing.xs, alignItems: 'center' }}>
+        {onOpenInfo ? (
+          <>
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={infoLabel || '聊天信息'}
+              testID="chat-tool-more"
+              onPress={onOpenInfo}
+              style={({ pressed }) => [{ width: 36, height: 36, borderRadius: radius.control, alignItems: 'center', justifyContent: 'center' }, pressed && { opacity: 0.7 }]}
+            >
+              <Ionicons name="ellipsis-horizontal" size={18} color={colors.textSecondary} />
+            </Pressable>
+            <View testID="chat-tool-more-divider" style={{ width: 22, height: 1, backgroundColor: colors.border, marginVertical: 2 }} />
+          </>
+        ) : null}
         {TOOLS.map(t => {
           const on = active === t.key;
           const disabled = !!t.needSession && !realSession;
