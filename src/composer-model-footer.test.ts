@@ -4,7 +4,7 @@
 // shows the control's name while the accessibility label still says unknown.
 import { strict as assert } from 'node:assert';
 import fs from 'node:fs';
-import { composerModelRowInset, composerVariantLabel, composerVariantPillLabel } from './composer-model-label';
+import { composerModelRowInset, composerShowsVariantControl, composerVariantLabel, composerVariantPillLabel } from './composer-model-label';
 import { setLanguagePreference } from './i18n';
 
 let n = 0;
@@ -42,6 +42,18 @@ ck('a11y label keeps the explicit unknown', row.includes("t('chat.modelPicker.va
 ck('behavior unchanged: model pill toggles, variant pill opens', row.includes('onPress={() => setModelSheetOpen(v => !v)}') && row.includes('onPress={() => setModelSheetOpen(true)}'));
 const styles = chat.slice(chat.indexOf('  composerModelPill: {'), chat.indexOf('  headerIdentity: {'));
 ck('model pill shrinks, variant pill does not', /composerModelPill: \{[^}]*flexShrink: 1, minWidth: 0/.test(styles) && /composerVariantPill: \{[^}]*flexShrink: 0/.test(styles));
+
+// 思考档位按钮只在支持独立 modelVariant 的 runtime（OpenCode V2）下展示；
+// antigravity-sdk/acp（模型 ID 自带 -low/-medium/-high/-xhigh）、grok-build-acp、claude-code 等隐藏，避免冲突。
+ck('variant button hidden for antigravity-sdk / antigravity-acp', !composerShowsVariantControl({ runtime: 'antigravity-sdk' }) && !composerShowsVariantControl({ runtime: 'antigravity-acp' }));
+ck('variant button hidden for grok-build-acp / claude-code / codex-sdk', !composerShowsVariantControl({ runtime: 'grok-build-acp' }) && !composerShowsVariantControl({ runtime: 'claude-code' }) && !composerShowsVariantControl({ runtime: 'codex-sdk' }));
+ck('variant button hidden for agent-node:antigravity without runtime field', !composerShowsVariantControl({ agent: 'agent-node:antigravity' }));
+ck('variant button hidden for opencode v1', !composerShowsVariantControl({ runtime: 'opencode-cli', generation: 'v1' }));
+ck('variant button shown for opencode-cli / opencode-sdk', composerShowsVariantControl({ runtime: 'opencode-cli' }) && composerShowsVariantControl({ runtime: 'opencode-sdk' }));
+ck('variant button shown for agent-node:opencode fallback', composerShowsVariantControl({ agent: 'agent-node:opencode' }));
+ck('variant button shown whenever explicit variant readback exists', composerShowsVariantControl({ runtime: 'antigravity-sdk', variant: 'high' }) && composerShowsVariantControl({ variant: null }));
+ck('ChatScreen gates both desktop and mobile variant pills with showVariantControl',
+  chat.includes('const showVariantControl = composerShowsVariantControl(') && (chat.match(/\{showVariantControl \?/g)?.length ?? 0) === 2);
 
 console.log(`${n}/${n} passed`);
 process.exit(0);

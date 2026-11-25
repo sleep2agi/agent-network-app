@@ -73,7 +73,7 @@ import { canShowPermissionSection } from './node-permission-model';
 import { descriptionForNode } from './node-description';
 import AvatarStatusRing from './AvatarStatusRing';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
-import { activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import { activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerShowsVariantControl, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ComposerStopButton from './ComposerStopButton';
@@ -2592,6 +2592,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4591 真机回访：停止的「未确认」提示是**这个会话**的状态，切到别的节点必须清掉，
   // 否则上一次的提示会挂在另一个节点的聊天框上（用户会以为这个节点也没停）。
   const [nodeDescription, setNodeDescription] = useState<string>('');
+  const [nodeRuntimeMeta, setNodeRuntimeMeta] = useState<{ runtime: string | null; generation: string | null }>({ runtime: null, generation: null });
+  const showVariantControl = composerShowsVariantControl({
+    runtime: nodeRuntimeMeta.runtime ?? reportedValue?.runtime ?? controlSession?.runtime,
+    agent: controlSession?.agent,
+    generation: nodeRuntimeMeta.generation ?? controlSession?.opencode_generation ?? controlSession?.config_snapshot?.flags?.opencodeGeneration,
+    variant: footerVariant,
+  });
   useEffect(() => {
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     interruptSeenRef.current = new Set();
@@ -2600,6 +2607,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     setInterrupt(idleInterrupt());
     setComposerNotice(null);
     setNodeDescription('');
+    setNodeRuntimeMeta({ runtime: null, generation: null });
   }, [cfg, alias]);
   // #5501 —— 聊天顶栏「在线 · 职责/签名」单行摘要；打开/关闭聊天信息面板时刷新，编辑完立即生效。
   useEffect(() => {
@@ -2607,7 +2615,15 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     void fetchHubNodes(cfg)
       .then(({ nodes }) => {
         if (!live) return;
-        setNodeDescription(descriptionForNode(nodes ?? [], { nodeId: controlSession?.node_id, alias }));
+        const list = nodes ?? [];
+        setNodeDescription(descriptionForNode(list, { nodeId: controlSession?.node_id, alias }));
+        const matched = controlSession?.node_id
+          ? list.find(n => n.node_id === controlSession.node_id)
+          : (() => { const m = list.filter(n => n.alias === alias); return m.length === 1 ? m[0] : undefined; })();
+        setNodeRuntimeMeta({
+          runtime: matched?.runtime ?? null,
+          generation: matched?.opencode_generation ?? matched?.config_snapshot?.flags?.opencodeGeneration ?? null,
+        });
       })
       .catch(() => { /* keep previous */ });
     return () => { live = false; };
@@ -3660,6 +3676,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </Text>
                   <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
                 </Pressable>
+                {showVariantControl ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
@@ -3673,6 +3690,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                   </Text>
                   <Ionicons name="chevron-down" size={12} color={colors.textMuted} />
                 </Pressable>
+                ) : null}
             {/* 左侧（＋ / 模型 / 思考档位）与右侧之间的弹性空白：＋ 仍是工具栏这一整行的直接子元素，
                 录音条替换工具栏时 drive 以它的父元素（整行）量高度和左右边缘。 */}
             <View style={styles.desktopToolbarSpacer} />
@@ -3794,6 +3812,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           </Text>
           <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
+        {showVariantControl ? (
         <Pressable
           accessibilityRole="button"
           accessibilityLabel={t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })}
@@ -3807,6 +3826,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           </Text>
           <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
+        ) : null}
         {turnCaps.interrupt && (interruptable(sessionStatus) || interrupt.phase !== 'idle') ? <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} onPress={pressInterrupt} /> : null}
         {turnCaps.interrupt && interruptable(sessionStatus) ? (
                 <Pressable
