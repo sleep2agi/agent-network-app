@@ -2348,12 +2348,16 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const effectiveScopeRef = useRef(effectiveScope);
   effectiveScopeRef.current = effectiveScope;
   const [effectiveModel, setEffectiveModel] = useState<ComposerModelSnapshot | null>(null);
+  const [modelStatusTick, setModelStatusTick] = useState(0);
   const receiveEffectiveConfig = useCallback((value: import('./api').NodeConfigRead | null) => {
     if (effectiveScopeRef.current !== effectiveScope) return;
     setEffectiveModel(value?.model_effective?.trim() ? {
       scope: effectiveScope, expiresAt: Date.now() + 35_000,
       value: { model: value.model_effective, modelVariant: value.modelVariant },
     } : null);
+    if (value?.agy_hot_model_capable && value.last_update?.status === 'applied') {
+      setModelStatusTick(n => n + 1);
+    }
   }, [effectiveScope]);
   // No extra config/catalog request: the panel publishes its existing authorized read.
   // Expire even after the panel unmounts; render also checks age after suspended timers.
@@ -2429,7 +2433,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     void poll();
     const timer = setInterval(poll, 30_000);
     return () => { live = false; clearInterval(timer); if (expiry) clearTimeout(expiry); };
-  }, [cfg, alias, composerModelScope, foreground]);
+  }, [cfg, alias, composerModelScope, foreground, modelStatusTick]);
   // Deliberately a slower, separate poll than the 5s message poll above:
   // an agent's online/offline state changes far less often than messages
   // do, so 30s keeps the status badge fresh without doubling the chat's

@@ -26,7 +26,15 @@ import {
   type OpenCodeCatalogPoll,
 } from './api';
 import { catalogErrorText, isOpenCodeV2Node, mergeReportedVariants, peerCatalogWithVariants, reportedCatalogWithVariants } from './opencode-v2-model-list';
-import { acpModelChoices, acpModelErrorText, isAcpModelRuntime, normalizeAcpModelId } from './acp-model-edit';
+import {
+  acpModelChoices,
+  acpModelErrorText,
+  classifyAcpSaveOutcome,
+  filterAndGroupAgyModels,
+  isAcpModelRuntime,
+  isAgyRuntime,
+  normalizeAcpModelId,
+} from './acp-model-edit';
 import { nodeProviderDaemon } from './node-provider-target';
 import { modelControlAvailability } from './node-model-change';
 import { buildConfigPatch, variantAfterModelSwitch, variantValueError, variantWritable } from './node-variant-patch';
@@ -106,6 +114,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const [acpNotice, setAcpNotice] = useState<string | null>(null);
   const [acpError, setAcpError] = useState<string | null>(null);
   const [acpPrefilled, setAcpPrefilled] = useState(false);
+  const [agyCustomOpen, setAgyCustomOpen] = useState(false);
   // #4976 跟进：loading 超过 4 秒就换成「还剩多少秒会出结果」，别让人对着同一句话干等。
   const [loadingElapsedSec, setLoadingElapsedSec] = useState(0);
   useEffect(() => {
@@ -116,13 +125,15 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   }, [catalog.loading, catalogAttempt]);
   // undefined = 正在读；null = Hub 没这个接口/读失败；对象 = 真实读回。
   const [config, setConfig] = useState<NodeConfigRead | null | undefined>(undefined);
-  // ACP 面板：配置读到后把当前模型填进输入框（只填一次，别覆盖用户正在改的内容）。
+  // ACP 面板：非 agy（无目录手输）配置读到后把当前模型填进输入框（只填一次，别覆盖用户正在改的内容）。
   useEffect(() => {
     if (acpPrefilled || config === undefined) return;
-    const current = (config?.model ?? '').trim();
-    if (current) setAcpDraft(current);
+    if (!isAgyRuntime(node?.runtime)) {
+      const current = (config?.model ?? '').trim();
+      if (current) setAcpDraft(current);
+    }
     setAcpPrefilled(true);
-  }, [config, acpPrefilled]);
+  }, [config, acpPrefilled, node?.runtime]);
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
@@ -549,33 +560,274 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   // 以前照样弹出整个搜索面板，再给一段红字「不是 OpenCode V2」。现在只给一张说明卡：当前模型 + 原因，
   // 不出搜索框 / 列表 / 档位 / agent。
   if (acpRuntime) {
-    const saveAcpModel = async () => {
-      if (!node || !config || acpSaving) return;
-      const checked = normalizeAcpModelId(acpDraft);
+    const agyRuntime = isAgyRuntime(node?.runtime);
+    const agyHotCapable = config?.agy_hot_model_capable === true || node?.agy_hot_model_capable === true;
+    const acpChoices = acpModelChoices({ runtime: node?.runtime, agyModels: node?.agy_models });
+    const configuredModel = (config?.model ?? '').trim();
+    const activeAcpModel = (configuredModel || currentModel || '').trim();
+    const saveAcpModel = async (explicitModel?: string, opts?: { closeOnHotApplied?: boolean }) => {
+      if (!node || acpSaving) return;
+      const checked = normalizeAcpModelId(explicitModel ?? acpDraft);
       if (!checked.ok) { setAcpError(acpModelErrorText(checked.error)); return; }
+      if (explicitModel !== undefined && checked.value === activeAcpModel && (!currentModel || checked.value === currentModel.trim())) {
+        closeRef.current();
+        return;
+      }
       setAcpSaving(true);
       setAcpError(null);
       setAcpNotice(null);
       try {
-        const res = await updateNodeConfig(cfg, { nodeId: node.node_id, baseRevision: config.config_revision, patch: buildConfigPatch({ model: checked.value }) });
-        if (!res.ok) { setAcpError(res.error); return; }
-        // 只确认「配置真的写进去了」，不声称运行时已切换：这两个 runtime 没有目录/回读可校验。
-        const after = await fetchNodeConfig(cfg, node.node_id);
-        if (after && after.model !== checked.value) {
-          setAcpError(t('chat.modelPicker.acpNotSaved', { value: checked.value }));
+        let activeConfig = config ?? null;
+        if (!activeConfig) {
+          activeConfig = await fetchNodeConfig(cfgRef.current, node.node_id).catch(() => null);
+          if (activeConfig) { setConfig(activeConfig); readbackRef.current(activeConfig); }
+        }
+        if (!activeConfig) {
+          setAcpError(t('chat.modelPicker.noConfig'));
           return;
         }
-        setConfig(after ?? config);
-        setAcpNotice(t('chat.modelPicker.acpSaved', { value: checked.value }));
+        const baseRevision = activeConfig.config_revision;
+        const res = await updateNodeConfig(cfgRef.current, {
+          nodeId: node.node_id,
+          baseRevision,
+          patch: buildConfigPatch({ model: checked.value }),
+        });
+        if (!res.ok) {
+          if (res.conflict) {
+            await reloadConfig();
+            setAcpError(t('chat.modelPicker.conflict'));
+            return;
+          }
+          setAcpError(t('chat.modelPicker.failed', { message: res.error }));
+          return;
+        }
+        const effectiveApplyMode = res.apply_mode ?? (agyRuntime && agyHotCapable ? 'hot' : 'restart');
+        const expectHot = effectiveApplyMode === 'hot';
+        const pollDelays = expectHot ? [300, 600, 900, 1200] : [200];
+        let after: NodeConfigRead | null = null;
+        let outcome = classifyAcpSaveOutcome({
+          applyMode: effectiveApplyMode,
+          after: null,
+          updateId: res.update_id,
+          requested: checked.value,
+          baseRevision,
+        });
+        for (let i = 0; i < pollDelays.length; i += 1) {
+          await new Promise(resolve => setTimeout(resolve, pollDelays[i]));
+          after = await fetchNodeConfig(cfgRef.current, node.node_id).catch(() => null);
+          outcome = classifyAcpSaveOutcome({
+            applyMode: effectiveApplyMode,
+            after,
+            updateId: res.update_id,
+            requested: checked.value,
+            baseRevision,
+          });
+          if (outcome.kind === 'applied' || outcome.kind === 'failed') break;
+        }
+        // 无论终局如何都换上最新配置：revision 已抬高，留旧值下次必撞 revision_conflict。
+        if (after) {
+          setConfig(after);
+          readbackRef.current(after);
+        }
+        if (outcome.kind === 'failed') {
+          setAcpError(t('chat.modelPicker.failed', { message: outcome.reason }));
+          return;
+        }
+        if (outcome.kind === 'applied') {
+          setAcpDraft('');
+          if (outcome.hot) {
+            setAcpNotice(t('chat.modelPicker.acpHotApplied', { value: checked.value }));
+            if (opts?.closeOnHotApplied) { closeRef.current(); return; }
+          } else {
+            setAcpNotice(t('chat.modelPicker.acpSaved', { value: checked.value }));
+          }
+          return;
+        }
         setAcpDraft('');
+        setAcpNotice(t('chat.modelPicker.acpRestarting', { value: checked.value }));
       } catch (e) {
-        setAcpError(e instanceof Error ? e.message : String(e));
+        setAcpError(t('chat.modelPicker.failed', { message: e instanceof Error ? e.message : String(e) }));
       } finally {
         setAcpSaving(false);
       }
     };
-    const acpChoices = acpModelChoices({ runtime: node?.runtime, agyModels: node?.agy_models });
+
     const draftTrim = acpDraft.trim();
+    if (agyRuntime) {
+      const agyView = filterAndGroupAgyModels({
+        models: acpChoices.models,
+        query,
+        currentModel: activeAcpModel,
+      });
+      const unlistedCustom = draftTrim.length > 0 && !acpChoices.models.includes(draftTrim);
+      const sourceText = acpChoices.source === 'reported'
+        ? t('chat.modelPicker.agySourceReported', { count: acpChoices.models.length })
+        : t('chat.modelPicker.agySourceFallback', { count: acpChoices.models.length });
+      const modeText = agyHotCapable ? t('chat.modelPicker.agyModeHot') : t('chat.modelPicker.agyModeRestart');
+      const configDiffers = !!configuredModel && !!currentModel && configuredModel !== currentModel.trim();
+      return (
+        <View style={styles.card} testID="composer-model-sheet">
+          <View style={styles.searchBar} testID="model-palette-acp">
+            <Ionicons name="search-outline" size={16} color={colors.textMuted} />
+            <TextInput
+              testID="model-palette-agy-search"
+              value={query}
+              onChangeText={text => { setQuery(text); setAcpError(null); }}
+              placeholder={t('chat.modelPicker.search')}
+              placeholderTextColor={colors.textMuted}
+              accessibilityLabel={t('chat.modelPicker.searchLabel')}
+              style={[styles.searchInput, Platform.OS === 'web' && ({ outlineStyle: 'none' } as object)]}
+              autoCapitalize="none"
+              autoCorrect={false}
+              autoFocus
+            />
+            {query ? (
+              <Pressable
+                testID="model-palette-search-clear"
+                accessibilityRole="button"
+                hitSlop={6}
+                onPress={() => setQuery('')}
+                style={{ padding: 2 }}
+              >
+                <Ionicons name="close-circle" size={16} color={colors.textMuted} />
+              </Pressable>
+            ) : null}
+            <Pressable
+              testID="model-palette-close"
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.modelPicker.close')}
+              hitSlop={8}
+              onPress={() => closeRef.current()}
+              style={{ marginLeft: 4, padding: 2 }}
+            >
+              <Ionicons name="close" size={18} color={colors.textMuted} />
+            </Pressable>
+          </View>
+
+          {acpSaving ? (
+            <View style={styles.statusRow} testID="model-palette-busy">
+              <ActivityIndicator size="small" color={colors.accent} />
+              <Text style={styles.statusText}>{t('chat.modelPicker.switching')}</Text>
+            </View>
+          ) : null}
+
+          {agyView.total === 0 ? (
+            <View style={styles.emptyBox} testID="model-palette-empty">
+              <Text style={styles.emptyTitle}>{t('chat.modelPicker.empty')}</Text>
+              <Text style={styles.emptyHint}>{t('chat.modelPicker.agyEmptyHint')}</Text>
+            </View>
+          ) : (
+            <ScrollView
+              style={{ maxHeight: listMax }}
+              keyboardShouldPersistTaps="handled"
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+              testID="model-palette-list"
+            >
+              {agyView.groups.map(group => (
+                <View key={group.group} style={styles.group}>
+                  <View style={styles.groupHeader}>
+                    <Text style={styles.groupName} numberOfLines={1} testID={`model-palette-group-${group.group}`}>{group.group}</Text>
+                    <Text style={styles.groupCount} testID={`model-palette-group-count-${group.group}`}>{group.count}</Text>
+                  </View>
+                  {group.rows.map(row => (
+                    <Pressable
+                      key={row.id}
+                      testID={`model-palette-acp-suggest-${row.id}`}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: row.current, disabled: acpSaving }}
+                      accessibilityLabel={t('chat.modelPicker.modelA11y', { value: row.id })}
+                      disabled={acpSaving}
+                      onPress={() => { void saveAcpModel(row.id, { closeOnHotApplied: true }); }}
+                      style={({ pressed }) => [
+                        styles.row,
+                        row.current && styles.rowCurrent,
+                        pressed && { opacity: 0.7 },
+                      ]}
+                    >
+                      <View style={styles.agyRowMain}>
+                        <View style={styles.agyRowTitleLine}>
+                          <Text style={styles.rowLabel} numberOfLines={1}>{row.label}</Text>
+                          {row.level ? (
+                            <View style={[styles.agyLevelPill, row.current && styles.agyLevelPillCurrent]}>
+                              <Text style={[styles.agyLevelText, row.current && { color: colors.accent }]}>{row.level}</Text>
+                            </View>
+                          ) : null}
+                        </View>
+                        {row.label !== row.id ? (
+                          <Text style={styles.agyRowSlug} numberOfLines={1}>{row.id}</Text>
+                        ) : null}
+                      </View>
+                      {row.current ? (
+                        <Ionicons name="checkmark" size={18} color={colors.accent} testID={`model-palette-check-${row.id}`} />
+                      ) : null}
+                    </Pressable>
+                  ))}
+                </View>
+              ))}
+            </ScrollView>
+          )}
+
+          <Text style={styles.source} testID="model-palette-source">
+            {`${sourceText} · ${modeText}`}
+          </Text>
+          {configDiffers ? (
+            <Text style={styles.source} testID="model-palette-acp-configured">
+              {t('chat.modelPicker.acpConfigured', { value: configuredModel })}
+            </Text>
+          ) : null}
+
+          <View style={styles.agyCustomSection}>
+            <Pressable
+              testID="model-palette-agy-custom-toggle"
+              accessibilityRole="button"
+              onPress={() => setAgyCustomOpen(v => !v)}
+              style={styles.agyCustomToggle}
+            >
+              <Text style={styles.agyCustomToggleText}>{t('chat.modelPicker.agyCustomToggle')}</Text>
+              <Ionicons name={agyCustomOpen ? 'chevron-up' : 'chevron-down'} size={14} color={colors.textMuted} />
+            </Pressable>
+            {agyCustomOpen ? (
+              <View style={styles.agyCustomBody}>
+                <TextInput
+                  testID="model-palette-acp-input"
+                  value={acpDraft}
+                  onChangeText={text => { setAcpDraft(text); setAcpError(null); setAcpNotice(null); }}
+                  placeholder={activeAcpModel || 'claude-opus-5-5-high'}
+                  placeholderTextColor={colors.textMuted}
+                  autoCapitalize="none"
+                  autoCorrect={false}
+                  style={styles.acpInput}
+                />
+                {unlistedCustom ? (
+                  <Text style={styles.agyCustomWarn} testID="model-palette-agy-custom-warn">
+                    {t('chat.modelPicker.agyCustomUnlisted', { value: draftTrim })}
+                  </Text>
+                ) : null}
+                <Pressable
+                  testID="model-palette-acp-save"
+                  accessibilityRole="button"
+                  accessibilityState={{ busy: acpSaving, disabled: acpSaving || !draftTrim }}
+                  disabled={acpSaving || !draftTrim}
+                  onPress={() => { void saveAcpModel(acpDraft, { closeOnHotApplied: true }); }}
+                  style={[styles.acpSave, (!draftTrim || acpSaving) && { opacity: 0.55 }]}
+                >
+                  <Text style={styles.acpSaveText}>{acpSaving ? t('chat.modelPicker.acpSaving') : t('chat.modelPicker.acpSave')}</Text>
+                </Pressable>
+              </View>
+            ) : null}
+          </View>
+
+          {acpError ? (
+            <View style={styles.errorBox} testID="model-palette-acp-error">
+              <Text style={styles.errorText}>{acpError}</Text>
+            </View>
+          ) : null}
+          {acpNotice ? <Text style={styles.notice} testID="model-palette-acp-notice">{acpNotice}</Text> : null}
+        </View>
+      );
+    }
+
     return (
       <View style={styles.card} testID="composer-model-sheet">
         <View style={styles.searchBar} testID="model-palette-acp">
@@ -599,13 +851,8 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         </Text>
         {/* 配置值 vs 运行时上报值分开写：写进去但还没重启时，两个值会不一样，别让人误会保存没生效。 */}
         <Text style={styles.source} testID="model-palette-acp-configured">
-          {t('chat.modelPicker.acpConfigured', { value: (config?.model ?? '').trim() || t('chat.modelUnknown') })}
+          {t('chat.modelPicker.acpConfigured', { value: configuredModel || t('chat.modelUnknown') })}
         </Text>
-        {acpChoices.source === 'reported' ? (
-          <Text style={styles.source} testID="model-palette-acp-reported-count">
-            {`agy models · ${acpChoices.models.length}`}
-          </Text>
-        ) : null}
         <TextInput
           testID="model-palette-acp-input"
           value={acpDraft}
@@ -641,8 +888,12 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         >
           <Text style={styles.acpSaveText}>{acpSaving ? t('chat.modelPicker.acpSaving') : t('chat.modelPicker.acpSave')}</Text>
         </Pressable>
-        {acpError ? <Text style={styles.errorText} testID="model-palette-acp-error">{acpError}</Text> : null}
-        {acpNotice ? <Text style={styles.statusText} testID="model-palette-acp-notice">{acpNotice}</Text> : null}
+        {acpError ? (
+          <View style={styles.errorBox} testID="model-palette-acp-error">
+            <Text style={styles.errorText}>{acpError}</Text>
+          </View>
+        ) : null}
+        {acpNotice ? <Text style={styles.notice} testID="model-palette-acp-notice">{acpNotice}</Text> : null}
       </View>
     );
   }
@@ -915,6 +1166,17 @@ const makeStyles = () => ({
   acpChipText: { fontSize: ds(11), color: colors.textMuted },
   acpSave: { marginHorizontal: 10, marginTop: 10, marginBottom: 10, paddingVertical: 9, borderRadius: radius.control, backgroundColor: colors.accent, alignItems: 'center' as const },
   acpSaveText: { fontSize: ds(13), color: '#fff', fontWeight: '600' as const },
+  agyRowMain: { flex: 1, minWidth: 0, paddingVertical: 5, gap: 2, paddingRight: 8 },
+  agyRowTitleLine: { flexDirection: 'row' as const, alignItems: 'center' as const, gap: 6 },
+  agyLevelPill: { paddingHorizontal: 6, paddingVertical: 1, borderRadius: radius.pill, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.inputBg },
+  agyLevelPillCurrent: { borderColor: colors.accent },
+  agyLevelText: { fontSize: ds(10), color: colors.textMuted, fontWeight: '500' as const },
+  agyRowSlug: { fontSize: ds(11), color: colors.textMuted },
+  agyCustomSection: { marginTop: 6, borderTopWidth: 1, borderTopColor: colors.border, paddingTop: 4 },
+  agyCustomToggle: { flexDirection: 'row' as const, alignItems: 'center' as const, justifyContent: 'space-between' as const, paddingHorizontal: 10, paddingVertical: 6 },
+  agyCustomToggleText: { fontSize: ds(12), color: colors.textMuted },
+  agyCustomBody: { paddingBottom: 2 },
+  agyCustomWarn: { fontSize: ds(11), color: colors.failed, paddingHorizontal: 10, paddingTop: 4, lineHeight: 16 },
   // #4976 —— 错误终态给一个明确的「重试」，别只留一段红字。
   retryButton: { alignSelf: 'flex-start' as const, marginTop: 8, paddingHorizontal: 10, paddingVertical: 5, borderRadius: radius.item, backgroundColor: colors.inputBg },
   retryLabel: { fontSize: ds(12), color: colors.accent },
