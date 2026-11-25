@@ -73,7 +73,7 @@ import { canShowPermissionSection } from './node-permission-model';
 import { descriptionForNode } from './node-description';
 import AvatarStatusRing from './AvatarStatusRing';
 import { chatInfoCaps, chatInfoGroups, chatInfoPresentation, isChatFindKey, type ChatInfoCaps, type ChatInfoRow } from './chat-info-model';
-import { readComposerModelSnapshot, readEffectiveComposerModel, activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
+import { activeComposerModelValue, composerVariantLabel, composerVariantPillLabel, composerModelRowInset, reportedComposerModel, type ComposerModelSnapshot } from './composer-model-label';
 import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ComposerStopButton from './ComposerStopButton';
@@ -2345,7 +2345,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const effectiveScopeRef = useRef(effectiveScope);
   effectiveScopeRef.current = effectiveScope;
   const [effectiveModel, setEffectiveModel] = useState<ComposerModelSnapshot | null>(null);
-  const composerModelLine = readEffectiveComposerModel(effectiveModel, effectiveScope, reportedModel, composerModelScope) ?? readComposerModelSnapshot(reportedModel, composerModelScope);
   const receiveEffectiveConfig = useCallback((value: import('./api').NodeConfigRead | null) => {
     if (effectiveScopeRef.current !== effectiveScope) return;
     setEffectiveModel(value?.model_effective?.trim() ? {
@@ -2749,7 +2748,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         onLayout={(event) => { const h = Math.round(event.nativeEvent.layout.height); setHeaderHeight(c => (c === h ? c : h)); }}
         testID="chat-header"
       >
-      <View style={styles.headerTopRow}>
         {!desktop && !hideBack ? (
           <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} testID="chat-header-back">
             <Text style={styles.back}>‹</Text>
@@ -2840,31 +2838,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             <Ionicons name="ellipsis-horizontal" size={20} color={colors.textSecondary} testID="chat-header-more-icon" />
           </Pressable>
         ) : null}
-      </View>
-      {/* admin 2026-11-22「把上面这一样放到下面一列」：模型胶囊单独一行，不再和头像/名字/⋯
-          挤在标题那一行里抢宽度——整行都归它，不用靠加宽上限去凑合。 */}
-      <View style={styles.headerModelRow}>
-        <Pressable
-          accessibilityRole={footerModel ? undefined : 'button'}
-          accessibilityLabel={footerModel ? undefined : (modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect'))}
-          onPress={footerModel ? undefined : () => setModelSheetOpen(true)}
-          hitSlop={6}
-        >
-          {/* admin 2026-11-21「这个地方也很奇怪了」：页头这个胶囊写的是「节点上报：claude-code...」，
-              固定 132px 宽度一截断，模型名本身（唯一有用的信息）反而被切没了；底部输入框自己的模型
-              胶囊（composerModelPill）只显示模型名，不带「节点上报」这层框架，两边不一致本身就是
-              困惑点。去掉前缀跟下面对齐，截断也从「切尾巴」改成「切中间」，长名字至少头尾都留着。
-              admin 2026-11-22「这是啥情况」：132px 这个宽度上限是按手机窄屏定的，桌面宽窗口头部
-              明明有大把空白，却还套着同一个上限，"opencode-cli · openai/gpt-6-astra" 这类较长的
-              runtime+model 组合照样被切得看不出是什么型号。桌面这边放宽上限，手机仍按 132px（窄屏
-              没有多余空间可以给）。 */}
-          <Text style={[styles.modelChip, desktop && styles.modelChipDesktop]} numberOfLines={1} ellipsizeMode="middle" testID="chat-header-model">
-            {composerModelLine
-              ? composerModelLine
-              : modelFixedByNode ? t('chat.modelFixed') : t('chat.modelSelect')}
-          </Text>
-        </Pressable>
-      </View>
       </View>
 
       {backgroundTarget ? <NodeSessionControl key={JSON.stringify([cfg.serverUrl, cfg.token, backgroundTarget])} cfg={cfg} target={backgroundTarget} /> : null}
@@ -3958,17 +3931,15 @@ const makeStyles = (B = bubbleLayout()) =>
   loadRetry: { alignSelf: 'center', marginTop: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: 10, borderRadius: radius.pill, backgroundColor: colors.subtleFill },
   loadRetryText: { color: colors.textSecondary, fontSize: 13, fontWeight: '600' },
   header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: spacing.md,
     paddingHorizontal: spacing.lg,
     paddingVertical: spacing.md,
     borderBottomWidth: 1,
     borderBottomColor: colors.border,
     backgroundColor: colors.card,
   },
-  // admin 2026-11-22「把上面这一样放到下面一列」：模型胶囊原来和头像/名字/⋯挤在同一行，
-  // 不管桌面窗口多宽都只分得到一条缝；拆成两行后，标题行（这一个）只装头像/名字/⋯，
-  // 模型胶囊挪到下面单独一行（headerModelRow），整行宽度都归它用。
-  headerTopRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.md },
-  headerModelRow: { flexDirection: 'row', marginTop: spacing.xs },
   // 桌面聊天页底色带角落光斑（chat-glow.ts）：头部和输入区外围透明，让光透出来；卡片本身仍是实底。
   headerOverGlow: { backgroundColor: 'transparent' },
   back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
@@ -3994,13 +3965,6 @@ const makeStyles = (B = bubbleLayout()) =>
   composerVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0, height: 24, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
   composerVariantPillText: { fontSize: ds(11), lineHeight: 14, color: colors.textSecondary },
   composerPillPlaceholder: { color: colors.textMuted },
-  modelChip: {
-    maxWidth: 132, marginRight: 6, paddingHorizontal: 6, paddingVertical: 2,
-    borderRadius: radius.item, backgroundColor: colors.card, color: colors.textMuted,
-    fontSize: ds(11), overflow: 'hidden',
-  },
-  // 桌面宽窗口头部有空间，132px 那个手机窄屏的上限没必要照搬（admin 2026-11-22）。
-  modelChipDesktop: { maxWidth: 260 },
   // 头像+名字这一整块现在是一个可点的整体（见 chat-header-identity）：行容器接过原来
   // headerTitleCol 的 flex:1，自己内部再给名字列同样的 flex:1，布局比例和点不动时完全一样。
   headerIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, minWidth: 0 },

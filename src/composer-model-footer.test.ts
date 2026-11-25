@@ -40,7 +40,7 @@ ck('long model names truncate to one line', /numberOfLines=\{1\} ellipsizeMode="
 ck('mobile pill shows the placeholder label', row.includes('{composerVariantPillLabel(footerVariant)}'));
 ck('a11y label keeps the explicit unknown', row.includes("t('chat.modelPicker.variantA11y', { value: composerVariantLabel(footerVariant) })"));
 ck('behavior unchanged: model pill toggles, variant pill opens', row.includes('onPress={() => setModelSheetOpen(v => !v)}') && row.includes('onPress={() => setModelSheetOpen(true)}'));
-const styles = chat.slice(chat.indexOf('  composerModelPill: {'), chat.indexOf('  modelChip: {'));
+const styles = chat.slice(chat.indexOf('  composerModelPill: {'), chat.indexOf('  headerIdentity: {'));
 ck('model pill shrinks, variant pill does not', /composerModelPill: \{[^}]*flexShrink: 1, minWidth: 0/.test(styles) && /composerVariantPill: \{[^}]*flexShrink: 0/.test(styles));
 
 console.log(`${n}/${n} passed`);
