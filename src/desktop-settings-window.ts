@@ -1,6 +1,6 @@
 import { nativeTitleBarTheme, wireSettingsWindowTheme } from './native-title-bar-theme';
 import { onThemePreferenceChange, setSystemColorScheme, themeMode, themePreference, type ThemeMode } from './theme';
-import { isWindowsTauriShell } from './window-shell';
+import { isWindowsTauriShell, settingsWindowDecorations, tauriShellPlatform } from './window-shell';
 import { SETTINGS_CATEGORIES, requestSettingsDetail, rememberSettingsCategory, settingsDetailFromQuery, type SettingsCategoryKey, type SettingsDetailKey } from './settings-model';
 
 export const SETTINGS_WINDOW_LABEL = 'settings';
@@ -91,8 +91,12 @@ export async function openSettingsWindow(category?: string | null, detail?: Sett
     minHeight: 520,
     focus: true,
     theme: settingsWindowTheme(),
-    // 原生标题栏(– □ × 是系统的),页面里不画 WinTitleBar —— 见 window-shell.ts windowDrawsOwnTitleBar
-    decorations: true,
+    // 2026-11-25 admin Windows 截图「这个也挺难看的」：Windows 关掉原生白条标题栏，
+    // 改由透明自绘 WinTitleBar 接管（融入整窗渐变），并显式开 shadow + resizable
+    // 保留 Win11 圆角/阴影与无边框缩放；macOS 保持 decorations=true + overlay 红黄绿灯。
+    decorations: settingsWindowDecorations(tauriShellPlatform()),
+    shadow: true,
+    resizable: true,
     titleBarStyle: 'overlay',
     hiddenTitle: true,
     dragDropEnabled: false,

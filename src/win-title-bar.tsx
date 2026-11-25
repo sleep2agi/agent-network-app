@@ -17,7 +17,7 @@ import { useEffect, useState, useSyncExternalStore } from 'react';
 import { Platform, Pressable, View } from 'react-native';
 import { Text } from './ui-text';
 import { colors, onThemeChange, themeMode } from './theme';
-import { WINDOWS_TITLE_BAR_HEIGHT, WINDOW_CONTROL_WIDTH, isWindowsTauriShell, windowDrawsOwnTitleBar } from './window-shell';
+import { WINDOWS_TITLE_BAR_HEIGHT, WINDOW_CONTROL_WIDTH, currentWindowLabel, isWindowsTauriShell, windowDrawsOwnTitleBar } from './window-shell';
 
 export { WINDOWS_TITLE_BAR_HEIGHT, isWindowsTauriShell } from './window-shell';
 
@@ -128,6 +128,7 @@ export default function WinTitleBar() {
   useSyncExternalStore(onThemeChange, themeMode, themeMode);
   const show = isWindowsTauriShell(Platform.OS) && windowDrawsOwnTitleBar();
   if (!show) return null;
+  const title = currentWindowLabel() === 'settings' ? '设置 · ANet' : 'ANet';
 
   return (
     <View
@@ -149,7 +150,7 @@ export default function WinTitleBar() {
         {...({ dataSet: { tauriDragRegion: '' } } as any)}
         style={{ flex: 1, paddingLeft: 12, color: colors.textSecondary, fontSize: 12 }}
       >
-        ANet
+        {title}
       </Text>
       <WindowControls />
     </View>
