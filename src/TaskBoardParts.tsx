@@ -12,6 +12,7 @@ import { Text } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, onThemeChange, radius, spacing, themeMode, type as typeScale, weight } from './theme';
+import { useGlassChrome } from './glass-chrome';
 import { shadowOnly } from './elevation';
 import type { ReqPriority, Requirement, RequirementProject } from './requirements-model';
 import { PRIORITY_CODE, priorityLabel } from './task-priority';
@@ -51,8 +52,8 @@ export const softShadow = () => (themeMode() === 'dark'
 
 export const liftedShadow = () => shadowOnly('floating');
 
-/** 列底色和卡片底色要差一档:浅色 = 灰列白卡;深色 = 深列浅卡。 */
-export const columnBg = () => (themeMode() === 'dark' ? colors.card : colors.subtleFill);
+/** 列底色和卡片底色要差一档:浅色 = 灰列白卡(桌面整窗渐变下用微透底让暖光透出);深色 = 深列浅卡。 */
+export const columnBg = (glass = false) => (themeMode() === 'dark' ? colors.card : glass ? 'rgba(29, 32, 38, 0.04)' : colors.subtleFill);
 export const cardBg = () => (themeMode() === 'dark' ? colors.rowActive : colors.card);
 
 export const priorityColor = (p: ReqPriority): string => (p === 'high' ? colors.failed : p === 'normal' ? colors.textSecondary : p === 'low' ? colors.rest : colors.textMuted);
@@ -60,13 +61,13 @@ export const priorityColor = (p: ReqPriority): string => (p === 'high' ? colors.
 export const dueColor = (tone: DueTone): string => (tone === 'overdue' ? colors.failed : tone === 'today' || tone === 'tomorrow' ? colors.blocked : colors.textSecondary);
 export const dueBg = (tone: DueTone): string => (tone === 'overdue' ? colors.failed + '1a' : tone === 'today' ? colors.blocked + '1a' : colors.subtleFill);
 
-export const makeTaskStyles = () => StyleSheet.create({
+export const makeTaskStyles = (glass = false) => StyleSheet.create({
   // 头部
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.xl, paddingVertical: spacing.md, minHeight: CONTROL_H + spacing.md * 2 },
   headerPhone: { paddingHorizontal: spacing.lg, gap: spacing.sm },
   pageTitle: { color: colors.text, fontSize: typeScale.heading, fontWeight: weight.strong, lineHeight: CONTROL_H },
   spacer: { flex: 1 },
-  segment: { flexDirection: 'row', height: CONTROL_H, padding: 3, borderRadius: BOARD_RADIUS.control, backgroundColor: colors.subtleFill, alignItems: 'center' },
+  segment: { flexDirection: 'row', height: CONTROL_H, padding: 3, borderRadius: BOARD_RADIUS.control, backgroundColor: glass && themeMode() === 'light' ? 'rgba(29, 32, 38, 0.045)' : colors.subtleFill, alignItems: 'center' },
   segmentItem: { height: CONTROL_H - 6, paddingHorizontal: spacing.md, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   segmentItemOn: { backgroundColor: cardBg(), ...softShadow() },
   segmentText: { color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium },
@@ -83,11 +84,11 @@ export const makeTaskStyles = () => StyleSheet.create({
   // 看板
   board: { flex: 1, flexDirection: 'row', gap: spacing.lg, paddingHorizontal: spacing.xl, paddingBottom: spacing.xl, paddingTop: spacing.xs },
   boardNarrow: { gap: spacing.md, paddingHorizontal: spacing.lg },
-  column: { flex: 1, flexBasis: 0, minWidth: 0, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(), borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
+  column: { flex: 1, flexBasis: 0, minWidth: 0, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(glass), borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
   // 手机分页看板:一页一列,页宽 / 列宽由 task-board-layout 算成数值。横向 ScrollView 里不写 flex / flexBasis /
   // 百分比 —— 原生 Yoga 上 flex: 1 + flexBasis: 'auto' 的基准是 0,列会塌成 4px(0.2.143 真机)。
   // flexGrow 只作用在页内的竖直主轴(撑满页高)。
-  columnPaged: { flexGrow: 1, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(), borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
+  columnPaged: { flexGrow: 1, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(glass), borderWidth: 2, borderColor: 'transparent', overflow: 'hidden' },
   boardPaged: { flexDirection: 'row', paddingTop: spacing.xs, paddingBottom: spacing.lg },
   pager: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: spacing.xs, paddingHorizontal: spacing.lg, paddingBottom: spacing.xs },
   pagerTab: { flexDirection: 'row', alignItems: 'center', gap: 6, height: 30, paddingHorizontal: spacing.md, borderRadius: BOARD_RADIUS.pill },
@@ -98,7 +99,7 @@ export const makeTaskStyles = () => StyleSheet.create({
   columnHead: { flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md + 2, paddingTop: spacing.md, paddingBottom: spacing.sm },
   columnDot: { width: 8, height: 8, borderRadius: radius.pill },
   // 「废弃」(#724):桌面收起时是右侧一条窄栏(竖排标签),展开后列头多一个收起按钮;手机是分页胶囊最后一格。
-  abandonedRail: { width: 48, flexShrink: 0, alignItems: 'center', gap: spacing.sm, paddingTop: spacing.md, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(), borderWidth: 2, borderColor: 'transparent' },
+  abandonedRail: { width: 48, flexShrink: 0, alignItems: 'center', gap: spacing.sm, paddingTop: spacing.md, borderRadius: BOARD_RADIUS.card, backgroundColor: columnBg(glass), borderWidth: 2, borderColor: 'transparent' },
   abandonedRailText: { width: 96, marginVertical: 38, textAlign: 'center', color: colors.textSecondary, fontSize: typeScale.small, fontWeight: weight.medium, transform: [{ rotate: '90deg' }] },
   abandonedCollapse: { marginLeft: 'auto', width: 24, height: 20, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   abandonedTab: { borderWidth: 1, borderStyle: 'dashed', borderColor: colors.border },
@@ -168,11 +169,12 @@ export const makeTaskStyles = () => StyleSheet.create({
 
 export type TaskStyles = ReturnType<typeof makeTaskStyles>;
 
-/** 样式随主题 / 字号密度重建(restyleAll 走 onThemeChange)。 */
+/** 样式随主题 / 字号密度 / 玻璃渐变重建(restyleAll 走 onThemeChange)。 */
 export function useTaskStyles(): TaskStyles {
+  const glass = useGlassChrome();
   const [v, setV] = useState(0);
   useEffect(() => onThemeChange(() => setV(n => n + 1)), []);
-  return useMemo(makeTaskStyles, [v]);
+  return useMemo(() => makeTaskStyles(glass), [v, glass]);
 }
 
 export function PriorityDot({ p, s }: { p: ReqPriority; s: TaskStyles }) {

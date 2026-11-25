@@ -16,6 +16,8 @@ import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import AliasAvatar from './AliasAvatar';
 import { colors, radius, spacing, type as typeScale, weight } from './theme';
+import { useGlassChrome } from './glass-chrome';
+import { mobileGlowActive } from './glow-mode';
 import { personKey } from './requirement-people';
 import { abandonedShown, activeProjects, applyFilter, filterForScope, NO_PROJECT, projectCounts, scopeOf, splitByCount, tagFilterAfterPick, type SidebarScope } from './task-board-model';
 import { setCreatingTag, setCreatingProject, setManagingProjects, setManagingTags, setSideMenu, setTaskFilter, setTaskSection, taskBoardState, useTaskBoard } from './task-board-store';
@@ -29,6 +31,7 @@ import { CONTROL_H, a11yState } from './TaskBoardParts';
 /** onNavigate:在「任务详情」(派发记录的一条)上点左栏时回到任务页。 */
 export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => void }) {
   useTranslation();
+  const glass = useGlassChrome();
   const styles = makeSidebarStyles();
   const items = useTaskBoard(s => s.items);
   const people = useTaskBoard(s => s.people);
@@ -221,7 +224,7 @@ export default function TaskFilterSidebar({ onNavigate }: { onNavigate?: () => v
   };
   const icon = (name: string, on = false) => <Ionicons name={name as never} size={17} color={on ? colors.accent : colors.textSecondary} />;
   return (
-    <View style={[styles.root, { backgroundColor: colors.listBg }]} testID="task-sidebar">
+    <View style={[styles.root, { backgroundColor: glass || mobileGlowActive() ? 'transparent' : colors.listBg }]} testID="task-sidebar">
       <View style={styles.head}><Text style={[styles.title, { color: colors.text }]} testID="task-sidebar-title">{tr('tasks.copy.190')}</Text></View>
       <ScrollView contentContainerStyle={styles.body}>
         {/* 标签组(可折叠)与项目组:同一种组头、同样的上下间距,中间一条分隔线(owner 0.2.162 截图里两组挤在一起)。 */}

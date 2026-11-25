@@ -53,4 +53,15 @@ assert.match(app, /if \(desktop && cfg && screen\.name !== 'login'\) \{[\s\S]{0,
 const settings = readFileSync(new URL('./SettingsScreen.tsx', import.meta.url), 'utf8');
 assert.ok(!settings.includes('glassOpaque'), 'SettingsScreen does not opt out of GlassContent (would cut the warm glow at the macOS title strip)');
 assert.match(settings, /sidebar:\s*\{[^}]*backgroundColor:\s*'transparent'/, 'SettingsScreen sidebar lets the warm window glow through');
+// admin 2026-11-25 截图「这个配色不对」：任务页左栏（TaskFilterSidebar）和服务器左栏（ServerSidebar）
+// 挂在 GlassContent 外侧的 desktop-workspace-sidebar，不能铺实底把左上角暖光切成白块；
+// 看板列在浅色整窗渐变下用微透底与暖光融合。
+const taskSide = readFileSync(new URL('./TaskFilterSidebar.tsx', import.meta.url), 'utf8');
+assert.match(taskSide, /useGlassChrome\(\)/, 'TaskFilterSidebar subscribes to GlassChrome');
+assert.match(taskSide, /glass \|\| mobileGlowActive\(\) \? 'transparent' : colors\.listBg/, 'TaskFilterSidebar yields transparent background over window glow');
+const serverSide = readFileSync(new URL('./ServerSidebar.tsx', import.meta.url), 'utf8');
+assert.match(serverSide, /useGlassChrome\(\)/, 'ServerSidebar subscribes to GlassChrome');
+assert.match(serverSide, /\(glass \|\| mobileGlowActive\(\)\) && \{ backgroundColor: 'transparent' \}/, 'ServerSidebar yields transparent background over window glow');
+const taskParts = readFileSync(new URL('./TaskBoardParts.tsx', import.meta.url), 'utf8');
+assert.match(taskParts, /useGlassChrome\(\)/, 'TaskBoardParts adapts board columns to GlassChrome');
 console.log('chat-glow: ok');
