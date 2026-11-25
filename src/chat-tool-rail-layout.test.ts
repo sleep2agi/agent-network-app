@@ -34,6 +34,10 @@ const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 assert.match(chat, /paddingRight: toolRailReserve/);
 assert.match(chat, /rootWidth - toolRailReserve/);
 assert.match(chat, /state=\{toolRail\} setState=\{setToolRail\}/);
+// admin 2026-11-25 截图:「回到最新 / 新消息 ↓」胶囊不能跨进右侧任务栏,也不能被压在桌面输入卡下面。
+assert.match(chat, /right: spacing\.lg \+ toolRailReserve/);
+assert.match(chat, /desktopComposerWrap\}\s+onLayout=\{event => setComposerFooterTop\(event\.nativeEvent\.layout\.y\)\}/);
+assert.match(chat, /jumpWrap: \{[^}]*zIndex: 5/);
 
 console.log('chat-tool-rail-layout: ok');
 
