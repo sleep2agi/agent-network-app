@@ -3283,9 +3283,19 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       ) : null}
 
       {copiedToastVisible(copiedAt, Date.now()) ? (
-        <View style={styles.copiedToast} pointerEvents="none" accessibilityLiveRegion="polite">
-          <Ionicons name="checkmark-circle" size={14} color={colors.accent} />
-          <Text style={styles.copiedToastText}>{t('chat.copied')}</Text>
+        <View
+          style={[
+            styles.jumpWrap,
+            toolRailReserve > 0 ? { right: spacing.lg + toolRailReserve } : null,
+            composerFooterTop > 0 ? { bottom: undefined, top: composerFooterTop - JUMP_PILL_CLEARANCE } : { bottom: 96 },
+          ]}
+          pointerEvents="none"
+          accessibilityLiveRegion="polite"
+        >
+          <View style={styles.copiedToast}>
+            <Ionicons name="checkmark-circle" size={14} color={colors.accent} />
+            <Text style={styles.copiedToastText}>{t('chat.copied')}</Text>
+          </View>
         </View>
       ) : null}
       {/* 更像微信·round-3: 滚离底部时的「回到最新 / N 条新消息」pill。
@@ -3296,13 +3306,23 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           `bottom: 84` 又在"模型/思考档位/停止"那行多出来时盖住了输入区——那行的高度不是常量,
           处理中会多出"停止"等按钮。改成跟着实测的 composerFooterTop 走,输入区整体变高/变矮
           胶囊都跟着挪,不会再撞在一起;composerFooterTop 还没测出来(首次渲染)时退回旧的
-          `bottom: 84`,不会闪一下跳到屏幕顶部。 */}
+          `bottom: 84`,不会闪一下跳到屏幕顶部。
+          admin 2026-11-25「这个也很奇怪啊」(第三次,桌面展开右侧任务栏截图):
+          1) `position: 'absolute'` 不受父容器 `paddingRight: toolRailReserve` 约束,右侧栏展开时
+             胶囊按整窗居中、跨到任务栏分界线上;补 `right: spacing.lg + toolRailReserve` 留在聊天列居中。
+          2) 桌面 `desktopComposerWrap` 漏了 `onLayout` 报 `composerFooterTop`,始终退回 `bottom: 84`
+             被压在桌面输入卡后面;给 `desktopComposerWrap` 补上 `onLayout` 并给 `jumpWrap` 加 `zIndex: 5`。 */}
       {showJump ? (
         <View
-          style={[styles.jumpWrap, composerFooterTop > 0 ? { bottom: undefined, top: composerFooterTop - JUMP_PILL_CLEARANCE } : null]}
+          style={[
+            styles.jumpWrap,
+            toolRailReserve > 0 ? { right: spacing.lg + toolRailReserve } : null,
+            composerFooterTop > 0 ? { bottom: undefined, top: composerFooterTop - JUMP_PILL_CLEARANCE } : null,
+          ]}
           pointerEvents="box-none"
+          testID="chat-jump-wrap"
         >
-          <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8}>
+          <Pressable style={styles.jumpPill} onPress={jumpToLatest} hitSlop={8} testID="chat-jump-pill">
             <Text style={styles.jumpPillText}>{unread > 0 ? t('chat.newMessages', { count: unread }) : t('chat.latest')} ↓</Text>
           </Pressable>
         </View>
@@ -3522,7 +3542,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
             onPick={pickSuggest}
           />
         ) : null}
-        <View style={styles.desktopComposerWrap}>
+        <View style={styles.desktopComposerWrap} onLayout={event => setComposerFooterTop(event.nativeEvent.layout.y)}>
         {modelPaletteOverlay}
         <View style={[styles.desktopComposer, { height: composerHeight, minHeight: undefined, maxHeight: undefined }]} testID="desktop-composer-card">
           {/* 内容高度量尺:同宽、同字号行高的隐形文字。不用 TextInput 的 onContentSizeChange —— web 上那是
@@ -3848,7 +3868,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         restoreFocusRef={mainComposerRef}
       />
       {desktop && dropActive ? (
-        <View pointerEvents="none" style={styles.dropOverlay} testID="chat-drop-overlay">
+        <View pointerEvents="none" style={[styles.dropOverlay, toolRailReserve > 0 ? { right: spacing.sm + toolRailReserve } : null]} testID="chat-drop-overlay">
           <Ionicons name="cloud-upload-outline" size={28} color={colors.accent} />
           <Text style={styles.dropOverlayText}>{t('chat.drop')}</Text>
         </View>
@@ -4143,7 +4163,7 @@ const makeStyles = (B = bubbleLayout()) =>
   // 拖文件进聊天区时整格一层虚线框 + 提示(不拦事件,drop 由 document 上的监听处理)。
   dropOverlay: { position: 'absolute', top: spacing.sm, left: spacing.sm, right: spacing.sm, bottom: spacing.sm, borderWidth: 2, borderStyle: 'dashed', borderColor: colors.accent, borderRadius: radius.control, backgroundColor: colors.bg + 'E6', alignItems: 'center', justifyContent: 'center', gap: spacing.sm },
   dropOverlayText: { color: colors.accent, fontSize: 14, fontWeight: '600' },
-  jumpWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: 84, alignItems: 'center' },
+  jumpWrap: { position: 'absolute', left: spacing.lg, right: spacing.lg, bottom: 84, alignItems: 'center', zIndex: 5 },
   jumpPill: {
     backgroundColor: colors.card,
     borderRadius: radius.pill,
@@ -4162,7 +4182,7 @@ const makeStyles = (B = bubbleLayout()) =>
   copyHover: { width: 24, height: 24, borderRadius: radius.pill, alignItems: 'center', justifyContent: 'center', backgroundColor: colors.card, borderWidth: 1, borderColor: colors.border },
   copyHoverSent: { left: -12 },
   copyHoverReply: { right: -12 },
-  copiedToast: { position: 'absolute', alignSelf: 'center', bottom: 96, flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.card, ...elevated('floating') },
+  copiedToast: { flexDirection: 'row', alignItems: 'center', gap: 6, paddingVertical: 6, paddingHorizontal: 12, borderRadius: radius.pill, backgroundColor: colors.card, ...elevated('floating') },
   copiedToastText: { color: colors.text, fontSize: 12 },
   attachPreviewList: { maxHeight: 112, paddingVertical: spacing.xs },
   // 多图草稿条(微信式):计数 + 原图开关一行,下面横向缩略图,每张右上 ✕、左下序号。
