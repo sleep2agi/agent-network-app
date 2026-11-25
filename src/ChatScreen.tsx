@@ -3134,7 +3134,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                             <MessageHoverActions side="reply" styles={styles} onCopy={() => void copyMessage(item.result ?? item.reply ?? '')} onMore={at => openMenuAt(at, { item, text: item.result ?? item.reply ?? '', author: alias })} />
                           ) : null}
                           {secretCard ? (
-                            <ChatSecretCard cfg={cfg} request={secretCard} alreadySaved={secretSavedAfter(secretConfirmRows, secretCard.key, item.completed_at ?? item.created_at)} onSaved={sendPlainText} />
+                            <ChatSecretCard cfg={cfg} alias={alias} request={secretCard} alreadySaved={secretSavedAfter(secretConfirmRows, secretCard.key, item.completed_at ?? item.created_at)} onSaved={sendPlainText} />
                           ) : (
                           <MarkdownMessage contentWidth={Math.max(1, replyCap.maxWidth - 2 * spacing.lg - (item.late ? spacing.sm + 3 : 0))}
                             mouse={pointer || (Platform.OS === 'web' && globalThis.matchMedia?.('(pointer: fine)').matches)}>{stripAttachmentPlaceholder(cleanAttachmentDebugText(replyQuoted.body), replyViews.length > 0)}</MarkdownMessage>

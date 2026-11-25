@@ -5,6 +5,24 @@ export type SecretSnapshot = { network_id: string; daemon_node_id: string | null
   revision: number; activation: 'next_start'; keys: { key: string; source: 'daemon' | 'node' }[];
   /** 只来自 list 调用；写操作后可能仍是上一拍的值（下一次刷新会更新）。 */
   pending?: PendingSecretRequest[] };
+export type MergedSecretKey = { key: string; source: 'daemon' | 'node'; independentOnly?: boolean };
+
+/** #5505 —— Daemon 托管节点在运行时会合并读取 daemon scoped-secrets.json 与独立 node-secrets.json
+ * （后者优先）。密钥页把两边键名合在一起展示，避免聊天卡片或 CLI 写进 node-secrets.json 的键在页面「失踪」。 */
+export function mergeNodeSecretKeys(
+  primary: readonly { key: string; source: 'daemon' | 'node' }[],
+  independent: readonly { key: string; source: 'daemon' | 'node' }[] = [],
+): MergedSecretKey[] {
+  const byKey = new Map<string, MergedSecretKey>();
+  for (const item of primary) byKey.set(item.key, { key: item.key, source: item.source });
+  for (const item of independent) {
+    const existing = byKey.get(item.key);
+    if (!existing || existing.source === 'daemon') {
+      byKey.set(item.key, { key: item.key, source: 'node', independentOnly: true });
+    }
+  }
+  return [...byKey.values()].sort((a, b) => a.key.localeCompare(b.key));
+}
 
 /** 只收形状对的行，最多 8 条；坏行丢弃而不是整份拒绝。 */
 export function normalizePendingSecretRequests(v: unknown): PendingSecretRequest[] | undefined {
