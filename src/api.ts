@@ -349,6 +349,10 @@ export interface HubNode extends TurnCapabilityReport {
   opencode_catalog?: string[] | null;
   /** admin 2026-11-11 —— 每个模型的思考档位：`provider/model=none,low,high,max`（agent-node ≥ 2.5.0-preview.202 上报）。 */
   opencode_catalog_variants?: string[] | null;
+  /** #5321（Hub #3774）—— agy 节点自报的可用模型 slug 清单（来自 `agy models`）。 */
+  agy_models?: string[] | null;
+  /** #5321（Hub #3774）—— agy 登录态（logged_in / not_logged_in / unknown）。 */
+  agy_login_state?: 'logged_in' | 'not_logged_in' | 'unknown' | null;
   /**
    * #4976（Hub ≥ 0.9.0-preview.287 / #3641）—— 服务端把「目录会不会有」这件事显式投影出来，
    * 客户端不用再靠 runtime + catalog 猜：

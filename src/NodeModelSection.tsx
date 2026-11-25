@@ -49,6 +49,7 @@ import {
 } from './node-model-change';
 import { variantOutcomeOf } from './variant-outcome';
 import { suggestedModels } from './runtime-catalog';
+import { isAgyRuntime } from './acp-model-edit';
 import { catalogStatusLine, catalogErrorText, isOpenCodeV2Node, modelIdsFromCatalog, peerCatalogSources, reportedCatalogModels, reportsCatalogSince, catalogStateOf, catalogNoticeFor, canRetryCatalog } from './opencode-v2-model-list';
 import { opencodeFlagsOf,
   generationOf,
@@ -326,9 +327,14 @@ export default function NodeModelSection({ cfg, node, runtimeVersion, onEffectiv
   // 机器上报了 V2 目录就用它;没上报(常见:刚接入/还没轮询到)就退回内置候选,
   // 否则「建议」里只剩「当前」那一个 chip,用户会以为没法切换(admin 2026-11-01 截图)。
   const v2Catalog = v2Models ?? [];
+  const agyReported = isAgyRuntime(node.runtime) && Array.isArray(node.agy_models)
+    ? node.agy_models.filter((m): m is string => typeof m === 'string' && m.trim().length > 0)
+    : [];
   const suggestions = v2 && v2Catalog.length > 0
     ? v2Catalog
-    : (v2 && peerModels.length > 0 ? peerModels : suggestedModels(node.runtime));
+    : (v2 && peerModels.length > 0
+      ? peerModels
+      : (agyReported.length > 0 ? agyReported : suggestedModels(node.runtime)));
   const usingBuiltinFallback = v2 && v2Catalog.length === 0 && peerModels.length === 0;
   const usingPeerFallback = v2 && v2Catalog.length === 0 && peerModels.length > 0;
   // #4976 review：按钮与状态行提示共用同一判据；unsupported_runtime / 非 v2 都不给重试。
