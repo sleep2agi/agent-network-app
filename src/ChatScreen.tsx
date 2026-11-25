@@ -970,10 +970,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     onInsert: text => {
       insertVoiceText(text);
     },
-    // admin 2026-11-24「学豆包」:手机按住说话、输入框是空的 ⇒ 松手识别完直接发出去;
-    // 输入框里已经有字(正在写)⇒ 照旧插到光标处,不替用户把半句话发出去。
-    sendOnRelease: () => voiceSourceRef.current === 'holdBar' && holdLayoutRef.current !== null && !(draftRef.current ?? '').trim(),
-    onSend: text => sendPlainText(text),
+    // admin 2026-11-25「你那个语音按住之后，你不能直接发出去啊？还是先得进输入框吧？要是有很多东西输错怎么办？」：
+    // 保留豆包式蓝色光晕 / 波形 / 上移取消体验，但松手后一律先放进输入框/草稿让用户校对，不再直接发出去。
     // 手机:「说话时间太短」由浮层在屏幕中间提示(微信式),不再在输入区上方重复一条。
     onNotice: text => { if (holdLayoutRef.current && text === TOO_SHORT_NOTICE) return; setComposerNotice(text); },
     zoneAt: (pageX, pageY, prev) => {
@@ -3860,7 +3858,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       </>
       )}
       {voiceSurface(desktop) === 'phoneOverlay' ? <VoiceRecordingOverlay voice={voice} bottom={88 + composerInset} hidden={holdOverlayOn} /> : null}
-      {holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} sends={!draft.trim()} /> : null}
+      {holdOverlayOn ? <VoiceHoldOverlay voice={voice} layout={holdLayout} /> : null}
       <View ref={originProbeRef} collapsable={false} pointerEvents="none" style={styles.originProbe} />
       <SideThreadDrawer
         cfg={cfg}

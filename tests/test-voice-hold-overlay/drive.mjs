@@ -179,8 +179,9 @@ const draft = (page) => page.evaluate(() => document.querySelector('[data-testid
 const notice = (page) => page.evaluate(() => document.querySelector('[data-testid="composer-notice"]')?.textContent ?? null);
 const sendPosts = (page) => page.evaluate(() => window.__posts.filter(p => /\/api\/(send|tasks?|messages)\b/.test(new URL(p.url).pathname)).length);
 
-// admin 2026-11-24「学豆包」:不压暗、底部蓝色光晕 + 细波形 + 一行「松手发送，上移取消」;流式文字是右侧蓝色气泡;
-// 输入框为空时中间松手 = 直接发出去;输入框已有字 = 插进草稿;上移过线 = 取消(变红)。
+// admin 2026-11-24「学豆包」+ 2026-11-25「不能直接发出去，先得进输入框」:
+// 不压暗、底部蓝色光晕 + 细波形 + 一行「松手转文字，上移取消」;流式文字是右侧蓝色气泡;
+// 中间松手一律先放进输入框/草稿方便校对（绝不直接发送）;上移过线 = 取消(变红)。
 const hubPosts = (page) => page.evaluate(() => window.__posts.filter(p => { try { return /\/api\/(send|tasks?|messages)\b/.test(new URL(p.url).pathname); } catch { return false; } }).map(p => p.body));
 for (const scheme of ['light', 'dark']) {
   const tag = `phone-390x844-${scheme}`;
@@ -197,7 +198,7 @@ for (const scheme of ['light', 'dark']) {
   const wrapBg = await bg(page, '[data-testid="voice-overlay"]');
   ck(tag, '不压暗聊天(浮层根透明)', !wrapBg || wrapBg === 'rgba(0, 0, 0, 0)', wrapBg);
   ck(tag, '底部有光晕', !!(await box(page, 'voice-hold-glow')));
-  ck(tag, '文案「松手发送，上移取消」(输入框为空)', (await label(page)) === '松手发送，上移取消', await label(page));
+  ck(tag, '文案「松手转文字，上移取消」(输入框为空也不直接发)', (await label(page)) === '松手转文字，上移取消', await label(page));
   const hA = await barHeights(page); await page.waitForTimeout(350); const hB = await barHeights(page);
   ck(tag, '41 根细波形随电平跳动', hA.length === 41 && hA.join() !== hB.join(), `${hA.length} bars`);
   const imP = await painted(page, 'voice-interim');
@@ -216,16 +217,15 @@ for (const scheme of ['light', 'dark']) {
   await releaseAndSettle(page);
   ck(tag, '取消区松手:什么都不发', (await hubPosts(page)).length === before);
 
-  // ── 3 中间松手 = 直接发送 ──
+  // ── 3 中间松手 = 先放进输入框/草稿，不直接发送 ──
   await page.evaluate(() => { window.__flash = { text: '帮我建个每早八点的定时任务', fail: false }; });
   await press(page);
   await page.waitForTimeout(1200);
   await releaseAndSettle(page);
-  await page.waitForTimeout(800);
-  const posts = await hubPosts(page);
-  ck(tag, '输入框为空、中间松手 → 识别完直接发出去', posts.some(b => b.includes('帮我建个每早八点的定时任务')), `${posts.length} posts`);
-  ck(tag, '发送后输入框仍为空(没塞进草稿)', !((await draft(page)) ?? '').trim(), JSON.stringify(await draft(page)));
-  await shot('3-sent');
+  await page.waitForTimeout(600);
+  const postsAfterInsert = await hubPosts(page);
+  ck(tag, '输入框为空、中间松手 → 放进草稿方便校对、不直接发送', ((await draft(page)) ?? '').includes('帮我建个每早八点的定时任务') && postsAfterInsert.length === before, `draft=${JSON.stringify(await draft(page))} posts=${postsAfterInsert.length}`);
+  await shot('3-drafted');
 
   // ── 4 输入框已有字 → 插进草稿,不发送 ──
   // 输入框先有字:切到键盘模式写半句,再切回语音模式(语音模式下草稿卡片只在有字时出现)。
