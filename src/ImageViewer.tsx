@@ -7,6 +7,7 @@ import { AttachmentFile, downloadAttachment } from './AuthedThumb';
 import { saveObjectUrlOriginal } from './AuthedWebThumb';
 import { appFetch } from './app-fetch';
 import { displayDownloadPath } from './desktop-download';
+import { harmonyDownloadFile, hasHarmonyFileBridge } from './harmony-bridge';
 import { downloadImageObjectUrl } from './web-image-download';
 import { radius } from './theme';
 import {
@@ -330,7 +331,10 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
                   accessibilityLabel={`下载 ${current.name}`}
                   hitSlop={8}
                   onPress={(e: any) => {
-                    saveObjectUrlOriginal(currentUri, current.name, !!(e?.nativeEvent?.altKey ?? e?.altKey))
+                    const saveTask = hasHarmonyFileBridge() && current.authUri
+                      ? harmonyDownloadFile({ url: current.authUri, token, fileName: current.name, mimeType: current.mime, mode: 'save' }).then(p => p || null)
+                      : saveObjectUrlOriginal(currentUri, current.name, !!(e?.nativeEvent?.altKey ?? e?.altKey));
+                    saveTask
                       .then(path => setSaveNote(path ? `✓ 已保存到 ${displayDownloadPath(path)}` : null))
                       .catch(reason => setSaveNote(`保存失败(${reason instanceof Error ? reason.message : String(reason)})`));
                   }}

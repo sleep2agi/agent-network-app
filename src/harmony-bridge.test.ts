@@ -10,8 +10,10 @@ import {
   harmonyOpenLocalFile,
   harmonyPostNotification,
   harmonyRequestNotificationPermission,
+  harmonySaveBytes,
   hasHarmonyFileBridge,
   hasHarmonyNotificationBridge,
+  hasHarmonySaveBytesBridge,
   hasHarmonySseBridge,
   installHarmonyClipboardShim,
   isHarmonyShell,
@@ -212,6 +214,7 @@ async function run() {
   const closedStreams: string[] = [];
   const fileDownloads: Array<{ id: string; payload: any }> = [];
   const fileOpens: Array<{ id: string; payload: any }> = [];
+  const savedBytes: Array<{ id: string; payload: any }> = [];
   const externalUrls: string[] = [];
   const copiedTexts: string[] = [];
   const themes: string[] = [];
@@ -245,6 +248,17 @@ async function run() {
         resolve?.(reqId, JSON.stringify({ ok: true, path: payload.path }));
       });
     },
+    saveBytesAsync: (reqId: string, reqJson: string) => {
+      const payload = JSON.parse(reqJson);
+      savedBytes.push({ id: reqId, payload });
+      queueMicrotask(() => {
+        const resolve = g.__ANET_HARMONY_FILE_RESOLVE__ as ((id: string, raw: string) => void) | undefined;
+        const path = payload.fileName === 'cancel.log'
+          ? ''
+          : `file://docs/storage/Users/currentUser/Download/${encodeURIComponent(payload.fileName)}`;
+        resolve?.(reqId, JSON.stringify({ ok: true, path }));
+      });
+    },
     openExternalUrl: (url: string) => { externalUrls.push(url); return true; },
     copyText: (text: string) => { copiedTexts.push(text); },
     setThemeMode: (mode: string) => { themes.push(mode); },
@@ -253,8 +267,8 @@ async function run() {
     cancelNotification: (idNum: number) => { notifications.push({ kind: 'cancel', value: idNum }); },
   };
 
-  ck('capability detectors report SSE / file / notification bridges',
-    hasHarmonySseBridge() && hasHarmonyFileBridge() && hasHarmonyNotificationBridge());
+  ck('capability detectors report SSE / file / saveBytes / notification bridges',
+    hasHarmonySseBridge() && hasHarmonyFileBridge() && hasHarmonySaveBytesBridge() && hasHarmonyNotificationBridge());
 
   const sseEvents: unknown[] = [];
   const sseStates: string[] = [];
@@ -299,6 +313,17 @@ async function run() {
     dlPath === '/cache/downloads/report.pdf'
     && fileDownloads[0]?.payload?.mode === 'open'
     && fileOpens[0]?.payload?.path === dlPath);
+
+  const rawLogBytes = new TextEncoder().encode('鸿蒙导出日志测试\n');
+  const savedUri = await harmonySaveBytes({ bytes: rawLogBytes, fileName: '测试.log', mimeType: 'text/plain' });
+  const cancelledUri = await harmonySaveBytes({ bytes: rawLogBytes, fileName: 'cancel.log', mimeType: 'text/plain' });
+  const decodedSaved = savedBytes[0]?.payload?.bytesBase64
+    ? new TextDecoder().decode(base64ToBytes(savedBytes[0].payload.bytesBase64))
+    : '';
+  ck('harmonySaveBytes encodes bytes to base64 and handles picker cancel',
+    savedUri === 'file://docs/storage/Users/currentUser/Download/%E6%B5%8B%E8%AF%95.log'
+    && decodedSaved === '鸿蒙导出日志测试\n'
+    && cancelledUri === '');
 
   // 11) External URL + clipboard shim + theme sync + native notifications
   ck('harmonyOpenExternalUrl invokes native opener',

@@ -33,6 +33,8 @@ import {
 import { SHARE_W, renderShareCardPng, shareCardLayout, shareFileName, specOf, type ShareOptions, type ShareSize, type ShareTheme } from './task-share-card';
 import { shareModel } from './task-share-model';
 import { saveImageObjectUrl } from './web-image-download';
+import { displayDownloadPath } from './desktop-download';
+import { harmonySaveBytes, hasHarmonySaveBytesBridge } from './harmony-bridge';
 import { copyImageBlob } from './image-clipboard';
 import TaskTagStatusChart from './TaskTagStatusChart';
 import { inStatsProject, loadedTagSnapshot, parseTagSnapshot, type TagSnapshot } from './task-tag-status';
@@ -573,8 +575,19 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
     return () => { dead = true; };
   }, [key]);
   const name = shareFileName(period, ymd(now), size);
-  const save = () => {
+  const save = async () => {
     if (!preview) return;
+    if (hasHarmonySaveBytesBridge()) {
+      try {
+        const blob = blobRef.current ?? await (await fetch(preview)).blob();
+        const bytes = new Uint8Array(await blob.arrayBuffer());
+        const saved = await harmonySaveBytes({ bytes, fileName: name, mimeType: 'image/png' });
+        if (saved) setMsg(tr('dash.saved', { name: displayDownloadPath(saved) }));
+      } catch (e) {
+        setMsg(tr('dash.exportFailed', { msg: e instanceof Error ? e.message : String(e) }));
+      }
+      return;
+    }
     saveImageObjectUrl(preview, name);
     setMsg(tr('dash.saved', { name }));
   };
@@ -605,7 +618,7 @@ function ShareDialog({ data, period, people, c, onClose, phone }: ViewProps & { 
       {msg ? <Text style={c.foot} testID="dash-share-msg" numberOfLines={2}>{msg}</Text> : null}
       <View style={c.dialogFoot}>
         <Pressable accessibilityRole="button" onPress={() => { void copy(); }} style={c.ghostBtn} testID="dash-share-copy"><Ionicons name="copy-outline" size={16} color={colors.text} /><Text style={c.ghostText}>{tr('dash.copy')}</Text></Pressable>
-        <Pressable accessibilityRole="button" onPress={save} style={[c.shareBtn, !preview && { opacity: 0.5 }]} disabled={!preview} testID="dash-share-save"><Ionicons name="download-outline" size={16} color={colors.onAccent} /><Text style={c.shareBtnText}>{tr('dash.save')}</Text></Pressable>
+        <Pressable accessibilityRole="button" onPress={() => { void save(); }} style={[c.shareBtn, !preview && { opacity: 0.5 }]} disabled={!preview} testID="dash-share-save"><Ionicons name="download-outline" size={16} color={colors.onAccent} /><Text style={c.shareBtnText}>{tr('dash.save')}</Text></Pressable>
       </View>
     </View>
   ) : (

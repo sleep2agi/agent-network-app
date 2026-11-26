@@ -251,7 +251,7 @@ struct Index {
             'postNotification',
             'cancelNotification',
           ],
-          asyncMethodList: ['httpFetchAsync', 'downloadAndOpenFileAsync', 'openLocalFileAsync'],
+          asyncMethodList: ['httpFetchAsync', 'downloadAndOpenFileAsync', 'openLocalFileAsync', 'saveBytesAsync'],
           controller: this.controller,
         })
         .onControllerAttached(() => {

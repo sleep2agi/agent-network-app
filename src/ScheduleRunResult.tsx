@@ -9,6 +9,7 @@ import AttachmentFileDesktop from './AttachmentFileDesktop';
 import ImageViewer from './ImageViewer';
 import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from './image-viewer-model';
 import { attachmentCacheScope } from './attach-download';
+import { hasHarmonyFileBridge } from './harmony-bridge';
 import { cleanAttachmentDebugText } from './attachment-display';
 import { runDisplay, runFailureText, runReplyAttachments, type RunAttachment } from './schedule-run-result';
 import { colors, radius, spacing, type as fontSize, weight } from './theme';
@@ -73,8 +74,8 @@ export default function ScheduleRunResult({ cfg, run, state, onRetry, onOpenChat
 
   function renderAttachment(a: RunAttachment) {
     const key = `${scope}-${a.key}`;
-    const tauri = viewerEnv.tauri;
-    if (a.isImage && Platform.OS === 'web' && tauri) {
+    const webAuthed = viewerEnv.tauri || hasHarmonyFileBridge();
+    if (a.isImage && Platform.OS === 'web' && webAuthed) {
       return <AuthedWebThumb key={key} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} onPress={objectUrl => openViewer(a.key, objectUrl)} />;
     }
     if (a.isImage && Platform.OS !== 'web') {
@@ -91,7 +92,7 @@ export default function ScheduleRunResult({ cfg, run, state, onRetry, onOpenChat
     if (Platform.OS !== 'web') {
       return <AttachmentFile key={key} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} />;
     }
-    if (tauri) return <AttachmentFileDesktop key={key} uri={a.uri} name={a.name} token={cfg.token} size={a.size} />;
+    if (webAuthed) return <AttachmentFileDesktop key={key} uri={a.uri} name={a.name} token={cfg.token} size={a.size} mime={a.mime} />;
     return <Text key={a.key} style={s.attachmentLine}>📎 {a.name}</Text>;
   }
 

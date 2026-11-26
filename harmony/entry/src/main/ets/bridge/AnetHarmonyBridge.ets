@@ -1,4 +1,4 @@
-import { common, wantConstant } from '@kit.AbilityKit';
+import { common, Want, wantConstant } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { webview } from '@kit.ArkWeb';
 import { rcp } from '@kit.RemoteCommunicationKit';
@@ -51,6 +51,12 @@ interface BridgeFileOpenRequest {
   mimeType?: string;
 }
 
+interface BridgeFileSaveBytesRequest {
+  fileName?: string;
+  mimeType?: string;
+  bytesBase64?: string;
+}
+
 interface BridgeFileResult {
   ok: boolean;
   path?: string;
@@ -80,6 +86,60 @@ function sanitizeFileName(raw: string): string {
   return base.length > 120 ? base.slice(0, 120) : base;
 }
 
+/**
+ * PreviewKit rejects generic '*/*' and 'application/octet-stream' (API 12+ d.ts:329).
+ * Resolve a concrete MIME type from explicit non-generic input or the filename extension;
+ * return '' when unknown so HarmonyOS infers from the file suffix.
+ */
+function resolvePreviewMimeType(fileName: string, rawMime?: string): string {
+  const cleaned = rawMime ? rawMime.split(';')[0].trim().toLowerCase() : '';
+  if (
+    cleaned.length > 0 &&
+    cleaned !== '*/*' &&
+    cleaned !== 'application/octet-stream' &&
+    cleaned.includes('/') &&
+    !cleaned.endsWith('/*')
+  ) {
+    return cleaned;
+  }
+  const dot = fileName.lastIndexOf('.');
+  const ext = dot >= 0 ? fileName.slice(dot + 1).toLowerCase() : '';
+  switch (ext) {
+    case 'pdf': return 'application/pdf';
+    case 'doc': return 'application/msword';
+    case 'docx': return 'application/vnd.openxmlformats-officedocument.wordprocessingml.document';
+    case 'xls': return 'application/vnd.ms-excel';
+    case 'xlsx': return 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    case 'ppt': return 'application/vnd.ms-powerpoint';
+    case 'pptx': return 'application/vnd.openxmlformats-officedocument.presentationml.presentation';
+    case 'txt':
+    case 'log':
+    case 'md':
+    case 'markdown': return 'text/plain';
+    case 'csv': return 'text/csv';
+    case 'html':
+    case 'htm': return 'text/html';
+    case 'xml': return 'text/xml';
+    case 'json': return 'application/json';
+    case 'png': return 'image/png';
+    case 'jpg':
+    case 'jpeg': return 'image/jpeg';
+    case 'gif': return 'image/gif';
+    case 'webp': return 'image/webp';
+    case 'bmp': return 'image/bmp';
+    case 'svg': return 'image/svg+xml';
+    case 'mp4': return 'video/mp4';
+    case 'mov': return 'video/quicktime';
+    case 'webm': return 'video/webm';
+    case 'mp3': return 'audio/mpeg';
+    case 'wav': return 'audio/wav';
+    case 'm4a': return 'audio/mp4';
+    case 'ogg': return 'audio/ogg';
+    case 'zip': return 'application/zip';
+    default: return '';
+  }
+}
+
 function toRcpMethod(raw: string): rcp.HttpMethod {
   switch (raw.toUpperCase()) {
     case 'POST':
@@ -101,6 +161,7 @@ function toRcpMethod(raw: string): rcp.HttpMethod {
 
 export class AnetHarmonyBridge {
   private session: rcp.Session | null = null;
+  private downloadSession: rcp.Session | null = null;
   private controller: webview.WebviewController | null = null;
   private hostContext: common.UIAbilityContext | null = null;
   private base64: util.Base64Helper = new util.Base64Helper();
@@ -134,6 +195,28 @@ export class AnetHarmonyBridge {
       }
     }
     return this.session;
+  }
+
+  private ensureDownloadSession(): rcp.Session {
+    if (!this.downloadSession) {
+      try {
+        this.downloadSession = rcp.createSession({
+          requestConfiguration: {
+            transfer: {
+              timeout: {
+                connectMs: 15000,
+                transferMs: 300000,
+              },
+            },
+          },
+        });
+      } catch (err) {
+        const e = err as BusinessError;
+        hilog.error(DOMAIN, TAG, 'rcp.createSession (download) failed: %{public}s', e?.message ?? String(err));
+        throw new Error(e?.message ?? String(err));
+      }
+    }
+    return this.downloadSession;
   }
 
   private evalJs(script: string, label: string): void {
@@ -197,13 +280,13 @@ export class AnetHarmonyBridge {
       }
     }
 
-    let content: ArrayBuffer | undefined = undefined;
-    if (parsed.bodyBase64 && parsed.bodyBase64.length > 0) {
-      const decoded: Uint8Array = this.base64.decodeSync(parsed.bodyBase64);
-      content = decoded.buffer.slice(decoded.byteOffset, decoded.byteOffset + decoded.byteLength);
-    }
-
     try {
+      let content: ArrayBuffer | undefined = undefined;
+      if (parsed.bodyBase64 && parsed.bodyBase64.length > 0) {
+        const decoded: Uint8Array = this.base64.decodeSync(parsed.bodyBase64);
+        content = decoded.buffer.slice(decoded.byteOffset, decoded.byteOffset + decoded.byteLength);
+      }
+
       const req = new rcp.Request(url, method, reqHeaders, content);
       const res: rcp.Response = await this.ensureSession().fetch(req);
       const outHeaders: Array<Array<string>> = [];
@@ -293,9 +376,17 @@ export class AnetHarmonyBridge {
       }
     }
 
-    const client = http.createHttp();
+    let client: http.HttpRequest;
+    let decoder: util.TextDecoder;
+    try {
+      client = http.createHttp();
+      decoder = util.TextDecoder.create('utf-8', { ignoreBOM: true });
+    } catch (err) {
+      const e = err as BusinessError;
+      this.pushSse(streamId, 'error', e?.message ?? String(err));
+      return;
+    }
     this.sseClients.set(streamId, client);
-    const decoder = util.TextDecoder.create('utf-8', { ignoreBOM: true });
     let opened = false;
     let closedByCaller = false;
 
@@ -345,20 +436,28 @@ export class AnetHarmonyBridge {
       readTimeout: 300000,
     };
 
-    client.requestInStream(url, options).then((statusCode: number) => {
-      closedByCaller = this.sseClients.get(streamId) !== client;
+    try {
+      client.requestInStream(url, options).then((statusCode: number) => {
+        closedByCaller = this.sseClients.get(streamId) !== client;
+        cleanup();
+        if (closedByCaller) return;
+        const reason = statusCode !== 200 ? `HTTP ${statusCode}` : 'server closed stream';
+        this.pushSse(streamId, 'close', reason);
+      }).catch((err: BusinessError) => {
+        closedByCaller = this.sseClients.get(streamId) !== client;
+        cleanup();
+        if (closedByCaller) return;
+        const msg = err && err.message ? `${err.message} (${err.code ?? ''})` : String(err);
+        hilog.warn(DOMAIN, TAG, 'SSE stream error for %{public}s: %{public}s', url, msg);
+        this.pushSse(streamId, 'error', msg);
+      });
+    } catch (err) {
       cleanup();
-      if (closedByCaller) return;
-      const reason = statusCode !== 200 ? `HTTP ${statusCode}` : 'server closed stream';
-      this.pushSse(streamId, 'close', reason);
-    }).catch((err: BusinessError) => {
-      closedByCaller = this.sseClients.get(streamId) !== client;
-      cleanup();
-      if (closedByCaller) return;
-      const msg = err && err.message ? `${err.message} (${err.code ?? ''})` : String(err);
-      hilog.warn(DOMAIN, TAG, 'SSE stream error for %{public}s: %{public}s', url, msg);
+      const e = err as BusinessError;
+      const msg = e && e.message ? `${e.message} (${e.code ?? ''})` : String(err);
+      hilog.warn(DOMAIN, TAG, 'SSE requestInStream threw for %{public}s: %{public}s', url, msg);
       this.pushSse(streamId, 'error', msg);
-    });
+    }
   }
 
   closeSseStream(streamId: string): void {
@@ -396,6 +495,77 @@ export class AnetHarmonyBridge {
     });
   }
 
+  saveBytesAsync(reqId: string, reqJson: string): void {
+    this.runSaveBytes(reqJson).then((res: BridgeFileResult) => {
+      this.pushFileResult(reqId, res);
+    }).catch((err: BusinessError) => {
+      this.pushFileResult(reqId, { ok: false, error: err?.message ?? String(err) });
+    });
+  }
+
+  private async saveBufferViaPicker(
+    hostCtx: common.UIAbilityContext,
+    safeName: string,
+    body: ArrayBuffer | null | undefined,
+  ): Promise<BridgeFileResult> {
+    let uris: Array<string>;
+    try {
+      const savePicker = new picker.DocumentViewPicker(hostCtx);
+      const saveOpts = new picker.DocumentSaveOptions();
+      saveOpts.newFileNames = [safeName];
+      uris = await savePicker.save(saveOpts);
+    } catch (err) {
+      const e = err as BusinessError;
+      const msg = e && e.message ? `${e.message} (${e.code ?? ''})` : String(err);
+      hilog.warn(DOMAIN, TAG, 'DocumentViewPicker.save failed: %{public}s', msg);
+      return { ok: false, error: msg };
+    }
+    if (!uris || uris.length === 0) {
+      return { ok: true, path: '' };
+    }
+    const targetUri = uris[0];
+    let dstFile: fileIo.File | null = null;
+    try {
+      dstFile = fileIo.openSync(targetUri, fileIo.OpenMode.READ_WRITE);
+      if (body && body.byteLength > 0) {
+        fileIo.writeSync(dstFile.fd, body);
+      }
+      return { ok: true, path: targetUri };
+    } catch (err) {
+      const e = err as BusinessError;
+      const msg = e && e.message ? `${e.message} (${e.code ?? ''})` : String(err);
+      hilog.warn(DOMAIN, TAG, 'saveBufferViaPicker write failed for %{public}s: %{public}s', targetUri, msg);
+      return { ok: false, error: msg };
+    } finally {
+      if (dstFile) {
+        try { fileIo.closeSync(dstFile); } catch { /* ignore */ }
+      }
+    }
+  }
+
+  private async runSaveBytes(reqJson: string): Promise<BridgeFileResult> {
+    const hostCtx = this.hostContext;
+    if (!hostCtx) return { ok: false, error: 'Host context unavailable' };
+    let parsed: BridgeFileSaveBytesRequest;
+    try {
+      parsed = JSON.parse(reqJson) as BridgeFileSaveBytesRequest;
+    } catch {
+      return { ok: false, error: 'Malformed save bytes request JSON' };
+    }
+    const safeName = sanitizeFileName(parsed.fileName ?? 'download.bin');
+    let body: ArrayBuffer = new ArrayBuffer(0);
+    if (parsed.bytesBase64 && parsed.bytesBase64.length > 0) {
+      try {
+        const decoded: Uint8Array = this.base64.decodeSync(parsed.bytesBase64);
+        body = decoded.buffer.slice(decoded.byteOffset, decoded.byteOffset + decoded.byteLength);
+      } catch (err) {
+        const e = err as BusinessError;
+        return { ok: false, error: e?.message ?? String(err) };
+      }
+    }
+    return await this.saveBufferViaPicker(hostCtx, safeName, body);
+  }
+
   private async runFileDownload(reqJson: string): Promise<BridgeFileResult> {
     const hostCtx = this.hostContext;
     if (!hostCtx) return { ok: false, error: 'Host context unavailable' };
@@ -408,7 +578,7 @@ export class AnetHarmonyBridge {
     const url = parsed.url ?? '';
     if (!/^https?:\/\/\S+$/i.test(url)) return { ok: false, error: 'Invalid download URL' };
     const safeName = sanitizeFileName(parsed.fileName ?? 'download.bin');
-    const mimeType = (parsed.mimeType && parsed.mimeType.trim()) ? parsed.mimeType.trim() : '*/*';
+    const mimeType = resolvePreviewMimeType(safeName, parsed.mimeType);
     const mode = parsed.mode === 'save' ? 'save' : 'open';
 
     const reqHeaders: rcp.RequestHeaders = {};
@@ -416,10 +586,22 @@ export class AnetHarmonyBridge {
       reqHeaders['Authorization'] = `Bearer ${parsed.token}`;
     }
 
-    const req = new rcp.Request(url, 'GET', reqHeaders);
-    const res: rcp.Response = await this.ensureSession().fetch(req);
+    let res: rcp.Response;
+    try {
+      const req = new rcp.Request(url, 'GET', reqHeaders);
+      res = await this.ensureDownloadSession().fetch(req);
+    } catch (err) {
+      const e = err as BusinessError;
+      const msg = e && e.message ? `${e.message} (${e.code ?? ''})` : String(err);
+      hilog.warn(DOMAIN, TAG, 'runFileDownload fetch failed for %{public}s: %{public}s', url, msg);
+      return { ok: false, error: msg };
+    }
     if (res.statusCode < 200 || res.statusCode >= 300) {
       return { ok: false, error: `HTTP ${res.statusCode}` };
+    }
+
+    if (mode === 'save') {
+      return await this.saveBufferViaPicker(hostCtx, safeName, res.body);
     }
 
     const dir = `${hostCtx.cacheDir}/downloads`;
@@ -431,34 +613,31 @@ export class AnetHarmonyBridge {
       try { fileIo.mkdirSync(dir, true); } catch { /* exists */ }
     }
     const localPath = `${dir}/${Date.now()}_${safeName}`;
-    const file = fileIo.openSync(localPath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
+    let file: fileIo.File | null = null;
     try {
+      file = fileIo.openSync(localPath, fileIo.OpenMode.CREATE | fileIo.OpenMode.WRITE_ONLY | fileIo.OpenMode.TRUNC);
       if (res.body && res.body.byteLength > 0) {
         fileIo.writeSync(file.fd, res.body);
       }
+    } catch (err) {
+      const e = err as BusinessError;
+      const msg = e && e.message ? `${e.message} (${e.code ?? ''})` : String(err);
+      hilog.warn(DOMAIN, TAG, 'runFileDownload cache write failed: %{public}s', msg);
+      return { ok: false, error: msg };
     } finally {
-      fileIo.closeSync(file);
+      if (file) {
+        try { fileIo.closeSync(file); } catch { /* ignore */ }
+      }
     }
 
-    if (mode === 'save') {
-      const savePicker = new picker.DocumentViewPicker(hostCtx);
-      const saveOpts = new picker.DocumentSaveOptions();
-      saveOpts.newFileNames = [safeName];
-      const uris: Array<string> = await savePicker.save(saveOpts);
-      if (!uris || uris.length === 0) {
-        return { ok: true, path: localPath };
-      }
-      const dstFile = fileIo.openSync(uris[0], fileIo.OpenMode.READ_WRITE | fileIo.OpenMode.TRUNC);
-      try {
-        fileIo.copyFileSync(localPath, dstFile.fd);
-      } finally {
-        fileIo.closeSync(dstFile);
-      }
-      return { ok: true, path: uris[0] };
+    try {
+      await this.openUriWithPreviewOrAbility(hostCtx, localPath, safeName, mimeType);
+      return { ok: true, path: localPath };
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(DOMAIN, TAG, 'openUriWithPreviewOrAbility failed, falling back to Save-As picker: %{public}s', e?.message ?? String(err));
+      return await this.saveBufferViaPicker(hostCtx, safeName, res.body);
     }
-
-    await this.openUriWithPreviewOrAbility(hostCtx, localPath, safeName, mimeType);
-    return { ok: true, path: localPath };
   }
 
   private async runOpenLocalFile(reqJson: string): Promise<BridgeFileResult> {
@@ -473,9 +652,14 @@ export class AnetHarmonyBridge {
     const localPath = parsed.path ?? '';
     if (!localPath) return { ok: false, error: 'Empty file path' };
     const safeName = sanitizeFileName(parsed.fileName ?? 'file');
-    const mimeType = (parsed.mimeType && parsed.mimeType.trim()) ? parsed.mimeType.trim() : '*/*';
-    await this.openUriWithPreviewOrAbility(hostCtx, localPath, safeName, mimeType);
-    return { ok: true, path: localPath };
+    const mimeType = resolvePreviewMimeType(safeName, parsed.mimeType);
+    try {
+      await this.openUriWithPreviewOrAbility(hostCtx, localPath, safeName, mimeType);
+      return { ok: true, path: localPath };
+    } catch (err) {
+      const e = err as BusinessError;
+      return { ok: false, error: e?.message ?? String(err) };
+    }
   }
 
   private async openUriWithPreviewOrAbility(
@@ -484,14 +668,23 @@ export class AnetHarmonyBridge {
     title: string,
     mimeType: string,
   ): Promise<void> {
-    const uri = localPathOrUri.startsWith('file://') ? localPathOrUri : fileUri.getUriFromPath(localPathOrUri);
+    const resolvedMime = resolvePreviewMimeType(title, mimeType);
+    let uri = localPathOrUri;
+    if (!localPathOrUri.startsWith('file://')) {
+      try {
+        uri = fileUri.getUriFromPath(localPathOrUri);
+      } catch (err) {
+        const e = err as BusinessError;
+        throw new Error(e?.message ?? String(err));
+      }
+    }
     try {
       const can = await filePreview.canPreview(hostCtx, uri);
       if (can) {
         const info: filePreview.PreviewInfo = {
           title: title,
           uri: uri,
-          mimeType: mimeType,
+          mimeType: resolvedMime,
         };
         await filePreview.openPreview(hostCtx, info);
         return;
@@ -500,12 +693,20 @@ export class AnetHarmonyBridge {
       const e = err as BusinessError;
       hilog.warn(DOMAIN, TAG, 'PreviewKit fallback to startAbility: %{public}s', e?.message ?? String(err));
     }
-    await hostCtx.startAbility({
-      action: 'ohos.want.action.viewData',
-      uri: uri,
-      type: mimeType,
-      flags: wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION,
-    });
+    try {
+      const want: Want = {
+        action: 'ohos.want.action.viewData',
+        uri: uri,
+        flags: wantConstant.Flags.FLAG_AUTH_READ_URI_PERMISSION,
+      };
+      if (resolvedMime.length > 0) {
+        want.type = resolvedMime;
+      }
+      await hostCtx.startAbility(want);
+    } catch (err) {
+      const e = err as BusinessError;
+      throw new Error(e?.message ?? String(err));
+    }
   }
 
   // ── External Links ──

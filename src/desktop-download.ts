@@ -112,8 +112,10 @@ export async function revealInFolder(path: string): Promise<void> {
   await revealItemInDir(path);
 }
 
-/** 从「下载」目录路径里取给人看的短名(~/Downloads/x.pdf)。 */
+/** 从「下载」目录路径里取给人看的短名(~/Downloads/x.pdf);同时解码鸿蒙 URI 里的中文百分号编码。 */
 export function displayDownloadPath(path: string): string {
-  const parts = path.split(/[\\/]/).filter(Boolean);
-  return parts.length >= 2 ? `…/${parts.slice(-2).join('/')}` : path;
+  let decoded = path;
+  try { decoded = decodeURIComponent(path); } catch { /* preserve raw when malformed % sequence */ }
+  const parts = decoded.split(/[\\/]/).filter(Boolean);
+  return parts.length >= 2 ? `…/${parts.slice(-2).join('/')}` : decoded;
 }

@@ -45,6 +45,7 @@ export interface HarmonyBridgeApi {
   closeSseStream?: (streamId: string) => void;
   downloadAndOpenFileAsync?: (reqId: string, reqJson: string) => void;
   openLocalFileAsync?: (reqId: string, reqJson: string) => void;
+  saveBytesAsync?: (reqId: string, reqJson: string) => void;
   openExternalUrl?: (url: string) => boolean;
   setThemeMode?: (mode: string) => void;
   requestNotificationPermission?: () => void;
@@ -139,6 +140,11 @@ export function hasHarmonySseBridge(): boolean {
 export function hasHarmonyFileBridge(): boolean {
   const b = getHarmonyBridge();
   return !!(b && typeof b.downloadAndOpenFileAsync === 'function');
+}
+
+export function hasHarmonySaveBytesBridge(): boolean {
+  const b = getHarmonyBridge();
+  return !!(b && typeof b.saveBytesAsync === 'function');
 }
 
 export function hasHarmonyNotificationBridge(): boolean {
@@ -385,6 +391,25 @@ export async function harmonyOpenLocalFile(opts: {
   await awaitHarmonyFileBridge((reqId) => {
     bridge.openLocalFileAsync!(reqId, JSON.stringify(opts));
   });
+}
+
+export async function harmonySaveBytes(opts: {
+  bytes: Uint8Array;
+  fileName: string;
+  mimeType?: string;
+}): Promise<string> {
+  const bridge = getHarmonyBridge();
+  if (!bridge || typeof bridge.saveBytesAsync !== 'function') {
+    throw new Error('HarmonyOS save-bytes bridge unavailable');
+  }
+  const res = await awaitHarmonyFileBridge((reqId) => {
+    bridge.saveBytesAsync!(reqId, JSON.stringify({
+      fileName: opts.fileName,
+      mimeType: opts.mimeType,
+      bytesBase64: bytesToBase64(opts.bytes),
+    }));
+  });
+  return res.path ?? '';
 }
 
 // ── Native external URL opener ──
