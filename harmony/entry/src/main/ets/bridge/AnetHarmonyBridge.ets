@@ -86,11 +86,9 @@ function sanitizeFileName(raw: string): string {
   return base.length > 120 ? base.slice(0, 120) : base;
 }
 
-/**
- * PreviewKit rejects generic '*/*' and 'application/octet-stream' (API 12+ d.ts:329).
- * Resolve a concrete MIME type from explicit non-generic input or the filename extension;
- * return '' when unknown so HarmonyOS infers from the file suffix.
- */
+// PreviewKit rejects generic wildcard MIME and 'application/octet-stream' (API 12+ d.ts:329).
+// Resolve a concrete MIME type from explicit non-generic input or the filename extension;
+// return '' when unknown so HarmonyOS infers from the file suffix.
 function resolvePreviewMimeType(fileName: string, rawMime?: string): string {
   const cleaned = rawMime ? rawMime.split(';')[0].trim().toLowerCase() : '';
   if (
