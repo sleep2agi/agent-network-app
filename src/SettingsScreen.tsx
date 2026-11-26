@@ -61,6 +61,7 @@ import { keepAliveAvailable, keepAliveLastError, keepAliveRunning, subscribeKeep
 import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runtime';
 import XiaomiGuideModal from './XiaomiGuideModal';
 import VoiceSettingsSection from './VoiceSettingsSection';
+import { getHubVoiceSnapshot, subscribeHubVoice } from './hub-voice';
 import UiScaleSettings from './UiScaleSettings';
 import LanguageSettings from './LanguageSettings';
 import ShortcutsSettings from './ShortcutsSettings';
@@ -413,12 +414,14 @@ export default function SettingsScreen({
   // 部门负责人(RFC-040,Hub ≥ .91):手机设置列表最上面一组「管理本部门」(电脑在侧栏「人员」上方)。旧 Hub ⇒ 空,不出现。
   const managedDepts = managedDepartmentIds(authMe, me.networkId);
   const [manageDeptOpen, setManageDeptOpen] = useState(false);
-  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub, users: usersAvailable }, undefined, platform), [query, localHub, usersAvailable, platform, language]);
+  const hubVoice = useSyncExternalStore(subscribeHubVoice, getHubVoiceSnapshot, getHubVoiceSnapshot);
+  const voiceAvailableOnWeb = hubVoice.supported && (hubVoice.enabled || hubVoice.canManage);
+  const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub, users: usersAvailable, voice: voiceAvailableOnWeb }, undefined, platform), [query, localHub, usersAvailable, voiceAvailableOnWeb, platform, language]);
   const searching = query.trim().length > 0;
   const visible = useMemo(() => visibleRowKeys(query, filtered), [query, filtered]);
   const active = activeCategoryKey(category, filtered);
   // 行要同时满足:在本平台存在(filtered 已按平台筛掉安卓专属行)且命中搜索(visible 为 null = 不在搜索)。
-  const onPlatform = useMemo(() => new Set(filterSettings('', { localHub: true, users: true }, undefined, platform).flatMap(c => c.rows.map(r => `${c.key}.${r.key}`))), [platform]);
+  const onPlatform = useMemo(() => new Set(filterSettings('', { localHub: true, users: true, voice: voiceAvailableOnWeb }, undefined, platform).flatMap(c => c.rows.map(r => `${c.key}.${r.key}`))), [platform, voiceAvailableOnWeb]);
   const show = (cat: SettingsCategoryKey, row: string) => onPlatform.has(`${cat}.${row}`) && (visible === null || visible.has(`${cat}.${row}`));
   // 不在搜索:只画选中的那一类;搜索中:把所有命中的类都画出来(各带小标题)。
   const sectionsToRender = searching ? filtered.map(c => c.key) : [active];
@@ -1320,7 +1323,7 @@ export default function SettingsScreen({
             <View style={sectionStyle} testID="settings-section-voice">
               {heading('voice')}
               {/* VoiceSettingsSection 自己画成几组设置积木卡片(v2),不再套一层 WideCard。 */}
-              <VoiceSettingsSection showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showMic={show('voice', 'mic')} showTest={show('voice', 'test')} />
+              <VoiceSettingsSection showHub={show('voice', 'hub')} showMode={show('voice', 'mode')} showCredentials={show('voice', 'credentials')} showMic={show('voice', 'mic')} showTest={show('voice', 'test')} />
             </View>
           ) : null}
 

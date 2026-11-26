@@ -114,11 +114,13 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
     ],
   },
   {
-    // 语音输入(豆包语音 ASR):凭据只存本机(SecureStore / 系统钥匙串),纯网页没有安全存储 → 不出现。
+    // 语音输入(豆包语音 ASR):本机个人凭据只在 SecureStore / 钥匙串平台出现；
+    // #5653 Hub 统一语音服务开启或可管理时，网页/鸿蒙也通过 available.voice=true 显示 hub/mic/test。
     key: 'voice',
     label: '语音输入',
     icon: 'mic-outline',
     rows: [
+      { key: 'hub', label: '服务器统一语音服务', keywords: ['服务器', '统一', '共享', 'hub', '免配', '零配置', '语音', '语音识别', '豆包', 'asr', 'voice'], platforms: ['android', 'ios', 'desktop'] },
       { key: 'mode', label: '识别模型', keywords: ['流式', '边说边出字', '实时', '极速版', '录音文件', '识别模型', '识别模式', 'streaming', 'stream', 'flash', '语音'], platforms: ['android', 'ios', 'desktop'] },
       { key: 'credentials', label: '豆包语音 API Key', keywords: ['语音', '语音识别', '豆包', '火山', '火山引擎', 'asr', 'voice', 'api key', 'app id', 'access token', '旧版控制台', '开通', '麦克风', '按住说话'], platforms: ['android', 'ios', 'desktop'] },
       // 麦克风选择(MicDeviceSetting):桌面 webview 才有 getUserMedia 设备;手机原生录音不给选。
@@ -198,7 +200,8 @@ export function filterSettings(
   for (const cat of categories) {
     if (cat.conditional && available[cat.key] !== true) continue;
     const catHit = q.length > 0 && (normalize(cat.label).includes(q) || pairHit(cat.label, q));
-    const rows = cat.rows.filter((r) => rowOnPlatform(r, platform) && (!r.adminOnly || available.users === true) && (catHit || rowMatches(r, query)));
+    const webHubVoice = cat.key === 'voice' && platform === 'web' && available.voice === true;
+    const rows = cat.rows.filter((r) => (rowOnPlatform(r, platform) || (webHubVoice && (r.key === 'hub' || r.key === 'mic' || r.key === 'test'))) && (!r.adminOnly || available.users === true) && (catHit || rowMatches(r, query)));
     if (rows.length) out.push({ ...cat, rows });
   }
   return out;
@@ -331,9 +334,10 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
 // ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
 // 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
 // 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
-export type SettingsDetailKey = 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'changePassword' | 'userMember' | 'userGroup' | 'changelog';
+export type SettingsDetailKey = 'voiceHub' | 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'changePassword' | 'userMember' | 'userGroup' | 'changelog';
 
 export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
+  voiceHub: '服务器统一语音',
   voiceApiKey: 'API Key',
   voiceAdvanced: '高级 / 旧版控制台',
   quietHours: '免打扰时段',
@@ -357,6 +361,7 @@ export type SettingsHeaderOverride = {
 
 /** 三级页属于哪个子页(返回时回到它;子页换了就不该还停在别人的三级页上)。 */
 export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryKey> = {
+  voiceHub: 'voice',
   voiceApiKey: 'voice',
   voiceAdvanced: 'voice',
   quietHours: 'notifications',

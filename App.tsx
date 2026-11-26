@@ -28,6 +28,7 @@ import './src/i18n-users';
 import { LOGIN_FAILURE_COPY, normalizeServerUrl, type LoginFailureKind } from './src/login-flow';
 import { hydrateHubAvatars, initLocalAvatars } from './src/lib/avatars';
 import { hydrateNodeRoles, isHostSupervisorAlias, nodeRolesVersion, subscribeNodeRoles } from './src/daemon-node';
+import { refreshHubVoiceConfig, setActiveHubVoiceConfig } from './src/hub-voice';
 import { usePoll } from './src/usePoll'; // R1 avatar 30s hydrate poll (main's App.tsx no longer imports it)
 import ChatScreen, { clearChatConversationCache } from './src/ChatScreen';
 import MessagesScreen from './src/MessagesScreen';
@@ -788,6 +789,7 @@ function AppRoot() {
   // one immediate load when logged in, then a slow foreground poll to pick up
   // web-side changes. Failure just leaves pool avatars — never blocks/crashes.
   useEffect(() => {
+    setActiveHubVoiceConfig(cfg);
     if (!cfg) return;
     let alive = true;
     // #692:同一份 /api/nodes 也告诉我们谁是守护节点(host_supervisor)—— 会话页换掉输入框、列表不画红点。
@@ -795,7 +797,10 @@ function AppRoot() {
     return () => { alive = false; };
   }, [cfg]);
   usePoll(() => {
-    if (cfg) fetchHubNodes(cfg).then(r => { hydrateHubAvatars(r.nodes); hydrateNodeRoles(r.nodes); }).catch(() => {});
+    if (cfg) {
+      fetchHubNodes(cfg).then(r => { hydrateHubAvatars(r.nodes); hydrateNodeRoles(r.nodes); }).catch(() => {});
+      void refreshHubVoiceConfig(cfg);
+    }
   }, 30000, [cfg]);
 
   // System back (button or fullscreen gesture) navigates within the app

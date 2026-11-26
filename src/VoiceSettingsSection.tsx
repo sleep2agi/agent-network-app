@@ -12,7 +12,7 @@ import { settingsText } from './i18n-settings';
 // 🔴 凭据只存本机(voice-credentials.ts),保存后**不回显**密钥全文:密钥输入框永远是空的,
 // 状态行只显示「已配置 ✓ …a1b2」。密钥栏留空点保存 = 不改。
 
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Platform, Pressable, StyleSheet, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
@@ -23,6 +23,8 @@ import { openExternal } from './open-external';
 import { finishUtteranceWith, newUtterance } from './useVoiceInput';
 import { useVoiceRecorder } from './useVoiceRecorder';
 import MicDeviceSetting from './MicDeviceSetting';
+import { HubVoiceSettingsCard } from './HubVoiceSettingsCard';
+import { getHubVoiceSnapshot, hubVoiceReady, subscribeHubVoice } from './hub-voice';
 import { SettingsActionRow, SettingsCardContent, SettingsChoiceRow, SettingsControlRow, SettingsGroup } from './settings-kit';
 import { STREAM_DEFAULT_RESOURCE_ID, STREAM_RESOURCE_IDS } from './doubao-stream-protocol';
 import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported, testFallbackNote, type VoiceMode, type VoicePlatform } from './voice-stream-policy';
@@ -57,6 +59,8 @@ export function advancedInitiallyOpen(c: VoiceCredentials | null): boolean {
 export function useVoiceSettings() {
   const storage = voiceStorageKind();
   const platform = voicePlatform();
+  const hubVoice = useSyncExternalStore(subscribeHubVoice, getHubVoiceSnapshot, getHubVoiceSnapshot);
+  const hubReady = hubVoiceReady(hubVoice);
   const [mode, setMode] = useState<VoiceMode>(currentVoiceMode());
   const [unavailable, setUnavailable] = useState(streamUnavailable());
   const [interim, setInterim] = useState('');
@@ -87,6 +91,7 @@ export function useVoiceSettings() {
 
   const status = voiceConfigStatus(creds);
   const credMode = creds ? authMode(creds) : undefined;
+  const canTest = status.configured || hubReady;
 
   const onSave = async () => {
     const r = mergeOnSave(creds, form);
@@ -116,14 +121,14 @@ export function useVoiceSettings() {
   };
 
   const onTest = async () => {
-    if (!creds) { setTest({ kind: 'error', message: asrErrorMessage('not_configured') }); return; }
+    if (!creds && !hubReady) { setTest({ kind: 'error', message: asrErrorMessage('not_configured') }); return; }
     // 测试按**所选识别模型**走,且流式不看「本次已记住不可用」:用户点测试就是想确认现在通不通。
     const route: VoiceMode = mode === 'stream' && streamingSupported(platform) ? 'stream' : 'flash';
     setInterim('');
     const u = newUtterance(route, setInterim);
     utteranceRef.current = u;
     u.start();
-    recorder.setChunkListener(route === 'stream' ? u.onChunk : null);
+    recorder.setChunkListener(u.route === 'stream' ? u.onChunk : null);
     let started = await recorder.start();
     // 第一次用:系统授权框刚弹过。这里不是按住手势,授权成功就直接接着录。
     if (!started.ok && started.permissionJustGranted) started = await recorder.start();
@@ -155,26 +160,55 @@ export function useVoiceSettings() {
   const testBusy = test.kind === 'recording' || test.kind === 'transcribing';
   const secondsLeft = test.kind === 'recording' ? Math.max(0, Math.ceil((test.until - Date.now()) / 1000)) : 0;
 
-  return { storage, platform, mode, unavailable, interim, creds, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft };
+  return { storage, platform, hubVoice, hubReady, canTest, mode, unavailable, interim, creds, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft };
 }
 
 export const VOICE_UNSUPPORTED_TEXT = 'settings.copy.228';
 export const voiceStorageLabel = (storage: string) => storage === 'keychain' ? tr('settings.copy.229') : tr('settings.copy.230');
 
-export default function VoiceSettingsSection({ showCredentials = true, showTest = true, showMode = true, showMic = true }: { showCredentials?: boolean; showTest?: boolean; showMode?: boolean; showMic?: boolean }) {
+export default function VoiceSettingsSection({ showHub = true, showCredentials = true, showTest = true, showMode = true, showMic = true }: { showHub?: boolean; showCredentials?: boolean; showTest?: boolean; showMode?: boolean; showMic?: boolean }) {
   useTranslation();
-  const { storage, platform, mode, unavailable, interim, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft } = useVoiceSettings();
+  const { storage, platform, hubVoice, canTest, mode, unavailable, interim, loaded, form, setForm, advanced, setAdvanced, saveMsg, busy, test, status, onSave, onClear, onTest, onPickMode, choices, setConsole, savedIs, testBusy, secondsLeft } = useVoiceSettings();
 
   if (storage === 'unsupported') {
+    const hubAvailable = hubVoice.supported && (hubVoice.enabled || hubVoice.canManage);
+    if (!hubAvailable) {
+      return (
+        <SettingsGroup testID="voice-settings-unsupported">
+          <SettingsCardContent><Text style={styles.hint}>{tr(VOICE_UNSUPPORTED_TEXT)}</Text></SettingsCardContent>
+        </SettingsGroup>
+      );
+    }
     return (
-      <SettingsGroup testID="voice-settings-unsupported">
-        <SettingsCardContent><Text style={styles.hint}>{tr(VOICE_UNSUPPORTED_TEXT)}</Text></SettingsCardContent>
-      </SettingsGroup>
+      <View testID="voice-settings">
+        {showHub ? <HubVoiceSettingsCard /> : null}
+        {showMic && Platform.OS === 'web' ? <SettingsGroup><SettingsCardContent><MicDeviceSetting /></SettingsCardContent></SettingsGroup> : null}
+        {showTest ? (
+          <SettingsGroup testID="voice-test-group">
+            <SettingsActionRow
+              label={tr('settings.copy.133')}
+              subtitle={`${tr('settings.copy.245')}。`}
+              action={test.kind === 'recording' ? tr('settings.copy.195', { v0: secondsLeft }) : test.kind === 'transcribing' ? tr('settings.copy.121') : tr('settings.copy.244')}
+              disabled={testBusy || !canTest}
+              onPress={() => void onTest()}
+              testID="voice-test-row"
+              buttonTestID="voice-test"
+            />
+            {test.kind === 'done' ? (
+              <SettingsCardContent>
+                <Text style={styles.result} testID="voice-test-result">{test.text ? tr('settings.copy.196', { v0: tr('settings.copy.123'), v1: test.text }) : tr('settings.copy.124')}</Text>
+              </SettingsCardContent>
+            ) : null}
+            {test.kind === 'error' ? <SettingsCardContent><Text style={[styles.result, styles.error]} testID="voice-test-error">{test.message}</Text></SettingsCardContent> : null}
+          </SettingsGroup>
+        ) : null}
+      </View>
     );
   }
 
   return (
     <View testID="voice-settings">
+      {showHub ? <HubVoiceSettingsCard /> : null}
       {showMode ? (
         // v2(#427):识别方式 = 设置积木的单选行(✓ 在右侧同一列),说明放在卡片下面。
         <SettingsGroup
@@ -341,7 +375,7 @@ export default function VoiceSettingsSection({ showCredentials = true, showTest 
             label={tr('settings.copy.133')}
             subtitle={`${tr('settings.copy.245')}${mode === 'stream' && streamingSupported(platform) ? tr('settings.copy.246') : ''}。`}
             action={test.kind === 'recording' ? tr('settings.copy.195', { v0: secondsLeft }) : test.kind === 'transcribing' ? tr('settings.copy.121') : tr('settings.copy.244')}
-            disabled={testBusy || !status.configured}
+            disabled={testBusy || !canTest}
             onPress={() => void onTest()}
             testID="voice-test-row"
             buttonTestID="voice-test"

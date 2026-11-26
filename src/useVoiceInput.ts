@@ -24,17 +24,20 @@ import { Utterance } from './voice-utterance';
 import { chooseRoute, STREAM_UNAVAILABLE_HINT, type UtteranceResult, type VoiceMode } from './voice-stream-policy';
 import { authMode } from './voice-credentials-model';
 import { currentVoiceMode, loadVoiceMode, markStreamUnavailable, streamUnavailable, voicePlatform } from './voice-prefs';
+import { getActiveHubVoiceConfig, getHubVoiceSnapshot, hubVoiceReady, subscribeHubVoice, transcribeViaHub } from './hub-voice';
 
 export const LIMITS = { minSeconds: MIN_UTTERANCE_SECONDS, maxSeconds: MAX_UTTERANCE_SECONDS };
 
 /** appFetch(桌面走 Tauri plugin-http,手机走 RN fetch)适配成 doubao-asr 的 FetchLike。 */
 export const asrFetch: FetchLike = (url, init) => appFetch(url, init as RequestInit) as ReturnType<FetchLike>;
 
-/** 录到的 PCM → 文本。设置页「测试」和聊天页共用。 */
+/** 录到的 PCM → 文本。优先本机个人凭据；未配置个人凭据时回落 Hub 统一代理（#5653）。 */
 export async function transcribeCaptured(creds: VoiceCredentials | null, captured: Captured): Promise<string> {
   const { wav, seconds } = pcmChunksToWav(captured.chunks, captured.sampleRate, captured.channels);
   if (seconds > MAX_UTTERANCE_SECONDS + 1) throw new AsrError('too_long');
-  return transcribeWav(creds, wav, { fetchImpl: asrFetch });
+  if (creds && creds.accessToken) return transcribeWav(creds, wav, { fetchImpl: asrFetch });
+  if (hubVoiceReady()) return transcribeViaHub(getActiveHubVoiceConfig(), wav);
+  throw new AsrError('not_configured');
 }
 
 /**
@@ -50,13 +53,17 @@ export const nativeWsFactory: WsFactory = (url, headers) => {
 
 /** 这一句走哪条路(读当前模式 + 本次运行内的「流式不可用」记忆)。 */
 export function currentRoute(mode: VoiceMode = currentVoiceMode()): VoiceMode {
-  return chooseRoute({ mode, platform: voicePlatform(), streamUnavailable: !!streamUnavailable() });
+  const chosen = chooseRoute({ mode, platform: voicePlatform(), streamUnavailable: !!streamUnavailable() });
+  // 无本地凭据、改走 Hub 统一代理时直接走极速版，不发起注定失败的直连流式握手。
+  if (!configuredSnapshot && hubVoiceReady()) return 'flash';
+  return chosen;
 }
 
 /** 新建一句话的编排器。设置页「测试」和聊天页共用。 */
 export function newUtterance(route: VoiceMode, onInterim: (text: string) => void): Utterance {
+  const effectiveRoute: VoiceMode = route === 'stream' && !configuredSnapshot && hubVoiceReady() ? 'flash' : route;
   return new Utterance({
-    route,
+    route: effectiveRoute,
     loadCreds: loadVoiceCredentials,
     openSession: (creds, cb) => new StreamingAsrSession(creds, { wsFactory: nativeWsFactory, onInterim: cb }),
     onInterim,
@@ -130,7 +137,10 @@ export function useVoiceInput(opts: {
 }): VoiceInput {
   const recorder = useVoiceRecorder();
   const sim = useSyncExternalStore(VOICE_SIM ? voiceSimStore.subscribe : noSim, simSnapshot, simSnapshot);
-  const configured = useSyncExternalStore(subscribeConfigured, getConfigured, getConfigured);
+  const localConfigured = useSyncExternalStore(subscribeConfigured, getConfigured, getConfigured);
+  const hubVoice = useSyncExternalStore(subscribeHubVoice, getHubVoiceSnapshot, getHubVoiceSnapshot);
+  const hubConfigured = hubVoiceReady(hubVoice);
+  const configured = localConfigured || hubConfigured;
   const [state, setState] = useState<VoiceState>(IDLE);
   const stateRef = useRef<VoiceState>(IDLE);
   const [now, setNow] = useState(Date.now());
@@ -231,7 +241,7 @@ export function useVoiceInput(opts: {
     return () => clearTimeout(id);
   }, [settingsPrompt]);
 
-  const available = voiceStorageKind() !== 'unsupported' && recorder.supported;
+  const available = (voiceStorageKind() !== 'unsupported' || hubConfigured) && recorder.supported;
 
   return {
     available,
