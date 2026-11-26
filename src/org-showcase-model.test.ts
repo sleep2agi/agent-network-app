@@ -1,4 +1,4 @@
-import { DEPT_HUES, deptTrail, isRunning, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats } from './org-showcase-model';
+import { DEPT_HUES, deptTrail, isAgentLive, isRunning, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats } from './org-showcase-model';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
 
 let p = 0, t = 0;
@@ -45,6 +45,16 @@ ck('drill: trail root → department', deptTrail(data, 'a11').map(d => d.id).joi
   ck('🔴 active 但 30 天没动 → 不算运行中', !isRunning({ lifecycleState: 'active', updatedAt: old }));
   ck('active 且刚动过 → 运行中', isRunning({ lifecycleState: 'active', updatedAt: fresh }));
   ck('active、不知道多久 → 仍算运行中（向后兼容）', isRunning({ lifecycleState: 'active' }));
+}
+// #5427：拿到实时 statusByAlias 后，统计口径与 LiveOrgMap 保持一致（!!s && s !== 'offline'）
+{
+  const liveMap = new Map([['甲', 'idle'], ['丙', 'offline'], ['戊', 'working']]);
+  ck('#5427: offline agent even if lifecycleState=active does not count as live', !isAgentLive(placed[2], liveMap));
+  ck('#5427: idle/working agents count as live (matching LiveOrgMap)', isAgentLive(placed[0], liveMap) && isAgentLive(placed[4], liveMap));
+  const liveStats = showcaseStats(data, placed, null, liveMap);
+  const liveCols = showcaseColumns(data, placed, { statusByAlias: liveMap });
+  ck('#5427: showcaseStats and showcaseColumns agree with live session map (2 total, 1 in A)', liveStats.running === 2 && liveCols[0].running === 1);
+  ck('#5427: empty live statusByAlias reports 0 (strict live semantics, never falls back to static isRunning)', showcaseStats(data, placed, null, new Map()).running === 0);
 }
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);

@@ -4,7 +4,7 @@
 //   头像叠 3 个（在跑的排前面）+ 部门名 + 「N 个 Agent · M 个运行中」+ 箭头，不再是文件夹图标 + 一个光秃的数字。
 // 纯逻辑，不 import react-native。
 import { orgTree, type AgentOrgData, type PlacedAgent } from './agent-org-model';
-import { isRunning } from './org-showcase-model';
+import { isAgentLive, isRunning } from './org-showcase-model';
 import { childrenOf, subtreeIds } from './org-model';
 
 export interface PhoneDeptFacts {
@@ -23,10 +23,17 @@ function agentsIn(placed: readonly PlacedAgent[], data: AgentOrgData, dept: stri
 }
 
 /** dept null = 未归属. Counts include sub-departments, like the existing counts on this page. */
-export function phoneDeptFacts(placed: readonly PlacedAgent[], data: AgentOrgData, dept: string | null, max = PHONE_AVATAR_STACK): PhoneDeptFacts {
+export function phoneDeptFacts(
+  placed: readonly PlacedAgent[],
+  data: AgentOrgData,
+  dept: string | null,
+  max = PHONE_AVATAR_STACK,
+  statusByAlias?: ReadonlyMap<string, string> | null,
+): PhoneDeptFacts {
   const agents = agentsIn(placed, data, dept);
-  const sorted = [...agents].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || a.alias.localeCompare(b.alias, 'zh'));
-  return { count: agents.length, running: agents.filter(isRunning).length, avatars: sorted.slice(0, max).map(a => a.alias) };
+  const live = (a: PlacedAgent) => isAgentLive(a, statusByAlias);
+  const sorted = [...agents].sort((a, b) => Number(live(b)) - Number(live(a)) || a.alias.localeCompare(b.alias, 'zh'));
+  return { count: agents.length, running: agents.filter(live).length, avatars: sorted.slice(0, max).map(a => a.alias) };
 }
 
 /** Phone indent per tree level. Small on purpose: three levels must still leave room for the name. */

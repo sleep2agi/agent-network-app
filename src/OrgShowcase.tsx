@@ -19,7 +19,7 @@ import { colors, onThemeChange, radius, spacing, type as typeScale } from './the
 import { useTranslation } from './i18n-react';
 import type { AgentOrgData, PlacedAgent } from './agent-org-model';
 import { staleDays } from './agent-org-model';
-import { deptTrail, isRunning, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats, type ShowcaseColumn } from './org-showcase-model';
+import { deptTrail, isAgentLive, pickAvatars, scopedPlaced, showcaseColumns, showcaseStats, type ShowcaseColumn } from './org-showcase-model';
 
 /** 栏宽跟着可用宽度走(放得下就不横向滚),夹在 MIN..MAX 之间;实在放不下才横向滚。 */
 const COL_MIN = 188;
@@ -34,6 +34,8 @@ const alpha = (hex: string, a: number) => `${hex}${Math.round(a * 255).toString(
 type StatIcon = 'people-outline' | 'git-network-outline' | 'pulse-outline' | 'person-outline';
 
 export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent[]; title: string; onOpenDept: (id: string | null) => void; onOpenAgent?: (alias: string) => void;
+  /** 实时会话状态（与 LiveOrgMap 统一在线口径，#5427）。未传或空 Map 时回退静态活跃口径。 */
+  statusByAlias?: ReadonlyMap<string, string> | null;
   /** 手机(admin 2026-11-16「手机客户端看组织架构图的效果不好」):桌面那套海报式概览在 390pt 宽里
    *  标题折三行、头像墙出框、四个大数字占满一屏,架构树被挤到折叠线以下。compact = 小标题、一行四个数、小头像。 */
   compact?: boolean }) {
@@ -44,10 +46,10 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
   useEffect(() => { if (rootId && !p.data.departments.some(d => d.id === rootId)) setRootId(null); }, [rootId, p.data]);
   const trail = deptTrail(p.data, rootId);
   const here = trail[trail.length - 1] ?? null;
-  const stats = showcaseStats(p.data, p.placed, rootId);
-  const columns = showcaseColumns(p.data, p.placed, { rootId });
+  const stats = showcaseStats(p.data, p.placed, rootId, p.statusByAlias);
+  const columns = showcaseColumns(p.data, p.placed, { rootId, statusByAlias: p.statusByAlias });
   const scoped = scopedPlaced(p.data, p.placed, rootId);
-  const cloud = pickAvatars(scoped, c ? 6 : 9);
+  const cloud = pickAvatars(scoped, c ? 6 : 9, p.statusByAlias);
   const showUnassigned = rootId === null && stats.unassigned > 0;
   const n = columns.length + (showUnassigned ? 1 : 0);
   const [avail, setAvail] = useState(0);
@@ -110,7 +112,7 @@ export default function OrgShowcase(p: { data: AgentOrgData; placed: PlacedAgent
         </View>}
         {n === 0 && here ? (
           // 叶子部门:Agent 卡片墙。
-          <AgentWall agents={scoped} onOpenAgent={p.onOpenAgent} />
+          <AgentWall agents={scoped} statusByAlias={p.statusByAlias} onOpenAgent={p.onOpenAgent} />
         ) : (
           c ? (
           <View testID="org-showcase-phone-list" style={{ gap: spacing.md }}>
@@ -236,9 +238,10 @@ function Column(p: { col: ShowcaseColumn; width: number; onOpen: (id: string) =>
   </View>;
 }
 
-function AgentWall(p: { agents: PlacedAgent[]; onOpenAgent?: (alias: string) => void }) {
+function AgentWall(p: { agents: PlacedAgent[]; statusByAlias?: ReadonlyMap<string, string> | null; onOpenAgent?: (alias: string) => void }) {
   const { t } = useTranslation();
-  const sorted = [...p.agents].sort((a, b) => Number(isRunning(b)) - Number(isRunning(a)) || Number(staleDays(a) !== null) - Number(staleDays(b) !== null) || a.alias.localeCompare(b.alias, 'zh'));
+  const live = (a: PlacedAgent) => isAgentLive(a, p.statusByAlias);
+  const sorted = [...p.agents].sort((a, b) => Number(live(b)) - Number(live(a)) || Number(staleDays(a) !== null) - Number(staleDays(b) !== null) || a.alias.localeCompare(b.alias, 'zh'));
   const shown = sorted.slice(0, AGENT_CAP);
   if (!shown.length) return <View testID="org-showcase-agents-empty" style={styles.wallEmpty}>
     <Ionicons name="people-outline" size={28} color={colors.textMuted} />
@@ -250,7 +253,7 @@ function AgentWall(p: { agents: PlacedAgent[]; onOpenAgent?: (alias: string) => 
         style={({ hovered, pressed }: { hovered?: boolean; pressed: boolean }) => [styles.agentCard, (hovered || pressed) && p.onOpenAgent && { borderColor: colors.textMuted }]}>
         <View style={staleDays(agent) !== null ? { opacity: 0.45 } : undefined}>
           <AliasAvatar alias={agent.alias} size={44} />
-          {agent.lifecycleState != null ? <View style={[styles.agentDot, { backgroundColor: isRunning(agent) ? colors.running : colors.rest }]} /> : null}
+          {agent.lifecycleState != null ? <View style={[styles.agentDot, { backgroundColor: live(agent) ? colors.running : colors.rest }]} /> : null}
         </View>
         <Text numberOfLines={1} style={styles.agentName}>{agent.alias}</Text>
         <Text numberOfLines={1} style={styles.deptMeta}>{staleDays(agent) !== null ? t('agentOrg.staleDays', { days: staleDays(agent)! }) : agent.ownerName ?? t('agentOrg.noOwner')}</Text>

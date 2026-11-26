@@ -70,6 +70,11 @@ ck('phone hides the 调整结构 block in every view, not just chart', /!p\.fill
   ck('search results are capped', phoneSearch(data, many, 'x')!.agents.length === PHONE_SEARCH_CAP);
   ck('phone list renders search, attention and only the top level', screen.includes('testID="agent-org-search"') && screen.includes('testID="agent-org-attention"') && screen.includes('const rows = phoneLevel(p.data, null);'));
   ck('status for attention comes from the light status read, phone only', screen.includes('fetchScopedStatus(p.cfg)') && /if \(!p\.phone\) return;\s*let live = true;\s*fetchScopedStatus/.test(screen));
+  // #5427：手机组织首页总览与部门行均传入 statusByAlias，与架构图统一在线口径。
+  const liveMap = new Map([['alpha', 'working'], ['beta', 'offline'], ['gamma', 'idle']]);
+  const liveRoot = phoneDeptFacts(placed, data, 'root', 3, liveMap);
+  ck('#5427: phoneDeptFacts uses live statusByAlias when available (alpha working + gamma idle, beta offline excluded)', liveRoot.running === 2 && liveRoot.avatars.slice(0, 2).join() === 'alpha,gamma');
+  ck('#5427: PhoneChartCard and PhoneDepartmentList pass statusByAlias into live counts', screen.includes('<PhoneChartCard data={data} placed={placed} statusByAlias={statusByAlias}') && screen.includes('phoneDeptFacts(p.placed, p.data, row.dept.id, PHONE_AVATAR_STACK, p.statusByAlias)'));
 }
 
 console.log(`org-phone-list: ${pass}/${pass + fails.length}`);
