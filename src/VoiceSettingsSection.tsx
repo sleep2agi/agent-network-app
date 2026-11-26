@@ -90,7 +90,7 @@ export function useVoiceSettings() {
   }, [test.kind]);
 
   const status = voiceConfigStatus(creds);
-  const credMode = creds ? authMode(creds) : undefined;
+  const credMode = creds ? authMode(creds) : (hubReady ? hubVoice.authMode : undefined);
   const canTest = status.configured || hubReady;
 
   const onSave = async () => {
@@ -143,7 +143,7 @@ export function useVoiceSettings() {
         try {
           const r = await finishUtteranceWith(u, captured);
           if (route === 'stream' && r.via === 'stream') clearStreamUnavailable();
-          setTest({ kind: 'done', text: r.text, via: r.via, note: testFallbackNote(route, r, status.configured ? status.streamResourceId : STREAM_DEFAULT_RESOURCE_ID, credMode) });
+          setTest({ kind: 'done', text: r.text, via: r.via, note: testFallbackNote(route, r, status.configured ? status.streamResourceId : (hubVoice.streamResourceId || STREAM_DEFAULT_RESOURCE_ID), credMode) });
         } catch (e) {
           const err = e instanceof AsrError ? e : new AsrError('upstream_error');
           setTest({ kind: 'error', message: asrErrorMessage(err.code, err.upstream, credMode) });

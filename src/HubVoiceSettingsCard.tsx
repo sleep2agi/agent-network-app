@@ -7,6 +7,8 @@ import { Text, TextInput } from './ui-text';
 import { colors, onThemeChange, radius, spacing } from './theme';
 import { buttonStyle, buttonTextStyle } from './elevation';
 import { AppSwitch } from './AppSwitch';
+import { STREAM_DEFAULT_RESOURCE_ID, STREAM_RESOURCE_IDS } from './doubao-stream-protocol';
+import { clearStreamUnavailable } from './voice-prefs';
 import {
   SettingsButton,
   SettingsCardContent,
@@ -40,7 +42,7 @@ function hubVoiceStatusText(s: HubVoiceConfigState): string {
 function useHubVoiceEditor() {
   const hub = useSyncExternalStore(subscribeHubVoice, getHubVoiceSnapshot, getHubVoiceSnapshot);
   const [form, setForm] = useState<HubVoiceAdminForm>(() => initialHubVoiceForm(hub));
-  const [advanced, setAdvanced] = useState(() => hub.authMode === 'app-token' || !!hub.endpoint);
+  const [advanced, setAdvanced] = useState(() => hub.authMode === 'app-token' || !!hub.endpoint || !!hub.streamEndpoint || !!hub.streamResourceId);
   const [busy, setBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
 
@@ -54,8 +56,8 @@ function useHubVoiceEditor() {
       apiKey: prev.apiKey,
       accessToken: prev.accessToken,
     }));
-    if (hub.authMode === 'app-token' || !!hub.endpoint) setAdvanced(true);
-  }, [hub.scopeKey, hub.configured, hub.enabled, hub.authMode, hub.appId, hub.endpoint, hub.updatedAt]);
+    if (hub.authMode === 'app-token' || !!hub.endpoint || !!hub.streamEndpoint || !!hub.streamResourceId) setAdvanced(true);
+  }, [hub.scopeKey, hub.configured, hub.enabled, hub.authMode, hub.appId, hub.endpoint, hub.streamEndpoint, hub.streamResourceId, hub.updatedAt]);
 
   const setAuthMode = (authMode: HubVoiceAuthMode) => setForm(f => ({ ...f, authMode }));
 
@@ -69,6 +71,7 @@ function useHubVoiceEditor() {
     try {
       const res = await saveHubVoiceConfig(cfg, merged.body);
       if (res.ok) {
+        clearStreamUnavailable();
         setForm(initialHubVoiceForm(res.state));
         setMsg({ ok: true, text: tr('hubVoice.saved') });
       } else {
@@ -93,6 +96,8 @@ function useHubVoiceEditor() {
         auth_mode: hub.authMode,
         app_id: hub.appId,
         endpoint: hub.endpoint,
+        stream_endpoint: hub.streamEndpoint,
+        stream_resource_id: hub.streamResourceId,
       });
       if (res.ok) {
         setMsg({ ok: true, text: tr('hubVoice.saved') });
@@ -265,6 +270,38 @@ export function HubVoiceSettingsCard() {
                     autoCorrect={false}
                     style={styles.input}
                   />
+
+                  <Text style={styles.fieldLabel}>{tr('hubVoice.streamEndpointLabel')}</Text>
+                  <TextInput
+                    testID="hub-voice-stream-endpoint"
+                    accessibilityLabel={tr('hubVoice.streamEndpointLabel')}
+                    value={form.streamEndpoint}
+                    onChangeText={streamEndpoint => setForm(f => ({ ...f, streamEndpoint }))}
+                    placeholder={tr('hubVoice.streamEndpointPlaceholder')}
+                    placeholderTextColor={colors.textMuted}
+                    autoCapitalize="none"
+                    autoCorrect={false}
+                    style={styles.input}
+                  />
+
+                  <Text style={styles.fieldLabel}>{tr('hubVoice.streamResourceLabel')}</Text>
+                  <View style={styles.chips}>
+                    {STREAM_RESOURCE_IDS.map(id => {
+                      const on = (form.streamResourceId || STREAM_DEFAULT_RESOURCE_ID) === id;
+                      return (
+                        <Pressable
+                          key={id}
+                          accessibilityRole="radio"
+                          accessibilityState={{ checked: on }}
+                          onPress={() => setForm(f => ({ ...f, streamResourceId: id }))}
+                          style={[styles.chip, on && styles.chipOn]}
+                          testID={`hub-voice-stream-resource-${id}`}
+                        >
+                          <Text style={[styles.chipText, on && styles.chipTextOn]}>{id}</Text>
+                        </Pressable>
+                      );
+                    })}
+                  </View>
                 </View>
               ) : null}
 
@@ -406,6 +443,25 @@ export function HubVoiceEditPage() {
           onChangeText={endpoint => setForm(f => ({ ...f, endpoint }))}
           placeholder="https://…"
         />
+        <SettingsTextField
+          testID="hub-voice-stream-endpoint"
+          accessibilityLabel={tr('hubVoice.streamEndpointLabel')}
+          value={form.streamEndpoint}
+          onChangeText={streamEndpoint => setForm(f => ({ ...f, streamEndpoint }))}
+          placeholder="wss://…"
+        />
+      </SettingsGroup>
+
+      <SettingsGroup title={tr('hubVoice.streamResourceLabel')}>
+        {STREAM_RESOURCE_IDS.map(id => (
+          <SettingsChoiceRow
+            key={id}
+            testID={`hub-voice-stream-resource-${id}`}
+            label={id}
+            selected={(form.streamResourceId || STREAM_DEFAULT_RESOURCE_ID) === id}
+            onPress={() => setForm(f => ({ ...f, streamResourceId: id }))}
+          />
+        ))}
       </SettingsGroup>
 
       <SettingsButton label={tr('hubVoice.save')} busy={busy} onPress={() => void onSave()} testID="hub-voice-save" />

@@ -1,11 +1,12 @@
-// ck-style (self-executing; run by scripts/run-tests.mjs). #5653 Hub 统一语音输入（ASR）单测与接线守卫。
+// ck-style (self-executing; run by scripts/run-tests.mjs). #5653 Hub 统一发放语音 Key 单测与接线守卫。
 import { readFileSync } from 'node:fs';
-import { AsrError, MAX_WAV_BYTES } from './doubao-asr';
 import type { HubConfig } from './api';
 import {
   __resetHubVoiceForTest,
   clearHubVoiceConfig,
   EMPTY_HUB_VOICE,
+  ensureHubVoiceCredentials,
+  getHubVoiceCredentials,
   getHubVoiceSnapshot,
   hubVoiceReady,
   initialHubVoiceForm,
@@ -14,7 +15,6 @@ import {
   saveHubVoiceConfig,
   setActiveHubVoiceConfig,
   subscribeHubVoice,
-  transcribeViaHub,
   type HubVoiceConfigState,
   type HubVoiceFetchLike,
 } from './hub-voice';
@@ -25,7 +25,6 @@ const ck = (name: string, cond: boolean) => { t++; if (cond) { p++; console.log(
 
 const cfgA: HubConfig = { serverUrl: 'https://hub.example.test', token: 'utok_aaaa11112222', networkId: 'net_a', profileId: 'p_a' };
 const cfgB: HubConfig = { serverUrl: 'https://hub.example.test', token: 'utok_bbbb33334444', networkId: 'net_b', profileId: 'p_b' };
-const sampleWav = new Uint8Array([0x52, 0x49, 0x46, 0x46, 0x24, 0x00, 0x00, 0x00]);
 
 async function run() {
   // ── 1. Pure form validation (mergeHubVoiceWrite) ──
@@ -40,8 +39,23 @@ async function run() {
     const rHttp = mergeHubVoiceWrite(unconfigured, { ...initialHubVoiceForm(unconfigured), apiKey: 'sk-valid-1234', endpoint: 'http://evil.example/flash' });
     ck('非 https 自定义地址被拒绝', !rHttp.ok && rHttp.reasonKey === 'hubVoice.err.endpointInvalid');
 
-    const rOk = mergeHubVoiceWrite(unconfigured, { ...initialHubVoiceForm(unconfigured), apiKey: 'sk-valid-1234', endpoint: 'https://asr.example/flash' });
-    ck('新版 API Key + https 地址校验通过', rOk.ok && rOk.body.auth_mode === 'api-key' && rOk.body.access_token === 'sk-valid-1234' && rOk.body.endpoint === 'https://asr.example/flash');
+    const rWsStream = mergeHubVoiceWrite(unconfigured, { ...initialHubVoiceForm(unconfigured), apiKey: 'sk-valid-1234', streamEndpoint: 'ws://evil.example/sauc' });
+    ck('非 wss 流式地址被拒绝', !rWsStream.ok && rWsStream.reasonKey === 'hubVoice.err.streamEndpointInvalid');
+
+    const rOk = mergeHubVoiceWrite(unconfigured, {
+      ...initialHubVoiceForm(unconfigured),
+      apiKey: 'sk-valid-1234',
+      endpoint: 'https://asr.example/flash',
+      streamEndpoint: 'wss://asr.example/sauc',
+      streamResourceId: 'volc.seedasr.sauc.duration',
+    });
+    ck('新版 API Key + https/wss + 流式资源 ID 校验通过',
+      rOk.ok
+      && rOk.body.auth_mode === 'api-key'
+      && rOk.body.access_token === 'sk-valid-1234'
+      && rOk.body.endpoint === 'https://asr.example/flash'
+      && rOk.body.stream_endpoint === 'wss://asr.example/sauc'
+      && rOk.body.stream_resource_id === 'volc.seedasr.sauc.duration');
 
     const savedApiKey: HubVoiceConfigState = { ...unconfigured, configured: true, enabled: true, authMode: 'api-key', keyHint: '…1234' };
     const rToggle = mergeHubVoiceWrite(savedApiKey, { ...initialHubVoiceForm(savedApiKey), enabled: false });
@@ -57,41 +71,83 @@ async function run() {
     ck('旧版 App ID + Access Token 校验通过', rOldOk.ok && rOldOk.body.auth_mode === 'app-token' && rOldOk.body.app_id === 'app_123');
   }
 
-  // ── 2. Store lifecycle: fetch, subscribe, account/network isolation, old Hub 404 cache ──
+  // ── 2. Store lifecycle: config + key issuance + memory cache + rotation + isolation + 404 cache ──
   {
     __resetHubVoiceForTest();
     let notifies = 0;
     const unsub = subscribeHubVoice(() => { notifies++; });
-    let seenUrl = '';
-    let seenAuth = '';
-    const okFetch: HubVoiceFetchLike = async (url, init) => {
-      seenUrl = url;
-      seenAuth = init.headers.Authorization ?? '';
-      return {
-        status: 200,
-        json: async () => ({
-          ok: true,
-          network_id: 'net_a',
-          enabled: true,
-          configured: true,
-          mode: 'hub-proxy',
-          provider: 'doubao',
-          auth_mode: 'api-key',
-          app_id: '',
-          key_hint: '…9988',
-          endpoint: '',
-          can_manage: true,
-          vault_ready: true,
-          updated_at: 1700000000000,
-        }),
-      };
+    let configUrl = '';
+    let credsCalls = 0;
+    let currentUpdatedAt = 1700000000000;
+    let currentSecret = 'volc-issued-key-9988';
+
+    const okFetch: HubVoiceFetchLike = async (url) => {
+      if (url.includes('/api/voice/config')) {
+        configUrl = url;
+        return {
+          status: 200,
+          json: async () => ({
+            ok: true,
+            network_id: 'net_a',
+            enabled: true,
+            configured: true,
+            mode: 'hub-key',
+            provider: 'doubao',
+            auth_mode: 'api-key',
+            app_id: '',
+            key_hint: '…9988',
+            endpoint: '',
+            stream_endpoint: '',
+            stream_resource_id: 'volc.seedasr.sauc.duration',
+            can_manage: true,
+            vault_ready: true,
+            updated_at: currentUpdatedAt,
+          }),
+        };
+      }
+      if (url.includes('/api/voice/credentials')) {
+        credsCalls++;
+        return {
+          status: 200,
+          json: async () => ({
+            ok: true,
+            network_id: 'net_a',
+            enabled: true,
+            configured: true,
+            mode: 'hub-key',
+            provider: 'doubao',
+            credentials: {
+              provider: 'doubao',
+              auth_mode: 'api-key',
+              app_id: '',
+              access_token: currentSecret,
+              endpoint: '',
+              stream_endpoint: '',
+              stream_resource_id: 'volc.seedasr.sauc.duration',
+            },
+            updated_at: currentUpdatedAt,
+          }),
+        };
+      }
+      return { status: 404, json: async () => ({}) };
     };
 
     setActiveHubVoiceConfig(cfgA, { fetchImpl: okFetch });
-    await new Promise(r => setTimeout(r, 10));
-    ck('GET /api/voice/config 带 network_id 与 Bearer token', seenUrl === 'https://hub.example.test/api/voice/config?network_id=net_a' && seenAuth === 'Bearer utok_aaaa11112222');
-    ck('启用且已配置时 hubVoiceReady() 为 true', hubVoiceReady() && getHubVoiceSnapshot().keyHint === '…9988' && getHubVoiceSnapshot().canManage);
+    await new Promise(r => setTimeout(r, 15));
+    ck('GET /api/voice/config 带 network_id 并自动预热内存凭据', configUrl === 'https://hub.example.test/api/voice/config?network_id=net_a' && hubVoiceReady() && getHubVoiceSnapshot().keyHint === '…9988');
     ck('订阅者收到更新通知', notifies >= 1);
+
+    const c1 = await ensureHubVoiceCredentials(cfgA, { fetchImpl: okFetch });
+    const c2 = await ensureHubVoiceCredentials(cfgA, { fetchImpl: okFetch });
+    ck('ensureHubVoiceCredentials 命中内存缓存且仅拉取一次', c1?.accessToken === 'volc-issued-key-9988' && c1?.streamResourceId === 'volc.seedasr.sauc.duration' && c2 === c1 && credsCalls === 1);
+
+    // Key rotation on Hub (updated_at changes) invalidates memory cache and fetches fresh key
+    currentUpdatedAt = 1700000009999;
+    currentSecret = 'volc-rotated-key-7777';
+    await refreshHubVoiceConfig(cfgA, { fetchImpl: okFetch });
+    await new Promise(r => setTimeout(r, 15));
+    const c3 = await ensureHubVoiceCredentials(cfgA, { fetchImpl: okFetch });
+    ck('Hub 密钥轮换（updated_at 变更）自动刷新内存凭据', c3?.accessToken === 'volc-rotated-key-7777' && credsCalls === 2);
 
     // Switch to another network where Hub returns 404 (older Hub)
     let calls404 = 0;
@@ -100,19 +156,19 @@ async function run() {
       return { status: 404, json: async () => ({ ok: false, error: 'not found' }) };
     };
     setActiveHubVoiceConfig(cfgB, { fetchImpl: oldHubFetch });
-    await new Promise(r => setTimeout(r, 10));
-    ck('切换网络后立刻隔离状态，旧 Hub 404 静默降级为 supported=false', !hubVoiceReady() && !getHubVoiceSnapshot().supported && getHubVoiceSnapshot().loaded);
+    await new Promise(r => setTimeout(r, 15));
+    ck('切换网络立刻清空上一个网络的内存凭据，旧 Hub 404 静默降级', getHubVoiceCredentials() === null && !hubVoiceReady() && !getHubVoiceSnapshot().supported && getHubVoiceSnapshot().loaded);
 
     await refreshHubVoiceConfig(cfgB, { fetchImpl: oldHubFetch });
     ck('旧 Hub 404 缓存生效，后续轮询不再重复发请求', calls404 === 1);
 
-    // Logout clears state immediately
+    // Logout clears state & credentials immediately
     setActiveHubVoiceConfig(null);
-    ck('登出清空 Hub 语音快照', !getHubVoiceSnapshot().loaded && !hubVoiceReady());
+    ck('登出清空 Hub 语音快照与内存凭据', !getHubVoiceSnapshot().loaded && !hubVoiceReady() && getHubVoiceCredentials() === null);
     unsub();
   }
 
-  // ── 3. Admin PUT / DELETE updates reactive store ──
+  // ── 3. Admin PUT / DELETE updates reactive store & revokes cached credentials ──
   {
     __resetHubVoiceForTest();
     setActiveHubVoiceConfig(cfgA, {
@@ -129,8 +185,20 @@ async function run() {
       app_id: '',
       access_token: 'sk-admin-key-5653',
       endpoint: '',
+      stream_endpoint: '',
+      stream_resource_id: '',
     }, {
-      fetchImpl: async (_url, init) => {
+      fetchImpl: async (url, init) => {
+        if (url.includes('/api/voice/credentials')) {
+          return {
+            status: 200,
+            json: async () => ({
+              ok: true,
+              credentials: { auth_mode: 'api-key', app_id: '', access_token: 'sk-admin-key-5653', endpoint: '', stream_endpoint: '', stream_resource_id: '' },
+              updated_at: 1700000010000,
+            }),
+          };
+        }
         seenMethod = init.method ?? '';
         seenBody = init.body ?? '';
         return {
@@ -139,15 +207,18 @@ async function run() {
             ok: true,
             enabled: true,
             configured: true,
+            mode: 'hub-key',
             auth_mode: 'api-key',
             key_hint: '…5653',
             can_manage: true,
             vault_ready: true,
+            updated_at: 1700000010000,
           }),
         };
       },
     });
-    ck('saveHubVoiceConfig PUT 成功并同步更新本地快照', putRes.ok && seenMethod === 'PUT' && seenBody.includes('sk-admin-key-5653') && hubVoiceReady() && getHubVoiceSnapshot().keyHint === '…5653');
+    await new Promise(r => setTimeout(r, 10));
+    ck('saveHubVoiceConfig PUT 成功并同步更新快照与内存凭据', putRes.ok && seenMethod === 'PUT' && seenBody.includes('sk-admin-key-5653') && hubVoiceReady() && getHubVoiceCredentials()?.accessToken === 'sk-admin-key-5653');
 
     const delRes = await clearHubVoiceConfig(cfgA, {
       fetchImpl: async (_url, init) => ({
@@ -155,65 +226,27 @@ async function run() {
         json: async () => ({ ok: true, enabled: false, configured: false, key_hint: '', can_manage: true, _m: init.method }),
       }),
     });
-    ck('clearHubVoiceConfig DELETE 成功并关闭 hubVoiceReady', delRes.ok && !hubVoiceReady() && !getHubVoiceSnapshot().configured);
+    ck('clearHubVoiceConfig DELETE 成功并立即清空内存凭据', delRes.ok && !hubVoiceReady() && !getHubVoiceSnapshot().configured && getHubVoiceCredentials() === null);
   }
 
-  // ── 4. transcribeViaHub proxy mapping & safety ──
-  {
-    let recBody = '';
-    const text = await transcribeViaHub(cfgA, sampleWav, {
-      fetchImpl: async (url, init) => {
-        recBody = `${url}|${init.body ?? ''}`;
-        return { status: 200, json: async () => ({ ok: true, text: '  你好 ANet  ' }) };
-      },
-    });
-    ck('transcribeViaHub POST /api/voice/recognize 返回 trim 后文本', text === '你好 ANet' && recBody.includes('/api/voice/recognize?network_id=net_a') && recBody.includes('wav_base64'));
-
-    const silent = await transcribeViaHub(cfgA, sampleWav, {
-      fetchImpl: async () => ({ status: 200, json: async () => ({ ok: true, text: '' }) }),
-    });
-    ck('静音返回空串不抛错', silent === '');
-
-    // Hub maps upstream 401 -> HTTP 502 { code: 'auth_failed' }
-    let caught: AsrError | null = null;
-    try {
-      await transcribeViaHub(cfgA, sampleWav, {
-        fetchImpl: async () => ({ status: 502, json: async () => ({ ok: false, code: 'auth_failed', upstream: '401' }) }),
-      });
-    } catch (e) { caught = e as AsrError; }
-    ck('HTTP 502 auth_failed 正确映射为 AsrError(auth_failed, 401)', caught instanceof AsrError && caught.code === 'auth_failed' && caught.upstream === '401');
-
-    let caughtLong: AsrError | null = null;
-    try {
-      await transcribeViaHub(cfgA, new Uint8Array(MAX_WAV_BYTES + 1), {
-        fetchImpl: async () => { throw new Error('should not fetch'); },
-      });
-    } catch (e) { caughtLong = e as AsrError; }
-    ck('超过 MAX_WAV_BYTES 在发请求前即拦截为 too_long', caughtLong instanceof AsrError && caughtLong.code === 'too_long');
-
-    let caughtTimeout: AsrError | null = null;
-    try {
-      await transcribeViaHub(cfgA, sampleWav, {
-        timeoutMs: 15,
-        fetchImpl: () => new Promise(() => {}),
-      });
-    } catch (e) { caughtTimeout = e as AsrError; }
-    ck('请求超时抛 AsrError(timeout)', caughtTimeout instanceof AsrError && caughtTimeout.code === 'timeout');
-  }
-
-  // ── 5. Web / HarmonyOS settings-model unlock & static safety guards ──
+  // ── 4. Web / HarmonyOS settings-model unlock & static safety guards ──
   {
     ck('纯网页默认（无 Hub 语音）仍隐藏语音设置', !filterSettings('', {}, undefined, 'web').some(c => c.key === 'voice'));
     const webEnabled = filterSettings('', { voice: true }, undefined, 'web').find(c => c.key === 'voice');
     ck('网页/鸿蒙在 Hub 语音可用时展示 hub/mic/test 行', !!webEnabled && JSON.stringify(webEnabled.rows.map(r => r.key)) === JSON.stringify(['hub', 'mic', 'test']));
 
     for (const f of ['src/hub-voice.ts', 'src/HubVoiceSettingsCard.tsx']) {
-      ck(`${f} 没有 console.*（音频与密钥安全红线）`, !/\bconsole\.(log|info|warn|error|debug)\b/.test(readFileSync(f, 'utf8')));
+      const src = readFileSync(f, 'utf8');
+      ck(`${f} 没有 console.*（音频与密钥安全红线）`, !/\bconsole\.(log|info|warn|error|debug)\b/.test(src));
+      ck(`${f} 不把密钥写进 localStorage`, !/localStorage\s*[.[]/.test(src));
     }
     const appSrc = readFileSync('App.tsx', 'utf8');
     ck('App.tsx 接入 setActiveHubVoiceConfig(cfg) 与轮询刷新', appSrc.includes('setActiveHubVoiceConfig(cfg)') && appSrc.includes('refreshHubVoiceConfig(cfg)'));
     const hookSrc = readFileSync('src/useVoiceInput.ts', 'utf8');
-    ck('useVoiceInput 结合 hubVoiceReady 解锁 available/configured 并优先本地回落 Hub', hookSrc.includes('hubVoiceReady(hubVoice)') && hookSrc.includes('transcribeViaHub(getActiveHubVoiceConfig(), wav)'));
+    ck('useVoiceInput 流式与极速版均走 loadEffectiveVoiceCredentials（优先本地、回落 Hub 发放 Key）',
+      hookSrc.includes('hubVoiceReady(hubVoice)')
+      && hookSrc.includes('loadCreds: loadEffectiveVoiceCredentials')
+      && hookSrc.includes('transcribeCaptured(await loadEffectiveVoiceCredentials(), captured)'));
   }
 
   console.log(`hub voice: ${p}/${t} checks passed`);
