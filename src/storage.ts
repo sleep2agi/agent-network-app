@@ -7,6 +7,7 @@ import { loadDesktopThemeMode, loadDesktopUiScale, saveDesktopThemeMode, saveDes
 export { onDesktopThemeStorageChange, onDesktopUiScaleStorageChange } from './desktop-theme-storage';
 import { UI_SCALE_STORAGE_KEY, parseStoredUiScale, serializeUiScale, type UiScalePrefs } from './ui-scale';
 import { acceptProfileCredential, serializeCredentialWrite, profileAuthRevision } from './profile-auth-state';
+import { harmonyKv, isHarmonyShell } from './harmony-bridge';
 
 // Token + server persist in the platform keystore (Android Keystore /
 // iOS Keychain) so login survives app restarts. Vincent tg 683 known
@@ -75,9 +76,21 @@ const webStorage = (): Storage | null => {
   try { return globalThis.localStorage ?? null; } catch { return null; }
 };
 const sessionKv: SessionKv = {
-  get: async key => { const web = webStorage(); return web ? web.getItem(key) : SecureStore.getItemAsync(key); },
-  set: async (key, value) => { const web = webStorage(); if (web) web.setItem(key, value); else await SecureStore.setItemAsync(key, value); },
-  del: async key => { const web = webStorage(); if (web) web.removeItem(key); else await SecureStore.deleteItemAsync(key); },
+  get: async key => {
+    if (Platform.OS === 'web' && isHarmonyShell()) return harmonyKv.get(key);
+    const web = webStorage();
+    return web ? web.getItem(key) : SecureStore.getItemAsync(key);
+  },
+  set: async (key, value) => {
+    if (Platform.OS === 'web' && isHarmonyShell()) { await harmonyKv.set(key, value); return; }
+    const web = webStorage();
+    if (web) web.setItem(key, value); else await SecureStore.setItemAsync(key, value);
+  },
+  del: async key => {
+    if (Platform.OS === 'web' && isHarmonyShell()) { await harmonyKv.del(key); return; }
+    const web = webStorage();
+    if (web) web.removeItem(key); else await SecureStore.deleteItemAsync(key);
+  },
 };
 const mobileSessions = createSessionStore(sessionKv);
 

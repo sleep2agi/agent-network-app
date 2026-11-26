@@ -1,1 +1,9 @@
-{ "name": "entry", "version": "1.0.0", "description": "ANet entry", "main": "", "author": "", "license": "", "dependencies": {} }
+{
+  "name": "entry",
+  "version": "1.0.0",
+  "description": "ANet HarmonyOS entry HAP module",
+  "main": "",
+  "author": "sleep2agi",
+  "license": "MIT",
+  "dependencies": {}
+}

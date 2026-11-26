@@ -65,7 +65,8 @@
     "web": "expo start --web",
     "typecheck": "tsc --noEmit -p tsconfig.build.json",
     "test": "node scripts/run-tests.mjs",
-    "build:local-hub-sidecar": "node scripts/build-local-hub-sidecar.mjs"
+    "build:local-hub-sidecar": "node scripts/build-local-hub-sidecar.mjs",
+    "build:harmony-web": "node scripts/build-harmony-web.mjs"
   },
   "private": true
 }

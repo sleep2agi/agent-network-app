@@ -1,3 +1,5 @@
+import { harmonyFetch, isHarmonyShell } from './harmony-bridge';
+
 /**
  * App-owned HTTP transport.
  *
@@ -43,8 +45,7 @@ export function appFetchLoad(now = Date.now()): { inflight: number; lastMinute: 
 }
 
 async function transport(input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const harmony = harmonyBridge();
-  if (harmony) return harmonyFetch(harmony, input, init);
+  if (isHarmonyShell()) return harmonyFetch(input, init);
   if ((globalThis as { __TAURI_INTERNALS__?: unknown }).__TAURI_INTERNALS__) {
     if (pooledHttpEnabled()) {
       const pooled = await pooledFetch(input, init);
@@ -144,55 +145,4 @@ async function pooledFetch(input: RequestInfo | URL, init?: RequestInit): Promis
     : await sent;
   if (!(raw instanceof ArrayBuffer) && !(raw instanceof Uint8Array)) return null;
   return decodePooledResponse(raw);
-}
-
-// ── 鸿蒙外壳（harmony/）──────────────────────────────────────────────
-// 外壳用系统 ArkWeb 加载本 bundle，页面来源是虚拟站点 https://app.anet.local；直接 fetch Hub 会被
-// 跨域规则挡住。外壳注册了 `anetHarmony.fetch(json) => Promise<json>`，由系统网络库发请求
-// （与桌面版 Tauri 原生 HTTP 同一思路）。请求 / 响应体都走 base64，图片和附件也能原样过。
-type HarmonyBridge = { fetch(req: string): Promise<string> };
-type HarmonyReply = { status: number; headers?: Record<string, string>; bodyBase64?: string; error?: string };
-
-function harmonyBridge(): HarmonyBridge | null {
-  const b = (globalThis as { anetHarmony?: HarmonyBridge }).anetHarmony;
-  return b && typeof b.fetch === 'function' ? b : null;
-}
-
-function bytesToBase64(bytes: Uint8Array): string {
-  let bin = '';
-  for (let i = 0; i < bytes.length; i += 0x8000) bin += String.fromCharCode(...bytes.subarray(i, i + 0x8000));
-  return btoa(bin);
-}
-
-function base64ToBytes(b64: string): Uint8Array {
-  const bin = atob(b64);
-  const out = new Uint8Array(bin.length);
-  for (let i = 0; i < bin.length; i++) out[i] = bin.charCodeAt(i);
-  return out;
-}
-
-export async function harmonyFetch(bridge: HarmonyBridge, input: RequestInfo | URL, init?: RequestInit): Promise<Response> {
-  const req = new Request(input, init);
-  if (req.signal?.aborted) throw new DOMException('Aborted', 'AbortError');
-  const headers: Record<string, string> = {};
-  req.headers.forEach((v, k) => { headers[k] = v; });
-  const body = req.method === 'GET' || req.method === 'HEAD' ? null : new Uint8Array(await req.arrayBuffer());
-  const call = bridge.fetch(JSON.stringify({
-    url: req.url,
-    method: req.method,
-    headers,
-    ...(body && body.length ? { bodyBase64: bytesToBase64(body) } : {}),
-  }));
-  // 原生请求停不下来；调用方取消时这里先按取消返回，结果到了直接丢掉。
-  const aborted = new Promise<never>((_, reject) => {
-    req.signal?.addEventListener('abort', () => reject(new DOMException('Aborted', 'AbortError')), { once: true });
-  });
-  const reply = JSON.parse(await Promise.race([call, aborted])) as HarmonyReply;
-  if (!reply.status) throw new TypeError(reply.error ? `网络请求失败：${reply.error}` : '网络请求失败');
-  const resHeaders = new Headers();
-  for (const [k, v] of Object.entries(reply.headers ?? {})) {
-    try { resHeaders.append(k, v); } catch { /* 系统网络库偶尔给出非法头名，跳过 */ }
-  }
-  const nullBody = reply.status === 204 || reply.status === 304 || req.method === 'HEAD';
-  return new Response(nullBody ? null : (base64ToBytes(reply.bodyBase64 ?? '').buffer as ArrayBuffer), { status: reply.status, headers: resHeaders });
 }

@@ -11,7 +11,8 @@ import { Text, TextInput } from './src/ui-text';
 import { Ionicons } from './src/icons';
 import { BrandMark } from './src/brand-mark';
 import { SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SAFE_AREA_SIM, layoutOs, statusBarHeight } from './src/safe-area-runtime';
+import { SAFE_AREA_SIM, layoutOs, statusBarHeight, webSafeAreaOverride } from './src/safe-area-runtime';
+import { HARMONY_INSETS_EVENT, registerHarmonyBackHandler } from './src/harmony-bridge';
 import { mainWindowTopPadding } from './src/modal-safe-area';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, setNetworkIdPersister, HubConfig } from './src/api';
@@ -395,11 +396,19 @@ export default function App() {
   );
 }
 
-// Web layout sweep only (src/safe-area-sim.ts): `?safeAreaSim=…` feeds simulated insets to every
-// useSafeAreaInsets() below. On a device SAFE_AREA_SIM is null and this renders its children as-is.
+// Web layout sweep (`?safeAreaSim=…`) and HarmonyOS ArkWeb live avoid areas: feeds insets to every
+// useSafeAreaInsets() below. On iOS/Android native or plain browser both are null and this renders as-is.
 function SimulatedSafeArea({ children }: { children: React.ReactNode }) {
-  if (!SAFE_AREA_SIM) return <>{children}</>;
-  return <SafeAreaInsetsContext.Provider value={SAFE_AREA_SIM}>{children}</SafeAreaInsetsContext.Provider>;
+  const [insets, setInsets] = useState(() => webSafeAreaOverride());
+  useEffect(() => {
+    if (Platform.OS !== 'web' || SAFE_AREA_SIM || typeof window === 'undefined') return;
+    const sync = () => setInsets(webSafeAreaOverride());
+    sync();
+    window.addEventListener(HARMONY_INSETS_EVENT, sync);
+    return () => window.removeEventListener(HARMONY_INSETS_EVENT, sync);
+  }, []);
+  if (!insets) return <>{children}</>;
+  return <SafeAreaInsetsContext.Provider value={insets}>{children}</SafeAreaInsetsContext.Provider>;
 }
 
 function AppRoot() {
@@ -782,8 +791,10 @@ function AppRoot() {
   // System back (button or fullscreen gesture) navigates within the app
   // instead of exiting (Vincent tg 730). Agents/login fall through to
   // the default exit behavior.
+  const harmonyBackRef = useRef<() => boolean>(() => false);
+  useEffect(() => (Platform.OS === 'web' ? registerHarmonyBackHandler(() => harmonyBackRef.current()) : undefined), []);
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+    const sub = BackHandler.addEventListener('hardwareBackPress', harmonyBackRef.current = () => {
       // taskDetail is a full-screen leaf under the tasks tab — hardware
       // back should return to the tasks list, not skip past it back to
       // agents (that would lose the user's place in the task list).
