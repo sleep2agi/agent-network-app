@@ -2593,10 +2593,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // 否则上一次的提示会挂在另一个节点的聊天框上（用户会以为这个节点也没停）。
   const [nodeDescription, setNodeDescription] = useState<string>('');
   const [nodeRuntimeMeta, setNodeRuntimeMeta] = useState<{ runtime: string | null; generation: string | null }>({ runtime: null, generation: null });
+  const controlFlagGen = controlSession?.config_snapshot?.flags?.opencodeGeneration;
   const showVariantControl = composerShowsVariantControl({
     runtime: nodeRuntimeMeta.runtime ?? reportedValue?.runtime ?? controlSession?.runtime,
     agent: controlSession?.agent,
-    generation: nodeRuntimeMeta.generation ?? controlSession?.opencode_generation ?? controlSession?.config_snapshot?.flags?.opencodeGeneration,
+    generation: nodeRuntimeMeta.generation ?? controlSession?.opencode_generation ?? (typeof controlFlagGen === 'string' ? controlFlagGen : null),
     variant: footerVariant,
   });
   useEffect(() => {
@@ -2620,9 +2621,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         const matched = controlSession?.node_id
           ? list.find(n => n.node_id === controlSession.node_id)
           : (() => { const m = list.filter(n => n.alias === alias); return m.length === 1 ? m[0] : undefined; })();
+        const matchedFlagGen = matched?.config_snapshot?.flags?.opencodeGeneration;
         setNodeRuntimeMeta({
           runtime: matched?.runtime ?? null,
-          generation: matched?.opencode_generation ?? matched?.config_snapshot?.flags?.opencodeGeneration ?? null,
+          generation: matched?.opencode_generation ?? (typeof matchedFlagGen === 'string' ? matchedFlagGen : null),
         });
       })
       .catch(() => { /* keep previous */ });
