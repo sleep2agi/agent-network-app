@@ -93,9 +93,11 @@ check('SHA256SUMS is sha256sum format, sorted, basenames only',
 check('installer alias drops the version', latestAliasName('Agent.Network_1.2.3_aarch64.dmg', '1.2.3') === 'Agent.Network_aarch64.dmg');
 check('updater bundles get no alias', latestAliasName('Agent.Network_1.2.3_aarch64.app.tar.gz', '1.2.3') === null);
 check('another version\'s file gets no alias', latestAliasName('Agent.Network_1.2.2_aarch64.dmg', '1.2.3') === null);
-for (const suffix of ['aarch64.dmg', 'x64-setup.exe', 'x64_en-US.msi', 'android-universal.apk', 'amd64.deb']) {
+for (const suffix of ['aarch64.dmg', 'x64-setup.exe', 'x64_en-US.msi', 'android-universal.apk', 'amd64.deb', 'harmony.hap']) {
   check(`ANet ${suffix} preserves the old fixed download link`, latestAliasName(`ANet_1.2.3_${suffix}`, '1.2.3') === `Agent.Network_${suffix}`);
 }
+check('HarmonyOS .hap gets a stable latest alias when attached',
+  latestAliasName('Agent.Network_1.2.3_harmony.hap', '1.2.3') === 'Agent.Network_harmony.hap');
 check('ANet updater bundles and signatures get no installer alias',
   ['aarch64.app.tar.gz', 'x64-setup.exe.sig', 'amd64.deb.sig'].every(s => latestAliasName(`ANet_1.2.3_${s}`, '1.2.3') === null));
 check('ANet wrong version and unrelated prefix get no alias',

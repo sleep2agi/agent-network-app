@@ -83,6 +83,26 @@ hdc install -r harmony/entry/build/default/outputs/default/ANet-harmony-signed.h
 
 ---
 
+## 发布到 GitHub Release 与官网自动亮灯（`www.anet.sh`）
+
+官网下载页（`sleep2agi/agent-network#3904`）与国内镜像脚本（`scripts/modelscope-mirror.mjs`）已自动识别标准命名 **`Agent.Network_<版本>_harmony.hap`**（并在镜像 `desktop/latest/` 下同步生成 `Agent.Network_harmony.hap` 与 `SHA256SUMS`）：
+
+> 注意：DevEco Studio 自动调试签名（Debug Profile）绑定测试机 UDID，仅限登记设备安装；面向官网公开下载需使用华为 AppGallery Connect 签发的 **发布/企业签名证书**（`.p12` + `.cer` + `.p7b`）。
+
+签名完成后执行：
+
+```bash
+# 生成 harmony/dist/Agent.Network_<版本>_harmony.hap 及 .sha256
+npm run package:harmony-hap -- --input harmony/entry/build/default/outputs/default/ANet-harmony-signed.hap
+
+# 上传到对应 desktop-v<版本> Release（官网检测有 .hap 后自动点亮鸿蒙下载按钮）
+npm run package:harmony-hap -- --input harmony/entry/build/default/outputs/default/ANet-harmony-signed.hap --upload
+```
+
+上传后触发一次 `modelscope-mirror.yml` 即可同步国内镜像和 `SHA256SUMS`。
+
+---
+
 ## 现状
 
 - [x] **真机端到端验收已通过**（设备：**HUAWEI MatePad Mini / MLR-AL10**，系统：**HarmonyOS 6.1 / API 24**，DevEco Studio 26.0.1.290 自动签名安装）：
