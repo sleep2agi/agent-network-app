@@ -9,6 +9,7 @@
     "tests/opencode-launch-window/**",
     "tests/evidence/4150/**",
     "node_modules",
+    "harmony",
     "src-tauri/target",
     "src/test-support/**"
   ]
