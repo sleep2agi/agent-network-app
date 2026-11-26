@@ -49,6 +49,26 @@ export function composerVariantPillLabel(variant: string | null | undefined): st
   return variant === undefined ? t('chat.variantPillUnknown') : composerVariantLabel(variant);
 }
 
+const INDEPENDENT_VARIANT_RUNTIMES = new Set(['opencode-cli', 'opencode-sdk', 'opencode']);
+
+/** 输入框底部是否展示独立的「思考档位」按钮。
+ *  只有 OpenCode V2 支持独立 modelVariant；antigravity-sdk / antigravity-acp 的思维档位已编码在
+ *  模型 ID 中（如 gemini-4-neon-high / -xhigh / -medium / -low），grok-build-acp、claude-code、
+ *  codex-sdk 等也无独立档位控件。若已明确读回 modelVariant（含 null=默认），始终展示。 */
+export function composerShowsVariantControl(input: {
+  runtime?: string | null;
+  agent?: string | null;
+  generation?: string | null;
+  variant?: string | null;
+}): boolean {
+  if (input.variant !== undefined) return true;
+  if (input.generation === 'v1') return false;
+  const rt = typeof input.runtime === 'string' ? input.runtime.trim().toLowerCase() : '';
+  if (rt) return INDEPENDENT_VARIANT_RUNTIMES.has(rt);
+  const ag = typeof input.agent === 'string' ? input.agent.trim().toLowerCase() : '';
+  return ag.includes('opencode');
+}
+
 /** Left/right inset of the mobile model row so its pills line up with the text box, not the buttons beside it. */
 export function composerModelRowInset(hasLeftCol: boolean, controlSize: number, rowPad: number, gap: number): { left: number; right: number } {
   return { left: rowPad + (hasLeftCol ? controlSize + gap : 0), right: rowPad + controlSize + gap };
