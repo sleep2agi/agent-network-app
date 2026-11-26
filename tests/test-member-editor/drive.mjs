@@ -227,6 +227,25 @@ for (const theme of ['light', 'dark']) {
   await ctx.close();
 }
 
+// 管理员的角色说明（cc123 2026-11-26）：要说清「默认看得见全部、范围在『管理范围』里限定」，两行内画全、不截断。
+for (const theme of ['light', 'dark']) {
+  let d;
+  try { d = await openDesktop(theme); } catch (e) { ck(`desktop ${theme} admin: 打开成员弹窗`, false, String(e.message).split('\n')[0]); continue; }
+  const { ctx, win } = d;
+  await win.locator(tid('member-role-admin')).click();
+  await win.waitForTimeout(300);
+  const hint = await win.evaluate(() => {
+    const el = document.querySelector('[data-testid="member-role-hint"]');
+    if (!el) return null;
+    const lh = parseFloat(getComputedStyle(el).lineHeight) || 18;
+    return { text: el.textContent, lines: Math.round(el.getBoundingClientRect().height / lh), clipped: el.scrollHeight > el.clientHeight + 1 };
+  });
+  ck(`desktop ${theme} admin hint: 说明白「默认全部 + 管理范围」`, !!hint && hint.text.includes('全部 Agent') && hint.text.includes('管理范围'), hint?.text);
+  ck(`desktop ${theme} admin hint: ≤ 2 行、没被截断`, !!hint && hint.lines <= 2 && !hint.clipped, JSON.stringify(hint));
+  if (OUT) await win.screenshot({ path: `${OUT}/desktop-admin-${theme}.png` });
+  await ctx.close();
+}
+
 // 旧 Hub:没有任务权限 / 分组接口
 {
   let d;

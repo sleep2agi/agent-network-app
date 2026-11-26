@@ -18,7 +18,7 @@ registerTranslations({
   'users.access.all': ['全部 Agent', 'All agents'],
   'users.access.count': ['{count} 个 Agent', '{count} agents'],
   'users.access.none': ['未分配 Agent', 'No agents'],
-  'users.footer': ['新成员默认看不到任何 Agent，点成员在「可访问的 Agent」里逐个分配。所有者和管理员可以访问全部 Agent。', 'New members see no agents by default. Tap a member to assign agents under Accessible agents. Owners and admins can access every agent.'],
+  'users.footer': ['新成员默认看不到任何 Agent，点成员在「可访问的 Agent」里逐个分配。所有者和管理员默认可以访问全部 Agent，管理员可在「管理范围」限定到某个部门。', 'New members see no agents by default. Tap a member to assign agents under Accessible agents. Owners and admins see every agent by default; an admin can be limited to one department under Scope.'],
   'users.loadFailed': ['读取成员失败', 'Could not load members'],
   'users.retry': ['重试', 'Retry'],
   'users.loading': ['正在读取…', 'Loading…'],
@@ -111,7 +111,7 @@ registerTranslations({
   // 成员编辑器重设计(#417):双栏弹窗 / 手机成员页与它推入的两页。
   'users.roleHint.member': ['可对话、可建任务；不能管理成员', 'Can chat and create tasks; cannot manage members'],
   'users.roleHint.viewer': ['只能查看，不能对话、不能改任务', 'View only: cannot chat or edit tasks'],
-  'users.roleHint.admin': ['能管理成员', 'Can manage members'],
+  'users.roleHint.admin': ['能管理成员；默认看得见全部 Agent，可在「管理范围」限定到某个部门', 'Manages members; sees every agent unless Scope limits them to a department'],
   'users.adminAccess': ['管理员可以访问全部 Agent 和任务，不用单独授权。', 'Admins can reach every agent and task; nothing to grant.'],
   'users.picked': ['已选', 'Selected'],
   'users.pickedHint': ['{count} 个 · 点 × 移除', '{count} · tap × to remove'],
