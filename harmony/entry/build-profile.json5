@@ -1,5 +1,21 @@
 {
   "apiType": "stageMode",
   "buildOption": {},
-  "targets": [ { "name": "default", "runtimeOS": "OpenHarmony" } ]
+  "buildOptionSet": [
+    {
+      "name": "release",
+      "arkOptions": {
+        "obfuscation": {
+          "ruleOptions": {
+            "enable": false
+          }
+        }
+      }
+    }
+  ],
+  "targets": [
+    {
+      "name": "default"
+    }
+  ]
 }

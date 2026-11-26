@@ -43,6 +43,7 @@ import { entriesFromBody, rollbackReleaseUrl, rollbackTarget } from './changelog
 import { APP_VERSION } from './version';
 import { BrandMark } from './brand-mark';
 import { aboutPlatformLabel, COPIED_FLASH_MS } from './about-model';
+import { isHarmonyShell } from './harmony-bridge';
 import './i18n-about';
 import { checkDesktopUpdate, desktopUpdateLastCheckedAt, desktopUpdateSnapshot, subscribeDesktopUpdates } from './desktop-updater';
 import { describeUpdateRow } from './update-check-state';
@@ -403,7 +404,7 @@ export default function SettingsScreen({
   }, [cfg]);
 
   const tauriDesktop = !!(globalThis as any).__TAURI_INTERNALS__;
-  const aboutPlatform = aboutPlatformLabel(Platform.OS, tauriDesktop, (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ?? '');
+  const aboutPlatform = aboutPlatformLabel(Platform.OS, tauriDesktop, (globalThis as { navigator?: { userAgent?: string } }).navigator?.userAgent ?? '', isHarmonyShell());
   const platform = notifyPreview?.platform ?? settingsPlatform(Platform.OS, tauriDesktop);
   const usersAvailable = canManageUsers(authMe, me.networkId);
   const railHidden = useRailHidden();

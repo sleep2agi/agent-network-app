@@ -7,3 +7,4 @@ local.properties
 oh-package-lock.json5
 # 由 build.sh 从 App 网页版导出，不入库
 entry/src/main/resources/rawfile/web
+dist/

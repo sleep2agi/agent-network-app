@@ -18,6 +18,7 @@ check(bytesToBase64(big) === Buffer.from(big).toString('base64'), 'chunked base6
   check(empty.length === 0, 'HTTP 200 empty generic file is a valid zero-byte download');
 }
 check(displayDownloadPath('/Users/v/Downloads/a.pdf') === '…/Downloads/a.pdf' && displayDownloadPath('C:\\Users\\v\\Downloads\\a.pdf') === '…/Downloads/a.pdf', 'short display path');
+check(displayDownloadPath('file://docs/storage/Users/currentUser/Download/%E6%B5%8B%E8%AF%95.pdf') === '…/Download/测试.pdf' && displayDownloadPath('/tmp/bad%ZZ.pdf') === '…/tmp/bad%ZZ.pdf', 'displayDownloadPath decodes HarmonyOS UTF-8 URI safely');
 // 接线契约
 const chat = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
 check(chat.includes("a.needsAuth && a.uri && Platform.OS === 'web' && !!(globalThis as any).__TAURI_INTERNALS__ ? (") && chat.includes('<AttachmentFileDesktop'), 'desktop non-image attachments render the downloadable component');

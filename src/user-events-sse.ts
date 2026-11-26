@@ -5,6 +5,7 @@
 import type { HubConfig } from './api';
 import { RECONNECT_MIN_MS, nextBackoffMs, xhrSseRecycleChars, type ConnState } from './logs-buffer';
 import { takeSseJsonPayloads } from './desktop-message-consume';
+import { hasHarmonySseBridge, openHarmonySseStream } from './harmony-bridge';
 
 export function userEventStreamUrl(serverUrl: string, networkId: string): string {
   const base = serverUrl.replace(/\/+$/, '');
@@ -32,7 +33,69 @@ export function openUserEventStream(
   if ((globalThis as any).__TAURI_INTERNALS__) {
     return openTauriUserEventStream(cfg, cfg.networkId, handlers);
   }
+  if (hasHarmonySseBridge()) {
+    return openHarmonyUserEventStream(cfg, cfg.networkId, handlers);
+  }
   return openXhrUserEventStream(cfg, cfg.networkId, handlers);
+}
+
+function openHarmonyUserEventStream(
+  cfg: HubConfig,
+  netId: string,
+  handlers: OpenUserEventStreamHandlers,
+): () => void {
+  let stopped = false;
+  let closeActive: (() => void) | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let backoffMs = RECONNECT_MIN_MS;
+
+  const connect = () => {
+    if (stopped) return;
+    handlers.onState?.('connecting');
+    let carry = '';
+    const url = userEventStreamUrl(cfg.serverUrl, netId);
+    closeActive = openHarmonySseStream(
+      url,
+      [
+        ['Authorization', `Bearer ${cfg.token}`],
+        ['Accept', 'text/event-stream'],
+        ['Cache-Control', 'no-cache'],
+      ],
+      {
+        onOpen: () => {
+          if (stopped) return;
+          backoffMs = RECONNECT_MIN_MS;
+          handlers.onState?.('connected');
+        },
+        onChunk: (chunk) => {
+          if (stopped) return;
+          const taken = takeSseJsonPayloads(carry + chunk);
+          carry = taken.rest;
+          for (const payload of taken.payloads) handlers.onEvent(payload);
+        },
+        onClose: (why) => {
+          if (stopped) return;
+          closeActive = null;
+          handlers.onState?.('disconnected', why);
+          const delay = backoffMs;
+          backoffMs = nextBackoffMs(backoffMs);
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, delay);
+        },
+      },
+    );
+  };
+
+  connect();
+
+  return () => {
+    stopped = true;
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    closeActive?.();
+    closeActive = null;
+  };
 }
 
 type NativePayload =

@@ -1,168 +1,393 @@
+import { abilityAccessCtrl, common } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
-import { http } from '@kit.NetworkKit';
-import { util } from '@kit.ArkTS';
-import { common } from '@kit.AbilityKit';
+import { picker } from '@kit.CoreFileKit';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
+import { hilog } from '@kit.PerformanceAnalysisKit';
+import { AnetHarmonyBridge } from '../bridge/AnetHarmonyBridge';
 
-// ANet 鸿蒙外壳。
-// ① 界面：随包打进去的 App 网页版（rawfile/web），用一个固定的虚拟站点
-//    https://app.anet.local/ 加载，请求在 onInterceptRequest 里直接从包里读 —— 不依赖网络就能打开界面，
-//    `/_expo/...` 这类绝对路径也能找到。
-// ② 联网：网页里直接 fetch Hub 会被浏览器的跨域规则挡住（Hub 只放行自己配置的来源）。
-//    和桌面版（Tauri 原生 HTTP）同一个思路：注册 `anetHarmony.fetch`，由系统网络库发请求，
-//    App 的 appFetch 检测到它就走这条路。
-const APP_ORIGIN = 'https://app.anet.local';
+const DOMAIN = 0x0000;
+const TAG = 'ANetIndex';
+const APP_ORIGIN = 'https://anet.local/';
+const BRIDGE_PERMISSION = '{"javascriptProxyPermission":{"urlPermissionList":[{"scheme":"https","host":"anet.local","port":"","path":""}]}}';
 
-const MIME: Record<string, string> = {
-  'html': 'text/html', 'js': 'application/javascript', 'css': 'text/css', 'json': 'application/json',
-  'png': 'image/png', 'jpg': 'image/jpeg', 'jpeg': 'image/jpeg', 'gif': 'image/gif', 'svg': 'image/svg+xml',
-  'webp': 'image/webp', 'ico': 'image/x-icon', 'ttf': 'font/ttf', 'otf': 'font/otf', 'woff': 'font/woff',
-  'woff2': 'font/woff2', 'mp3': 'audio/mpeg', 'wav': 'audio/wav', 'mp4': 'video/mp4', 'wasm': 'application/wasm'
-};
-
-interface BridgeRequest {
-  url: string;
-  method?: string;
-  headers?: Record<string, string>;
-  bodyBase64?: string;
+function mimeTypeForPath(relPath: string): string {
+  const lower = relPath.toLowerCase();
+  if (lower.endsWith('.html')) return 'text/html';
+  if (lower.endsWith('.js') || lower.endsWith('.mjs')) return 'application/javascript';
+  if (lower.endsWith('.css')) return 'text/css';
+  if (lower.endsWith('.json')) return 'application/json';
+  if (lower.endsWith('.svg')) return 'image/svg+xml';
+  if (lower.endsWith('.png')) return 'image/png';
+  if (lower.endsWith('.jpg') || lower.endsWith('.jpeg')) return 'image/jpeg';
+  if (lower.endsWith('.webp')) return 'image/webp';
+  if (lower.endsWith('.ico')) return 'image/x-icon';
+  if (lower.endsWith('.ttf')) return 'font/ttf';
+  if (lower.endsWith('.woff')) return 'font/woff';
+  if (lower.endsWith('.woff2')) return 'font/woff2';
+  return 'application/octet-stream';
 }
 
-interface BridgeResponse {
-  status: number;
-  headers: Record<string, string>;
-  bodyBase64: string;
-  error?: string;
+function isTextMime(mime: string): boolean {
+  return mime.startsWith('text/') || mime === 'application/javascript' || mime === 'application/json' || mime === 'image/svg+xml';
 }
 
-const METHODS: Record<string, http.RequestMethod> = {
-  'GET': http.RequestMethod.GET, 'POST': http.RequestMethod.POST, 'PUT': http.RequestMethod.PUT,
-  'DELETE': http.RequestMethod.DELETE, 'OPTIONS': http.RequestMethod.OPTIONS, 'HEAD': http.RequestMethod.HEAD
-};
-
-function bridgeResponse(status: number, headers: Record<string, string>, bodyBase64: string, error?: string): string {
-  const r: BridgeResponse = { status: status, headers: headers, bodyBase64: bodyBase64, error: error };
-  return JSON.stringify(r);
-}
-
-class AnetBridge {
-  private b64: util.Base64Helper = new util.Base64Helper();
-
-  fetch(reqJson: string): Promise<string> {
-    return new Promise<string>((resolve) => {
-      let req: BridgeRequest;
-      try {
-        req = JSON.parse(reqJson) as BridgeRequest;
-      } catch (e) {
-        resolve(bridgeResponse(0, {}, '', 'bad request'));
-        return;
-      }
-      const client = http.createHttp();
-      const method = METHODS[(req.method ?? 'GET').toUpperCase()] ?? http.RequestMethod.GET;
-      const reqHeaders: Record<string, string> = req.headers ?? {};
-      const options: http.HttpRequestOptions = {
-        method: method,
-        header: reqHeaders,
-        expectDataType: http.HttpDataType.ARRAY_BUFFER,
-        connectTimeout: 15000,
-        readTimeout: 120000
-      };
-      if (req.bodyBase64) {
-        const bytes = this.b64.decodeSync(req.bodyBase64);
-        options.extraData = bytes.buffer.slice(bytes.byteOffset, bytes.byteOffset + bytes.byteLength);
-      }
-      client.request(req.url, options).then((res: http.HttpResponse) => {
-        const headers: Record<string, string> = {};
-        if (res.header) {
-          const raw = res.header as Record<string, Object>;
-          Object.keys(raw).forEach((k: string) => { headers[k] = String(raw[k]); });
-        }
-        const body = res.result instanceof ArrayBuffer ? new Uint8Array(res.result) : new Uint8Array(0);
-        resolve(bridgeResponse(res.responseCode, headers, this.b64.encodeToStringSync(body)));
-      }).catch((err: Error) => {
-        resolve(bridgeResponse(0, {}, '', err?.message ?? String(err)));
-      }).finally(() => client.destroy());
-    });
+function wantsImagePickerOnly(acceptTypes: Array<string>): boolean {
+  if (!acceptTypes || acceptTypes.length === 0) return false;
+  for (let i = 0; i < acceptTypes.length; i++) {
+    const lower = acceptTypes[i].toLowerCase().trim();
+    if (!lower) continue;
+    const isImg = lower.startsWith('image/')
+      || lower === '.png' || lower === '.jpg' || lower === '.jpeg'
+      || lower === '.webp' || lower === '.gif' || lower === '.heic' || lower === '.bmp';
+    if (!isImg) return false;
   }
+  return true;
 }
 
 @Entry
 @Component
 struct Index {
-  controller: webview.WebviewController = new webview.WebviewController();
-  bridge: AnetBridge = new AnetBridge();
+  private controller: webview.WebviewController = new webview.WebviewController();
+  private bridge: AnetHarmonyBridge = new AnetHarmonyBridge();
+  private pageLoaded: boolean = false;
+  private allowSystemBackOnce: boolean = false;
+  private splashTimer: number = -1;
 
-  onBackPress(): boolean {
-    if (this.controller.accessBackward()) {
-      this.controller.backward();
-      return true;
+  @State private showSplash: boolean = true;
+  @State private splashOpacity: number = 1;
+  @StorageProp('anetThemeMode') themeMode: string = 'light';
+  @StorageProp('anetInsetTop') @Watch('pushInsetsToWeb') insetTop: number = 0;
+  @StorageProp('anetInsetRight') @Watch('pushInsetsToWeb') insetRight: number = 0;
+  @StorageProp('anetInsetBottom') @Watch('pushInsetsToWeb') insetBottom: number = 0;
+  @StorageProp('anetInsetLeft') @Watch('pushInsetsToWeb') insetLeft: number = 0;
+
+  private attachBridgeRuntime(): void {
+    this.bridge.attachController(this.controller);
+    try {
+      const hostCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+      if (hostCtx) {
+        this.bridge.attachHostContext(hostCtx);
+      }
+    } catch {
+      // UIContext not ready yet; will attach in onControllerAttached
     }
-    return false;
   }
 
-  private readRaw(path: string): Uint8Array | null {
+  aboutToAppear(): void {
+    this.attachBridgeRuntime();
+  }
+
+  aboutToDisappear(): void {
+    if (this.splashTimer !== -1) {
+      clearTimeout(this.splashTimer);
+      this.splashTimer = -1;
+    }
+  }
+
+  private dismissSplash(): void {
+    if (!this.showSplash || this.splashTimer !== -1) return;
+    this.splashTimer = setTimeout(() => {
+      this.splashTimer = -1;
+      try {
+        this.getUIContext().animateTo({
+          duration: 180,
+          curve: Curve.EaseOut,
+          onFinish: () => {
+            this.showSplash = false;
+          },
+        }, () => {
+          this.splashOpacity = 0;
+        });
+      } catch {
+        this.splashOpacity = 0;
+        this.showSplash = false;
+      }
+    }, 150);
+  }
+
+  private pushInsetsToWeb(): void {
+    if (!this.pageLoaded) return;
+    const payload = this.bridge.getInsetsJson();
+    const script =
+      `window.__ANET_HARMONY_INSETS__=${payload};` +
+      `window.dispatchEvent(new CustomEvent('anet-harmony-insets',{detail:${payload}}));`;
     try {
-      const ctx = getContext(this) as common.UIAbilityContext;
-      return ctx.resourceManager.getRawFileContentSync('web' + path);
-    } catch (e) {
+      this.controller.runJavaScript(script).catch(() => {});
+    } catch {
+      // WebView not attached yet
+    }
+  }
+
+  private resolveRawfileResponse(requestUrl: string): WebResourceResponse | null {
+    if (!requestUrl.startsWith(APP_ORIGIN)) {
       return null;
     }
+    let relPath = requestUrl.slice(APP_ORIGIN.length);
+    const qIdx = relPath.indexOf('?');
+    if (qIdx >= 0) relPath = relPath.slice(0, qIdx);
+    const hIdx = relPath.indexOf('#');
+    if (hIdx >= 0) relPath = relPath.slice(0, hIdx);
+    if (!relPath || relPath.endsWith('/')) {
+      relPath = 'index.html';
+    }
+    if (relPath.includes('..')) {
+      return null;
+    }
+
+    const hostCtx = this.getUIContext().getHostContext();
+    if (!hostCtx) {
+      return null;
+    }
+    const resMgr = hostCtx.resourceManager;
+    let rawBytes: Uint8Array | null = null;
+    let targetPath = relPath;
+    try {
+      rawBytes = resMgr.getRawFileContentSync(`web/${targetPath}`);
+    } catch {
+      // SPA route fallback to web/index.html when path has no file extension
+      if (!targetPath.includes('.')) {
+        targetPath = 'index.html';
+        try {
+          rawBytes = resMgr.getRawFileContentSync('web/index.html');
+        } catch (err) {
+          const e = err as BusinessError;
+          hilog.error(DOMAIN, TAG, 'Missing rawfile web/index.html: %{public}s', e.message);
+          return null;
+        }
+      } else {
+        return null;
+      }
+    }
+
+    if (!rawBytes) {
+      return null;
+    }
+    const mime = mimeTypeForPath(targetPath);
+    const response = new WebResourceResponse();
+    const buf = rawBytes.buffer.slice(rawBytes.byteOffset, rawBytes.byteOffset + rawBytes.byteLength);
+    response.setResponseData(buf);
+    response.setResponseMimeType(mime);
+    if (isTextMime(mime)) {
+      response.setResponseEncoding('utf-8');
+    }
+    response.setResponseCode(200);
+    response.setReasonMessage('OK');
+    response.setResponseIsReady(true);
+    return response;
   }
 
-  private serve(url: string): WebResourceResponse | null {
-    if (!url.startsWith(APP_ORIGIN + '/')) return null;
-    let path = url.substring(APP_ORIGIN.length).split('?')[0].split('#')[0];
-    try { path = decodeURIComponent(path); } catch (e) { /* keep raw */ }
-    if (path === '/' || path === '') path = '/index.html';
-    let data = this.readRaw(path);
-    // 单页应用：没有扩展名的路径（路由）一律回 index.html。
-    if (!data && path.lastIndexOf('.') <= path.lastIndexOf('/')) {
-      path = '/index.html';
-      data = this.readRaw(path);
+  private openNativeFileSelector(wantsImagesOnly: boolean, isMultiple: boolean, result: FileSelectorResult): void {
+    const maxCount = isMultiple ? 9 : 1;
+    if (wantsImagesOnly) {
+      try {
+        const opts = new photoAccessHelper.PhotoSelectOptions();
+        opts.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+        opts.maxSelectNumber = maxCount;
+        const photoPicker = new photoAccessHelper.PhotoViewPicker();
+        photoPicker.select(opts).then((res: photoAccessHelper.PhotoSelectResult) => {
+          result.handleFileList(res.photoUris ?? []);
+        }).catch((err: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, 'PhotoViewPicker failed: %{public}s', err?.message ?? String(err));
+          result.handleFileList([]);
+        });
+      } catch (err) {
+        const e = err as BusinessError;
+        hilog.warn(DOMAIN, TAG, 'PhotoViewPicker threw: %{public}s', e?.message ?? String(err));
+        result.handleFileList([]);
+      }
+      return;
     }
-    const res = new WebResourceResponse();
-    if (!data) {
-      res.setResponseCode(404);
-      res.setReasonMessage('Not Found');
-      res.setResponseData('');
-      res.setResponseIsReady(true);
-      return res;
+
+    try {
+      const hostCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+      const docPicker = hostCtx ? new picker.DocumentViewPicker(hostCtx) : new picker.DocumentViewPicker();
+      const docOpts = new picker.DocumentSelectOptions();
+      docOpts.maxSelectNumber = maxCount;
+      docPicker.select(docOpts).then((uris: Array<string>) => {
+        result.handleFileList(uris ?? []);
+      }).catch((err: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, 'DocumentViewPicker failed: %{public}s', err?.message ?? String(err));
+        result.handleFileList([]);
+      });
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(DOMAIN, TAG, 'DocumentViewPicker threw: %{public}s', e?.message ?? String(err));
+      result.handleFileList([]);
     }
-    const ext = path.substring(path.lastIndexOf('.') + 1).toLowerCase();
-    res.setResponseMimeType(MIME[ext] ?? 'application/octet-stream');
-    res.setResponseEncoding('utf-8');
-    res.setResponseCode(200);
-    res.setReasonMessage('OK');
-    res.setResponseData(data.buffer.slice(data.byteOffset, data.byteOffset + data.byteLength));
-    res.setResponseIsReady(true);
-    return res;
+  }
+
+  onBackPress(): boolean {
+    if (this.allowSystemBackOnce) {
+      this.allowSystemBackOnce = false;
+      return false;
+    }
+    if (!this.pageLoaded) {
+      return false;
+    }
+    this.controller.runJavaScript(
+      '(function(){try{return typeof window.__ANET_HARMONY_BACK__==="function" && !!window.__ANET_HARMONY_BACK__();}catch(e){return false;}})()'
+    ).then((result: string) => {
+      if (result !== 'true') {
+        if (this.controller.accessBackward()) {
+          this.controller.backward();
+        } else if (deviceInfo.deviceType !== '2in1') {
+          try {
+            const abilityCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+            if (abilityCtx) {
+              abilityCtx.moveAbilityToBackground().catch(() => {
+                this.allowSystemBackOnce = true;
+              });
+            } else {
+              this.allowSystemBackOnce = true;
+            }
+          } catch {
+            this.allowSystemBackOnce = true;
+          }
+        } else {
+          this.allowSystemBackOnce = true;
+        }
+      }
+    }).catch(() => {});
+    return true;
   }
 
   build() {
-    Column() {
-      Web({ src: APP_ORIGIN + '/index.html', controller: this.controller })
-        .domStorageAccess(true)
-        .databaseAccess(true)
-        .javaScriptAccess(true)
-        .mediaPlayGestureAccess(false)
-        .javaScriptProxy({
-          object: this.bridge,
-          name: 'anetHarmony',
-          methodList: ['fetch'],
-          controller: this.controller
-        })
-        .onInterceptRequest((event) => {
-          // 返回 null = 不拦截（Hub 等外部地址照常走网络）。
-          const r: WebResourceResponse | null = event ? this.serve(event.request.getRequestUrl()) : null;
-          return r as WebResourceResponse;
-        })
-        .onPermissionRequest((event) => {
-          // 语音输入要麦克风：系统先弹自己的授权框，这里只放行网页侧的请求。
-          event?.request.grant(event.request.getAccessibleResource());
-        })
+    Stack() {
+      Web({ src: `${APP_ORIGIN}index.html`, controller: this.controller })
         .width('100%')
         .height('100%')
+        .backgroundColor(this.themeMode === 'dark' ? '#111113' : '#FAF1E6')
+        .darkMode(WebDarkMode.Auto)
+        .javaScriptAccess(true)
+        .domStorageAccess(true)
+        .fileAccess(true)
+        .imageAccess(true)
+        .onlineImageAccess(true)
+        .mixedMode(MixedMode.All)
+        .keyboardAvoidMode(WebKeyboardAvoidMode.RESIZE_CONTENT)
+        .javaScriptProxy({
+          object: this.bridge,
+          name: '__ANET_HARMONY__',
+          methodList: [
+            'kvGet',
+            'kvSet',
+            'kvDel',
+            'getInsetsJson',
+            'copyText',
+            'openExternalUrl',
+            'openSseStream',
+            'closeSseStream',
+            'setThemeMode',
+            'requestNotificationPermission',
+            'postNotification',
+            'cancelNotification',
+          ],
+          asyncMethodList: ['httpFetchAsync', 'downloadAndOpenFileAsync', 'openLocalFileAsync', 'saveBytesAsync'],
+          controller: this.controller,
+          permission: BRIDGE_PERMISSION,
+        })
+        .onLoadIntercept((event) => {
+          if (!event || !event.data) return false;
+          const req = event.data;
+          const url = req.getRequestUrl();
+          if (!url || url.startsWith(APP_ORIGIN) || url === 'about:blank') {
+            return false;
+          }
+          if (req.isMainFrame()) {
+            if (/^https?:\/\//i.test(url)) {
+              this.bridge.openExternalUrl(url);
+            }
+            return true;
+          }
+          return false;
+        })
+        .onControllerAttached(() => {
+          this.attachBridgeRuntime();
+          try {
+            const ua = this.controller.getUserAgent();
+            if (!ua.includes('ANetHarmony')) {
+              this.controller.setCustomUserAgent(`${ua} ANetHarmony/1.0`);
+            }
+          } catch (err) {
+            const e = err as BusinessError;
+            hilog.warn(DOMAIN, TAG, 'setCustomUserAgent skipped: %{public}s', e.message);
+          }
+        })
+        .onInterceptRequest((event) => {
+          if (!event) return null;
+          return this.resolveRawfileResponse(event.request.getRequestUrl());
+        })
+        .onShowFileSelector((event) => {
+          if (!event) return false;
+          const param = event.fileSelector;
+          const acceptTypes: Array<string> = param.getAcceptType() ?? [];
+          const isMultiple = param.getMode() === FileSelectorMode.FileOpenMultipleMode;
+          this.openNativeFileSelector(wantsImagePickerOnly(acceptTypes), isMultiple, event.result);
+          return true;
+        })
+        .onPermissionRequest((event) => {
+          // 语音输入需要麦克风：先触发系统权限弹窗，用户授权后再放行 ArkWeb 网页侧录音请求。
+          if (!event) return;
+          const req = event.request;
+          const resources = req.getAccessibleResource();
+          const hostCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+          if (hostCtx) {
+            try {
+              const atManager = abilityAccessCtrl.createAtManager();
+              atManager.requestPermissionsFromUser(hostCtx, ['ohos.permission.MICROPHONE'])
+                .then((res) => {
+                  if (res.authResults && res.authResults.length > 0 && res.authResults[0] === 0) {
+                    req.grant(resources);
+                  } else {
+                    req.deny();
+                  }
+                })
+                .catch(() => {
+                  req.deny();
+                });
+              return;
+            } catch (err) {
+              const e = err as BusinessError;
+              hilog.warn(DOMAIN, TAG, 'requestPermissionsFromUser failed: %{public}s', e?.message ?? String(err));
+            }
+          }
+          req.grant(resources);
+        })
+        .onPageEnd(() => {
+          this.pageLoaded = true;
+          this.pushInsetsToWeb();
+          this.dismissSplash();
+        })
+
+      if (this.showSplash) {
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.splash_glow'))
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Fill)
+          Column({ space: 14 }) {
+            Image($r('app.media.startIcon'))
+              .width(72)
+              .height(72)
+              .objectFit(ImageFit.Contain)
+            Text('ANet')
+              .fontSize(18)
+              .fontWeight(FontWeight.Medium)
+              .letterSpacing(0.3)
+              .fontColor(this.themeMode === 'dark' ? '#F3F4F6' : '#1D2026')
+          }
+          .alignItems(HorizontalAlign.Center)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.themeMode === 'dark' ? '#111113' : '#FAF1E6')
+        .opacity(this.splashOpacity)
+        .hitTestBehavior(HitTestMode.None)
+      }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#0B1220')
+    .backgroundColor(this.themeMode === 'dark' ? '#111113' : '#FAF1E6')
   }
 }

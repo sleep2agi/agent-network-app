@@ -6,11 +6,18 @@ import { colors, onThemeChange, spacing, radius } from './theme';
 import { useBubbleInk } from './bubble-ink';
 import { downloadImageObjectUrl, saveImageObjectUrl } from './web-image-download';
 import { chooseSavePath, isTauriDesktop, revealInFolder, saveToDownloads, displayDownloadPath } from './desktop-download';
+import { harmonyDownloadFile, harmonyOpenLocalFile, harmonySaveBytes, hasHarmonyFileBridge, hasHarmonySaveBytesBridge } from './harmony-bridge';
 
 /** Tauri 的 WebView 里 <a download> 不落盘(Vincent 2026-09-07):走 Rust 写进「下载」目录;
+ *  鸿蒙 ArkWeb 里 <a download> 也不落盘:走原生 DocumentViewPicker 另存为;
  *  点 → 另存为对话框选位置,⌥/Alt 点 → 直接存到下载。返回落盘路径(浏览器下载/取消时为 null)。
  *  多图气泡的预览层也用它(方格里放不下「下载原图」那一行)。 */
 export const saveObjectUrlOriginal = async (url: string, name: string, direct = false): Promise<string | null> => {
+  if (hasHarmonySaveBytesBridge()) {
+    const bytes = new Uint8Array(await (await fetch(url)).arrayBuffer());
+    const saved = await harmonySaveBytes({ bytes, fileName: name });
+    return saved || null;
+  }
   if (!isTauriDesktop()) { saveImageObjectUrl(url, name); return null; }
   let target: string | null | undefined;
   if (!direct) { target = await chooseSavePath(name).catch(() => undefined); if (target === null) return null; }
@@ -41,6 +48,11 @@ export default function AuthedWebThumb({
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const saveOriginal = async (url: string, direct = false) => {
     try {
+      if (hasHarmonyFileBridge()) {
+        const saved = await harmonyDownloadFile({ url: uri, token, fileName: name, mimeType: mime, mode: 'save' });
+        if (saved) setSavedPath(saved);
+        return;
+      }
       const saved = await saveObjectUrlOriginal(url, name, direct);
       if (saved) setSavedPath(saved);
     } catch (reason) {
@@ -110,8 +122,17 @@ export default function AuthedWebThumb({
         <Text style={[styles.download, ink]}>{savedPath ? `✓ 已保存到 ${displayDownloadPath(savedPath)}` : '↓ 下载原图'}</Text>
       </Pressable>
       {savedPath ? (
-        <Pressable accessibilityRole="button" hitSlop={6} onPress={() => { void revealInFolder(savedPath).catch(() => undefined); }}>
-          <Text style={[styles.download, ink]}>在文件夹中显示</Text>
+        <Pressable
+          accessibilityRole="button"
+          hitSlop={6}
+          onPress={() => {
+            void (hasHarmonyFileBridge()
+              ? harmonyOpenLocalFile({ path: savedPath, fileName: name, mimeType: mime })
+              : revealInFolder(savedPath)
+            ).catch(() => undefined);
+          }}
+        >
+          <Text style={[styles.download, ink]}>{hasHarmonyFileBridge() ? '打开预览' : '在文件夹中显示'}</Text>
         </Pressable>
       ) : null}
     </View>

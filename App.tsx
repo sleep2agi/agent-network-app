@@ -11,7 +11,9 @@ import { Text, TextInput } from './src/ui-text';
 import { Ionicons } from './src/icons';
 import { BrandMark } from './src/brand-mark';
 import { SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
-import { SAFE_AREA_SIM, layoutOs, statusBarHeight } from './src/safe-area-runtime';
+import { SAFE_AREA_SIM, layoutOs, statusBarHeight, webSafeAreaOverride } from './src/safe-area-runtime';
+import { HARMONY_INSETS_EVENT, installHarmonyBackHandlerShim, installHarmonyClipboardShim, markHarmonyRootBackHandler, syncHarmonyTheme } from './src/harmony-bridge';
+if (Platform.OS === 'web') installHarmonyBackHandlerShim(BackHandler);
 import { mainWindowTopPadding } from './src/modal-safe-area';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, setNetworkIdPersister, HubConfig } from './src/api';
@@ -395,11 +397,19 @@ export default function App() {
   );
 }
 
-// Web layout sweep only (src/safe-area-sim.ts): `?safeAreaSim=…` feeds simulated insets to every
-// useSafeAreaInsets() below. On a device SAFE_AREA_SIM is null and this renders its children as-is.
+// Web layout sweep (`?safeAreaSim=…`) and HarmonyOS ArkWeb live avoid areas: feeds insets to every
+// useSafeAreaInsets() below. On iOS/Android native or plain browser both are null and this renders as-is.
 function SimulatedSafeArea({ children }: { children: React.ReactNode }) {
-  if (!SAFE_AREA_SIM) return <>{children}</>;
-  return <SafeAreaInsetsContext.Provider value={SAFE_AREA_SIM}>{children}</SafeAreaInsetsContext.Provider>;
+  const [insets, setInsets] = useState(() => webSafeAreaOverride());
+  useEffect(() => {
+    if (Platform.OS !== 'web' || SAFE_AREA_SIM || typeof window === 'undefined') return;
+    const sync = () => setInsets(webSafeAreaOverride());
+    sync();
+    window.addEventListener(HARMONY_INSETS_EVENT, sync);
+    return () => window.removeEventListener(HARMONY_INSETS_EVENT, sync);
+  }, []);
+  if (!insets) return <>{children}</>;
+  return <SafeAreaInsetsContext.Provider value={insets}>{children}</SafeAreaInsetsContext.Provider>;
 }
 
 function AppRoot() {
@@ -465,7 +475,16 @@ function AppRoot() {
     // 0.2.83:窗口自己的底色也跟主题走——Overlay 标题栏区域和 webview 未画出的那一帧露出来的是它,
     // 默认是白的(Vincent 2026-09-22 macOS 深色主题顶部白条)。失败不抛,底色只是保底。
     void applyWindowBackground(themeMode());
-    return onThemeChange((m) => { setTheme(m); void applyWindowBackground(m); });
+    if (Platform.OS === 'web') {
+      syncHarmonyTheme(themeMode());
+      installHarmonyClipboardShim();
+      installHarmonyBackHandlerShim(BackHandler);
+    }
+    return onThemeChange((m) => {
+      setTheme(m);
+      void applyWindowBackground(m);
+      if (Platform.OS === 'web') syncHarmonyTheme(m);
+    });
   }, []);
   // Scrollbars are painted by the browser, outside React Native's style
   // system, so they need the palette pushed to them explicitly.
@@ -781,9 +800,12 @@ function AppRoot() {
 
   // System back (button or fullscreen gesture) navigates within the app
   // instead of exiting (Vincent tg 730). Agents/login fall through to
-  // the default exit behavior.
+  // the default exit behavior. On HarmonyOS, installHarmonyBackHandlerShim
+  // routes BackHandler.addEventListener through a LIFO stack where screen-level
+  // handlers run before this AppRoot fallback.
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', () => {
+    if (Platform.OS === 'web') installHarmonyBackHandlerShim(BackHandler);
+    const sub = BackHandler.addEventListener('hardwareBackPress', markHarmonyRootBackHandler(() => {
       // taskDetail is a full-screen leaf under the tasks tab — hardware
       // back should return to the tasks list, not skip past it back to
       // agents (that would lose the user's place in the task list).
@@ -820,7 +842,7 @@ function AppRoot() {
         return true;
       }
       return false;
-    });
+    }));
     return () => sub.remove();
   }, [screen, layout]);
 
@@ -857,7 +879,7 @@ function AppRoot() {
 
   if (booting) {
     return (
-      <SafeAreaView style={[styles.root, rootInset, styles.center, bootStyles.root]}>
+      <SafeAreaView style={[styles.root, rootInset, styles.center, bootStyles.root, { backgroundColor: 'transparent' }]}>
         <BrandMark size={72} style={bootStyles.logo} />
         <Text style={bootStyles.title}>ANet</Text>
         <ActivityIndicator color={colors.accent} />
@@ -1314,7 +1336,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
 }
 
 const makeEntryStyles = () => StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.bg },
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'transparent' },
   card: { width: '100%', maxWidth: 440, gap: 14, paddingHorizontal: 32, paddingVertical: 32, borderRadius: radius.surface, backgroundColor: colors.card, ...elevated('floating') },
   cardCompact: { paddingHorizontal: 22, paddingVertical: 26, borderRadius: radius.surface },
   logo: { width: 72, height: 72, borderRadius: appIconRadius(72), alignSelf: 'center' },
@@ -1341,7 +1363,7 @@ const loginStylesShared = StyleSheet.create({
 
 // #193 机制:模块级 StyleSheet 引用主题值必须随主题重建,否则冻在导入时的那套颜色。
 const makeBootStyles = () => StyleSheet.create({
-  root: { backgroundColor: colors.bg, gap: 14 },
+  root: { backgroundColor: 'transparent', gap: 14 },
   logo: { width: 96, height: 96, borderRadius: appIconRadius(96) },
   title: { color: colors.text, fontSize: 18, fontWeight: '600', letterSpacing: 0.3 },
 });

@@ -9,6 +9,12 @@ import { ANDROID_PACKAGE } from './android-update-core';
 import { AnetKeepAlive } from '../modules/anet-keepalive';
 import { loadNotifySettings } from './notify-settings';
 import {
+  harmonyCancelNotification,
+  harmonyPostNotification,
+  harmonyRequestNotificationPermission,
+  hasHarmonyNotificationBridge,
+} from './harmony-bridge';
+import {
   setupAndroidChannels,
   type ChannelEnums,
   type PermissionStatus,
@@ -17,7 +23,10 @@ import {
 
 type NotificationsModule = typeof import('expo-notifications');
 
-export const mobileNotificationsSupported = (): boolean => Platform.OS === 'android' || Platform.OS === 'ios';
+const isHarmonyNotifications = (): boolean => Platform.OS === 'web' && hasHarmonyNotificationBridge();
+
+export const mobileNotificationsSupported = (): boolean =>
+  Platform.OS === 'android' || Platform.OS === 'ios' || isHarmonyNotifications();
 
 let modPromise: Promise<NotificationsModule> | null = null;
 function mod(): Promise<NotificationsModule> {
@@ -40,7 +49,7 @@ async function applyAndroidChannels(N: NotificationsModule): Promise<void> {
 
 /** 前台展示策略 + 安卓渠道。幂等;安卓 13+ 要先有渠道再请求权限。 */
 export function ensureNotificationSetup(): Promise<void> {
-  if (!mobileNotificationsSupported()) return Promise.resolve();
+  if (!mobileNotificationsSupported() || isHarmonyNotifications()) return Promise.resolve();
   if (setupPromise) return setupPromise;
   setupPromise = (async () => {
     const N = await mod();
@@ -91,6 +100,7 @@ export function currentInterruptionFilter(): number | null {
 }
 
 export async function notificationPermission(): Promise<{ status: PermissionStatus; canAskAgain: boolean }> {
+  if (isHarmonyNotifications()) return { status: 'granted', canAskAgain: true };
   if (!mobileNotificationsSupported()) return { status: 'denied', canAskAgain: false };
   const N = await mod();
   const p = await N.getPermissionsAsync();
@@ -98,6 +108,10 @@ export async function notificationPermission(): Promise<{ status: PermissionStat
 }
 
 export async function requestNotificationPermission(): Promise<PermissionStatus> {
+  if (isHarmonyNotifications()) {
+    harmonyRequestNotificationPermission();
+    return 'granted';
+  }
   if (!mobileNotificationsSupported()) return 'denied';
   await ensureNotificationSetup();
   const N = await mod();
@@ -107,6 +121,10 @@ export async function requestNotificationPermission(): Promise<PermissionStatus>
 
 /** 发一条(同 identifier = 原地更新那条)。 */
 export async function postNotification(plan: Pick<PostPlan, 'identifier' | 'title' | 'body' | 'channelId' | 'alert' | 'data'>): Promise<void> {
+  if (isHarmonyNotifications()) {
+    harmonyPostNotification(plan.identifier, plan.title, plan.body);
+    return;
+  }
   if (!mobileNotificationsSupported()) return;
   await ensureNotificationSetup();
   const N = await mod();
@@ -125,6 +143,10 @@ export async function postNotification(plan: Pick<PostPlan, 'identifier' | 'titl
 }
 
 export async function dismissNotification(identifier: string): Promise<void> {
+  if (isHarmonyNotifications()) {
+    harmonyCancelNotification(identifier);
+    return;
+  }
   if (!mobileNotificationsSupported()) return;
   const N = await mod();
   await N.dismissNotificationAsync(identifier).catch(() => undefined);
@@ -138,7 +160,7 @@ function responseKeyOf(r: { notification: { request: { identifier: string }; dat
 
 /** 点通知(应用在跑时)+ 冷启动时启动应用的那一次点击。返回取消订阅。 */
 export async function subscribeNotificationTaps(onTap: TapHandler): Promise<() => void> {
-  if (!mobileNotificationsSupported()) return () => {};
+  if (!mobileNotificationsSupported() || isHarmonyNotifications()) return () => {};
   const N = await mod();
   const sub = N.addNotificationResponseReceivedListener(r => onTap(r.notification.request.content.data, responseKeyOf(r)));
   try {
@@ -149,7 +171,7 @@ export async function subscribeNotificationTaps(onTap: TapHandler): Promise<() =
 }
 
 export async function clearLastNotificationTap(): Promise<void> {
-  if (!mobileNotificationsSupported()) return;
+  if (!mobileNotificationsSupported() || isHarmonyNotifications()) return;
   const N = await mod();
   try { N.clearLastNotificationResponse(); } catch { /* 老版本没有 */ }
 }

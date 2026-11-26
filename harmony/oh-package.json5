@@ -1,8 +1,6 @@
 {
   "modelVersion": "5.0.0",
-  "name": "anet-harmony",
-  "version": "1.0.0",
-  "description": "ANet HarmonyOS shell",
+  "description": "ANet HarmonyOS ArkWeb native shell (Stage Model, API 12+)",
   "dependencies": {},
   "devDependencies": {}
 }

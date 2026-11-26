@@ -76,6 +76,14 @@ export const isAndroidLike = (os: string, userAgent = ''): boolean =>
   os === 'android' || (os === 'web' && /\bAndroid\b/i.test(userAgent));
 
 /**
+ * HarmonyOS ArkWeb shell or OpenHarmony/HarmonyOS mobile browser.
+ * Portrait wide candybar phones (e.g. 16:9.5 Pura X View ≈ 440 vp) keep the phone stack;
+ * rotating to landscape (≥ 700 vp) or opening on a HarmonyOS foldable/tablet splits two-pane.
+ */
+export const isHarmonyLike = (os: string, userAgent = ''): boolean =>
+  os === 'web' && /\b(OpenHarmony|HarmonyOS|ANetHarmony)\b/i.test(userAgent);
+
+/**
  * iPad native (`Platform.isPad`), or the web build with an iPad UA. The UA half exists for the
  * web-export harness (Playwright's iPad descriptors send `iPad`); real iPadOS Safari sends a
  * Mac UA and stays on the web phone layout as before.
@@ -84,7 +92,7 @@ export const isIPadLike = (os: string, isPad = false, userAgent = ''): boolean =
   (os === 'ios' && isPad) || (os === 'web' && /\biPad\b/.test(userAgent));
 
 export function chooseAppLayout({ os, tauri, userAgent = '', width, height, isPad = false }: LayoutInput): AppLayout {
-  if (isAndroidLike(os, userAgent)) return width >= ANDROID_TWO_PANE_MIN_WIDTH ? 'twoPane' : 'phone';
+  if (isAndroidLike(os, userAgent) || isHarmonyLike(os, userAgent)) return width >= ANDROID_TWO_PANE_MIN_WIDTH ? 'twoPane' : 'phone';
   // iPad: landscape full-screen splits, portrait keeps the phone stack. Rotation changes
   // useWindowDimensions, so App.tsx re-runs this and the layout follows the device.
   if (isIPadLike(os, isPad, userAgent)) {

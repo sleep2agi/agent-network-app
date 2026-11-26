@@ -249,6 +249,9 @@ for (const scheme of ['light', 'dark']) {
   // ── 5 太短 ──
   await page.locator('[data-testid="composer-mode-toggle"]').click(); await page.locator('textarea').first().fill(''); await page.locator('[data-testid="composer-mode-toggle"]').click(); await page.waitForTimeout(300);
   await press(page);
+  // CI 机器慢:按下后先是「准备录音…」(starting);若在 starting 阶段就松手,voiceStep 会静默回 idle 不弹「说话时间太短」。
+  // 等录音进入 recording(离开「准备录音…」)后立刻松手,稳定落在 <0.6s 的 tooShort 分支。
+  await page.waitForFunction(() => { const l = document.querySelector('[data-testid="voice-hold-label"]')?.textContent; return !!l && l !== '准备录音…'; }, null, { timeout: 5000 }).catch(() => {});
   await page.mouse.up();
   await page.waitForSelector('[data-testid="voice-hold-toast"]', { timeout: 3000 }).then(() => ck(tag, '太短 → 「说话时间太短」', true), () => ck(tag, '太短 → 「说话时间太短」', false));
   await stopLevels(page);

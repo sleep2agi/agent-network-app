@@ -64,6 +64,8 @@ export const chatTranslations = {
   'chat.modelPicker.variantUnknown': ['{value}（这个模型的清单里没有列出其它档位）', '{value} (the catalog lists no other levels for this model)'],
   'chat.modelPicker.currentMark': ['当前', 'Current'],
   'chat.file.saveHint': ['选择位置保存 · Alt 点击直接存到下载', 'Choose a save location · Alt-click to save to Downloads'],
+  'chat.file.harmonyHint': ['点击打开预览，或点击下方「另存为」保存到设备', 'Tap to preview, or use “Save as” below to save to device'],
+  'chat.file.harmonyOpen': ['打开预览', 'Open preview'],
   'chat.file.browserHint': ['安全下载到浏览器', 'Download securely in your browser'],
   'chat.file.browserHandedOff': ['已交给浏览器下载 · 点击可再次下载', 'Handed to your browser · Click to download again'],
   'chat.file.reveal': ['在文件夹中显示', 'Show in folder'],

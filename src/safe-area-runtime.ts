@@ -4,6 +4,7 @@
 import { Platform, StatusBar } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { parseSafeAreaSim, type SimInsets } from './safe-area-sim';
+import { readHarmonyInsets } from './harmony-bridge';
 import { modalSafePadding, type ModalKind } from './modal-safe-area';
 import type { FullscreenPadding } from './rules-fullscreen-layout';
 
@@ -12,14 +13,21 @@ export const SAFE_AREA_SIM: SimInsets | null = Platform.OS === 'web'
   ? parseSafeAreaSim(String((globalThis as { location?: { search?: string } }).location?.search ?? ''))
   : null;
 
-/** The OS the inset rules should apply for ('android' under the simulation). */
-export function layoutOs(): string {
-  return SAFE_AREA_SIM ? 'android' : Platform.OS;
+/** Live insets override on web: `?safeAreaSim=…` in tests, or native HarmonyOS ArkWeb avoid areas. */
+export function webSafeAreaOverride(): SimInsets | null {
+  if (Platform.OS !== 'web') return null;
+  return SAFE_AREA_SIM ?? readHarmonyInsets();
 }
 
-/** StatusBar.currentHeight (Android), or the simulated top inset. */
+/** The OS the inset rules should apply for ('android' under simulation or HarmonyOS ArkWeb shell). */
+export function layoutOs(): string {
+  return webSafeAreaOverride() ? 'android' : Platform.OS;
+}
+
+/** StatusBar.currentHeight (Android), or the simulated / HarmonyOS top inset. */
 export function statusBarHeight(): number | undefined {
-  return SAFE_AREA_SIM ? SAFE_AREA_SIM.top : StatusBar.currentHeight;
+  const override = webSafeAreaOverride();
+  return override ? override.top : StatusBar.currentHeight;
 }
 
 /**

@@ -20,6 +20,7 @@ import { Ionicons } from './icons';
 
 import { tailNodeLogs, waitForRulesFileResult, type HubConfig, type RulesTarget, type Session } from './api';
 import { chooseSavePath, displayDownloadPath, isTauriDesktop, saveToDownloads } from './desktop-download';
+import { harmonySaveBytes, hasHarmonySaveBytesBridge } from './harmony-bridge';
 import InfoTip from './InfoTip';
 import {
   LOG_LEVEL_CHIPS, LOGS_FOLLOW_MS, LOGS_SEARCH_DEBOUNCE_MS, lineTone, logsEmptyMessage, logsEnqueueError, logsExportName, logsQuery,
@@ -227,6 +228,9 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
         if (!path) return;
         const saved = await saveToDownloads(name, new TextEncoder().encode(text), path);
         setNotice(`已导出到 ${displayDownloadPath(saved)}`);
+      } else if (hasHarmonySaveBytesBridge()) {
+        const saved = await harmonySaveBytes({ bytes: new TextEncoder().encode(text), fileName: name, mimeType: 'text/plain' });
+        if (saved) setNotice(`已导出到 ${displayDownloadPath(saved)}`);
       } else if (WEB) {
         const doc = (globalThis as any).document;
         const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });

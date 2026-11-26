@@ -1,6 +1,6 @@
 import { readFileSync } from 'node:fs';
 import {
-  ANDROID_TWO_PANE_MIN_WIDTH, IPAD_TWO_PANE_MIN_WIDTH, TAURI_DESKTOP_MIN_WIDTH, chooseAppLayout, isAndroidLike, isIPadLike,
+  ANDROID_TWO_PANE_MIN_WIDTH, IPAD_TWO_PANE_MIN_WIDTH, TAURI_DESKTOP_MIN_WIDTH, chooseAppLayout, isAndroidLike, isHarmonyLike, isIPadLike,
   paneSelectionFor, screenForPaneSelection, splitsInTwoPane, twoPaneListWidth,
   CHAT_PANE_MIN_WIDTH, LIST_PANE_DEFAULT_WIDTH, LIST_PANE_MAX_WIDTH, LIST_PANE_MIN_WIDTH, listWidthFromDrag, parseStoredListWidth,
 } from './wide-layout';
@@ -40,6 +40,14 @@ ck('web + Android UA at 900 → twoPane', chooseAppLayout({ os: 'web', tauri: fa
 ck('web + Android UA + tauri global at 900 → twoPane', chooseAppLayout({ os: 'web', tauri: true, userAgent: ANDROID_WEB_UA, width: 900 }) === 'twoPane');
 ck('web + Android UA + tauri global at 400 → phone', chooseAppLayout({ os: 'web', tauri: true, userAgent: ANDROID_WEB_UA, width: 400 }) === 'phone');
 ck('web + Android UA at 400 → phone', chooseAppLayout({ os: 'web', tauri: false, userAgent: ANDROID_WEB_UA, width: 400 }) === 'phone');
+
+// ── HarmonyOS ArkWeb (including 16:9.5 wide candybar phone 阔直板 ~440×744 portrait / ~744×440 landscape) ──
+const HARMONY_UA = 'Mozilla/5.0 (Phone; OpenHarmony 5.0) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36 ArkWeb/4.1.6.1 Mobile ANetHarmony/1.0';
+ck('isHarmonyLike: OpenHarmony / ANetHarmony UA on web', isHarmonyLike('web', HARMONY_UA));
+ck('isHarmonyLike: not Mac/Win UA', !isHarmonyLike('web', MAC_UA) && !isHarmonyLike('web', WIN_UA));
+ck('HarmonyOS wide candybar portrait (440×744) → phone', chooseAppLayout({ os: 'web', tauri: false, userAgent: HARMONY_UA, width: 440, height: 744 }) === 'phone');
+ck('HarmonyOS wide candybar landscape (744×440) → twoPane', chooseAppLayout({ os: 'web', tauri: false, userAgent: HARMONY_UA, width: 744, height: 440 }) === 'twoPane');
+ck('HarmonyOS foldable / tablet (900×700) → twoPane (never desktop)', chooseAppLayout({ os: 'web', tauri: false, userAgent: HARMONY_UA, width: 900, height: 700 }) === 'twoPane');
 
 // ── desktop (Tauri) unchanged: exactly `tauri && width >= 860` ──
 for (const ua of [MAC_UA, WIN_UA, '']) {

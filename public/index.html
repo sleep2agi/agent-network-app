@@ -31,11 +31,31 @@
     -->
     <style id="anet-boot-bg">
       html, body { background: #111113; }
+      body {
+        background-image:
+          radial-gradient(ellipse 60% 65% at 8% 10%, rgba(255, 190, 130, 0.09) 0%, rgba(255, 190, 130, 0.03) 40%, rgba(255, 190, 130, 0) 72%),
+          radial-gradient(ellipse 60% 65% at 94% 92%, rgba(255, 190, 130, 0.09) 0%, rgba(255, 190, 130, 0.03) 40%, rgba(255, 190, 130, 0) 72%);
+      }
       @media (prefers-color-scheme: light) {
         html, body { background: #f6f7f9; }
+        body {
+          background-image:
+            radial-gradient(ellipse 75% 80% at 8% 10%, rgba(248, 218, 184, 0.6) 0%, rgba(248, 218, 184, 0.25) 40%, rgba(248, 218, 184, 0) 72%),
+            radial-gradient(ellipse 75% 80% at 94% 92%, rgba(248, 218, 184, 0.6) 0%, rgba(248, 218, 184, 0.25) 40%, rgba(248, 218, 184, 0) 72%);
+        }
       }
       html[data-boot-theme="dark"], html[data-boot-theme="dark"] body { background: #111113; }
+      html[data-boot-theme="dark"] body {
+        background-image:
+          radial-gradient(ellipse 60% 65% at 8% 10%, rgba(255, 190, 130, 0.09) 0%, rgba(255, 190, 130, 0.03) 40%, rgba(255, 190, 130, 0) 72%),
+          radial-gradient(ellipse 60% 65% at 94% 92%, rgba(255, 190, 130, 0.09) 0%, rgba(255, 190, 130, 0.03) 40%, rgba(255, 190, 130, 0) 72%);
+      }
       html[data-boot-theme="light"], html[data-boot-theme="light"] body { background: #f6f7f9; }
+      html[data-boot-theme="light"] body {
+        background-image:
+          radial-gradient(ellipse 75% 80% at 8% 10%, rgba(248, 218, 184, 0.6) 0%, rgba(248, 218, 184, 0.25) 40%, rgba(248, 218, 184, 0) 72%),
+          radial-gradient(ellipse 75% 80% at 94% 92%, rgba(248, 218, 184, 0.6) 0%, rgba(248, 218, 184, 0.25) 40%, rgba(248, 218, 184, 0) 72%);
+      }
     </style>
     <script>
       // The theme saved in settings (src/desktop-theme-storage.ts, key theme_mode_v1)

@@ -1,1 +1,8 @@
-{ "string": [ { "name": "app_name", "value": "ANet" } ] }
+{
+  "string": [
+    {
+      "name": "app_name",
+      "value": "ANet"
+    }
+  ]
+}
