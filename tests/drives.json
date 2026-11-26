@@ -310,6 +310,10 @@
       "kind": "stub",
       "secs": 60
     },
+    "test-log-panel/drive.mjs": {
+      "kind": "stub",
+      "secs": 30
+    },
     "test-member-editor/drive.mjs": {
       "kind": "stub",
       "secs": 33
