@@ -51,7 +51,10 @@ struct Index {
   private bridge: AnetHarmonyBridge = new AnetHarmonyBridge();
   private pageLoaded: boolean = false;
   private allowSystemBackOnce: boolean = false;
+  private splashTimer: number = -1;
 
+  @State private showSplash: boolean = true;
+  @State private splashOpacity: number = 1;
   @StorageProp('anetThemeMode') themeMode: string = 'light';
   @StorageProp('anetInsetTop') @Watch('pushInsetsToWeb') insetTop: number = 0;
   @StorageProp('anetInsetRight') @Watch('pushInsetsToWeb') insetRight: number = 0;
@@ -72,6 +75,34 @@ struct Index {
 
   aboutToAppear(): void {
     this.attachBridgeRuntime();
+  }
+
+  aboutToDisappear(): void {
+    if (this.splashTimer !== -1) {
+      clearTimeout(this.splashTimer);
+      this.splashTimer = -1;
+    }
+  }
+
+  private dismissSplash(): void {
+    if (!this.showSplash || this.splashTimer !== -1) return;
+    this.splashTimer = setTimeout(() => {
+      this.splashTimer = -1;
+      try {
+        this.getUIContext().animateTo({
+          duration: 180,
+          curve: Curve.EaseOut,
+          onFinish: () => {
+            this.showSplash = false;
+          },
+        }, () => {
+          this.splashOpacity = 0;
+        });
+      } catch {
+        this.splashOpacity = 0;
+        this.showSplash = false;
+      }
+    }, 150);
   }
 
   private pushInsetsToWeb(): void {
@@ -221,11 +252,11 @@ struct Index {
   }
 
   build() {
-    Column() {
+    Stack() {
       Web({ src: `${APP_ORIGIN}index.html`, controller: this.controller })
         .width('100%')
         .height('100%')
-        .backgroundColor(this.themeMode === 'dark' ? '#111318' : '#F6F7F9')
+        .backgroundColor(this.themeMode === 'dark' ? '#111113' : '#FAF1E6')
         .darkMode(WebDarkMode.Auto)
         .javaScriptAccess(true)
         .domStorageAccess(true)
@@ -309,10 +340,37 @@ struct Index {
         .onPageEnd(() => {
           this.pageLoaded = true;
           this.pushInsetsToWeb();
+          this.dismissSplash();
         })
+
+      if (this.showSplash) {
+        Stack({ alignContent: Alignment.Center }) {
+          Image($r('app.media.splash_glow'))
+            .width('100%')
+            .height('100%')
+            .objectFit(ImageFit.Fill)
+          Column({ space: 14 }) {
+            Image($r('app.media.startIcon'))
+              .width(72)
+              .height(72)
+              .objectFit(ImageFit.Contain)
+            Text('ANet')
+              .fontSize(18)
+              .fontWeight(FontWeight.Medium)
+              .letterSpacing(0.3)
+              .fontColor(this.themeMode === 'dark' ? '#F3F4F6' : '#1D2026')
+          }
+          .alignItems(HorizontalAlign.Center)
+        }
+        .width('100%')
+        .height('100%')
+        .backgroundColor(this.themeMode === 'dark' ? '#111113' : '#FAF1E6')
+        .opacity(this.splashOpacity)
+        .hitTestBehavior(HitTestMode.None)
+      }
     }
     .width('100%')
     .height('100%')
-    .backgroundColor(this.themeMode === 'dark' ? '#111318' : '#F6F7F9')
+    .backgroundColor(this.themeMode === 'dark' ? '#111113' : '#FAF1E6')
   }
 }

@@ -876,7 +876,7 @@ function AppRoot() {
 
   if (booting) {
     return (
-      <SafeAreaView style={[styles.root, rootInset, styles.center, bootStyles.root]}>
+      <SafeAreaView style={[styles.root, rootInset, styles.center, bootStyles.root, { backgroundColor: 'transparent' }]}>
         <BrandMark size={72} style={bootStyles.logo} />
         <Text style={bootStyles.title}>ANet</Text>
         <ActivityIndicator color={colors.accent} />
@@ -1333,7 +1333,7 @@ export function FirstRunScreen({ busy, stage, error, onStartLocal, onRemote }: {
 }
 
 const makeEntryStyles = () => StyleSheet.create({
-  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: colors.bg },
+  root: { flex: 1, alignItems: 'center', justifyContent: 'center', padding: 24, backgroundColor: 'transparent' },
   card: { width: '100%', maxWidth: 440, gap: 14, paddingHorizontal: 32, paddingVertical: 32, borderRadius: radius.surface, backgroundColor: colors.card, ...elevated('floating') },
   cardCompact: { paddingHorizontal: 22, paddingVertical: 26, borderRadius: radius.surface },
   logo: { width: 72, height: 72, borderRadius: appIconRadius(72), alignSelf: 'center' },
@@ -1360,7 +1360,7 @@ const loginStylesShared = StyleSheet.create({
 
 // #193 机制:模块级 StyleSheet 引用主题值必须随主题重建,否则冻在导入时的那套颜色。
 const makeBootStyles = () => StyleSheet.create({
-  root: { backgroundColor: colors.bg, gap: 14 },
+  root: { backgroundColor: 'transparent', gap: 14 },
   logo: { width: 96, height: 96, borderRadius: appIconRadius(96) },
   title: { color: colors.text, fontSize: 18, fontWeight: '600', letterSpacing: 0.3 },
 });
