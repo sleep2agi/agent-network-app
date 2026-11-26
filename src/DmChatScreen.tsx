@@ -7,6 +7,7 @@
 // 桌面「＋」系统文件选择器 + 拖进会话区 + ⌘/Ctrl+V;草稿缩略图、原图开关、并发上传队列、点图预览。
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Platform, Pressable, ScrollView, StatusBar, StyleSheet, View, useWindowDimensions } from 'react-native';
+import { isHarmonyShell, registerHarmonyBackHandler } from './harmony-bridge';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layoutOs } from './safe-area-runtime';
@@ -280,6 +281,11 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
     if (!plusOpen || desktop || Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => plusEvent('back'));
     return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plusOpen, desktop]);
+  useEffect(() => {
+    if (!plusOpen || desktop || Platform.OS !== 'web' || !isHarmonyShell()) return;
+    return registerHarmonyBackHandler(() => plusEvent('back'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plusOpen, desktop]);
   const { height: windowHeight } = useWindowDimensions();

@@ -12,7 +12,8 @@ import { Ionicons } from './src/icons';
 import { BrandMark } from './src/brand-mark';
 import { SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SAFE_AREA_SIM, layoutOs, statusBarHeight, webSafeAreaOverride } from './src/safe-area-runtime';
-import { HARMONY_INSETS_EVENT, installHarmonyClipboardShim, registerHarmonyBackHandler, syncHarmonyTheme } from './src/harmony-bridge';
+import { HARMONY_INSETS_EVENT, installHarmonyBackHandlerShim, installHarmonyClipboardShim, markHarmonyRootBackHandler, syncHarmonyTheme } from './src/harmony-bridge';
+if (Platform.OS === 'web') installHarmonyBackHandlerShim(BackHandler);
 import { mainWindowTopPadding } from './src/modal-safe-area';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, setNetworkIdPersister, HubConfig } from './src/api';
@@ -477,6 +478,7 @@ function AppRoot() {
     if (Platform.OS === 'web') {
       syncHarmonyTheme(themeMode());
       installHarmonyClipboardShim();
+      installHarmonyBackHandlerShim(BackHandler);
     }
     return onThemeChange((m) => {
       setTheme(m);
@@ -798,11 +800,12 @@ function AppRoot() {
 
   // System back (button or fullscreen gesture) navigates within the app
   // instead of exiting (Vincent tg 730). Agents/login fall through to
-  // the default exit behavior.
-  const harmonyBackRef = useRef<() => boolean>(() => false);
-  useEffect(() => (Platform.OS === 'web' ? registerHarmonyBackHandler(() => harmonyBackRef.current()) : undefined), []);
+  // the default exit behavior. On HarmonyOS, installHarmonyBackHandlerShim
+  // routes BackHandler.addEventListener through a LIFO stack where screen-level
+  // handlers run before this AppRoot fallback.
   useEffect(() => {
-    const sub = BackHandler.addEventListener('hardwareBackPress', harmonyBackRef.current = () => {
+    if (Platform.OS === 'web') installHarmonyBackHandlerShim(BackHandler);
+    const sub = BackHandler.addEventListener('hardwareBackPress', markHarmonyRootBackHandler(() => {
       // taskDetail is a full-screen leaf under the tasks tab — hardware
       // back should return to the tasks list, not skip past it back to
       // agents (that would lose the user's place in the task list).
@@ -839,7 +842,7 @@ function AppRoot() {
         return true;
       }
       return false;
-    });
+    }));
     return () => sub.remove();
   }, [screen, layout]);
 

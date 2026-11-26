@@ -9,6 +9,7 @@ import { AnetHarmonyBridge } from '../bridge/AnetHarmonyBridge';
 const DOMAIN = 0x0000;
 const TAG = 'ANetIndex';
 const APP_ORIGIN = 'https://anet.local/';
+const BRIDGE_PERMISSION = '{"javascriptProxyPermission":{"urlPermissionList":[{"scheme":"https","host":"anet.local","port":"","path":""}]}}';
 
 function mimeTypeForPath(relPath: string): string {
   const lower = relPath.toLowerCase();
@@ -284,6 +285,22 @@ struct Index {
           ],
           asyncMethodList: ['httpFetchAsync', 'downloadAndOpenFileAsync', 'openLocalFileAsync', 'saveBytesAsync'],
           controller: this.controller,
+          permission: BRIDGE_PERMISSION,
+        })
+        .onLoadIntercept((event) => {
+          if (!event || !event.data) return false;
+          const req = event.data;
+          const url = req.getRequestUrl();
+          if (!url || url.startsWith(APP_ORIGIN) || url === 'about:blank') {
+            return false;
+          }
+          if (req.isMainFrame()) {
+            if (/^https?:\/\//i.test(url)) {
+              this.bridge.openExternalUrl(url);
+            }
+            return true;
+          }
+          return false;
         })
         .onControllerAttached(() => {
           this.attachBridgeRuntime();

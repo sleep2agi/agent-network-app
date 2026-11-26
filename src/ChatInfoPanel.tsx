@@ -7,6 +7,7 @@ import { AppSwitch } from './AppSwitch';
 //            web 导出里再压一条 history,让浏览器「后退」也只关这一页。
 import { useEffect, useMemo, useRef, type ReactNode } from 'react';
 import { BackHandler, Modal, Platform, Pressable, ScrollView, StyleSheet,  View } from 'react-native';
+import { isHarmonyShell, registerHarmonyBackHandler } from './harmony-bridge';
 import { Text } from './ui-text';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
@@ -78,9 +79,12 @@ export default function ChatInfoPanel({
       const node = drawerRef.current;
       if (node && typeof node.contains === 'function' && !node.contains(e.target)) onCloseRef.current();
     };
+    const unsubHarmony = Platform.OS === 'web' && isHarmonyShell()
+      ? registerHarmonyBackHandler(() => { onCloseRef.current(); return true; })
+      : undefined;
     doc.addEventListener('keydown', onKey);
     doc.addEventListener('mousedown', onDown, true);
-    return () => { doc.removeEventListener('keydown', onKey); doc.removeEventListener('mousedown', onDown, true); };
+    return () => { unsubHarmony?.(); doc.removeEventListener('keydown', onKey); doc.removeEventListener('mousedown', onDown, true); };
   }, [visible, drawer]);
 
   // 推页(web 导出):打开时压一条 history,浏览器后退 = 关这一页;用 ‹ 关的,把那条弹掉。

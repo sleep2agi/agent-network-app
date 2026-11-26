@@ -1,3 +1,4 @@
+import { readFileSync } from 'node:fs';
 import {
   base64ToBytes,
   bytesToBase64,
@@ -15,8 +16,10 @@ import {
   hasHarmonyNotificationBridge,
   hasHarmonySaveBytesBridge,
   hasHarmonySseBridge,
+  installHarmonyBackHandlerShim,
   installHarmonyClipboardShim,
   isHarmonyShell,
+  markHarmonyRootBackHandler,
   openHarmonySseStream,
   parseHarmonyInsets,
   readHarmonyInsets,
@@ -139,13 +142,52 @@ async function run() {
   ck('readHarmonyInsets prefers updated global object on rotation', !!rotated && rotated.left === 38 && rotated.right === 24);
   ck('parseHarmonyInsets rejects out-of-range / malformed', parseHarmonyInsets({ top: -1, right: 0, bottom: 0, left: 0 }) === null && parseHarmonyInsets('not-json') === null);
 
-  // 6) Swipe-back registration
+  // 6) Swipe-back registration (LIFO screen-level handlers intercept before AppRoot fallback)
   let calls = 0;
   const unsub = registerHarmonyBackHandler(() => { calls++; return true; });
   const backFn = g.__ANET_HARMONY_BACK__ as (() => boolean) | undefined;
   ck('registerHarmonyBackHandler wires global handler', typeof backFn === 'function' && backFn() === true && calls === 1);
   unsub();
   ck('unregister clears global handler', g.__ANET_HARMONY_BACK__ === undefined);
+
+  {
+    const trace: string[] = [];
+    const fakeBack = {
+      addEventListener: (_ev: string, _fn: () => boolean) => ({ remove: () => {} }),
+    };
+    installHarmonyBackHandlerShim(fakeBack);
+    const rootSub = fakeBack.addEventListener('hardwareBackPress', markHarmonyRootBackHandler(() => {
+      trace.push('root');
+      return true;
+    }));
+    const screenSub = fakeBack.addEventListener('hardwareBackPress', () => {
+      trace.push('screen');
+      return true;
+    });
+    // Even if AppRoot re-registers after a screen mounts, screen handler still intercepts first!
+    rootSub.remove();
+    const rootSub2 = fakeBack.addEventListener('hardwareBackPress', markHarmonyRootBackHandler(() => {
+      trace.push('root2');
+      return true;
+    }));
+    const runBack = g.__ANET_HARMONY_BACK__ as (() => boolean) | undefined;
+    const hitScreen = !!runBack?.();
+    screenSub.remove();
+    const hitRoot = !!runBack?.();
+    rootSub2.remove();
+    ck('Harmony BackHandler shim runs screen-level handlers before AppRoot fallback (even after root re-register)',
+      hitScreen && hitRoot && trace.join(',') === 'screen,root2' && g.__ANET_HARMONY_BACK__ === undefined);
+  }
+
+  // Origin isolation check on Index.ets (Codex P1 finding)
+  {
+    const indexEts = readFileSync(new URL('../harmony/entry/src/main/ets/pages/Index.ets', import.meta.url), 'utf8');
+    ck('Index.ets restricts javaScriptProxy to https://anet.local and guards main-frame navigation via onLoadIntercept',
+      indexEts.includes('javascriptProxyPermission')
+      && indexEts.includes('"host":"anet.local"')
+      && indexEts.includes('.onLoadIntercept(')
+      && indexEts.includes('req.isMainFrame()'));
+  }
 
   // 7) ArkWeb asyncMethodList callback bridge (httpFetchAsync + HTTP/2 pseudo-header filtering)
   const asyncReqIds: string[] = [];

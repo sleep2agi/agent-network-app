@@ -7,7 +7,7 @@ import { AttachmentFile, downloadAttachment } from './AuthedThumb';
 import { saveObjectUrlOriginal } from './AuthedWebThumb';
 import { appFetch } from './app-fetch';
 import { displayDownloadPath } from './desktop-download';
-import { harmonyDownloadFile, hasHarmonyFileBridge } from './harmony-bridge';
+import { harmonyDownloadFile, hasHarmonyFileBridge, isHarmonyShell, registerHarmonyBackHandler } from './harmony-bridge';
 import { downloadImageObjectUrl } from './web-image-download';
 import { radius } from './theme';
 import {
@@ -96,6 +96,10 @@ export default function ImageViewer({ state, onClose, serverUrl, token }: {
   useEffect(() => {
     setSaveNote(null);
   }, [index, state]);
+  useEffect(() => {
+    if (!state || Platform.OS !== 'web' || !isHarmonyShell()) return;
+    return registerHarmonyBackHandler(() => { live.current.onClose(); return true; });
+  }, [!!state]);
 
   // Latest values for the (once-created) responder.
   const live = useRef({ index, count, viewport, onClose });

@@ -575,13 +575,80 @@ export function readHarmonyInsets(): SimInsets | null {
   return null;
 }
 
-// ── Swipe-back delegation ──
+// ── Swipe-back delegation (LIFO screen-level stack → AppRoot fallback) ──
 
-export function registerHarmonyBackHandler(handler: () => boolean): () => void {
-  if (typeof globalThis === 'undefined') return () => {};
+export type HarmonyBackHandler = () => boolean | null | undefined;
+
+const harmonyScreenBackHandlers: Array<HarmonyBackHandler> = [];
+const harmonyRootBackHandlers: Array<HarmonyBackHandler> = [];
+const harmonyRootTagged = new WeakSet<HarmonyBackHandler>();
+
+function dispatchHarmonyBack(): boolean {
+  for (let i = harmonyScreenBackHandlers.length - 1; i >= 0; i--) {
+    try {
+      if (harmonyScreenBackHandlers[i]()) return true;
+    } catch {
+      // continue to next handler
+    }
+  }
+  for (let i = harmonyRootBackHandlers.length - 1; i >= 0; i--) {
+    try {
+      if (harmonyRootBackHandlers[i]()) return true;
+    } catch {
+      // continue to next handler
+    }
+  }
+  return false;
+}
+
+function syncHarmonyBackGlobal(): void {
+  if (typeof globalThis === 'undefined') return;
   const g = harmonyGlobal();
-  g.__ANET_HARMONY_BACK__ = handler;
+  if (harmonyScreenBackHandlers.length > 0 || harmonyRootBackHandlers.length > 0) {
+    g.__ANET_HARMONY_BACK__ = dispatchHarmonyBack;
+  } else if (g.__ANET_HARMONY_BACK__ === dispatchHarmonyBack) {
+    delete g.__ANET_HARMONY_BACK__;
+  }
+}
+
+/** Tag AppRoot's fallback back handler so screen-level handlers always intercept first. */
+export function markHarmonyRootBackHandler<T extends HarmonyBackHandler>(handler: T): T {
+  harmonyRootTagged.add(handler);
+  return handler;
+}
+
+export function registerHarmonyBackHandler(handler: HarmonyBackHandler, opts?: { root?: boolean }): () => void {
+  if (typeof globalThis === 'undefined') return () => {};
+  const list = (opts?.root || harmonyRootTagged.has(handler)) ? harmonyRootBackHandlers : harmonyScreenBackHandlers;
+  list.push(handler);
+  syncHarmonyBackGlobal();
+  let removed = false;
   return () => {
-    if (g.__ANET_HARMONY_BACK__ === handler) delete g.__ANET_HARMONY_BACK__;
+    if (removed) return;
+    removed = true;
+    const idx = list.lastIndexOf(handler);
+    if (idx >= 0) list.splice(idx, 1);
+    syncHarmonyBackGlobal();
   };
+}
+
+let backHandlerShimInstalled = false;
+export function installHarmonyBackHandlerShim(backHandler: {
+  addEventListener?: (eventName: 'hardwareBackPress', handler: HarmonyBackHandler) => { remove: () => void };
+}): void {
+  if (backHandlerShimInstalled || !isHarmonyShell()) return;
+  if (!backHandler || typeof backHandler.addEventListener !== 'function') return;
+  const orig = backHandler.addEventListener.bind(backHandler);
+  try {
+    backHandler.addEventListener = (eventName: 'hardwareBackPress', handler: HarmonyBackHandler) => {
+      if (eventName === 'hardwareBackPress' && typeof handler === 'function') {
+        const unsub = registerHarmonyBackHandler(handler);
+        return { remove: unsub };
+      }
+      return orig(eventName, handler);
+    };
+    backHandlerShimInstalled = true;
+  } catch {
+    // Non-writable BackHandler; callers using registerHarmonyBackHandler still work
+  }
 }

@@ -7,6 +7,7 @@ import TaskExecutionNotice from './TaskExecutionNotice';
 import { taskExecutionState } from './task-execution';
 import ModalKeyboardAvoider from './ModalKeyboardAvoider';
 import { PanResponder, ActivityIndicator, Alert, BackHandler, FlatList, Image, Keyboard, KeyboardAvoidingView, Modal, Platform, Pressable, ScrollView, StatusBar, StyleSheet, useWindowDimensions, View } from 'react-native';
+import { isHarmonyShell, registerHarmonyBackHandler } from './harmony-bridge';
 import { Text, TextInput } from './ui-text';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { layoutOs, useModalSafePadding } from './safe-area-runtime';
@@ -682,6 +683,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     if (!plusMenuOpen || desktop || Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => plusEvent('back'));
     return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [plusMenuOpen, desktop]);
+  useEffect(() => {
+    if (!plusMenuOpen || desktop || Platform.OS !== 'web' || !isHarmonyShell()) return;
+    return registerHarmonyBackHandler(() => plusEvent('back'));
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [plusMenuOpen, desktop]);
   // Switching conversation (two-pane sidebar) never carries an open panel over.
@@ -1473,6 +1479,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     if (!searchOpen || Platform.OS !== 'android') return;
     const sub = BackHandler.addEventListener('hardwareBackPress', () => { closeSearch(); return true; });
     return () => sub.remove();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchOpen]);
+  useEffect(() => {
+    if (!searchOpen || Platform.OS !== 'web' || !isHarmonyShell()) return;
+    return registerHarmonyBackHandler(() => { closeSearch(); return true; });
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [searchOpen]);
   // 桌面 Ctrl/⌘+F:直接打开「查找聊天内容」(已开就把光标放回搜索框)。登记在 设置 → 快捷键
