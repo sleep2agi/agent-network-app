@@ -1,11 +1,13 @@
 // 关于页(管理员 2026-11-14「感觉这个页面也很难看」重排)的纯逻辑。
 // 平台名:桌面端是 Tauri 包着的 react-native-web,Platform.OS 恒为 'web' —— 以前 Mac 上关于页写「v0.2.533 · Web」,
 // 截图报问题时看不出是哪个端。Tauri 下按 UA 认 macOS / Windows / Linux;真浏览器仍是 Web。
-export function aboutPlatformLabel(os: string, tauri: boolean, userAgent = ''): string {
+export function aboutPlatformLabel(os: string, tauri: boolean, userAgent = '', harmony = false): string {
   if (os === 'ios') return 'iOS';
   if (os === 'android') return 'Android';
   if (os !== 'web') return os;
+  if (harmony || /\bANetHarmony\b/i.test(userAgent)) return 'HarmonyOS';
   if (/\bAndroid\b/i.test(userAgent)) return 'Android Web';
+  if (/OpenHarmony|HarmonyOS/i.test(userAgent)) return 'HarmonyOS Web';
   if (!tauri) return 'Web';
   if (/Mac OS X|Macintosh/i.test(userAgent)) return 'macOS';
   if (/Windows/i.test(userAgent)) return 'Windows';
