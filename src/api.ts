@@ -83,7 +83,9 @@ export interface Session extends TurnCapabilityReport {
 
 export interface HubTask {
   task_id?: string;
+  from_node_id?: string | null;
   from_name?: string;
+  to_node_id?: string | null;
   to_name?: string;
   content?: string;
   /** Agent replies live in `result` on the hub's task rows. */

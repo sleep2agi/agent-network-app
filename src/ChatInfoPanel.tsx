@@ -51,6 +51,7 @@ export default function ChatInfoPanel({
     name: string;
     details: string[];
     message?: { label: string; onPress: () => void };
+    retry?: { label: string; onPress: () => void };
   };
 }) {
   const safe = useModalSafePadding('fullScreen');
@@ -120,8 +121,22 @@ export default function ChatInfoPanel({
                 style={({ pressed }) => [styles.row, pressed && styles.pressed]}
                 testID="chat-sender-message"
               >
-                <Text style={styles.label}>{identity.message.label}</Text>
+                <Ionicons name="chatbubble-ellipses-outline" size={18} color={colors.accent} />
+                <Text style={[styles.label, styles.accentLabel]}>{identity.message.label}</Text>
                 <Ionicons name="chevron-forward" size={18} color={colors.textMuted} />
+              </Pressable>
+            </View>
+          ) : identity.retry ? (
+            <View style={styles.group}>
+              <Pressable
+                accessibilityRole="button"
+                accessibilityLabel={identity.retry.label}
+                onPress={identity.retry.onPress}
+                style={({ pressed }) => [styles.row, pressed && styles.pressed]}
+                testID="chat-sender-retry"
+              >
+                <Ionicons name="refresh-outline" size={18} color={colors.accent} />
+                <Text style={[styles.label, styles.accentLabel]}>{identity.retry.label}</Text>
               </Pressable>
             </View>
           ) : null}
@@ -283,6 +298,7 @@ const makeStyles = () => StyleSheet.create({
   // Inset like WeChat: the line starts where the labels start.
   divider: { height: StyleSheet.hairlineWidth, backgroundColor: colors.border, marginLeft: spacing.lg },
   label: { flex: 1, color: colors.text, fontSize: 16 },
+  accentLabel: { color: colors.accent, fontWeight: '600' },
   profileRow: { paddingVertical: spacing.md },
   profileText: { flex: 1, minWidth: 0 },
   profileName: { color: colors.text, fontSize: 17, fontWeight: '600' },

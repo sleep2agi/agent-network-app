@@ -879,6 +879,7 @@ function AppRoot() {
           <ChatScreen
             cfg={cfg}
             alias={detachedAlias}
+            networkId={screen.networkId}
             daemonMgmt={screen.daemonMgmt}
             onBack={() => {}}
             onOpenNodeSettings={() => setScreen({ name: 'nodeInfo', alias: detachedAlias, daemonMgmt: screen.daemonMgmt })}
@@ -1096,11 +1097,11 @@ function AppRoot() {
                     ) : screen.name === 'dm' && cfg.networkId ? (
                       <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} hideBack />
                     ) : screen.name === 'group' && cfg.networkId ? (
-                      <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} hideBack />
+                      <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenSenderDm={p => setScreen(dmScreenFor(p))} hideBack />
                     ) : screen.name === 'nodeInfo' ? (
                       <NodeDetailScreen key={`nodeInfo:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
                     ) : screen.name === 'nodeDetail' ? (
-                      <NodeDetailScreen key={`nodeDetail:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+                      <NodeDetailScreen key={`nodeDetail:${screen.alias}`} cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} layoutWidth={paneAreaWidth - paneListWidth} touch onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} onOpenChat={(a, net) => setScreen({ name: 'chat', alias: a, networkId: net })} />
                     ) : (
                       <View style={styles.twoPaneEmpty}>
                         <Ionicons name="chatbubbles-outline" size={52} color={colors.textMuted} />
@@ -1136,7 +1137,7 @@ function AppRoot() {
                 <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} />
               ) : screen.name === 'group' && cfg.networkId ? (
                 // 手机:微信式推入的整页群聊,左上角返回会话列表。
-                <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} />
+                <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenSenderDm={p => setScreen(dmScreenFor(p))} />
               ) : screen.name === 'nodeInfo' ? (
                 <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
               ) : screen.name === 'nodeDetail' ? (
@@ -1148,6 +1149,7 @@ function AppRoot() {
                   alias={screen.alias}
                   onBack={() => setScreen({ name: 'agents' })}
                   onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })}
+                  onOpenChat={(a, net) => setScreen({ name: 'chat', alias: a, networkId: net })}
                 />
               ) : screen.name === 'picker' ? (
                 // #338 RFC-026 §9.4 — modal-style screen, hides tab bar to keep
@@ -1178,6 +1180,7 @@ function AppRoot() {
                   cfg={cfg}
                   taskId={screen.taskId}
                   onBack={() => setScreen({ name: 'tasks' })}
+                  onOpenChat={alias => setScreen({ name: 'chat', alias })}
                 />
               ) : screen.name === 'logs' ? (
                 // Row 6 — network event stream (SSE). Full-screen leaf reached
@@ -1200,7 +1203,7 @@ function AppRoot() {
                   ) : screen.name === 'scheduled' ? (
                     <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
                   ) : screen.name === 'org' ? (
-                    <OrgWorkspace cfg={cfg} phone onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+                    <OrgWorkspace cfg={cfg} phone onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} onOpenAgentChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })} />
                   ) : screen.name === 'messages' ? (
                     <MessagesScreen cfg={cfg} />
                   ) : screen.name === 'server' ? (
@@ -1470,7 +1473,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
     <DmChatScreen key={`dm:${screen.userId}`} cfg={cfg} networkId={cfg.networkId} peer={dmPeerOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenTask={id => openTaskNotice(id, cfg, setScreen)} desktop />
   ) : screen.name === 'group' && cfg.networkId ? (
     // 桌面:左边会话列表里点群,右边面板就是群聊(和私信同一个面板,没有返回键)。
-    <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} desktop />
+    <DmChatScreen key={`group:${screen.alias}`} cfg={cfg} networkId={cfg.networkId} group={groupRefOf(screen)} onBack={() => setScreen({ name: 'agents' })} onOpenSenderDm={p => setScreen(dmScreenFor(p))} desktop />
   ) : screen.name === 'tasks' ? (
     <TasksScreen cfg={cfg} desktop onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} onOpenVoiceSettings={() => { rememberSettingsCategory('voice'); void openSettingsWindow('voice').then(opened => { if (!opened) setScreen({ name: 'settings' }); }); }} />
   ) : screen.name === 'scheduled' ? <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
@@ -1491,10 +1494,10 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'serverPending' ? <HubPendingScreen cfg={cfg} tab={screen.tab} />
   : screen.name === 'serverDaemon' ? <HubDaemonEntryScreen cfg={cfg} desktop onBack={() => setScreen({ name: 'server' })} onOpenDaemon={alias => setScreen(openDaemonFromHub(alias))} />
   : screen.name === 'serverNodes' ? <AgentsScreen cfg={cfg} filter={screen.filter} onOpenChat={alias => setScreen({ name: 'serverNodeDetail', alias })} onOpenPicker={() => setScreen({ name: 'picker' })} onOpenNodeDetail={alias => setScreen({ name: 'serverNodeDetail', alias })} />
-  : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+  : screen.name === 'serverNodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'serverNodes' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} onOpenChat={(a, net) => setScreen({ name: 'chat', alias: a, networkId: net })} />
   : screen.name === 'settings' ? <SettingsScreen cfg={cfg} onLogout={onLogout} onLocalDataDeleted={onLocalDataDeleted} onAddAccount={onAddAccount} onSwitchProfile={onSwitchProfile} onReauthProfile={onReauthProfile} onProfileEdited={onProfileEdited} />
-  : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} desktop />
-  : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+  : screen.name === 'taskDetail' ? <TaskDetailScreen cfg={cfg} taskId={screen.taskId} onBack={() => setScreen({ name: 'tasks' })} desktop onOpenChat={alias => setScreen({ name: 'chat', alias })} />
+  : screen.name === 'nodeDetail' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen({ name: 'agents' })} desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} onOpenChat={(a, net) => setScreen({ name: 'chat', alias: a, networkId: net })} />
   : screen.name === 'nodeInfo' ? <NodeDetailScreen cfg={cfg} alias={screen.alias} onBack={() => setScreen(chatBackFromNodeInfo(screen))} readOnly desktop onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
   : screen.name === 'logs' ? <LogsScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} onOpenTask={taskId => setScreen({ name: 'taskDetail', taskId })} desktop />
   : screen.name === 'picker' ? <HostSupervisorPickerScreen cfg={cfg} onBack={() => setScreen({ name: 'server' })} onPicked={d => setScreen({ name: 'wizard', daemon: d })} desktop />
@@ -1503,7 +1506,7 @@ function DesktopWorkspace({ cfg, screen, setScreen, onLogout, onLocalDataDeleted
   : screen.name === 'hubEnv' ? <HubSecretsPane cfg={cfg} onOpenTokens={() => setScreen({ name: 'hubTokens' })} />
   : screen.name === 'hubProviders' ? <HubProviderManagementScreen cfg={cfg} />
   : screen.name === 'hubTokens' ? <HubTokenManagementScreen cfg={cfg} />
-  : screen.name === 'org' ? <OrgWorkspace cfg={cfg} onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} />
+  : screen.name === 'org' ? <OrgWorkspace cfg={cfg} onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} onOpenAgentChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })} />
   : hubSectionForScreen(screen.name) ? <HubScopeScreen key={screen.name} section={hubSectionForScreen(screen.name)!} />
   : (
     <View style={desktopStyles.empty}>

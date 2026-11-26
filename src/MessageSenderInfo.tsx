@@ -5,6 +5,7 @@ import ChatInfoPanel from './ChatInfoPanel';
 import { fetchMessageAvatarData } from './message-avatar-data';
 import { messageAvatarTarget, type MessageAvatarTarget } from './message-avatar-target';
 import type { ChatInfoPresentation } from './chat-info-model';
+import { fetchAuthMe } from './user-admin-api';
 import { useTranslation } from './i18n-react';
 import './i18n-users';
 
@@ -25,14 +26,23 @@ export default function MessageSenderInfo({ cfg, networkId, author, currentAlias
   const [loaded, setLoaded] = useState<Loaded | null>(null);
   const { t } = useTranslation();
   const [failed, setFailed] = useState(false);
+  const [retryTick, setRetryTick] = useState(0);
   useEffect(() => {
     let active = true;
     setLoaded(null);
     setFailed(false);
-    void fetchMessageAvatarData(cfg, networkId).then(data => {
-      const nodes = data.nodes.filter(n => n.node_id && n.alias).map(n => ({ networkId, nodeId: n.node_id, alias: n.alias }));
-      const users = data.members.map(u => ({ networkId, userId: u.user_id, username: u.username }));
-      const target = messageAvatarTarget({ networkId, author, nodes, users });
+    void (async () => {
+      let effectiveNetworkId = networkId.trim();
+      if (!effectiveNetworkId) {
+        const me = await fetchAuthMe(cfg).catch(() => null);
+        effectiveNetworkId = ((me as { current_network?: string | null } | null)?.current_network || me?.networks?.[0]?.network_id || '').trim();
+      }
+      return fetchMessageAvatarData(cfg, effectiveNetworkId);
+    })().then(data => {
+      const resolvedNet = data.networkId;
+      const nodes = data.nodes.filter(n => n.node_id && n.alias).map(n => ({ networkId: resolvedNet, nodeId: n.node_id, alias: n.alias }));
+      const users = data.members.map(u => ({ networkId: resolvedNet, userId: u.user_id, username: u.username }));
+      const target = messageAvatarTarget({ networkId: resolvedNet, author, nodes, users });
       if (!active) return;
       if (target.kind === 'unresolved') { setFailed(true); return; }
       const member = target.kind === 'user' ? data.members.find(u => u.user_id === target.userId) : undefined;
@@ -48,11 +58,14 @@ export default function MessageSenderInfo({ cfg, networkId, author, currentAlias
       setLoaded({ target, name, details });
     }).catch(() => { if (active) setFailed(true); });
     return () => { active = false; };
-  }, [cfg.serverUrl, cfg.token, cfg.profileId, networkId, author.nodeId, author.userId, author.label, t]);
+  }, [cfg.serverUrl, cfg.token, cfg.profileId, networkId, author.nodeId, author.userId, author.label, retryTick, t]);
 
   const target = loaded?.target;
   const message = target?.kind === 'node' && target.alias !== currentAlias && onMessage
     ? { label: t('chat.sender.message'), onPress: () => { onClose(); onMessage({ alias: target.alias, networkId: target.networkId }); } }
+    : undefined;
+  const retry = failed
+    ? { label: t('chat.modelPicker.retry'), onPress: () => setRetryTick(n => n + 1) }
     : undefined;
   const name = loaded?.name || author.label || t('chat.sender.title');
   // Avatar lookup is keyed by alias/username, not the mutable display name.
@@ -62,6 +75,6 @@ export default function MessageSenderInfo({ cfg, networkId, author, currentAlias
     visible presentation={presentation} groups={[]} alias={name}
     paneWidth={paneWidth} headerHeight={headerHeight} onClose={onClose} onRow={() => {}}
     identity={{ avatar: <AliasAvatar alias={avatarAlias} size={48} />, name,
-      details: loaded?.details || [t(failed ? 'chat.sender.unavailable' : 'chat.sender.loading')], message }}
+      details: loaded?.details || [t(failed ? 'chat.sender.unavailable' : 'chat.sender.loading')], message, retry }}
   />;
 }

@@ -383,9 +383,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // i18n-allow: legacy sender fallback participates in quote/forward identity, not translatable UI.
   const [currentUsername, setCurrentUsername] = useState('我');
   const [currentUserId, setCurrentUserId] = useState<string | undefined>();
+  // 旧登录档案缺 cfg.networkId（或从推送通知无 networkId 进入会话）时，用 /api/auth/me 补齐，
+  // 避免消息头像身份卡 / 部门选择器直接拿空字符串报错「无法确认发送方身份」。
+  const [fallbackNetworkId, setFallbackNetworkId] = useState<string | undefined>();
   const [senderProfile, setSenderProfile] = useState<{ nodeId?: string; userId?: string; label?: string } | null>(null);
   useEffect(() => { setSenderProfile(null); }, [alias, cfg.networkId, cfg.serverUrl, cfg.profileId, cfg.token]);
-  useEffect(() => { setCurrentUserId(undefined); }, [cfg.serverUrl, cfg.profileId, cfg.token]);
+  useEffect(() => { setCurrentUserId(undefined); setFallbackNetworkId(undefined); }, [cfg.serverUrl, cfg.profileId, cfg.token]);
   const [loaded, setLoaded] = useState(false);
   // admin 2026-11-20 截图：会话打开后骨架一直不消（首屏读没回来，poll 在非前台时根本不跑）。
   // 8 秒还没 loaded 就给一个可点的重试，不再干等。
@@ -878,6 +881,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           const username = data?.user?.username;
           if (!alive) return;
           setCurrentUserId(data?.user?.user_id);
+          const resolvedNet = (data as { current_network?: string | null } | null)?.current_network || data?.networks?.[0]?.network_id || undefined;
+          if (resolvedNet) setFallbackNetworkId(resolvedNet);
           if (typeof username === 'string' && username.trim()) { setCurrentUsername(username.trim()); return; }
           schedule();
         })
@@ -3860,14 +3865,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         onRow={onInfoRow}
       />
       {senderProfile ? <MessageSenderInfo
-        cfg={cfg} networkId={cfg.networkId ?? ''} author={senderProfile} currentAlias={alias}
+        cfg={cfg} networkId={cfg.networkId || controlSession?.network_id || fallbackNetworkId || ''} author={senderProfile} currentAlias={alias}
         presentation={chatInfoPresentation({ desktop, hideBack })} paneWidth={paneWidth} headerHeight={headerHeight}
         onClose={() => setSenderProfile(null)} onMessage={onOpenSenderChat}
       /> : null}
       {deptPickerOpen && deptInfo ? (
         <NodeDepartmentPicker
           cfg={cfg}
-          networkId={cfg.networkId ?? ''}
+          networkId={cfg.networkId || controlSession?.network_id || fallbackNetworkId || ''}
           nodeId={deptInfo.nodeId}
           org={deptInfo.org}
           departmentId={deptInfo.departmentId}
