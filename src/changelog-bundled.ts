@@ -5,6 +5,13 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.623:",
+  "",
+  "- 新功能：agy 模型面板升级 —— 支持搜索、按来源分组，模型更多也更好找。",
+  "- 修复：@ 提及选择器支持句中触发、更稳；点头像跳到对应聊天更可靠；组织页「运行中」计数与实际一致；去掉头像下方重复的模型行；按住说话时转写直接插入输入框草稿；推理档位按钮只在支持的节点上显示。",
+  "- 修复：更新页与更新日志不再出现裸井号小标题，统一归入「新功能 / 说明」分组。",
+  "- 说明：以上都是界面层改动，安装即生效，不需要重启服务端。",
+  "",
   "What's new in 0.2.622:",
   "### 新功能与修复",
   "",
