@@ -2586,20 +2586,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     }
   }, [sessionStatus, interrupt.phase]);
 
+  const [nodeRuntimeMeta, setNodeRuntimeMeta] = useState<{ runtime: string | null; generation: string | null }>({ runtime: null, generation: null });
+
   // 全量行:能力位很少变,不跟 30s 轮询(全量投影比 light 大一个量级)。失败就保留上一次 / 退回 light。
   // 换了聊天对象先清掉,别让上一个 agent 的能力位挂在这一个的聊天信息里。
   useEffect(() => { setFullCaps(null); setControlSession(null); }, [cfg, alias]);
   // #4591 真机回访：停止的「未确认」提示是**这个会话**的状态，切到别的节点必须清掉，
   // 否则上一次的提示会挂在另一个节点的聊天框上（用户会以为这个节点也没停）。
   const [nodeDescription, setNodeDescription] = useState<string>('');
-  const [nodeRuntimeMeta, setNodeRuntimeMeta] = useState<{ runtime: string | null; generation: string | null }>({ runtime: null, generation: null });
-  const controlFlagGen = controlSession?.config_snapshot?.flags?.opencodeGeneration;
-  const showVariantControl = composerShowsVariantControl({
-    runtime: nodeRuntimeMeta.runtime ?? reportedValue?.runtime ?? controlSession?.runtime,
-    agent: controlSession?.agent,
-    generation: nodeRuntimeMeta.generation ?? controlSession?.opencode_generation ?? (typeof controlFlagGen === 'string' ? controlFlagGen : null),
-    variant: footerVariant,
-  });
   useEffect(() => {
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     interruptSeenRef.current = new Set();
@@ -2610,6 +2604,13 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     setNodeDescription('');
     setNodeRuntimeMeta({ runtime: null, generation: null });
   }, [cfg, alias]);
+  const controlFlagGen = controlSession?.config_snapshot?.flags?.opencodeGeneration;
+  const showVariantControl = composerShowsVariantControl({
+    runtime: nodeRuntimeMeta.runtime ?? reportedValue?.runtime ?? controlSession?.runtime,
+    agent: controlSession?.agent,
+    generation: nodeRuntimeMeta.generation ?? controlSession?.opencode_generation ?? (typeof controlFlagGen === 'string' ? controlFlagGen : null),
+    variant: footerVariant,
+  });
   // #5501 —— 聊天顶栏「在线 · 职责/签名」单行摘要；打开/关闭聊天信息面板时刷新，编辑完立即生效。
   useEffect(() => {
     let live = true;
