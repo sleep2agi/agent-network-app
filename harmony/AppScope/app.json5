@@ -1,0 +1,10 @@
+{
+  "app": {
+    "bundleName": "sh.anet.app",
+    "vendor": "anet",
+    "versionCode": 1000000,
+    "versionName": "0.2.621",
+    "icon": "$media:app_icon",
+    "label": "$string:app_name"
+  }
+}

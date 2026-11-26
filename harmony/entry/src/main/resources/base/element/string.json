@@ -1,0 +1,8 @@
+{
+  "string": [
+    { "name": "module_desc", "value": "ANet" },
+    { "name": "ability_desc", "value": "ANet 数字员工" },
+    { "name": "app_name", "value": "ANet" },
+    { "name": "mic_reason", "value": "按住说话时录音，转成文字发给数字员工" }
+  ]
+}
