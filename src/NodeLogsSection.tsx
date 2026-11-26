@@ -23,8 +23,8 @@ import { chooseSavePath, displayDownloadPath, isTauriDesktop, saveToDownloads } 
 import { harmonySaveBytes, hasHarmonySaveBytesBridge } from './harmony-bridge';
 import InfoTip from './InfoTip';
 import {
-  LOG_LEVEL_CHIPS, LOGS_FOLLOW_MS, LOGS_SEARCH_DEBOUNCE_MS, lineTone, logsEmptyMessage, logsEnqueueError, logsExportName, logsQuery,
-  logsStatusMessage, logsSupport, logsTarget, logsText, mergeFollow, nextSinceTs, parseLogsTail,
+  LOG_LEVEL_CHIPS, LOGS_FOLLOW_MS, LOGS_SEARCH_DEBOUNCE_MS, conciseLogText, displayLines, lineTone, logsEmptyMessage, logsEnqueueError, logsExportName, logsQuery,
+  logsStatusMessage, logsSupport, logsTarget, logsText, mergeFollow, mergeOlder, moreLinesCount, nextSinceTs, parseLogsTail,
   type LogLevelFilter, type LogLine, type LogsTail,
 } from './node-logs';
 import { isTerminal, nextPollDelayMs } from './node-rules';
@@ -34,7 +34,7 @@ import { colors, radius, spacing, type } from './theme';
 
 const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 const WEB = Platform.OS === 'web';
-const INFO = '这个节点 agent-node 进程自己写的运行日志(只读,最新的在最下面)。令牌、Bearer / Authorization、带 TOKEN / KEY / SECRET / PASSWORD 的配置值在节点上就被遮住了,不会离开节点。';
+const INFO = '这个节点 agent-node 进程自己写的运行日志(只读,最新的在最上面;先读最新的 150 行,往下翻到底点「加载更早的」再要)。「详细」打开显示每行原文和调试行。令牌、Bearer / Authorization、带 TOKEN / KEY / SECRET / PASSWORD 的配置值在节点上就被遮住了,不会离开节点。';
 
 export type NodeLogsSectionProps = {
   cfg: HubConfig; alias?: string; node?: RulesTarget | null; session: Session;
@@ -57,6 +57,9 @@ export function NodeLogsSection({ cfg, alias, node, session, pointer }: NodeLogs
 }
 
 type Phase = 'loading' | 'ready' | 'error';
+
+// 「详细」开关:同一次打开 App 里记住(关掉面板再开不用重选);简洁是默认。
+let detailedPref = false;
 type Fetched = { ok: true; tail: LogsTail } | { ok: false; message: string };
 
 /** 页面在不在前台(原生:AppState;web / 桌面:document.visibilityState)。 */
@@ -85,6 +88,9 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
   const [search, setSearch] = useState('');
   const [applied, setApplied] = useState('');
   const [follow, setFollow] = useState(false);
+  const [detailed, setDetailedState] = useState(detailedPref);
+  const setDetailed = (v: boolean) => { detailedPref = v; setDetailedState(v); };
+  const [loadingOlder, setLoadingOlder] = useState(false);
   const [phase, setPhase] = useState<Phase>('loading');
   const [message, setMessage] = useState('');
   const [lines, setLines] = useState<LogLine[]>([]);
@@ -177,14 +183,24 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
     return () => { stop = true; if (timer) clearTimeout(timer); };
   }, [follow, foreground, phase, fetchTail, level, applied]);
 
-  // 停在最下面(最新的一行):读完 / 新行进来时,只要人没往上翻就贴底;往上翻了就不打扰(跟随时除外)。
-  const pinBottom = useRef(true);
-  useEffect(() => { if (phase === 'loading') pinBottom.current = true; }, [phase]);
-  const onContentSize = () => { if (pinBottom.current || follow) scrollRef.current?.scrollToEnd?.({ animated: false }); };
-  const onScroll = (e: any) => {
-    const { contentOffset, contentSize, layoutMeasurement } = e.nativeEvent;
-    pinBottom.current = contentSize.height - (contentOffset.y + layoutMeasurement.height) < 40;
-  };
+  // 加载更早的:只在用户点的时候发(不自动拉,省 hub)。节点只回「最新的 N 行」,所以把 N 调大再要一次、只接上更早的部分。
+  const more = moreLinesCount(lines.length, meta.matched);
+  const loadOlder = useCallback(async () => {
+    const n = moreLinesCount(linesRef.current.length, metaRef.current.matched);
+    if (!n || busy.current) return;
+    busy.current = true;
+    setLoadingOlder(true);
+    const my = seq.current;
+    const r = await fetchTail(logsQuery({ level, search: applied, lines: n }));
+    busy.current = false;
+    setLoadingOlder(false);
+    if (my !== seq.current || !r) return;
+    if (!r.ok) { setMessage(r.message); return; }
+    setLines(prev => mergeOlder(prev, r.tail.lines));
+    setMeta(m => ({ ...m, matched: r.tail.matched, truncated: r.tail.truncated, nodeNow: r.tail.now_ts ?? m.nodeNow }));
+    setMessage('');
+  }, [fetchTail, level, applied]);
+  const shown = useMemo(() => displayLines(lines, detailed), [lines, detailed]);
 
   // 桌面:Ctrl/⌘+F 聚焦搜索框(只在这个分区挂着时监听)。手机没有键盘快捷键。
   useEffect(() => {
@@ -286,6 +302,7 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
   );
 
   const followBtn = <ToggleBtn label="实时跟随" on={follow} onPress={() => setFollow(f => !f)} height={chipH} pointer={pointer} testID="node-logs-follow" />;
+  const detailBtn = <ToggleBtn label="详细" on={detailed} onPress={() => setDetailed(!detailed)} height={chipH} pointer={pointer} testID="node-logs-detailed" />;
   // 手机:ⓘ 本身 22px,四周再扩 8px 触控区(≈ 38px),不靠悬停。
   const info = <InfoTip label="关于运行日志" text={INFO} hitSlop={pointer ? undefined : 8} />;
   const exportLabel = WEB ? '导出' : '分享';
@@ -295,7 +312,7 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
     <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm, zIndex: 10 }} testID="node-logs-toolbar">
       {chips}{searchBox}
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
-        {followBtn}
+        {followBtn}{detailBtn}
         <SmallBtn label="复制" onPress={copy} disabled={!lines.length} height={chipH} pointer testID="node-logs-copy" />
         <SmallBtn label={exportLabel} onPress={exportLog} disabled={!lines.length} height={chipH} pointer testID="node-logs-export" />
         <SmallBtn label="刷新" onPress={() => void reload()} height={chipH} pointer testID="node-logs-refresh" />
@@ -305,7 +322,7 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
   ) : (
     // 手机:两行 —— 筛选 + 跟随 + ⓘ(横向可滑),搜索 + 图标按钮(36×36,够手指点;没有悬停)。
     <View style={{ gap: spacing.sm, zIndex: 10 }} testID="node-logs-toolbar">
-      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', gap: spacing.sm }}>{chips}{followBtn}{info}</ScrollView>
+      <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ alignItems: 'center', gap: spacing.sm }}>{chips}{followBtn}{detailBtn}{info}</ScrollView>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.xs }}>
         {searchBox}
         <IconBtn icon="copy-outline" label="复制" onPress={copy} disabled={!lines.length} size={chipH} testID="node-logs-copy" />
@@ -328,7 +345,7 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
         <SmallBtn label="重试" onPress={() => void reload()} height={chipH} pointer={pointer} />
       </View>
     );
-    if (phase === 'ready' && !lines.length) return (
+    if (phase === 'ready' && !shown.length) return (
       <View style={{ padding: spacing.md }} testID="node-logs-empty">
         <Text style={{ color: colors.textMuted, fontSize: type.small }}>{logsEmptyMessage({ files: meta.files, level, search: applied })}</Text>
       </View>
@@ -341,24 +358,31 @@ function LogsViewer({ cfg: cfgProp, target: targetProp, alias, pointer, session 
       {toolbar}
       <View style={{ flex: 1, minHeight: 160, backgroundColor: colors.card, borderRadius: radius.lg, overflow: 'hidden' }} testID="node-logs-viewer">
         {status ?? (
-          <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md }} onContentSizeChange={onContentSize} onScroll={onScroll} scrollEventThrottle={100} testID="node-logs-scroll">
-            {/* 一整块可选文本:桌面拖选跨行、复制保留换行;每行按级别上色(错误红、警告琥珀)。 */}
+          <ScrollView ref={scrollRef} style={{ flex: 1 }} contentContainerStyle={{ padding: spacing.md, gap: spacing.sm }} scrollEventThrottle={100} testID="node-logs-scroll">
+            {/* 最新的在最上面。一整块可选文本:桌面拖选跨行、复制保留换行;每行按级别上色(错误红、警告琥珀)。
+                简洁:去掉「[INFO ] [节点名]」前缀、只留第一行、过长截断;详细:原文。复制 / 导出永远是原文。 */}
             <Text selectable={pointer || WEB} testID="node-logs-text" style={{ fontFamily: MONO, fontSize: 12, lineHeight: 18, color: colors.text }}>
-              {lines.map((l, i) => {
+              {shown.map((l, i) => {
                 const tone = lineTone(l.level);
                 return (
                   <Text key={l.key} style={tone === 'error' ? { color: colors.failed } : tone === 'warn' ? { color: colors.blocked } : undefined}>
-                    {l.text}{i < lines.length - 1 ? '\n' : ''}
+                    {detailed ? l.text : conciseLogText(l.text)}{i < shown.length - 1 ? '\n' : ''}
                   </Text>
                 );
               })}
             </Text>
+            {more ? (
+              <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm }}>
+                <SmallBtn label={loadingOlder ? '正在加载…' : '加载更早的'} onPress={() => void loadOlder()} disabled={loadingOlder} height={chipH} pointer={pointer} testID="node-logs-older" />
+                {loadingOlder ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}
+              </View>
+            ) : null}
           </ScrollView>
         )}
       </View>
       <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, minHeight: 18 }}>
         <Text style={{ color: colors.textMuted, fontSize: type.caption }} testID="node-logs-footer">
-          {lines.length ? `${lines.length} 行${meta.matched > lines.length ? ` · 只显示最新的 ${lines.length} 行(共 ${meta.matched} 行匹配)` : ''}` : ''}
+          {lines.length ? `${lines.length} 行${meta.matched > lines.length ? ` · 还有更早的 ${meta.matched - lines.length} 行` : ''}${!detailed && shown.length < lines.length ? ` · 简洁模式藏了 ${lines.length - shown.length} 行调试` : ''}` : ''}
           {follow ? `${lines.length ? ' · ' : ''}实时跟随中，每 ${LOGS_FOLLOW_MS / 1000} 秒刷新` : ''}
         </Text>
         {phase === 'loading' && lines.length ? <ActivityIndicator size="small" color={colors.textMuted} /> : null}

@@ -5,6 +5,7 @@ import {
   LOG_LEVEL_CHIPS, LOGS_GREP_MAX, LOGS_KEEP_MAX, LOGS_LINES, LOGS_OLD_HUB_MESSAGE, LOGS_OLD_NODE_MESSAGE,
   lineTone, logFileBase, logsEmptyMessage, logsEnqueueError, logsExportName, logsQuery, logsStatusMessage, logsSupport, logsTarget,
   logsText, mergeFollow, nextSinceTs, normalizeLogKey, parseLogsTail, type LogLine,
+  LOGS_FOLLOW_MS, LOGS_MORE_STEP, LOGS_NODE_MAX, LOGS_CONCISE_MAX, conciseLogText, displayLines, mergeOlder, moreLinesCount,
 } from './node-logs';
 import { FIXED_SHORTCUTS } from './shortcuts-model';
 
@@ -33,12 +34,39 @@ const L = (key: string, text: string, ts: number | null = 1, level: LogLine['lev
 
 // ── 请求参数 ──
 {
-  ck('默认:500 行,不带 level / grep / since', JSON.stringify(logsQuery({ level: 'all', search: '' })) === JSON.stringify({ lines: LOGS_LINES }));
-  ck('级别 + 搜索(去首尾空白)+ since', JSON.stringify(logsQuery({ level: 'error', search: '  boom ', sinceTs: 5 })) === JSON.stringify({ lines: 500, level: 'error', grep: 'boom', since_ts: 5 }));
+  ck('默认:150 行(先读最新的一小段),不带 level / grep / since', JSON.stringify(logsQuery({ level: 'all', search: '' })) === JSON.stringify({ lines: LOGS_LINES }));
+  ck('级别 + 搜索(去首尾空白)+ since', JSON.stringify(logsQuery({ level: 'error', search: '  boom ', sinceTs: 5 })) === JSON.stringify({ lines: LOGS_LINES, level: 'error', grep: 'boom', since_ts: 5 }));
   ck('搜索词截到 200', logsQuery({ level: 'all', search: 'x'.repeat(500) }).grep!.length === LOGS_GREP_MAX);
   ck('since 为 null / 0 不带', !('since_ts' in logsQuery({ level: 'all', search: '', sinceTs: null })) && !('since_ts' in logsQuery({ level: 'all', search: '', sinceTs: 0 })));
   ck('请求参数里没有任何路径字段', !/path|file|dir/i.test(Object.keys(logsQuery({ level: 'warn', search: 'a', sinceTs: 1 })).join(',')));
   ck('筛选标签:全部 / 信息 / 警告 / 错误', LOG_LEVEL_CHIPS.map(c => c.label).join('/') === '全部/信息/警告/错误' && LOG_LEVEL_CHIPS.map(c => c.key).join() === 'all,info,warn,error');
+}
+
+// ── admin 2026-11-26:最新的在最上面、可切详细、少占 hub ──
+{
+  ck('打开先要 150 行;实时跟随 5 秒一轮', LOGS_LINES === 150 && LOGS_FOLLOW_MS === 5000);
+  ck('加载更早的:每次多 300 行', moreLinesCount(150, 1000) === 150 + LOGS_MORE_STEP);
+  ck('加载更早的:不超过节点上限 2000', moreLinesCount(1900, 5000) === LOGS_NODE_MAX);
+  ck('加载更早的:已经是全部 / 到上限 ⇒ 不显示按钮', moreLinesCount(150, 150) === null && moreLinesCount(80, 40) === null && moreLinesCount(2000, 9000) === null);
+
+  const old = [L('f:30', 'c', 3), L('f:40', 'd', 4)];
+  const inc = [L('f:10', 'a', 1), L('f:20', 'b', 2), L('f:30', 'c', 3), L('f:40', 'd', 4), L('f:50', 'e', 5)];
+  ck('mergeOlder:只把手里最早一行之前的接到前面,新写的不插进来', mergeOlder(old, inc).map(l => l.key).join() === 'f:10,f:20,f:30,f:40');
+  ck('mergeOlder:对不上(日志轮转)⇒ 换成新读的', mergeOlder(old, [L('g:1', 'x')]).map(l => l.key).join() === 'g:1');
+  ck('mergeOlder:没有更早的 ⇒ 原数组不变(不重渲染)', mergeOlder(old, old) === old);
+  ck('mergeOlder:手里没有行 ⇒ 用新读的', mergeOlder([], inc).length === 5);
+
+  const ls = [L('f:1', 'one', 1, 'info'), L('f:2', 'dbg', 2, 'debug'), L('f:3', 'three', 3, 'warn')];
+  ck('displayLines:最新的在最上面', displayLines(ls, true).map(l => l.key).join() === 'f:3,f:2,f:1');
+  ck('displayLines:简洁模式藏调试行', displayLines(ls, false).map(l => l.key).join() === 'f:3,f:1');
+  ck('displayLines:不改原数组(复制 / 导出仍是时间顺序)', ls.map(l => l.key).join() === 'f:1,f:2,f:3');
+
+  ck('简洁:去掉级别和节点名前缀', conciseLogText('[14:12:31] [INFO ] [神小马] 已注册到 CommHub') === '14:12:31 已注册到 CommHub');
+  ck('简洁:WARN / ERROR 前缀同样去掉', conciseLogText('[09:01:02] [ERROR] [a-b] boom') === '09:01:02 boom' && conciseLogText('[09:01:02] [WARN ] [x] w') === '09:01:02 w');
+  ck('简洁:认不出的格式原样', conciseLogText('plain line') === 'plain line');
+  ck('简洁:多行只留第一行并标 …', conciseLogText('[01:02:03] [INFO ] [n] head\nmore\nmore') === '01:02:03 head …');
+  const long = conciseLogText('[01:02:03] [INFO ] [n] ' + 'x'.repeat(500));
+  ck('简洁:过长截断到 200 字、以 … 结尾', long.length === LOGS_CONCISE_MAX && long.endsWith('…'));
 }
 
 // ── 解析:POSIX 化、CRLF → LF、坏行丢掉 ──

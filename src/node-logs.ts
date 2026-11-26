@@ -31,11 +31,18 @@ export interface LogsTail {
   now_ts: number | null;
 }
 
-/** 一次要多少行(节点上限 2000)。 */
-export const LOGS_LINES = 500;
+/** 打开时先要多少行(admin 2026-11-26「从最新的往前拉，不要占太多 Hub 资源」:原来一进来就要 500 行)。 */
+export const LOGS_LINES = 150;
+/** 点「加载更早的」每次多要这么多行。 */
+export const LOGS_MORE_STEP = 300;
+/** 节点一次最多回这么多行(agent-node tail_node_logs 的上限)。 */
+export const LOGS_NODE_MAX = 2000;
 /** 实时跟随时内存里最多留这么多行,再多就丢最早的。 */
 export const LOGS_KEEP_MAX = 2000;
-export const LOGS_FOLLOW_MS = 3_000;
+/** 实时跟随每一轮 = 一个 hub 请求 + 一次节点读盘;3 s → 5 s 省 40% 的往返,日志面板看着照样是「实时」。 */
+export const LOGS_FOLLOW_MS = 5_000;
+/** 简洁模式下一行最多显示这么多字,超出用「…」(复制 / 导出永远是原文)。 */
+export const LOGS_CONCISE_MAX = 200;
 export const LOGS_GREP_MAX = 200;
 export const LOGS_SEARCH_DEBOUNCE_MS = 400;
 
@@ -183,4 +190,56 @@ export function logsEmptyMessage(input: { files: number; level: LogLevelFilter; 
   if (input.files === 0) return '节点还没有写运行日志';
   if (input.level !== 'all' || input.search.trim()) return '没有匹配的日志行';
   return '日志是空的';
+}
+
+/**
+ * 「加载更早的」:下一次要多少行。节点只会回「最新的 N 行」,没有游标 —— 所以更早的 = 把 N 调大再要一次、按 key 合并。
+ * 手里已经是全部匹配行、或者已经到节点上限 ⇒ null(按钮不显示)。只在用户点的时候发,不自动拉。
+ */
+export function moreLinesCount(have: number, matched: number): number | null {
+  if (have >= LOGS_NODE_MAX || matched <= have) return null;
+  return Math.min(LOGS_NODE_MAX, have + LOGS_MORE_STEP);
+}
+
+/**
+ * 加载更早的:incoming 是节点「最新的 N 行」(时间顺序),里面有我们手里最早那行之前的、也可能有之后新写的。
+ * 只把手里最早一行**之前**的接到前面;之后新写的留给刷新 / 实时跟随,不打乱顺序。
+ * incoming 里一行都对不上(日志轮转了、或者中间隔太久)⇒ 直接换成 incoming。
+ */
+export function mergeOlder(existing: readonly LogLine[], incoming: readonly LogLine[]): LogLine[] {
+  if (!existing.length) return incoming as LogLine[];
+  const firstKey = existing[0].key;
+  const at = incoming.findIndex(l => l.key === firstKey);
+  if (at < 0) return incoming as LogLine[];
+  if (at === 0) return existing as LogLine[];
+  const seen = new Set(existing.map(l => l.key));
+  return [...incoming.slice(0, at).filter(l => !seen.has(l.key)), ...existing];
+}
+
+// agent-node 的行形如「[14:12:29] [INFO ] [神小马] 已注册到 CommHub」。简洁模式只留「14:12:29 已注册到 CommHub」:
+// 级别已经用颜色表示,节点名在面板标题上,一行省下 20 来个字,侧栏里不再一条折成三行。
+const PREFIX_RE = /^\[(\d{1,2}:\d{2}:\d{2})(?:\.\d+)?\]\s*(?:\[(?:DEBUG|INFO|WARN|WARNING|ERROR)\s*\]\s*)?(?:\[[^\]\n]{1,40}\]\s*)?/i;
+
+/** 简洁模式的一行:去掉级别 / 节点名前缀,多行只留第一行,过长截断。认不出格式就原样(只截断)。 */
+export function conciseLogText(text: string, max = LOGS_CONCISE_MAX): string {
+  const first = text.split('\n', 1)[0];
+  const m = PREFIX_RE.exec(first);
+  const body = m ? `${m[1]} ${first.slice(m[0].length)}` : first;
+  const more = first.length < text.length;
+  if (body.length > max) return `${body.slice(0, max - 1)}…`;
+  return more ? `${body} …` : body;
+}
+
+/**
+ * 面板里显示哪些行、按什么顺序:**最新的在最上面**(admin:「从最新的往前拉」);
+ * 简洁模式再藏掉 debug 行。复制 / 导出不走这里,永远是全部原文、时间顺序。
+ */
+export function displayLines(lines: readonly LogLine[], detailed: boolean): LogLine[] {
+  const out: LogLine[] = [];
+  for (let i = lines.length - 1; i >= 0; i--) {
+    const l = lines[i];
+    if (!detailed && l.level === 'debug') continue;
+    out.push(l);
+  }
+  return out;
 }

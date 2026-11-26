@@ -174,7 +174,8 @@ export const initScript = ({ theme }) => {
     if (p === '/api/status' && u.searchParams.get('light') === '1') {
       return { ok: true, sessions: sessions.map(s => ({ alias: s.alias, status: s.status, agent: s.agent ?? null, task: s.task ?? null, server: s.server ?? null, updated_at: s.updated_at ?? null, runtime: s.runtime ?? null, network_id: s.network_id ?? null })) };
     }
-    if (p === '/api/status') return { ok: true, sessions, files_capable: true };
+    // A drive can add capability bits to the stub sessions (window.__sessionsPatch(sessions)), e.g. logs_capable.
+    if (p === '/api/status') { window.__sessionsPatch?.(sessions); return { ok: true, sessions, files_capable: true }; }
     if (p === '/api/nodes') return { ok: true, nodes, count: nodes.length };
     // A drive can hand in its own chat history (window.__chatTasksFixture = HubTask[]), e.g. long markdown replies.
     const chatTasks = window.__chatTasksFixture || tasks;
