@@ -355,6 +355,8 @@ export interface HubNode extends TurnCapabilityReport {
   agy_models?: string[] | null;
   /** #5321（Hub #3774）—— agy 登录态（logged_in / not_logged_in / unknown）。 */
   agy_login_state?: 'logged_in' | 'not_logged_in' | 'unknown' | null;
+  /** agy 节点是否支持纯改模型热切换（不重启、不丢进程内会话）。 */
+  agy_hot_model_capable?: boolean | null;
   /**
    * #4976（Hub ≥ 0.9.0-preview.287 / #3641）—— 服务端把「目录会不会有」这件事显式投影出来，
    * 客户端不用再靠 runtime + catalog 猜：
@@ -1795,6 +1797,8 @@ export interface NodeConfigRead {
   modelVariant?: string | null;
   /** #4099：节点是否显式声明可写档位（server 顶层 opencode_variant_config_capable）。 */
   opencode_variant_config_capable?: boolean;
+  /** agy 节点是否显式声明支持纯改模型热切（不重启）。 */
+  agy_hot_model_capable?: boolean;
   /** #4099：最近一次下发终局（null = 从未下发）。res.ok 只是 pending，不是 ack。 */
   last_update?: {
     update_id?: string | null;
@@ -1836,6 +1840,7 @@ export const fetchNodeConfig = async (cfg: HubConfig, nodeId: string): Promise<N
     model_effective: typeof d.model_effective === 'string' ? d.model_effective : undefined,
     modelVariant: typeof d.modelVariant === 'string' || d.modelVariant === null ? d.modelVariant : undefined,
     opencode_variant_config_capable: (d as any).opencode_variant_config_capable === true,
+    agy_hot_model_capable: (d as any).agy_hot_model_capable === true,
     // 真实形状见 server/src/node-config-last-update.ts（update_id / status / terminal / requested_model / error）
     last_update: (d as any).last_update && typeof (d as any).last_update === 'object'
       ? {
