@@ -3900,6 +3900,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           onContentSizeChange={event => onInputContentSize(event.nativeEvent.contentSize.height)}
           onFocus={() => plusEvent('inputFocus')}
           onKeyPress={(event) => {
+            if (onSuggestKey(event)) return;
             if (!desktop) return;
             const key = event.nativeEvent as typeof event.nativeEvent & {
               ctrlKey?: boolean;
@@ -3909,7 +3910,6 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
               keyCode?: number;
               which?: number;
             };
-            if (onSuggestKey(key)) return;
             if (!shouldSendOnEnter(key, sendKey)) return;
             event.preventDefault?.();
             void submit();
