@@ -31,7 +31,7 @@ const args = existsSync(expoBin)
   ? ['export', '--platform', 'web', '--output-dir', TMP_EXPORT]
   : ['expo', 'export', '--platform', 'web', '--output-dir', TMP_EXPORT];
 
-execFileSync(cmd, args, { cwd: ROOT, stdio: 'inherit' });
+execFileSync(cmd, args, { cwd: ROOT, stdio: 'inherit', shell: process.platform === 'win32' });
 
 rmSync(RAWFILE_WEB, { recursive: true, force: true });
 mkdirSync(dirname(RAWFILE_WEB), { recursive: true });
