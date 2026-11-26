@@ -1,15 +1,29 @@
 import {
   base64ToBytes,
   bytesToBase64,
+  harmonyCancelNotification,
+  harmonyDownloadFile,
   harmonyFetch,
   harmonyKv,
+  harmonyNotificationId,
+  harmonyOpenExternalUrl,
+  harmonyOpenLocalFile,
+  harmonyPostNotification,
+  harmonyRequestNotificationPermission,
+  hasHarmonyFileBridge,
+  hasHarmonyNotificationBridge,
+  hasHarmonySseBridge,
+  installHarmonyClipboardShim,
   isHarmonyShell,
+  openHarmonySseStream,
   parseHarmonyInsets,
   readHarmonyInsets,
   registerHarmonyBackHandler,
+  syncHarmonyTheme,
   type HarmonyHttpRequestPayload,
 } from './harmony-bridge';
 import { appFetch } from './app-fetch';
+import { openUserEventStream } from './user-events-sse';
 
 let p = 0;
 let t = 0;
@@ -193,9 +207,136 @@ async function run() {
     globalThis.fetch = origGlobalFetch;
   }
 
+  // 9) Native SSE stream bridge (openUserEventStream + reconnect/close)
+  const openedStreams: Array<{ id: string; url: string; headers: [string, string][] }> = [];
+  const closedStreams: string[] = [];
+  const fileDownloads: Array<{ id: string; payload: any }> = [];
+  const fileOpens: Array<{ id: string; payload: any }> = [];
+  const externalUrls: string[] = [];
+  const copiedTexts: string[] = [];
+  const themes: string[] = [];
+  const notifications: Array<{ kind: string; value: unknown }> = [];
+
+  g.__ANET_HARMONY__ = {
+    httpFetchAsync: () => {},
+    openSseStream: (streamId: string, reqJson: string) => {
+      const parsed = JSON.parse(reqJson) as { url: string; headers: [string, string][] };
+      openedStreams.push({ id: streamId, url: parsed.url, headers: parsed.headers });
+      queueMicrotask(() => {
+        const dispatch = g.__ANET_HARMONY_SSE_EVENT__ as ((id: string, kind: string, data: string) => void) | undefined;
+        dispatch?.(streamId, 'open', '');
+        dispatch?.(streamId, 'chunk', 'data: {"type":"desktop_message","message":"hello"}\n\n');
+      });
+    },
+    closeSseStream: (streamId: string) => { closedStreams.push(streamId); },
+    downloadAndOpenFileAsync: (reqId: string, reqJson: string) => {
+      const payload = JSON.parse(reqJson);
+      fileDownloads.push({ id: reqId, payload });
+      queueMicrotask(() => {
+        const resolve = g.__ANET_HARMONY_FILE_RESOLVE__ as ((id: string, raw: string) => void) | undefined;
+        resolve?.(reqId, JSON.stringify({ ok: true, path: `/cache/downloads/${payload.fileName}` }));
+      });
+    },
+    openLocalFileAsync: (reqId: string, reqJson: string) => {
+      const payload = JSON.parse(reqJson);
+      fileOpens.push({ id: reqId, payload });
+      queueMicrotask(() => {
+        const resolve = g.__ANET_HARMONY_FILE_RESOLVE__ as ((id: string, raw: string) => void) | undefined;
+        resolve?.(reqId, JSON.stringify({ ok: true, path: payload.path }));
+      });
+    },
+    openExternalUrl: (url: string) => { externalUrls.push(url); return true; },
+    copyText: (text: string) => { copiedTexts.push(text); },
+    setThemeMode: (mode: string) => { themes.push(mode); },
+    requestNotificationPermission: () => { notifications.push({ kind: 'perm', value: true }); },
+    postNotification: (payloadJson: string) => { notifications.push({ kind: 'post', value: JSON.parse(payloadJson) }); },
+    cancelNotification: (idNum: number) => { notifications.push({ kind: 'cancel', value: idNum }); },
+  };
+
+  ck('capability detectors report SSE / file / notification bridges',
+    hasHarmonySseBridge() && hasHarmonyFileBridge() && hasHarmonyNotificationBridge());
+
+  const sseEvents: unknown[] = [];
+  const sseStates: string[] = [];
+  const closeUserSse = openUserEventStream(
+    { serverUrl: 'https://y.vansin.top', token: 'utok_test', networkId: 'net_1' } as any,
+    {
+      onEvent: (ev) => sseEvents.push(ev),
+      onState: (st) => sseStates.push(st),
+    },
+  );
+  await new Promise(r => setTimeout(r, 15));
+  closeUserSse();
+  ck('openUserEventStream routes through HarmonyOS native SSE bridge & delivers frames',
+    openedStreams.length === 1
+    && openedStreams[0].url === 'https://y.vansin.top/events/users/me?network_id=net_1'
+    && sseStates.includes('connected')
+    && sseEvents.length === 1
+    && (sseEvents[0] as any).message === 'hello'
+    && closedStreams.includes(openedStreams[0].id));
+
+  // Direct low-level SSE helper sanity check
+  let rawChunks = '';
+  const closeRaw = openHarmonySseStream('https://y.vansin.top/events/network/n1', [], {
+    onOpen: () => {},
+    onChunk: (c) => { rawChunks += c; },
+    onClose: () => {},
+  });
+  await new Promise(r => setTimeout(r, 15));
+  closeRaw();
+  ck('openHarmonySseStream receives raw SSE chunk', rawChunks.includes('desktop_message'));
+
+  // 10) Native file download / save / preview (zero Base64 OOM)
+  const dlPath = await harmonyDownloadFile({
+    url: 'https://y.vansin.top/api/files/f1',
+    token: 'utok_test',
+    fileName: 'report.pdf',
+    mimeType: 'application/pdf',
+    mode: 'open',
+  });
+  await harmonyOpenLocalFile({ path: dlPath, fileName: 'report.pdf', mimeType: 'application/pdf' });
+  ck('harmonyDownloadFile & harmonyOpenLocalFile resolve via __ANET_HARMONY_FILE_RESOLVE__',
+    dlPath === '/cache/downloads/report.pdf'
+    && fileDownloads[0]?.payload?.mode === 'open'
+    && fileOpens[0]?.payload?.path === dlPath);
+
+  // 11) External URL + clipboard shim + theme sync + native notifications
+  ck('harmonyOpenExternalUrl invokes native opener',
+    harmonyOpenExternalUrl('https://www.anet.sh') === true && externalUrls[0] === 'https://www.anet.sh');
+
+  const origNav = (globalThis as any).navigator;
+  const fakeClipboard: Record<string, unknown> = {};
+  Object.defineProperty(globalThis, 'navigator', { value: { clipboard: fakeClipboard }, configurable: true });
+  try {
+    installHarmonyClipboardShim();
+    await (fakeClipboard.writeText as (t: string) => Promise<void>)('鸿蒙复制测试');
+    ck('installHarmonyClipboardShim routes navigator.clipboard.writeText to bridge.copyText',
+      copiedTexts.includes('鸿蒙复制测试'));
+  } finally {
+    Object.defineProperty(globalThis, 'navigator', { value: origNav, configurable: true });
+  }
+
+  syncHarmonyTheme('dark');
+  syncHarmonyTheme('light');
+  ck('syncHarmonyTheme pushes dark/light mode to native bridge', themes.join(',') === 'dark,light');
+
+  harmonyRequestNotificationPermission();
+  harmonyPostNotification('agent:comm', '通信鸽', '已修复全部 P0');
+  harmonyCancelNotification('agent:comm');
+  const expectedNid = harmonyNotificationId('agent:comm');
+  ck('native notification bridge requests permission, publishes & cancels with stable positive id',
+    expectedNid > 0
+    && notifications.length === 3
+    && notifications[0].kind === 'perm'
+    && (notifications[1].value as any).id === expectedNid
+    && (notifications[1].value as any).title === '通信鸽'
+    && notifications[2].value === expectedNid);
+
   delete g.__ANET_HARMONY__;
   delete g.__ANET_HARMONY_INSETS__;
   delete g.__ANET_HARMONY_HTTP_RESOLVE__;
+  delete g.__ANET_HARMONY_SSE_EVENT__;
+  delete g.__ANET_HARMONY_FILE_RESOLVE__;
   console.log(`${p}/${t} passed`);
   process.exit(p === t ? 0 : 1);
 }

@@ -1,4 +1,4 @@
-import { AbilityConstant, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
+import { AbilityConstant, Configuration, ConfigurationConstant, UIAbility, Want } from '@kit.AbilityKit';
 import { window } from '@kit.ArkUI';
 import { preferences } from '@kit.ArkData';
 import { BusinessError } from '@kit.BasicServicesKit';
@@ -17,6 +17,8 @@ export default class EntryAbility extends UIAbility {
       const e = err as BusinessError;
       hilog.warn(DOMAIN, TAG, 'setColorMode skipped: %{public}s', e.message);
     }
+    const initialDark = this.context.config.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+    AppStorage.setOrCreate<string>('anetThemeMode', initialDark ? 'dark' : 'light');
     try {
       const pref = preferences.getPreferencesSync(this.context, { name: 'anet_kv' });
       AppStorage.setOrCreate<preferences.Preferences>('anetKvStore', pref);
@@ -25,6 +27,14 @@ export default class EntryAbility extends UIAbility {
       hilog.error(DOMAIN, TAG, 'Failed to open preferences: %{public}s', e.message);
     }
     hilog.info(DOMAIN, TAG, 'Ability onCreate: %{public}s %{public}d', want.abilityName ?? '', launchParam.launchReason);
+  }
+
+  onConfigurationUpdate(newConfig: Configuration): void {
+    const isDark = newConfig.colorMode === ConfigurationConstant.ColorMode.COLOR_MODE_DARK;
+    AppStorage.setOrCreate<string>('anetThemeMode', isDark ? 'dark' : 'light');
+    if (this.mainWindow) {
+      this.applySystemBarTheme(this.mainWindow, isDark);
+    }
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
@@ -37,9 +47,12 @@ export default class EntryAbility extends UIAbility {
       try {
         const win: window.Window = windowStage.getMainWindowSync();
         this.mainWindow = win;
+        AppStorage.setOrCreate<window.Window>('anetMainWindow', win);
         win.setWindowLayoutFullScreen(true).catch((fullErr: BusinessError) => {
           hilog.warn(DOMAIN, TAG, 'setWindowLayoutFullScreen error: %{public}s', fullErr.message);
         });
+        const isDark = AppStorage.get<string>('anetThemeMode') === 'dark';
+        this.applySystemBarTheme(win, isDark);
         this.syncAvoidAreas(win);
         win.on('avoidAreaChange', () => {
           this.syncAvoidAreas(win);
@@ -49,6 +62,23 @@ export default class EntryAbility extends UIAbility {
         hilog.error(DOMAIN, TAG, 'Window init failed: %{public}s', e.message);
       }
     });
+  }
+
+  private applySystemBarTheme(win: window.Window, isDark: boolean): void {
+    try {
+      const props: window.SystemBarProperties = {
+        statusBarColor: '#00000000',
+        statusBarContentColor: isDark ? '#FFFFFF' : '#1D2026',
+        navigationBarColor: '#00000000',
+        navigationBarContentColor: isDark ? '#FFFFFF' : '#1D2026',
+      };
+      win.setWindowSystemBarProperties(props).catch((barErr: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, 'setWindowSystemBarProperties failed: %{public}s', barErr.message);
+      });
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(DOMAIN, TAG, 'applySystemBarTheme threw: %{public}s', e.message);
+    }
   }
 
   private syncAvoidAreas(win: window.Window): void {

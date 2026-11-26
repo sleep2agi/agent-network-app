@@ -27,6 +27,7 @@
 
 import type { HubConfig } from './api';
 import { RECONNECT_MIN_MS, nextBackoffMs, xhrSseRecycleChars, type ConnState, type LogEvent } from './logs-buffer';
+import { hasHarmonySseBridge, openHarmonySseStream } from './harmony-bridge';
 
 interface OpenEventStreamHandlers {
   onEvent: (ev: LogEvent) => void;
@@ -49,7 +50,84 @@ export function openNetworkEventStream(
   if ((globalThis as any).__TAURI_INTERNALS__) {
     return openTauriNetworkEventStream(cfg, netId, handlers);
   }
+  if (hasHarmonySseBridge()) {
+    return openHarmonyNetworkEventStream(cfg, netId, handlers);
+  }
   return openXhrNetworkEventStream(cfg, netId, handlers);
+}
+
+function openHarmonyNetworkEventStream(
+  cfg: HubConfig,
+  netId: string,
+  handlers: OpenEventStreamHandlers,
+): () => void {
+  let stopped = false;
+  let closeActive: (() => void) | null = null;
+  let reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  let backoffMs = RECONNECT_MIN_MS;
+
+  const connect = () => {
+    if (stopped) return;
+    handlers.onState('connecting');
+    let carry = '';
+    const url = `${cfg.serverUrl.replace(/\/+$/, '')}/events/network/${encodeURIComponent(netId)}`;
+    closeActive = openHarmonySseStream(
+      url,
+      [
+        ['Authorization', `Bearer ${cfg.token}`],
+        ['Accept', 'text/event-stream'],
+        ['Cache-Control', 'no-cache'],
+      ],
+      {
+        onOpen: () => {
+          if (stopped) return;
+          backoffMs = RECONNECT_MIN_MS;
+          handlers.onState('connected');
+        },
+        onChunk: (chunk) => {
+          if (stopped) return;
+          const parts = (carry + chunk).split('\n\n');
+          carry = parts.pop() ?? '';
+          for (const frame of parts) {
+            const dataLines: string[] = [];
+            for (const line of frame.split('\n')) {
+              if (line.startsWith(':')) continue;
+              if (line.startsWith('data:')) dataLines.push(line.slice(5).replace(/^\s/, ''));
+            }
+            if (dataLines.length === 0) continue;
+            const payload = dataLines.join('\n');
+            try {
+              const parsed = JSON.parse(payload) as LogEvent;
+              parsed._at = Date.now();
+              handlers.onEvent(parsed);
+            } catch {
+              handlers.onEvent({ _at: Date.now(), _raw: payload, type: 'unknown' });
+            }
+          }
+        },
+        onClose: (why) => {
+          if (stopped) return;
+          closeActive = null;
+          handlers.onState('disconnected', why);
+          const delay = backoffMs;
+          backoffMs = nextBackoffMs(backoffMs);
+          reconnectTimer = setTimeout(() => {
+            reconnectTimer = null;
+            connect();
+          }, delay);
+        },
+      },
+    );
+  };
+
+  connect();
+
+  return () => {
+    stopped = true;
+    if (reconnectTimer) { clearTimeout(reconnectTimer); reconnectTimer = null; }
+    closeActive?.();
+    closeActive = null;
+  };
 }
 
 type NativePayload =

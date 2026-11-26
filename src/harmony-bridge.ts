@@ -1,13 +1,16 @@
 // HarmonyOS ArkWeb shell bridge (window.__ANET_HARMONY__).
 //
-// Pure TypeScript with zero react-native imports so Node unit tests and Expo Web
+// Pure TypeScript with zero react-native imports so Node/Bun unit tests and Expo Web
 // both import cleanly. When running inside the HarmonyOS ArkWeb container
 // (harmony/entry/src/main/ets/pages/Index.ets), ArkTS registers `window.__ANET_HARMONY__`
 // via `javaScriptProxy`, providing:
-//   - native HTTP transport (@kit.NetworkKit) that bypasses WebView CORS and supports LAN HTTP hubs
-//   - native key-value storage (@kit.ArkData preferences) that survives WebView cache clears
-//   - live system safe-area insets (top status bar / cutout, bottom navigation indicator)
-//   - native swipe-back delegation so HarmonyOS edge-back pops ANet screens instead of exiting.
+//   - native HTTP transport (@kit.RemoteCommunicationKit) bypassing WebView CORS & LAN HTTP blocks
+//   - native SSE stream transport (@kit.NetworkKit requestInStream) for real-time Hub events
+//   - native file download / save / preview (@kit.CoreFileKit + @kit.PreviewKit) without JS Base64 OOM
+//   - native external URL opener (UIAbilityContext.startAbility)
+//   - native KV storage (@kit.ArkData preferences) surviving WebView cache clears
+//   - native clipboard (@kit.BasicServicesKit pasteboard), notifications (@kit.NotificationKit),
+//     live system safe-area insets (avoidAreaChange), theme/status-bar sync, and swipe-back delegation.
 
 import type { SimInsets } from './safe-area-sim';
 
@@ -29,9 +32,24 @@ export interface HarmonyHttpResponsePayload {
   error?: string;
 }
 
+export interface HarmonyFileResultPayload {
+  ok: boolean;
+  path?: string;
+  error?: string;
+}
+
 export interface HarmonyBridgeApi {
   httpFetch?: (reqJson: string) => Promise<string> | string;
   httpFetchAsync?: (reqId: string, reqJson: string) => void;
+  openSseStream?: (streamId: string, reqJson: string) => void;
+  closeSseStream?: (streamId: string) => void;
+  downloadAndOpenFileAsync?: (reqId: string, reqJson: string) => void;
+  openLocalFileAsync?: (reqId: string, reqJson: string) => void;
+  openExternalUrl?: (url: string) => boolean;
+  setThemeMode?: (mode: string) => void;
+  requestNotificationPermission?: () => void;
+  postNotification?: (payloadJson: string) => void;
+  cancelNotification?: (idNum: number) => void;
   kvGet?: (key: string) => string | null;
   kvSet?: (key: string, value: string) => void;
   kvDel?: (key: string) => void;
@@ -39,11 +57,15 @@ export interface HarmonyBridgeApi {
   copyText?: (text: string) => void;
 }
 
+type HarmonySseEventKind = 'open' | 'chunk' | 'close' | 'error';
+
 type HarmonyGlobal = typeof globalThis & {
   __ANET_HARMONY__?: HarmonyBridgeApi;
   __ANET_HARMONY_INSETS__?: unknown;
   __ANET_HARMONY_BACK__?: () => boolean;
   __ANET_HARMONY_HTTP_RESOLVE__?: (reqId: string, rawJson: string) => void;
+  __ANET_HARMONY_SSE_EVENT__?: (streamId: string, kind: HarmonySseEventKind, data: string) => void;
+  __ANET_HARMONY_FILE_RESOLVE__?: (reqId: string, rawJson: string) => void;
 };
 
 const NULL_BODY_STATUS = new Set([101, 103, 204, 205, 304]);
@@ -51,7 +73,13 @@ const ERROR_REQUEST_CANCELLED = 'Request cancelled';
 export const HARMONY_INSETS_EVENT = 'anet-harmony-insets';
 
 const pendingHarmonyHttp = new Map<string, (rawJson: string) => void>();
-let nextHarmonyHttpId = 1;
+const pendingHarmonyFile = new Map<string, (rawJson: string) => void>();
+const harmonySseListeners = new Map<string, {
+  onOpen: () => void;
+  onChunk: (chunk: string) => void;
+  onClose: (reason: string) => void;
+}>();
+let nextHarmonyReqId = 1;
 
 const harmonyGlobal = (): HarmonyGlobal => globalThis as HarmonyGlobal;
 
@@ -66,6 +94,33 @@ function ensureHarmonyHttpResolver(): void {
   };
 }
 
+function ensureHarmonyFileResolver(): void {
+  const g = harmonyGlobal();
+  if (typeof g.__ANET_HARMONY_FILE_RESOLVE__ === 'function') return;
+  g.__ANET_HARMONY_FILE_RESOLVE__ = (reqId: string, rawJson: string) => {
+    const resolve = pendingHarmonyFile.get(reqId);
+    if (!resolve) return;
+    pendingHarmonyFile.delete(reqId);
+    resolve(rawJson);
+  };
+}
+
+function ensureHarmonySseDispatcher(): void {
+  const g = harmonyGlobal();
+  if (typeof g.__ANET_HARMONY_SSE_EVENT__ === 'function') return;
+  g.__ANET_HARMONY_SSE_EVENT__ = (streamId: string, kind: HarmonySseEventKind, data: string) => {
+    const listener = harmonySseListeners.get(streamId);
+    if (!listener) return;
+    if (kind === 'open') {
+      listener.onOpen();
+    } else if (kind === 'chunk') {
+      listener.onChunk(data);
+    } else {
+      listener.onClose(data || (kind === 'error' ? 'network error' : 'server closed stream'));
+    }
+  };
+}
+
 export function getHarmonyBridge(): HarmonyBridgeApi | null {
   if (typeof globalThis === 'undefined') return null;
   const b = harmonyGlobal().__ANET_HARMONY__;
@@ -74,6 +129,21 @@ export function getHarmonyBridge(): HarmonyBridgeApi | null {
 
 export function isHarmonyShell(): boolean {
   return getHarmonyBridge() !== null;
+}
+
+export function hasHarmonySseBridge(): boolean {
+  const b = getHarmonyBridge();
+  return !!(b && typeof b.openSseStream === 'function');
+}
+
+export function hasHarmonyFileBridge(): boolean {
+  const b = getHarmonyBridge();
+  return !!(b && typeof b.downloadAndOpenFileAsync === 'function');
+}
+
+export function hasHarmonyNotificationBridge(): boolean {
+  const b = getHarmonyBridge();
+  return !!(b && typeof b.postNotification === 'function');
 }
 
 // ── Base64 helpers (pure JS — browser, ArkWeb, Node & Bun safe, handles arbitrary binary payloads) ──
@@ -154,7 +224,7 @@ export async function harmonyFetch(input: RequestInfo | URL, init?: RequestInit)
   let raw: string;
   if (typeof bridge.httpFetchAsync === 'function') {
     ensureHarmonyHttpResolver();
-    const reqId = `h_${nextHarmonyHttpId++}`;
+    const reqId = `h_${nextHarmonyReqId++}`;
     raw = await new Promise<string>((resolve, reject) => {
       const cleanup = () => {
         pendingHarmonyHttp.delete(reqId);
@@ -225,6 +295,190 @@ export async function harmonyFetch(input: RequestInfo | URL, init?: RequestInit)
   });
   Object.defineProperty(res, 'url', { value: parsed.url || req.url, writable: false });
   return res;
+}
+
+// ── Native SSE stream transport ──
+
+export function openHarmonySseStream(
+  url: string,
+  headers: [string, string][],
+  handlers: { onOpen: () => void; onChunk: (chunk: string) => void; onClose: (reason: string) => void },
+): () => void {
+  const bridge = getHarmonyBridge();
+  if (!bridge || typeof bridge.openSseStream !== 'function') {
+    handlers.onClose('HarmonyOS SSE bridge unavailable');
+    return () => {};
+  }
+  ensureHarmonySseDispatcher();
+  const streamId = `sse_${nextHarmonyReqId++}`;
+  harmonySseListeners.set(streamId, handlers);
+  try {
+    bridge.openSseStream(streamId, JSON.stringify({ url, headers }));
+  } catch (err) {
+    harmonySseListeners.delete(streamId);
+    handlers.onClose(err instanceof Error ? err.message : String(err));
+    return () => {};
+  }
+  return () => {
+    harmonySseListeners.delete(streamId);
+    try {
+      bridge.closeSseStream?.(streamId);
+    } catch {
+      // ignore close errors
+    }
+  };
+}
+
+// ── Native file download / save / preview (zero JS Base64 OOM) ──
+
+function awaitHarmonyFileBridge(invoke: (reqId: string) => void): Promise<HarmonyFileResultPayload> {
+  ensureHarmonyFileResolver();
+  const reqId = `file_${nextHarmonyReqId++}`;
+  return new Promise<HarmonyFileResultPayload>((resolve, reject) => {
+    pendingHarmonyFile.set(reqId, (rawJson: string) => {
+      try {
+        const parsed = JSON.parse(rawJson) as HarmonyFileResultPayload;
+        if (!parsed || parsed.ok === false) {
+          reject(new Error(parsed?.error || 'HarmonyOS file action failed'));
+          return;
+        }
+        resolve(parsed);
+      } catch {
+        reject(new Error('Invalid HarmonyOS file bridge response'));
+      }
+    });
+    try {
+      invoke(reqId);
+    } catch (err) {
+      pendingHarmonyFile.delete(reqId);
+      reject(err);
+    }
+  });
+}
+
+export async function harmonyDownloadFile(opts: {
+  url: string;
+  token: string;
+  fileName: string;
+  mimeType?: string;
+  mode?: 'open' | 'save';
+}): Promise<string> {
+  const bridge = getHarmonyBridge();
+  if (!bridge || typeof bridge.downloadAndOpenFileAsync !== 'function') {
+    throw new Error('HarmonyOS file bridge unavailable');
+  }
+  const res = await awaitHarmonyFileBridge((reqId) => {
+    bridge.downloadAndOpenFileAsync!(reqId, JSON.stringify(opts));
+  });
+  return res.path ?? '';
+}
+
+export async function harmonyOpenLocalFile(opts: {
+  path: string;
+  fileName?: string;
+  mimeType?: string;
+}): Promise<void> {
+  const bridge = getHarmonyBridge();
+  if (!bridge || typeof bridge.openLocalFileAsync !== 'function') {
+    throw new Error('HarmonyOS file bridge unavailable');
+  }
+  await awaitHarmonyFileBridge((reqId) => {
+    bridge.openLocalFileAsync!(reqId, JSON.stringify(opts));
+  });
+}
+
+// ── Native external URL opener ──
+
+export function harmonyOpenExternalUrl(url: string): boolean {
+  const b = getHarmonyBridge();
+  if (!b || typeof b.openExternalUrl !== 'function') return false;
+  return b.openExternalUrl(url) !== false;
+}
+
+// ── Native clipboard shim (routes expo-clipboard & navigator.clipboard.writeText → pasteboard) ──
+
+let clipboardShimInstalled = false;
+export function installHarmonyClipboardShim(): void {
+  if (clipboardShimInstalled) return;
+  const b = getHarmonyBridge();
+  if (!b || typeof b.copyText !== 'function') return;
+  const nav = (globalThis as { navigator?: { clipboard?: { writeText?: (text: string) => Promise<void> } } }).navigator;
+  if (!nav) return;
+  const writeText = async (text: string): Promise<void> => {
+    const active = getHarmonyBridge();
+    if (active?.copyText) {
+      active.copyText(String(text ?? ''));
+      return;
+    }
+    throw new Error('HarmonyOS clipboard unavailable');
+  };
+  try {
+    if (nav.clipboard) {
+      Object.defineProperty(nav.clipboard, 'writeText', { value: writeText, configurable: true, writable: true });
+    } else {
+      Object.defineProperty(nav, 'clipboard', { value: { writeText }, configurable: true, writable: true });
+    }
+    clipboardShimInstalled = true;
+  } catch {
+    try {
+      Object.defineProperty(nav, 'clipboard', { value: { writeText }, configurable: true, writable: true });
+      clipboardShimInstalled = true;
+    } catch {
+      // Non-configurable navigator.clipboard; callers fall back gracefully
+    }
+  }
+}
+
+// ── Native theme & system bar sync ──
+
+export function syncHarmonyTheme(mode: 'dark' | 'light'): void {
+  const b = getHarmonyBridge();
+  if (!b || typeof b.setThemeMode !== 'function') return;
+  try {
+    b.setThemeMode(mode);
+  } catch {
+    // ignore
+  }
+}
+
+// ── Native notifications ──
+
+export function harmonyNotificationId(identifier: string): number {
+  let hash = 2166136261;
+  for (let i = 0; i < identifier.length; i++) {
+    hash ^= identifier.charCodeAt(i);
+    hash = Math.imul(hash, 16777619);
+  }
+  const positive = Math.abs(hash | 0);
+  return positive > 0 ? positive : 1;
+}
+
+export function harmonyRequestNotificationPermission(): void {
+  try {
+    getHarmonyBridge()?.requestNotificationPermission?.();
+  } catch {
+    // ignore
+  }
+}
+
+export function harmonyPostNotification(identifier: string, title: string, body: string): void {
+  const b = getHarmonyBridge();
+  if (!b || typeof b.postNotification !== 'function') return;
+  try {
+    b.postNotification(JSON.stringify({ id: harmonyNotificationId(identifier), title, body }));
+  } catch {
+    // ignore
+  }
+}
+
+export function harmonyCancelNotification(identifier: string): void {
+  const b = getHarmonyBridge();
+  if (!b || typeof b.cancelNotification !== 'function') return;
+  try {
+    b.cancelNotification(harmonyNotificationId(identifier));
+  } catch {
+    // ignore
+  }
 }
 
 // ── Native KV persistence (with localStorage mirror fallback) ──

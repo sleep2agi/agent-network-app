@@ -6,6 +6,7 @@ import AttachmentTextPreview, { TextPreviewLink } from './AttachmentTextPreview'
 import { isTextPreviewable } from './attachment-file-model';
 import { appFetch } from './app-fetch';
 import { chooseSavePath, displayDownloadPath, downloadAuthedBytes, isTauriDesktop, revealInFolder, saveBrowserDownload, saveToDownloads } from './desktop-download';
+import { harmonyDownloadFile, harmonyOpenLocalFile, hasHarmonyFileBridge } from './harmony-bridge';
 import { colors } from './theme';
 import { downloadEta, formatEta } from './download-eta';
 import { useBubbleInk } from './bubble-ink';
@@ -32,7 +33,7 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
         : job?.kind === 'done' && job.result ? { kind: 'saved', path: job.result, ...note }
           : job?.kind === 'done' ? { kind: 'ready', messageKey: 'chat.file.browserHandedOff' }
             : { kind: 'ready', ...note };
-  const download = async (direct: boolean) => {
+  const download = async (direct: boolean, harmonyMode: 'open' | 'save' = 'open') => {
     if (busy.current || job?.kind === 'downloading') return;
     busy.current = true;
     setNote(null);
@@ -43,6 +44,10 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
         if (target === null) return;
       }
       await runDownloadJob(jobKey, async (report) => {
+        if (hasHarmonyFileBridge()) {
+          // 鸿蒙原生直下 + 预览/另存为：大文件不经 JS Base64 往返，规避 OOM。
+          return harmonyDownloadFile({ url: uri, token, fileName: name, mimeType: mime, mode: harmonyMode });
+        }
         // 边下边算剩余时长:每 ~400ms 更新一次,避免每个 chunk 都触发重绘。
         const startedAt = Date.now();
         let lastPaint = 0;
@@ -68,7 +73,10 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
   const reveal = async () => {
     if (!state.path || busy.current) return;
     busy.current = true;
-    try { await revealInFolder(state.path); }
+    try {
+      if (hasHarmonyFileBridge()) await harmonyOpenLocalFile({ path: state.path, fileName: name, mimeType: mime });
+      else await revealInFolder(state.path);
+    }
     catch (error) { setNote({ messageKey: 'chat.file.revealFailed', message: error instanceof Error ? error.message : String(error) }); }
     finally { busy.current = false; }
   };
@@ -76,13 +84,13 @@ export default function AttachmentFileDesktop({ uri, name, token, size, mime }: 
     <View style={{ maxWidth: '100%' }} testID={`attachment-file-desktop-${name}`}>
       <AttachmentFileCard name={name} mime={mime} size={size} status={state.kind} progress={state.eta}
         detail={state.messageKey ? t(state.messageKey, { error: state.message ?? '' }) : state.message ?? (state.path ? displayDownloadPath(state.path) : t(isTauriDesktop() ? 'chat.file.saveHint' : 'chat.file.browserHint'))}
-        onPress={state.kind === 'saved' ? () => { void reveal(); } : (e: any) => { void download(!!(e?.nativeEvent?.altKey ?? e?.altKey)); }} />
+        onPress={state.kind === 'saved' ? () => { void reveal(); } : (e: any) => { void download(!!(e?.nativeEvent?.altKey ?? e?.altKey), 'open'); }} />
       {previewable || state.kind === 'saved' ? (
         <View style={{ flexDirection: 'row', gap: 16, paddingVertical: 8 }}>
           {previewable ? <TextPreviewLink name={name} onPress={() => setPreviewOpen(true)} /> : null}
           {state.kind === 'saved' ? <>
           <Pressable accessibilityRole="button" accessibilityLabel={`${t('chat.file.reveal')} ${name}`} testID="attachment-file-reveal" onPress={() => { void reveal(); }}><Text style={[{ color: colors.accent, fontSize: 12 }, linkInk]}>{t('chat.file.reveal')}</Text></Pressable>
-          <Pressable accessibilityRole="button" accessibilityLabel={`${t('chat.file.saveAs')} ${name}`} testID="attachment-file-save-as" onPress={() => { void download(false); }}><Text style={[{ color: colors.accent, fontSize: 12 }, linkInk]}>{t('chat.file.saveAs')}</Text></Pressable>
+          <Pressable accessibilityRole="button" accessibilityLabel={`${t('chat.file.saveAs')} ${name}`} testID="attachment-file-save-as" onPress={() => { void download(false, 'save'); }}><Text style={[{ color: colors.accent, fontSize: 12 }, linkInk]}>{t('chat.file.saveAs')}</Text></Pressable>
           </> : null}
         </View>
       ) : null}

@@ -13,26 +13,31 @@
 //
 // 纯逻辑可单测:依赖全部懒加载,测试注入替身。只放行 http(s),别的 scheme 一律不开。
 
-export type ExternalRoute = 'tauri' | 'window' | 'linking';
+import { getHarmonyBridge } from './harmony-bridge';
+
+export type ExternalRoute = 'tauri' | 'harmony' | 'window' | 'linking';
 
 export type OpenExternalDeps = {
   tauri: boolean;
+  harmony?: boolean;
   os: string;
   tauriOpen: (url: string) => Promise<unknown>;
+  harmonyOpen?: (url: string) => boolean | Promise<unknown>;
   windowOpen: ((url: string, target: string, features: string) => unknown) | null;
   linkingOpen: (url: string) => Promise<unknown>;
 };
 
 export const isExternalHttpUrl = (url: string): boolean => /^https?:\/\/[^\s]+$/i.test(url.trim());
 
-export function externalRoute(os: string, tauri: boolean): ExternalRoute {
+export function externalRoute(os: string, tauri: boolean, harmony = false): ExternalRoute {
   if (tauri) return 'tauri';
+  if (harmony) return 'harmony';
   if (os === 'web') return 'window';
   return 'linking';
 }
 
 let testDeps: OpenExternalDeps | undefined;
-/** 测试用:注入平台与三条路的替身;传 undefined 还原。 */
+/** 测试用:注入平台与各条路的替身;传 undefined 还原。 */
 export function __setOpenExternalDeps(next: OpenExternalDeps | undefined): void { testDeps = next; }
 
 // 同步组装:网页那条路必须在点击的同一个调用栈里 window.open(Safari 对「用户手势」卡得严,
@@ -40,10 +45,14 @@ export function __setOpenExternalDeps(next: OpenExternalDeps | undefined): void 
 // (那要 await import),而是看有没有 document —— RN 原生没有 document,RN-web / Tauri 有。
 function realDeps(): OpenExternalDeps {
   const g = globalThis as { __TAURI_INTERNALS__?: unknown; document?: unknown; open?: (url: string, target: string, features: string) => unknown };
+  const hb = getHarmonyBridge();
+  const hasHarmonyOpen = !!(hb && typeof hb.openExternalUrl === 'function');
   return {
     tauri: !!g.__TAURI_INTERNALS__,
+    harmony: hasHarmonyOpen,
     os: typeof g.document !== 'undefined' ? 'web' : 'native',
     tauriOpen: async url => { const { openUrl } = await import('@tauri-apps/plugin-opener'); return openUrl(url); },
+    harmonyOpen: hasHarmonyOpen ? url => hb!.openExternalUrl!(url) : undefined,
     windowOpen: typeof g.open === 'function' ? (url, target, features) => g.open!(url, target, features) : null,
     linkingOpen: async url => {
       const { Linking } = await import('react-native');
@@ -62,8 +71,12 @@ export async function openExternal(url: string): Promise<boolean> {
   const target = url.trim();
   if (!isExternalHttpUrl(target)) return false;
   const d = testDeps ?? realDeps();
-  const route = externalRoute(d.os, d.tauri);
+  const route = externalRoute(d.os, d.tauri, !!d.harmony);
   if (route === 'tauri') { await d.tauriOpen(target); return true; }
+  if (route === 'harmony') {
+    if (!d.harmonyOpen) return false;
+    return (await d.harmonyOpen(target)) !== false;
+  }
   if (route === 'window') {
     if (!d.windowOpen) return false;
     d.windowOpen(target, '_blank', 'noopener');

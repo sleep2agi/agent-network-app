@@ -1,6 +1,8 @@
 import { abilityAccessCtrl, common } from '@kit.AbilityKit';
 import { webview } from '@kit.ArkWeb';
-import { BusinessError } from '@kit.BasicServicesKit';
+import { picker } from '@kit.CoreFileKit';
+import { photoAccessHelper } from '@kit.MediaLibraryKit';
+import { BusinessError, deviceInfo } from '@kit.BasicServicesKit';
 import { hilog } from '@kit.PerformanceAnalysisKit';
 import { AnetHarmonyBridge } from '../bridge/AnetHarmonyBridge';
 
@@ -29,6 +31,19 @@ function isTextMime(mime: string): boolean {
   return mime.startsWith('text/') || mime === 'application/javascript' || mime === 'application/json' || mime === 'image/svg+xml';
 }
 
+function wantsImagePickerOnly(acceptTypes: Array<string>): boolean {
+  if (!acceptTypes || acceptTypes.length === 0) return false;
+  for (let i = 0; i < acceptTypes.length; i++) {
+    const lower = acceptTypes[i].toLowerCase().trim();
+    if (!lower) continue;
+    const isImg = lower.startsWith('image/')
+      || lower === '.png' || lower === '.jpg' || lower === '.jpeg'
+      || lower === '.webp' || lower === '.gif' || lower === '.heic' || lower === '.bmp';
+    if (!isImg) return false;
+  }
+  return true;
+}
+
 @Entry
 @Component
 struct Index {
@@ -37,13 +52,26 @@ struct Index {
   private pageLoaded: boolean = false;
   private allowSystemBackOnce: boolean = false;
 
+  @StorageProp('anetThemeMode') themeMode: string = 'light';
   @StorageProp('anetInsetTop') @Watch('pushInsetsToWeb') insetTop: number = 0;
   @StorageProp('anetInsetRight') @Watch('pushInsetsToWeb') insetRight: number = 0;
   @StorageProp('anetInsetBottom') @Watch('pushInsetsToWeb') insetBottom: number = 0;
   @StorageProp('anetInsetLeft') @Watch('pushInsetsToWeb') insetLeft: number = 0;
 
-  aboutToAppear(): void {
+  private attachBridgeRuntime(): void {
     this.bridge.attachController(this.controller);
+    try {
+      const hostCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+      if (hostCtx) {
+        this.bridge.attachHostContext(hostCtx);
+      }
+    } catch {
+      // UIContext not ready yet; will attach in onControllerAttached
+    }
+  }
+
+  aboutToAppear(): void {
+    this.attachBridgeRuntime();
   }
 
   private pushInsetsToWeb(): void {
@@ -117,6 +145,46 @@ struct Index {
     return response;
   }
 
+  private openNativeFileSelector(wantsImagesOnly: boolean, isMultiple: boolean, result: FileSelectorResult): void {
+    const maxCount = isMultiple ? 9 : 1;
+    if (wantsImagesOnly) {
+      try {
+        const opts = new photoAccessHelper.PhotoSelectOptions();
+        opts.MIMEType = photoAccessHelper.PhotoViewMIMETypes.IMAGE_TYPE;
+        opts.maxSelectNumber = maxCount;
+        const photoPicker = new photoAccessHelper.PhotoViewPicker();
+        photoPicker.select(opts).then((res: photoAccessHelper.PhotoSelectResult) => {
+          result.handleFileList(res.photoUris ?? []);
+        }).catch((err: BusinessError) => {
+          hilog.warn(DOMAIN, TAG, 'PhotoViewPicker failed: %{public}s', err?.message ?? String(err));
+          result.handleFileList([]);
+        });
+      } catch (err) {
+        const e = err as BusinessError;
+        hilog.warn(DOMAIN, TAG, 'PhotoViewPicker threw: %{public}s', e?.message ?? String(err));
+        result.handleFileList([]);
+      }
+      return;
+    }
+
+    try {
+      const hostCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
+      const docPicker = hostCtx ? new picker.DocumentViewPicker(hostCtx) : new picker.DocumentViewPicker();
+      const docOpts = new picker.DocumentSelectOptions();
+      docOpts.maxSelectNumber = maxCount;
+      docPicker.select(docOpts).then((uris: Array<string>) => {
+        result.handleFileList(uris ?? []);
+      }).catch((err: BusinessError) => {
+        hilog.warn(DOMAIN, TAG, 'DocumentViewPicker failed: %{public}s', err?.message ?? String(err));
+        result.handleFileList([]);
+      });
+    } catch (err) {
+      const e = err as BusinessError;
+      hilog.warn(DOMAIN, TAG, 'DocumentViewPicker threw: %{public}s', e?.message ?? String(err));
+      result.handleFileList([]);
+    }
+  }
+
   onBackPress(): boolean {
     if (this.allowSystemBackOnce) {
       this.allowSystemBackOnce = false;
@@ -131,7 +199,7 @@ struct Index {
       if (result !== 'true') {
         if (this.controller.accessBackward()) {
           this.controller.backward();
-        } else {
+        } else if (deviceInfo.deviceType !== '2in1') {
           try {
             const abilityCtx = this.getUIContext().getHostContext() as common.UIAbilityContext | undefined;
             if (abilityCtx) {
@@ -144,6 +212,8 @@ struct Index {
           } catch {
             this.allowSystemBackOnce = true;
           }
+        } else {
+          this.allowSystemBackOnce = true;
         }
       }
     }).catch(() => {});
@@ -155,6 +225,8 @@ struct Index {
       Web({ src: `${APP_ORIGIN}index.html`, controller: this.controller })
         .width('100%')
         .height('100%')
+        .backgroundColor(this.themeMode === 'dark' ? '#111318' : '#F6F7F9')
+        .darkMode(WebDarkMode.Auto)
         .javaScriptAccess(true)
         .domStorageAccess(true)
         .fileAccess(true)
@@ -165,12 +237,25 @@ struct Index {
         .javaScriptProxy({
           object: this.bridge,
           name: '__ANET_HARMONY__',
-          methodList: ['kvGet', 'kvSet', 'kvDel', 'getInsetsJson', 'copyText'],
-          asyncMethodList: ['httpFetchAsync'],
+          methodList: [
+            'kvGet',
+            'kvSet',
+            'kvDel',
+            'getInsetsJson',
+            'copyText',
+            'openExternalUrl',
+            'openSseStream',
+            'closeSseStream',
+            'setThemeMode',
+            'requestNotificationPermission',
+            'postNotification',
+            'cancelNotification',
+          ],
+          asyncMethodList: ['httpFetchAsync', 'downloadAndOpenFileAsync', 'openLocalFileAsync'],
           controller: this.controller,
         })
         .onControllerAttached(() => {
-          this.bridge.attachController(this.controller);
+          this.attachBridgeRuntime();
           try {
             const ua = this.controller.getUserAgent();
             if (!ua.includes('ANetHarmony')) {
@@ -184,6 +269,14 @@ struct Index {
         .onInterceptRequest((event) => {
           if (!event) return null;
           return this.resolveRawfileResponse(event.request.getRequestUrl());
+        })
+        .onShowFileSelector((event) => {
+          if (!event) return false;
+          const param = event.fileSelector;
+          const acceptTypes: Array<string> = param.getAcceptType() ?? [];
+          const isMultiple = param.getMode() === FileSelectorMode.FileOpenMultipleMode;
+          this.openNativeFileSelector(wantsImagePickerOnly(acceptTypes), isMultiple, event.result);
+          return true;
         })
         .onPermissionRequest((event) => {
           // 语音输入需要麦克风：先触发系统权限弹窗，用户授权后再放行 ArkWeb 网页侧录音请求。
@@ -220,6 +313,6 @@ struct Index {
     }
     .width('100%')
     .height('100%')
-    .backgroundColor('#F6F7F9')
+    .backgroundColor(this.themeMode === 'dark' ? '#111318' : '#F6F7F9')
   }
 }

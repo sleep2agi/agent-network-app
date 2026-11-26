@@ -13,6 +13,7 @@ const ck = (n: string, c: boolean, extra = '') => { t++; if (c) { p++; console.l
 
 // ── 平台分支 ───────────────────────────────────────────────────────────────────
 ck('Tauri 壳 → opener', externalRoute('web', true) === 'tauri');
+ck('鸿蒙壳 → harmony', externalRoute('web', false, true) === 'harmony');
 ck('浏览器 → window.open', externalRoute('web', false) === 'window');
 ck('安卓 → Linking', externalRoute('android', false) === 'linking');
 ck('iOS → Linking', externalRoute('ios', false) === 'linking');

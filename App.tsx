@@ -12,7 +12,7 @@ import { Ionicons } from './src/icons';
 import { BrandMark } from './src/brand-mark';
 import { SafeAreaInsetsContext, SafeAreaProvider, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { SAFE_AREA_SIM, layoutOs, statusBarHeight, webSafeAreaOverride } from './src/safe-area-runtime';
-import { HARMONY_INSETS_EVENT, registerHarmonyBackHandler } from './src/harmony-bridge';
+import { HARMONY_INSETS_EVENT, installHarmonyClipboardShim, registerHarmonyBackHandler, syncHarmonyTheme } from './src/harmony-bridge';
 import { mainWindowTopPadding } from './src/modal-safe-area';
 import { purgeLegacyAttachmentCache } from './src/AuthedThumb';
 import { prefetchStatus, login, fetchHubNodes, fetchNetworkId, setNetworkIdPersister, HubConfig } from './src/api';
@@ -474,7 +474,15 @@ function AppRoot() {
     // 0.2.83:窗口自己的底色也跟主题走——Overlay 标题栏区域和 webview 未画出的那一帧露出来的是它,
     // 默认是白的(Vincent 2026-09-22 macOS 深色主题顶部白条)。失败不抛,底色只是保底。
     void applyWindowBackground(themeMode());
-    return onThemeChange((m) => { setTheme(m); void applyWindowBackground(m); });
+    if (Platform.OS === 'web') {
+      syncHarmonyTheme(themeMode());
+      installHarmonyClipboardShim();
+    }
+    return onThemeChange((m) => {
+      setTheme(m);
+      void applyWindowBackground(m);
+      if (Platform.OS === 'web') syncHarmonyTheme(m);
+    });
   }, []);
   // Scrollbars are painted by the browser, outside React Native's style
   // system, so they need the palette pushed to them explicitly.

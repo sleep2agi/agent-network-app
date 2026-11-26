@@ -6,6 +6,7 @@ import { colors, onThemeChange, spacing, radius } from './theme';
 import { useBubbleInk } from './bubble-ink';
 import { downloadImageObjectUrl, saveImageObjectUrl } from './web-image-download';
 import { chooseSavePath, isTauriDesktop, revealInFolder, saveToDownloads, displayDownloadPath } from './desktop-download';
+import { harmonyDownloadFile, hasHarmonyFileBridge } from './harmony-bridge';
 
 /** Tauri 的 WebView 里 <a download> 不落盘(Vincent 2026-09-07):走 Rust 写进「下载」目录;
  *  点 → 另存为对话框选位置,⌥/Alt 点 → 直接存到下载。返回落盘路径(浏览器下载/取消时为 null)。
@@ -41,6 +42,11 @@ export default function AuthedWebThumb({
   const [savedPath, setSavedPath] = useState<string | null>(null);
   const saveOriginal = async (url: string, direct = false) => {
     try {
+      if (hasHarmonyFileBridge()) {
+        const saved = await harmonyDownloadFile({ url: uri, token, fileName: name, mimeType: mime, mode: 'save' });
+        if (saved) setSavedPath(saved);
+        return;
+      }
       const saved = await saveObjectUrlOriginal(url, name, direct);
       if (saved) setSavedPath(saved);
     } catch (reason) {
