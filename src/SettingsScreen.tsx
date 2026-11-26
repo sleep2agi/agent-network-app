@@ -415,7 +415,7 @@ export default function SettingsScreen({
   const managedDepts = managedDepartmentIds(authMe, me.networkId);
   const [manageDeptOpen, setManageDeptOpen] = useState(false);
   const hubVoice = useSyncExternalStore(subscribeHubVoice, getHubVoiceSnapshot, getHubVoiceSnapshot);
-  const voiceAvailableOnWeb = hubVoice.supported && (hubVoice.enabled || hubVoice.canManage);
+  const voiceAvailableOnWeb = hubVoice.supported && ((hubVoice.enabled && hubVoice.canUse) || hubVoice.canManage);
   const filtered = useMemo(() => filterSettings(query, { localHub: !!localHub, users: usersAvailable, voice: voiceAvailableOnWeb }, undefined, platform), [query, localHub, usersAvailable, voiceAvailableOnWeb, platform, language]);
   const searching = query.trim().length > 0;
   const visible = useMemo(() => visibleRowKeys(query, filtered), [query, filtered]);

@@ -32,6 +32,7 @@ export type HubVoiceConfigState = {
   endpoint: string;
   streamEndpoint: string;
   streamResourceId: string;
+  canUse: boolean;
   canManage: boolean;
   vaultReady: boolean;
   updatedAt: number | null;
@@ -82,6 +83,7 @@ export const EMPTY_HUB_VOICE: HubVoiceConfigState = {
   endpoint: '',
   streamEndpoint: '',
   streamResourceId: '',
+  canUse: false,
   canManage: false,
   vaultReady: true,
   updatedAt: null,
@@ -132,6 +134,7 @@ function parsePublicConfig(scopeKey: string, body: unknown): HubVoiceConfigState
     endpoint: typeof o.endpoint === 'string' ? o.endpoint : '',
     streamEndpoint: typeof o.stream_endpoint === 'string' ? o.stream_endpoint : '',
     streamResourceId: isStreamResourceId(rawStreamRid) ? rawStreamRid : '',
+    canUse: o.can_use !== false,
     canManage: o.can_manage === true,
     vaultReady: o.vault_ready !== false,
     updatedAt: typeof o.updated_at === 'number' && Number.isFinite(o.updated_at) ? o.updated_at : null,
@@ -234,6 +237,8 @@ let activeCfg: HubConfig | null = null;
 let snapshot: HubVoiceConfigState = EMPTY_HUB_VOICE;
 let cachedCreds: { scopeKey: string; updatedAt: number | null; creds: VoiceCredentials } | null = null;
 let inflightCreds: Promise<VoiceCredentials | null> | null = null;
+/** Monotonic generation bumped on scope switches & writes so stale in-flight GETs never overwrite newer state. */
+let storeEpoch = 0;
 const listeners = new Set<() => void>();
 const unsupportedScopes = new Set<string>();
 
@@ -247,7 +252,7 @@ function clearCachedCreds(): void {
 }
 
 function setSnapshot(next: HubVoiceConfigState): void {
-  if (!next.supported || !next.enabled || !next.configured) {
+  if (!next.supported || !next.enabled || !next.configured || !next.canUse) {
     clearCachedCreds();
   } else if (cachedCreds && (cachedCreds.scopeKey !== next.scopeKey || cachedCreds.updatedAt !== next.updatedAt)) {
     clearCachedCreds();
@@ -264,6 +269,7 @@ function setSnapshot(next: HubVoiceConfigState): void {
     snapshot.endpoint === next.endpoint &&
     snapshot.streamEndpoint === next.streamEndpoint &&
     snapshot.streamResourceId === next.streamResourceId &&
+    snapshot.canUse === next.canUse &&
     snapshot.canManage === next.canManage &&
     snapshot.vaultReady === next.vaultReady &&
     snapshot.updatedAt === next.updatedAt
@@ -289,7 +295,7 @@ export function getHubVoiceCredentials(): VoiceCredentials | null {
 }
 
 export function hubVoiceReady(s: HubVoiceConfigState = snapshot): boolean {
-  return s.supported && s.enabled && s.configured;
+  return s.supported && s.enabled && s.configured && s.canUse;
 }
 
 export function subscribeHubVoice(cb: () => void): () => void {
@@ -299,6 +305,7 @@ export function subscribeHubVoice(cb: () => void): () => void {
 
 /** Test-only reset for clean unit test isolation. */
 export function __resetHubVoiceForTest(): void {
+  storeEpoch++;
   activeCfg = null;
   snapshot = EMPTY_HUB_VOICE;
   clearCachedCreds();
@@ -312,11 +319,13 @@ export function setActiveHubVoiceConfig(cfg: HubConfig | null, opts?: { fetchImp
   const prevScope = hubVoiceScopeKey(activeCfg);
   activeCfg = cfg;
   if (!cfg || !nextScope) {
+    storeEpoch++;
     clearCachedCreds();
     setSnapshot(EMPTY_HUB_VOICE);
     return;
   }
   if (nextScope !== prevScope) {
+    storeEpoch++;
     clearCachedCreds();
     setSnapshot({ ...EMPTY_HUB_VOICE, scopeKey: nextScope });
     void refreshHubVoiceConfig(cfg, opts);
@@ -363,6 +372,7 @@ export async function fetchHubVoiceCredentials(
 ): Promise<VoiceCredentials | null> {
   const scopeKey = hubVoiceScopeKey(cfg);
   if (!scopeKey) return null;
+  const reqEpoch = storeEpoch;
   const fetchImpl = opts?.fetchImpl ?? defaultFetch;
   try {
     const res = await fetchImpl(voiceUrl(cfg, '/api/voice/credentials'), {
@@ -371,25 +381,30 @@ export async function fetchHubVoiceCredentials(
     });
     if (res.status === 401) {
       reportProfileAuthResponse(401, profileIdOf(cfg), undefined, cfg.token);
-      if (hubVoiceScopeKey(activeCfg) === scopeKey) clearCachedCreds();
+      if (hubVoiceScopeKey(activeCfg) === scopeKey && reqEpoch === storeEpoch) clearCachedCreds();
       return null;
     }
     if (res.status === 404 || res.status === 405 || res.status === 501) {
       unsupportedScopes.add(scopeKey);
-      if (hubVoiceScopeKey(activeCfg) === scopeKey) clearCachedCreds();
+      if (hubVoiceScopeKey(activeCfg) === scopeKey && reqEpoch === storeEpoch) clearCachedCreds();
       return null;
     }
     if (res.status < 200 || res.status >= 300) {
-      if (res.status === 409 && hubVoiceScopeKey(activeCfg) === scopeKey) {
-        clearCachedCreds();
-        setSnapshot({ ...snapshot, enabled: false });
+      if (hubVoiceScopeKey(activeCfg) === scopeKey && reqEpoch === storeEpoch) {
+        if (res.status === 409) {
+          clearCachedCreds();
+          setSnapshot({ ...snapshot, enabled: false });
+        } else if (res.status === 403) {
+          clearCachedCreds();
+          setSnapshot({ ...snapshot, canUse: false });
+        }
       }
       return null;
     }
     const body = await res.json().catch(() => null);
     const parsed = parseIssuedCredentials(body);
     if (!parsed) return null;
-    if (hubVoiceScopeKey(activeCfg) === scopeKey) {
+    if (hubVoiceScopeKey(activeCfg) === scopeKey && reqEpoch === storeEpoch) {
       cachedCreds = { scopeKey, updatedAt: parsed.updatedAt ?? snapshot.updatedAt, creds: parsed.creds };
     }
     return parsed.creds;
@@ -433,15 +448,17 @@ export async function refreshHubVoiceConfig(
     if (hubVoiceScopeKey(activeCfg) === scopeKey) setSnapshot(unsupported);
     return unsupported;
   }
+  const reqEpoch = storeEpoch;
   const next = await fetchHubVoiceConfig(target, opts);
-  if (hubVoiceScopeKey(activeCfg) === scopeKey) {
+  // Ignore stale in-flight GET if an admin write or account switch happened meanwhile.
+  if (hubVoiceScopeKey(activeCfg) === scopeKey && reqEpoch === storeEpoch) {
     setSnapshot(next);
     // Warm in-memory credentials in the background so pressing hold-to-talk has zero extra Hub RTT.
     if (hubVoiceReady(next) && (!cachedCreds || cachedCreds.scopeKey !== scopeKey || cachedCreds.updatedAt !== next.updatedAt)) {
       void ensureHubVoiceCredentials(target, opts);
     }
   }
-  return next;
+  return reqEpoch === storeEpoch ? next : snapshot;
 }
 
 export async function saveHubVoiceConfig(
@@ -466,6 +483,7 @@ export async function saveHubVoiceConfig(
       const parsed = parsePublicConfig(scopeKey, body);
       if (parsed) {
         if (hubVoiceScopeKey(activeCfg) === scopeKey) {
+          storeEpoch++;
           clearCachedCreds();
           setSnapshot(parsed);
           if (hubVoiceReady(parsed)) void ensureHubVoiceCredentials(cfg, opts);
@@ -501,6 +519,7 @@ export async function clearHubVoiceConfig(
       const parsed = parsePublicConfig(scopeKey, body);
       if (parsed) {
         if (hubVoiceScopeKey(activeCfg) === scopeKey) {
+          storeEpoch++;
           clearCachedCreds();
           setSnapshot(parsed);
         }

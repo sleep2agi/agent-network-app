@@ -227,6 +227,51 @@ async function run() {
       }),
     });
     ck('clearHubVoiceConfig DELETE 成功并立即清空内存凭据', delRes.ok && !hubVoiceReady() && !getHubVoiceSnapshot().configured && getHubVoiceCredentials() === null);
+
+    // Stale in-flight GET must not overwrite a newer PUT/DELETE write
+    let releaseStaleGet!: () => void;
+    const staleGetPromise = refreshHubVoiceConfig(cfgA, {
+      fetchImpl: () => new Promise(resolve => {
+        releaseStaleGet = () => resolve({
+          status: 200,
+          json: async () => ({
+            ok: true, enabled: true, configured: true, mode: 'hub-key', auth_mode: 'api-key',
+            key_hint: '…old1', can_use: true, can_manage: true, updated_at: 1700000000001,
+          }),
+        });
+      }),
+    });
+    await saveHubVoiceConfig(cfgA, {
+      enabled: false, provider: 'doubao', auth_mode: 'api-key', app_id: '', endpoint: '', stream_endpoint: '', stream_resource_id: '',
+    }, {
+      fetchImpl: async () => ({
+        status: 200,
+        json: async () => ({
+          ok: true, enabled: false, configured: true, mode: 'hub-key', auth_mode: 'api-key',
+          key_hint: '…new2', can_use: true, can_manage: true, updated_at: 1700000020000,
+        }),
+      }),
+    });
+    releaseStaleGet();
+    await staleGetPromise;
+    ck('写操作后返回的陈旧 GET 不会覆盖最新停用状态', !getHubVoiceSnapshot().enabled && getHubVoiceSnapshot().keyHint === '…new2');
+
+    // Read-only viewer (can_use: false) is never hubVoiceReady and does not fetch /api/voice/credentials
+    let viewerCredsHit = false;
+    await refreshHubVoiceConfig(cfgA, {
+      fetchImpl: async (url) => {
+        if (url.includes('/api/voice/credentials')) viewerCredsHit = true;
+        return {
+          status: 200,
+          json: async () => ({
+            ok: true, enabled: true, configured: true, mode: 'hub-key', auth_mode: 'api-key',
+            key_hint: '…new2', can_use: false, can_manage: false, updated_at: 1700000020001,
+          }),
+        };
+      },
+    });
+    await new Promise(r => setTimeout(r, 10));
+    ck('只读成员 can_use=false 时 hubVoiceReady 为 false 且不请求 /api/voice/credentials', !hubVoiceReady() && !viewerCredsHit);
   }
 
   // ── 4. Web / HarmonyOS settings-model unlock & static safety guards ──
@@ -243,8 +288,9 @@ async function run() {
     const appSrc = readFileSync('App.tsx', 'utf8');
     ck('App.tsx 接入 setActiveHubVoiceConfig(cfg) 与轮询刷新', appSrc.includes('setActiveHubVoiceConfig(cfg)') && appSrc.includes('refreshHubVoiceConfig(cfg)'));
     const hookSrc = readFileSync('src/useVoiceInput.ts', 'utf8');
-    ck('useVoiceInput 流式与极速版均走 loadEffectiveVoiceCredentials（优先本地、回落 Hub 发放 Key）',
+    ck('useVoiceInput 按下守卫与识别链路均包含 hubVoiceReady（零配置按住说话直接开录）',
       hookSrc.includes('hubVoiceReady(hubVoice)')
+      && hookSrc.includes('configured: getConfigured() || hubVoiceReady()')
       && hookSrc.includes('loadCreds: loadEffectiveVoiceCredentials')
       && hookSrc.includes('transcribeCaptured(await loadEffectiveVoiceCredentials(), captured)'));
   }

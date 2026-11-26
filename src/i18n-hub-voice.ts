@@ -10,7 +10,7 @@ registerTranslations({
   'hubVoice.statusUnconfigured': ['未配置', 'Not configured'],
   'hubVoice.memberFooterEnabled': ['当前网络已由管理员统一发放豆包语音 Key，客户端直连识别（支持流式与极速版，不经服务器中转），无需填写个人 Key。若填写个人 Key 将优先使用个人 Key。', 'Your network admin distributes a shared Doubao voice key for direct recognition (streaming & flash, no audio relay). No personal key needed; a personal key, if set, takes priority.'],
   'hubVoice.memberFooterDisabled': ['管理员尚未启用服务器统一语音服务；你可以填写个人豆包 API Key 使用语音输入。', 'Hub-managed voice is not enabled for this network. You can still configure a personal Doubao API Key below.'],
-  'hubVoice.adminFooter': ['Key 加密保存在当前网络的 Hub 保险库中，自动发放给本网络认证成员客户端直连豆包识别（不做音频转发，仅存内存不落盘，退出/停用即清空）；支持全端（含鸿蒙/网页）开箱即用。', 'Credentials are encrypted on the Hub and issued to authenticated members in this network for direct Doubao ASR (no audio relay; kept in memory only, cleared on sign-out or disable). Works across all platforms including HarmonyOS and web.'],
+  'hubVoice.adminFooter': ['这个 Key 会发到每个成员的设备上（仅存客户端内存，不做音频转发）。请在火山引擎控制台给它单独开一个子账号，并设好用量上限。退出登录、切换网络或停用后会立即清除。', 'This key is distributed to each member’s device (kept in memory only, no audio relay). Create a dedicated sub-account in Volcengine Console with a usage cap. Cleared immediately on sign-out, network switch, or disable.'],
   'hubVoice.vaultMissing': ['当前 Hub 尚未配置加密主密钥（ANET_HUB_SECRET_VAULT_KEY），保存前需由运维在 Hub 环境变量中设置。', 'This Hub does not have ANET_HUB_SECRET_VAULT_KEY configured yet. Set it in Hub environment variables before saving credentials.'],
   'hubVoice.enableSwitch': ['向当前网络成员发放 Key', 'Distribute key to network members'],
   'hubVoice.enableSubtitle': ['开启后全网络成员无需自配 Key 即可直连使用语音输入', 'Members in this network get zero-config direct voice input'],

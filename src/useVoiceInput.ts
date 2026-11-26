@@ -261,7 +261,7 @@ export function useVoiceInput(opts: {
       onResponderGrant: (e) => {
         startYRef.current = e.nativeEvent.pageY;
         setSettingsPrompt(false);
-        dispatch({ type: 'press', configured: getConfigured(), now: Date.now() });
+        dispatch({ type: 'press', configured: getConfigured() || hubVoiceReady(), now: Date.now() });
       },
       onResponderMove: (e) => {
         const zone = optsRef.current.zoneAt?.(e.nativeEvent.pageX, e.nativeEvent.pageY, zoneOfPhase(stateRef.current.phase)) ?? null;

@@ -138,8 +138,8 @@ export function HubVoiceSettingsCard() {
   useTranslation();
   const { hub, form, setForm, advanced, setAdvanced, busy, msg, setAuthMode, onSave, onToggleEnabled, onClear } = useHubVoiceEditor();
 
-  if (!hub.supported) return null;
-  const ready = hub.enabled && hub.configured;
+  if (!hub.supported || (!hub.canUse && !hub.canManage)) return null;
+  const ready = hub.enabled && hub.configured && hub.canUse;
   const footer = hub.canManage
     ? (!hub.vaultReady ? tr('hubVoice.vaultMissing') : tr('hubVoice.adminFooter'))
     : (ready ? tr('hubVoice.memberFooterEnabled') : tr('hubVoice.memberFooterDisabled'));
@@ -343,8 +343,8 @@ export function HubVoicePhoneGroup({ onOpenEdit }: { onOpenEdit: () => void }) {
   useTranslation();
   const hub = useSyncExternalStore(subscribeHubVoice, getHubVoiceSnapshot, getHubVoiceSnapshot);
   useEffect(() => { void refreshHubVoiceConfig(undefined, { force: false }); }, []);
-  if (!hub.supported) return null;
-  const ready = hub.enabled && hub.configured;
+  if (!hub.supported || (!hub.canUse && !hub.canManage)) return null;
+  const ready = hub.enabled && hub.configured && hub.canUse;
   const footer = hub.canManage
     ? tr('hubVoice.phoneHint')
     : (ready ? tr('hubVoice.memberFooterEnabled') : tr('hubVoice.memberFooterDisabled'));
