@@ -642,6 +642,16 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.622:
+            ### 新功能与修复
+
+            - 节点日志面板更好用（#1744）：最新的日志显示在最上面；第一次只读最新 150 行，往下翻到底点「加载更早的」才继续要；「详细」开关可以看每行原文和调试行，简洁模式只留主句；复制与导出始终是原文；实时跟随从 3 秒改成 5 秒一轮，少占 Hub。
+            - 权限说明写清楚了（#1743）：成员列表与成员编辑器里写明「所有者和管理员默认能看见全部 Agent，管理员可在『管理范围』限定到某个部门」。
+
+            ### 验证状态与已知问题
+
+            - 日志面板用假 Hub 跑了浅色/深色真界面测试（26/26），App 全量测试 569/569、类型检查通过；管理员说明的文案在成员编辑器真界面测试里覆盖（浅深各一次）。
+
             What's new in 0.2.621:
             ### 新功能与修复
 
