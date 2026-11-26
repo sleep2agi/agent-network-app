@@ -17,7 +17,7 @@
  */
 import { compareVersions } from './android-update-core';
 
-export type NoteKind = 'new' | 'speed' | 'fix';
+export type NoteKind = 'new' | 'speed' | 'fix' | 'note';
 export type NoteItem = { kind: NoteKind; text: string };
 export type NoteSection = { kind: NoteKind; title: string; items: NoteItem[] };
 export type NoteGroup = {
@@ -28,10 +28,14 @@ export type NoteGroup = {
   sections: NoteSection[];
 };
 
-export const SECTION_TITLES: Record<NoteKind, string> = { new: '新功能', speed: '提速', fix: '修复' };
-const SECTION_ORDER: NoteKind[] = ['new', 'speed', 'fix'];
+export const SECTION_TITLES: Record<NoteKind, string> = { new: '新功能', speed: '提速', fix: '修复', note: '说明' };
+const SECTION_ORDER: NoteKind[] = ['new', 'speed', 'fix', 'note'];
 
-const HEADING = /^What's new in\s+v?([0-9][^\s:]*)\s*:\s*$/i;
+const HEADING = /^(?:#{1,6}\s+)?What's new in\s+v?([0-9][^\s:]*)\s*:?\s*$/i;
+const SUBHEADING = /^\s*(?:#\s+|#{2,6}\s*)(.+?)\s*#*\s*$/;
+const BARE_HASH = /^\s*#{1,6}\s*$/;
+const HRULE = /^\s*(?:-{3,}|\*{3,}|_{3,})\s*$/;
+const LEADING_HASH = /^(?:#\s+|#{2,6}\s*)/;
 const FOOTER = /^Existing installations\b/i;
 const BULLET = /^\s*(?:[-*•·]|\d+[.)、])\s+/;
 
@@ -43,14 +47,27 @@ const PREFIX: Array<[RegExp, NoteKind]> = [
 ];
 const SPEED_WORDS = /提速|加速|更快|加快|秒开|更流畅|耗时|延迟降|faster|speed/i;
 
+/** Markdown 子标题（如 `### 修复`、`### 验证状态与已知问题`）→ 这一节的默认归类；混合标题返回 undefined。 */
+function subheadingKind(rawTitle: string): NoteKind | undefined {
+  const title = inlinePlain(rawTitle).replace(/[:：]\s*$/, '').trim();
+  if (/^(?:修复|问题修复|缺陷修复|Bug\s*fix(?:es)?|Fix(?:es|ed)?)$/i.test(title)) return 'fix';
+  if (/^(?:提速|加速|性能|性能优化|速度|Perf(?:ormance)?|Speed)$/i.test(title)) return 'speed';
+  if (/^(?:新功能|新增|特性|New|Feature(?:s)?)$/i.test(title)) return 'new';
+  if (/^(?:验证状态与已知问题|验证与已知问题|已知问题与验证|验证状态|测试状态|已知问题|注意事项|说明|备注|Verification|Known\s*Issues?|Notes?)$/i.test(title)) return 'note';
+  return undefined;
+}
+
 /** 一条说明 → 归类 + 去掉分类前缀 + 去掉行内 markdown(粗体 / 代码 / 链接)。 */
-export function classifyNote(raw: string): NoteItem {
-  let text = inlinePlain(raw.replace(BULLET, '').trim());
+export function classifyNote(raw: string, fallbackKind?: NoteKind): NoteItem {
+  const stripped = raw.replace(BULLET, '').trim().replace(LEADING_HASH, '').trim();
+  const text = inlinePlain(stripped);
+  if (fallbackKind === 'note') return { kind: 'note', text };
   for (const [re, kind] of PREFIX) {
     if (re.test(text)) return { kind, text: text.replace(re, '').trim() };
   }
   if (/^修复/.test(text)) return { kind: 'fix', text };
-  return { kind: SPEED_WORDS.test(text) ? 'speed' : 'new', text };
+  if (SPEED_WORDS.test(text)) return { kind: 'speed', text };
+  return { kind: fallbackKind ?? 'new', text };
 }
 
 const inlinePlain = (s: string) => s
@@ -61,20 +78,24 @@ const inlinePlain = (s: string) => s
   .replace(/\s+/g, ' ')
   .trim();
 
-/** 一段(一个版本)的正文行 → 条目。缩进的续行并进上一条;空行分条。 */
+/** 一段(一个版本)的正文行 → 条目。Markdown 子标题只用来定分节、不当条目；缩进续行并进上一条；空行分条。 */
 function itemsOf(lines: string[]): NoteItem[] {
-  const raw: string[] = [];
+  const raw: Array<{ text: string; hint?: NoteKind }> = [];
   let open = false;
+  let hint: NoteKind | undefined;
   for (const line of lines) {
-    if (!line.trim()) { open = false; continue; }
-    if (FOOTER.test(line.trim())) continue;
-    if (BULLET.test(line)) { raw.push(line); open = true; continue; }
-    if (open && /^\s+\S/.test(line)) { raw[raw.length - 1] += ` ${line.trim()}`; continue; }
+    const trimmed = line.trim();
+    if (!trimmed) { open = false; continue; }
+    if (FOOTER.test(trimmed) || HRULE.test(trimmed) || BARE_HASH.test(trimmed)) { open = false; continue; }
+    const sub = SUBHEADING.exec(trimmed);
+    if (sub) { open = false; hint = subheadingKind(sub[1]); continue; }
+    if (BULLET.test(line)) { raw.push({ text: line, hint }); open = true; continue; }
+    if (open && /^\s+\S/.test(line)) { raw[raw.length - 1].text += ` ${trimmed}`; continue; }
     // 不带横杠的一行字:自成一条(不和上一条粘在一起)。
-    raw.push(line);
+    raw.push({ text: line, hint });
     open = true;
   }
-  return raw.map(classifyNote).filter(i => i.text.length > 0);
+  return raw.map(entry => classifyNote(entry.text, entry.hint)).filter(i => i.text.length > 0);
 }
 
 function sectionsOf(items: NoteItem[]): NoteSection[] {

@@ -108,7 +108,7 @@ const phoneCase = async ({ vp, theme, state, current, tag }) => {
 
     // (d) content: no raw markdown / English heading; only versions newer than installed
     const text = await page.locator('[data-testid="android-update-prompt"]').last().innerText();
-    ck(`${name}: no "What's new" / leading "- "`, !/What's new/i.test(text) && !/^\s*- /m.test(text));
+    ck(`${name}: no "What's new" / leading "- " / raw "###"`, !/What's new/i.test(text) && !/^\s*- /m.test(text) && !/^\s*#{1,6}\s/m.test(text));
     const footerText = await page.locator('[data-testid="android-update-footer"]').last().innerText();
     const footerP = await painted(page.locator('[data-testid="android-update-footer"]').last(), /安全校验/);
     ck(`${name}: footer says 安全校验, no sha256 jargon`, footerText.includes('安全校验') && !/sha256/i.test(footerText) && seen(footerP), `${JSON.stringify(footerText)} ${pd(footerP)}`);
@@ -154,7 +154,7 @@ const desktopCase = async ({ vp, theme, state, current, tag }) => {
     const b = await box(page, bid);
     ck(`${name}: ${bid} inside the card`, !!b && b.y >= c.y && b.y + b.height <= c.y + c.height && b.x + b.width <= c.x + c.width, b && `y=${r1(b.y)}..${r1(b.y + b.height)} card ${r1(c.y)}..${r1(c.y + c.height)}`);
     const text = await page.locator('[data-testid="desktop-update-card"]').last().innerText();
-    ck(`${name}: no "What's new" / leading "- "`, !/What's new/i.test(text) && !/^\s*- /m.test(text));
+    ck(`${name}: no "What's new" / leading "- " / raw "###"`, !/What's new/i.test(text) && !/^\s*- /m.test(text) && !/^\s*#{1,6}\s/m.test(text));
     ck(`${name}: notes rendered (still there while downloading)`, (await page.locator('[data-testid="update-note-item"]').count()) > 0);
     if (state === 'downloading') {
       const pctP = await painted(page.locator('[data-testid="desktop-update-card"]').last(), /44%/);

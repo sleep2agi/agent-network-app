@@ -11,8 +11,24 @@ import type { NoteGroup, NoteKind } from './release-notes';
 export const tint = (hex: string, alpha: number): string =>
   /^#[0-9a-f]{6}$/i.test(hex) ? `${hex}${Math.round(Math.max(0, Math.min(1, alpha)) * 255).toString(16).padStart(2, '0')}` : hex;
 
-const KIND_ICON: Record<NoteKind, ComponentProps<typeof Ionicons>['name']> = { new: 'sparkles', speed: 'flash', fix: 'construct' };
-const kindColor = (kind: NoteKind): string => (kind === 'fix' ? colors.running : kind === 'speed' ? colors.blocked : colors.accent);
+const KIND_ICON: Record<NoteKind, ComponentProps<typeof Ionicons>['name']> = {
+  new: 'sparkles',
+  speed: 'flash',
+  fix: 'construct',
+  note: 'information-circle-outline',
+};
+const ITEM_ICON: Record<NoteKind, ComponentProps<typeof Ionicons>['name']> = {
+  new: 'add',
+  speed: 'flash',
+  fix: 'checkmark',
+  note: 'information',
+};
+const kindColor = (kind: NoteKind): string => (
+  kind === 'fix' ? colors.running
+    : kind === 'speed' ? colors.blocked
+      : kind === 'note' ? colors.textSecondary
+        : colors.accent
+);
 
 /** App 图标(和桌面安装包、启动页同一张品牌图)。 */
 export function UpdateBrandMark({ size }: { size: number }) {
@@ -76,7 +92,7 @@ export function ReleaseNoteGroups({ groups, surface, testID }: { groups: NoteGro
               {sec.items.map((item, ii) => (
                 <View key={ii} style={styles.item} testID="update-note-item">
                   <View style={[styles.itemDot, { backgroundColor: tint(kindColor(item.kind), 0.14) }]}>
-                    <Ionicons name={item.kind === 'fix' ? 'checkmark' : item.kind === 'speed' ? 'flash' : 'add'} size={11} color={kindColor(item.kind)} />
+                    <Ionicons name={ITEM_ICON[item.kind]} size={11} color={kindColor(item.kind)} />
                   </View>
                   <Text style={styles.itemText} selectable>{item.text}</Text>
                 </View>

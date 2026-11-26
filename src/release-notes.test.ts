@@ -1,5 +1,6 @@
 // 更新页「更新内容」解析(release-notes.ts)。ck 风格:自执行,失败退出码非 0(scripts/run-tests.mjs 汇总)。
 import { classifyNote, notesCoverVersion, parseReleaseNotes, type NoteGroup } from './release-notes';
+import { BUNDLED_RELEASE_BODY } from './changelog-bundled';
 const PLAIN_NOTE = '此版本包含功能改进和问题修复。';
 
 let p = 0, t = 0;
@@ -97,6 +98,51 @@ Existing installations can update in place; new installations can use the assets
   ck('covers: heading with no items → no', !notesCoverVersion("What's new in 0.2.160:\n\nWhat's new in 0.2.159:\n- 搜索\n", '0.2.160'));
   ck('covers: plain bullet text without headings → yes (taken as this version)', notesCoverVersion('- 修复:某问题', '0.2.160'));
   ck('covers: empty / null → no', !notesCoverVersion('', '0.2.160') && !notesCoverVersion(null, '0.2.160'));
+}
+
+// ── Markdown 子标题（### 新功能与修复 / ### 修复 / ### 验证状态与已知问题）绝不裸露 # ──
+{
+  const body622 = `What's new in 0.2.622:
+### 新功能与修复
+
+- 节点日志面板更好用（#1744）：最新的日志显示在最上面。
+- 权限说明写清楚了（#1743）：成员列表写清管理范围。
+
+### 验证状态与已知问题
+
+- 日志面板用假 Hub 跑了浅色/深色真界面测试（26/26），类型检查通过。`;
+  const g = parseReleaseNotes(body622, { currentVersion: '0.2.621', targetVersion: '0.2.622' });
+  const all = texts(g);
+  ck('markdown subheadings never appear as bullet items', all.length === 3 && all.every(s => !/^#/.test(s) && !s.includes('###')), JSON.stringify(all));
+  ck('0.2.622 splits into 新功能 (2) and 说明 (1)', g.length === 1 && g[0].sections.map(s => `${s.title}:${s.items.length}`).join('/') === '新功能:2/说明:1', g[0]?.sections.map(s => `${s.title}:${s.items.length}`).join('/'));
+
+  const byHeading = parseReleaseNotes(`## What's new in 0.2.623:
+### 修复
+- 聊天页闪烁
+### 性能
+- 冷启动缩短一半
+### 新增
+- 支持快捷键
+---
+###
+- ### 意外带井号的条目
+- #5427 统计口径对齐`, { currentVersion: '0.2.622' });
+  ck('## What\'s new heading recognized', byHeading.length === 1 && byHeading[0].version === '0.2.623');
+  const secMap = Object.fromEntries(byHeading[0].sections.map(s => [s.kind, s.items.map(i => i.text)]));
+  ck('### 修复 routes unprefixed items into fix section', secMap.fix?.includes('聊天页闪烁') === true, JSON.stringify(secMap));
+  ck('### 性能 routes unprefixed items into speed section', secMap.speed?.includes('冷启动缩短一半') === true, JSON.stringify(secMap));
+  ck('### 新增 keeps items in new, strips bullet ###, preserves #5427 issue ref',
+    secMap.new?.includes('支持快捷键') === true
+    && secMap.new?.includes('意外带井号的条目') === true
+    && secMap.new?.includes('#5427 统计口径对齐') === true, JSON.stringify(secMap));
+  ck('bare ### and --- hrules are dropped', texts(byHeading).every(s => s !== '---' && s !== '###'));
+
+  const onlyHeading = parseReleaseNotes("What's new in 1.0.1:\n### 新功能与修复\n\nWhat's new in 1.0.0:\n- x", { currentVersion: '0.1.0' });
+  ck('version with only a ### subheading and no items is dropped', versions(onlyHeading) === '1.0.0', versions(onlyHeading));
+
+  const bundledGroups = parseReleaseNotes(BUNDLED_RELEASE_BODY);
+  const leaked = texts(bundledGroups).filter(s => /^(?:#\s|#{2,6})/.test(s) || /(^|\s)#{2,6}(\s|$)/.test(s));
+  ck('entire BUNDLED_RELEASE_BODY has zero leaked markdown ### headings', bundledGroups.length > 50 && leaked.length === 0, JSON.stringify(leaked.slice(0, 5)));
 }
 
 console.log(`\n${p}/${t} passed`);
