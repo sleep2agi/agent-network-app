@@ -208,7 +208,6 @@ export default function VoiceSettingsSection({ showHub = true, showCredentials =
 
   return (
     <View testID="voice-settings">
-      {showHub ? <HubVoiceSettingsCard /> : null}
       {showMode ? (
         // v2(#427):识别方式 = 设置积木的单选行(✓ 在右侧同一列),说明放在卡片下面。
         <SettingsGroup
@@ -390,6 +389,9 @@ export default function VoiceSettingsSection({ showHub = true, showCredentials =
           {test.kind === 'error' ? <SettingsCardContent><Text style={[styles.result, styles.error]} testID="voice-test-error">{test.message}</Text></SettingsCardContent> : null}
         </SettingsGroup>
       ) : null}
+
+      {/* 服务器统一语音服务放在桌面语音区块底部，避免管理员表单或状态卡片挤占上方麦克风选择行的视口空间。 */}
+      {showHub ? <HubVoiceSettingsCard /> : null}
     </View>
   );
 }

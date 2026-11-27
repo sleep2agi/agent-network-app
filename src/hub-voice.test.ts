@@ -272,6 +272,12 @@ async function run() {
     });
     await new Promise(r => setTimeout(r, 10));
     ck('只读成员 can_use=false 时 hubVoiceReady 为 false 且不请求 /api/voice/credentials', !hubVoiceReady() && !viewerCredsHit);
+
+    // Bare { ok: true } fallback (non-voice route / stub) must not be treated as supported
+    await refreshHubVoiceConfig(cfgA, {
+      fetchImpl: async () => ({ status: 200, json: async () => ({ ok: true }) }),
+    });
+    ck('非语音接口返回的裸 { ok: true } 不误判为 supported', !getHubVoiceSnapshot().supported && !hubVoiceReady());
   }
 
   // ── 4. Web / HarmonyOS settings-model unlock & static safety guards ──

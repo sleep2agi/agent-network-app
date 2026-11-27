@@ -115,9 +115,9 @@ function profileIdOf(cfg: HubConfig): string {
 function parsePublicConfig(scopeKey: string, body: unknown): HubVoiceConfigState | null {
   if (!body || typeof body !== 'object') return null;
   const o = body as Record<string, unknown>;
-  if (o.ok !== true) return null;
-  const configured = o.configured === true;
-  const enabled = configured && o.enabled === true;
+  if (o.ok !== true || typeof o.configured !== 'boolean' || typeof o.enabled !== 'boolean') return null;
+  const configured = o.configured;
+  const enabled = configured && o.enabled;
   const authMode: HubVoiceAuthMode = o.auth_mode === 'app-token' ? 'app-token' : 'api-key';
   const rawStreamRid = typeof o.stream_resource_id === 'string' ? o.stream_resource_id.trim() : '';
   return {
