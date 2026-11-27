@@ -9,14 +9,16 @@ import { nodeIsDown } from './node-danger-actions';
 
 /** Parent keys this component by Hub/account/network/node, isolating late results. */
 /** initialDialog:从「概览 → 交给守护进程管理」进来时直接打开收编对话框(board #694),不用再点一次入口。 */
-export default function NodeAdoptionControls({ cfg, node, online, onRefresh, initialDialog }: { cfg: HubConfig; node: HubNode; online: boolean; onRefresh: () => void; initialDialog?: 'adopt' }) {
+export default function NodeAdoptionControls({ cfg, node, online, onRefresh, initialDialog, initialPath }: { cfg: HubConfig; node: HubNode; online: boolean; onRefresh: () => void; initialDialog?: 'adopt'; /** 节点自报的工作目录：有就预填，用户不用自己输。 */ initialPath?: string | null }) {
   const { t } = useTranslation();
   const [dialog, setDialog] = useState<'adopt' | 'start' | 'stop' | null>(initialDialog ?? null);
   const [list, setList] = useState<AdoptDaemonList>({ kind: 'loading' });
   const [listAttempt, setListAttempt] = useState(0);
   const daemons: HostSupervisorDaemon[] = list.kind === 'ready' ? list.daemons : [];
-  const [daemon, setDaemon] = useState(''), [path, setPath] = useState('');
+  const [daemon, setDaemon] = useState(''), [path, setPath] = useState(initialPath ?? '');
   const [message, setMessage] = useState('');
+  // 只有一台能收编的守护进程时直接选上（少问一步）；多台时仍让用户选。
+  useEffect(() => { if (!daemon && list.kind === 'ready' && list.daemons.length === 1) setDaemon(list.daemons[0].daemon_node_id); }, [list, daemon]);
   const [pending, setPending] = useState<{ kind: NodeLifecycleRequest['kind']; id: string } | null>(node.adoption?.status === 'pending' ? { kind: 'adopt', id: node.adoption.request_id } : null);
   const [busy, setBusy] = useState(false);
   const lock = useRef(false), alive = useRef(true), refresh = useRef(onRefresh);

@@ -9,8 +9,8 @@
 //   · oses_ 是目录 ID，永远不能变成 fork 的 session_id；
 //   · 404 = gate 未开放：显示「未开放」，绝不 fallback 普通创建；unknown 不新开意图。
 import { isOpenCodeV2Node } from './opencode-v2-model-list';
-import { useEffect, useMemo, useRef, useState } from 'react';
-import { ActivityIndicator, Platform, Pressable, View } from 'react-native';
+import { useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
+import { ActivityIndicator, Platform, Pressable, ScrollView, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { Ionicons } from './icons';
 import {
@@ -104,6 +104,8 @@ interface Props {
   /** Chat entry is scoped to its real current session, not directory/create. */
   forkOnly?: boolean;
   forkSourceError?: string | null;
+  /** 2026-11-27：fork 源不可用时紧跟在原因下面放的「下一步」（例如就地收编），由调用方提供。 */
+  forkSourceAction?: ReactNode;
 }
 
 type DirectoryState =
@@ -120,7 +122,7 @@ interface ForkState {
 const DIRECTORY_POLL_MS = 1500;
 const FORK_POLL_MS = 2000;
 
-export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessionId, forkSessions, title, onClose, daemonNodeId: suppliedDaemon, forkOnly = false, forkSourceError }: Props) {
+export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessionId, forkSessions, title, onClose, daemonNodeId: suppliedDaemon, forkOnly = false, forkSourceError, forkSourceAction }: Props) {
   const styles = makePaletteStyles();
   const [query, setQuery] = useState('');
   const [fork, setFork] = useState<ForkState>({ kind: 'loading', candidates: [], error: null });
@@ -554,7 +556,8 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           <Ionicons name="close" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
-      {caps.hubNoticeKey ? (
+      {/* 2026-11-27（admin 截图，同 #1759）：fork 源本身不可用时读不到 daemon 能力是这个原因造成的，不是 Hub 版本旧。 */}
+      {caps.hubNoticeKey && !(forkOnly && forkSourceError) ? (
         <Text style={[styles.headerSub, { color: colors.textSecondary }]} numberOfLines={2} testID="source-capability-hub-notice">{t(caps.hubNoticeKey)}</Text>
       ) : null}
       {/* Fork 当前节点（admin 11-11「有点丑」）：不摆 network / node id、mode= 这类内部字段，改成一句人话；
@@ -581,11 +584,13 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
 
       {busy && !forkOnly ? <PaletteLoading text={t('sourcePalette.submitting')} testID="source-palette-busy" /> : null}
       {forkOnly && forkSourceError ? <PaletteError text={forkSourceError} testID="chat-fork-source-error" /> : null}
+      {/* 手机上收编控件比浮层高：放进可滚动区域，确认按钮一定点得到。 */}
+      {forkOnly && forkSourceError && forkSourceAction ? <ScrollView testID="chat-fork-source-action" style={{ flexShrink: 1, minHeight: 0 }} keyboardShouldPersistTaps="handled">{forkSourceAction}</ScrollView> : null}
 
       <View testID="source-directory-section" style={{ flexShrink: 1, minHeight: 0 }}>
         {view.status === 'loading' ? <PaletteLoading text={t('sourcePalette.loading')} testID="source-palette-loading" /> : null}
         {view.status === 'error' ? <PaletteError text={view.errorText ?? ''} testID="source-palette-error" /> : null}
-        {view.status === 'ready' && view.total === 0 ? (
+        {view.status === 'ready' && view.total === 0 && !(forkOnly && forkSourceError) ? (
           view.catalogTotal === 0 ? (
             <PaletteEmpty
               title={t('sourcePalette.catalogEmpty')}

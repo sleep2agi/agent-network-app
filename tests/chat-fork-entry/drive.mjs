@@ -10,7 +10,7 @@ const browser = await chromium.launch({ headless: true, executablePath: process.
 let checks = 0;
 const ck = (name, result) => { assert.ok(result, name); checks++; console.log(`PASS ${name}`); };
 function fixture() {
-  window.__chatFork = { mode: 'fail', missing: false, calls: [], directory: 0, creates: 0, gets: 0 };
+  window.__chatFork = { mode: 'fail', missing: false, unmanaged: false, calls: [], directory: 0, creates: 0, gets: 0 };
   window.__routeOverride = (url, raw, method) => {
     const p = new URL(url).pathname;
     const fx = window.__chatFork;
@@ -19,7 +19,10 @@ function fixture() {
       session_id: fx.missing ? undefined : `ses_${alias}123`, project_dir: '/work/current-project',
     })) };
     if (p === '/api/nodes') return { ok: true, nodes: ['A', 'B'].map(alias => ({ alias, node_id: `n_${alias}`,
-      runtime: 'opencode-cli', opencode_generation: 'v2', lifecycle_daemon_node_id: 'd_fixture' })) };
+      runtime: 'opencode-cli', opencode_generation: 'v2', lifecycle_daemon_node_id: 'd_fixture',
+      ...(fx.unmanaged ? { managed: 'none', adoption: { status: 'none' } } : {}) })) };
+    // 2026-11-27：手动启动的源（managed:'none'）—— fork 弹窗里就地收编要列出这台机器上能收编的守护进程。
+    if (p === '/api/host-supervisors') return { ok: true, daemons: [{ daemon_node_id: 'd_fixture', alias: '示例守护', hostname: 'host-a', online: true, adopt_capable: true }] };
     if (p.includes('/source/directory')) { fx.directory++; return { ok: false, error: 'directory_must_not_be_called' }; }
     if (p.includes('/source/project-create')) { fx.creates++; return { ok: false, error: 'create_must_not_be_called' }; }
     if (p === '/api/node-session-control/source' && method === 'POST') {
@@ -110,6 +113,26 @@ try {
       missingText.includes('还没有 OpenCode 会话')
       && await page.getByTestId('source-fork-submit').count() === 0
       && await page.locator('[data-testid$="-check"]').count() === 0);
+    await page.getByTestId('source-fork-frame-close').click();
+    // admin 2026-11-27 截图：手动启动的节点 fork 被拒后是死路。现在原因下面直接给收编入口，不用去节点信息里找。
+    await page.evaluate(() => { window.__chatFork.missing = false; window.__chatFork.unmanaged = true; });
+    await open(page);
+    await page.getByTestId('chat-fork-source-error').waitFor();
+    await page.getByTestId('chat-fork-adopt-hint').waitFor();
+    const unmanagedText = await page.getByTestId('source-fork-frame').innerText();
+    ck(`${name}: unmanaged source explains why and offers adoption in place`,
+      unmanagedText.includes('还没交给守护进程管理') && !unmanagedText.includes('节点信息里')
+      && !unmanagedText.includes('当前 Hub 版本不提供该能力')
+      && !unmanagedText.includes('没有可选的节点来源')
+      && await page.getByTestId('chat-fork-source-action').count() === 1);
+    await bounds(page, viewport);
+    // 手机上收编控件比浮层高：「确认收编」要能滚到并且落在浮层里面。
+    await page.getByTestId('adopt-confirm').scrollIntoViewIfNeeded().catch(() => {});
+    const frame = await page.getByTestId('source-fork-frame').boundingBox();
+    const confirm = await page.getByTestId('adopt-confirm').boundingBox().catch(() => null);
+    ck(`${name}: adopt confirm is reachable inside the palette`, !!confirm && !!frame && confirm.y >= frame.y && confirm.y + confirm.height <= frame.y + frame.height + 1);
+    ck(`${name}: single daemon + reported folder ⇒ confirm is enabled without typing`, await page.getByTestId('adopt-confirm').getAttribute('aria-disabled') !== 'true');
+    await page.screenshot({ path: `${out}/${name}-unmanaged-adopt.png` });
     ck(`${name}: no JS errors`, errors.length === 0);
     await ctx.close();
   }

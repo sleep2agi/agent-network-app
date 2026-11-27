@@ -4,6 +4,7 @@ import { registerTranslations } from './i18n';
 export const nodeSourcePaletteTranslations = {
   'chat.info.fork': ['Fork 当前节点', 'Fork current node'],
   'chat.forkLoading': ['读取当前节点会话…', 'Reading the current node session…'],
+  'chat.forkAdoptHint': ['交给这台机器上的守护进程管理后，就能在这里直接 fork。只是登记，不会重启或改动这个节点。', 'Hand this node to a daemon on its machine and you can fork it right here. This only registers it; the node is not restarted or changed.'],
   'sourcePalette.title': ['节点来源', 'Node source'],
   'sourcePalette.subtitle': ['在这台 source 节点上新建会话、接入已有会话，或独立 fork。', 'Create a session on this source, attach an existing one, or fork independently.'],
   'sourcePalette.search': ['搜索项目或会话', 'Search projects or sessions'],
