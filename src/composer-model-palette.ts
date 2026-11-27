@@ -183,6 +183,17 @@ export interface ComposerSwitchConfirmation {
   pending?: boolean;
 }
 
+/** Only an explicit refusal for this write is evidence that hot model switching is unsupported. */
+export function composerModelSwitchUnsupported(error: unknown, receipt?: {
+  updateId: string | undefined;
+  last: { update_id?: string | null; terminal?: boolean; status?: string | null; error?: string | null } | null | undefined;
+}): boolean {
+  if (!receipt) return error === 'unsupported';
+  const { updateId, last } = receipt;
+  return !!updateId && last?.update_id === updateId && last.terminal === true
+    && last.status === 'rejected' && last.error === 'unsupported';
+}
+
 /** 模型切换：本次 update_id 的终局 ACK + model_effective 真实读回，两者都匹配才算生效。 */
 export function confirmComposerModelSwitch(input: {
   after: { model_effective?: string | null; last_update?: Parameters<typeof lastUpdateApplied>[0] } | null;

@@ -2883,6 +2883,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         currentVariant={footerVariant}
         onReadback={receiveEffectiveConfig}
         onClose={() => setModelSheetOpen(false)}
+        onOpenModelSettings={onOpenNodeSettings ? () => {
+          setModelSheetOpen(false);
+          requestNodeSection(nodeInfoSectionKey(cfg.profileId ?? cfg.serverUrl, alias), 'model');
+          onOpenNodeSettings();
+        } : undefined}
       />
     </View>
   ) : null;

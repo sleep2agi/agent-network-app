@@ -43,6 +43,7 @@ import { composerAgentCurrent, composerAgentSectionVisible, composerAgentSwitcha
 import './i18n-composer-agent';
 import {
   confirmComposerModelSwitch,
+  composerModelSwitchUnsupported,
   confirmComposerVariantSwitch,
   paletteCatalogModels,
   paletteCurrentKey,
@@ -64,6 +65,7 @@ interface Props {
   currentVariant: string | null | undefined;
   onReadback: (value: NodeConfigRead | null) => void;
   onClose: () => void;
+  onOpenModelSettings?: () => void;
 }
 
 const CATALOG_POLL_MS = 1000;
@@ -95,7 +97,7 @@ const VARIANT_CONFIRM_MAX_MS = 60 * 60 * 1000;
 
 const INTERNAL_AGENTS = new Set(['compaction', 'title', 'summary']);
 
-export default function ComposerModelPalette({ cfg, node, targetError, currentModel, currentVariant, onReadback, onClose }: Props) {
+export default function ComposerModelPalette({ cfg, node, targetError, currentModel, currentVariant, onReadback, onClose, onOpenModelSettings }: Props) {
   const styles = makeStyles();
   const { height: windowHeight } = useWindowDimensions();
   const [query, setQuery] = useState('');
@@ -136,6 +138,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   }, [config, acpPrefilled, node?.runtime]);
   const [busy, setBusy] = useState(false);
   const [errorText, setErrorText] = useState<string | null>(null);
+  const [modelSwitchUnsupported, setModelSwitchUnsupported] = useState(false);
   const [errorDetail, setErrorDetail] = useState<string | null>(null);
   const [notice, setNotice] = useState<string | null>(null);
   // 正在等节点回填档位的那次切换（panel 关闭/切节点时随之丢弃，不跨面板残留）。
@@ -304,6 +307,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
 
   const applyAgent = async (agent: string) => {
     if (!node || !config || !agentWritable || lock.current || !agents.includes(agent) || config.agent === agent) return;
+    setModelSwitchUnsupported(false);
     const requestScope = scope;
     const requestCfg = cfg;
     const live = () => scopeRef.current === requestScope;
@@ -353,6 +357,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
   const applyModel = async (row: PaletteRow) => {
     if (!node || lock.current) return;
     if (row.key === currentKey) { closeRef.current(); return; }
+    setModelSwitchUnsupported(false);
     if (!config) {
       setErrorText(t('chat.modelPicker.noConfig'));
       setErrorDetail(null);
@@ -377,19 +382,28 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
       });
       if (!res.ok) {
         if (res.conflict) await reloadConfig();
+        if (v2 && !res.conflict && composerModelSwitchUnsupported(res.error)) {
+          setModelSwitchUnsupported(true);
+          return;
+        }
         setErrorText(res.conflict ? t('chat.modelPicker.conflict') : t('chat.modelPicker.failed', { message: res.error }));
         return;
       }
       // 热切换的 ACK 很快，但 model_effective 跟着下一次心跳才到：短轮询，别拿第一次读回下结论。
       let after = await fetchNodeConfig(cfgRef.current, node.node_id);
       let verdict = confirmComposerModelSwitch({ after, updateId: res.update_id, requested: row.key });
-      for (let i = 0; !verdict.confirmed && i < READBACK_POLLS; i += 1) {
+      const rejected = () => v2 && composerModelSwitchUnsupported(null, { updateId: res.update_id, last: after?.last_update });
+      for (let i = 0; !verdict.confirmed && !rejected() && i < READBACK_POLLS; i += 1) {
         await new Promise(r => setTimeout(r, READBACK_POLL_MS));
         after = await fetchNodeConfig(cfgRef.current, node.node_id);
         verdict = confirmComposerModelSwitch({ after, updateId: res.update_id, requested: row.key });
       }
       // 无论结果如何都换上最新配置：revision 已经抬高，留着旧的下次必撞冲突。
       if (after) setConfig(after);
+      if (rejected()) {
+        setModelSwitchUnsupported(true);
+        return;
+      }
       if (!verdict.confirmed && !verdict.ackOnly) {
         setErrorText(t('chat.modelPicker.failed', { message: t('chat.modelPicker.acceptedUnconfirmed') }));
         setErrorDetail(verdict.reason);
@@ -428,6 +442,7 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
 
   const applyVariant = async (next: string | null) => {
     if (!node || lock.current) return;
+    setModelSwitchUnsupported(false);
     if (!config) {
       setErrorText(t('chat.modelPicker.noConfig'));
       setErrorDetail(null);
@@ -1121,6 +1136,16 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         </View>
       ) : null}
 
+      {modelSwitchUnsupported ? (
+        <View style={styles.errorBox} testID="model-palette-switch-unsupported">
+          <Text style={styles.errorText}>{t('chat.modelPicker.switchUnsupported')}</Text>
+          {onOpenModelSettings ? (
+            <Pressable accessibilityRole="button" onPress={onOpenModelSettings} testID="model-palette-open-model-settings">
+              <Text style={styles.statusText}>{t('chat.modelPicker.openModelSettings')}</Text>
+            </Pressable>
+          ) : null}
+        </View>
+      ) : null}
       {errorText ? (
         <View style={styles.errorBox} testID="model-palette-action-error">
           <Text style={styles.errorText}>{errorText}</Text>
