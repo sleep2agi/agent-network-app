@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.628:",
+  "",
+  "- 改进：节点暂不支持在对话中途切换模型时，聊天面板会说明原因，并提供「打开节点模型设置」入口；不会自动重试或重启节点。",
+  "- 改进：模型设置回执显示节点正在重启时，面板会提示等待节点重新上线后再确认当前模型。",
+  "",
   "What's new in 0.2.627:",
   "",
   "- 新功能：聊天里 MP3 / WAV / MP4 / WEBM 等音视频附件卡片换掉了原来的灰色折角方块，改成带格式角标的矢量图标（音频紫调、视频暖橙），浅色深色都清晰；PDF、ZIP、代码等文档卡片一并升级。",
