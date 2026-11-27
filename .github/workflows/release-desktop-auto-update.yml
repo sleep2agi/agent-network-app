@@ -642,6 +642,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.627:
+
+            - 新功能：聊天里 MP3 / WAV / MP4 / WEBM 等音视频附件卡片换掉了原来的灰色折角方块，改成带格式角标的矢量图标（音频紫调、视频暖橙），浅色深色都清晰；PDF、ZIP、代码等文档卡片一并升级。
+            - 修复：「停止」按钮重做为高辨识度的红色胶囊（停止 / 停止中… / 已停止 / 重试停止），不再把一长串提示挤在工具栏上；点停止后不再频繁卡在「已发送，节点未确认（可能仍在跑）」，节点回执一到就确认已停，超时或失败的说明挪到输入框上方轻提示。
+
             What's new in 0.2.626:
 
             - 修复：在聊天卡片里保存密钥后不用再手动重启 —— 节点空闲时会自动生效；它正在干活时会提示「做完这件事后自动生效」。
