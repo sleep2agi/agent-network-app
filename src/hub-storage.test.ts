@@ -92,6 +92,9 @@ const run = async () => {
 
     const rBadSize = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'a/b', apiToken: 'tok123456', maxFileMb: '999' });
     ck('Rejects maxFileMb > 500', !rBadSize.ok && rBadSize.reasonKey === 'hubStorage.err.maxSizeInvalid');
+
+    const rNoPubUrl = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'a/b', apiToken: 'tok123456', publicBaseUrl: 'https://cdn.example.com/public' });
+    ck('Strict private-only: mergeHubStorageWrite never sends non-empty public_base_url', rNoPubUrl.ok && rNoPubUrl.body.public_base_url === '');
   }
 
   console.log('# 3 Reactive store: refresh, scope isolation, old Hub 404 downgrade, test & clear');
@@ -124,15 +127,15 @@ const run = async () => {
       }
       if (url.includes('/api/storage/test') && init.method === 'POST') {
         return {
-          status: 200,
-          ok: true,
+          status: 400,
+          ok: false,
           json: async () => ({
-            ok: true,
+            ok: false,
             provider: 'modelscope',
             latency_ms: 42,
             visibility: 'public',
-            warning: '注意：该 ModelScope 仓库当前为公开（Public）',
-            message: '连接成功',
+            error: 'public_storage_forbidden',
+            message: '安全策略禁止使用公开（Public）ModelScope 仓库',
           }),
         };
       }
@@ -162,7 +165,7 @@ const run = async () => {
     ck('Loads ModelScope config state from Hub', snapA.supported && snapA.enabled && snapA.provider === 'modelscope' && snapA.repoId === 'team/anet-files' && snapA.maxFileBytes === 150 * 1024 * 1024);
 
     const testRes = await testHubStorageConfig(cfgA, null, { fetchImpl: okFetch });
-    ck('Test endpoint surfaces latency & public repo warning', testRes.ok && testRes.latencyMs === 42 && testRes.visibility === 'public' && !!testRes.warning);
+    ck('Test endpoint surfaces public_storage_forbidden hard rejection', !testRes.ok && testRes.error === 'public_storage_forbidden' && testRes.latencyMs === 42 && testRes.visibility === 'public');
 
     const cleared = await clearHubStorageConfig(cfgA, { fetchImpl: okFetch });
     ck('DELETE clears Hub storage config', cleared.ok && !getHubStorageSnapshot().configured && !getHubStorageSnapshot().enabled);
@@ -285,6 +288,8 @@ const run = async () => {
     ck('SettingsScreen renders HubStorageSettingsCard', settingsSrc.includes('<HubStorageSettingsCard />'));
     const phoneSrc = read('src/SettingsPhonePages.tsx');
     ck('SettingsPhonePages wires HubStoragePhoneGroup and HubStorageEditPage', phoneSrc.includes('<HubStoragePhoneGroup') && phoneSrc.includes('<HubStorageEditPage />'));
+    const cardSrc = read('src/HubStorageSettingsCard.tsx');
+    ck('HubStorageSettingsCard removes public_base_url input (strict private-only)', !cardSrc.includes('hub-storage-public-url') && !cardSrc.includes('publicUrlLabel'));
 
     // Guard against directional words (下面/below) in footer strings
     let badFooter = false;

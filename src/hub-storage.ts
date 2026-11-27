@@ -190,7 +190,7 @@ export function initialHubStorageForm(state: HubStorageConfigState): HubStorageA
     accessKeySecret: '',
     endpoint: state.endpoint,
     prefix: state.prefix ?? 'anet-files',
-    publicBaseUrl: state.publicBaseUrl,
+    publicBaseUrl: '',
     maxFileMb: String(Math.round((state.maxFileBytes || DEFAULT_HUB_STORAGE_MAX_BYTES) / (1024 * 1024))),
   };
 }
@@ -216,10 +216,11 @@ export function mergeHubStorageWrite(
 ): { ok: true; body: HubStorageWriteInput } | { ok: false; reasonKey: string } {
   const sameProvider = current.configured && current.provider === form.provider;
   const endpoint = form.endpoint.trim();
-  const publicBaseUrl = form.publicBaseUrl.trim();
-  if (!isValidOptionalUrl(endpoint) || !isValidOptionalUrl(publicBaseUrl)) {
+  if (!isValidOptionalUrl(endpoint)) {
     return { ok: false, reasonKey: 'hubStorage.err.urlInvalid' };
   }
+  // Strictly private-only policy: never transmit a public/CDN base URL.
+  const publicBaseUrl = '';
 
   const mb = Number(form.maxFileMb.trim() || '100');
   if (!Number.isFinite(mb) || mb < 1 || mb > 500) {

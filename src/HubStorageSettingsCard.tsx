@@ -56,7 +56,7 @@ function hubStorageStatusText(s: HubStorageConfigState): string {
 function useHubStorageEditor() {
   const hub = useSyncExternalStore(subscribeHubStorage, getHubStorageSnapshot, getHubStorageSnapshot);
   const [form, setForm] = useState<HubStorageAdminForm>(() => initialHubStorageForm(hub));
-  const [advanced, setAdvanced] = useState(() => !!hub.endpoint || !!hub.publicBaseUrl || hub.repoType === 'model' || (!!hub.revision && hub.revision !== 'master'));
+  const [advanced, setAdvanced] = useState(() => !!hub.endpoint || hub.repoType === 'model' || (!!hub.revision && hub.revision !== 'master'));
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'warn' | 'err'; text: string } | null>(null);
@@ -84,7 +84,6 @@ function useHubStorageEditor() {
     hub.region,
     hub.endpoint,
     hub.prefix,
-    hub.publicBaseUrl,
     hub.maxFileBytes,
     hub.updatedAt,
   ]);
@@ -422,19 +421,6 @@ export function HubStorageSettingsCard() {
                     value={form.endpoint}
                     onChangeText={endpoint => setForm(f => ({ ...f, endpoint }))}
                     placeholder={form.provider === 'modelscope' ? tr('hubStorage.endpointPlaceholderMs') : tr('hubStorage.endpointPlaceholderCloud')}
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-
-                  <Text style={styles.fieldLabel}>{tr('hubStorage.publicUrlLabel')}</Text>
-                  <TextInput
-                    testID="hub-storage-public-url"
-                    accessibilityLabel={tr('hubStorage.publicUrlLabel')}
-                    value={form.publicBaseUrl}
-                    onChangeText={publicBaseUrl => setForm(f => ({ ...f, publicBaseUrl }))}
-                    placeholder={tr('hubStorage.publicUrlPlaceholder')}
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
