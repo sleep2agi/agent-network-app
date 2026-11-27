@@ -42,6 +42,7 @@ import NotifyDiagnosticsPanel from './NotifyDiagnosticsPanel';
 import { persistUiScale, UiScalePreview } from './UiScaleSettings';
 import { DENSITY_OPTIONS, FONT_SIZE_OPTIONS, uiScale, uiScaleLayoutWide, uiScaleSummary } from './ui-scale';
 import { CONSOLE_HELP, useVoiceSettings, VOICE_UNSUPPORTED_TEXT } from './VoiceSettingsSection';
+import { HubVoiceEditPage, HubVoicePhoneGroup } from './HubVoiceSettingsCard';
 import MicDeviceSetting from './MicDeviceSetting';
 import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported } from './voice-stream-policy';
 import { VOLC_CONSOLE_URL } from './voice-credentials-model';
@@ -495,11 +496,32 @@ function VoicePhonePage({ ctx }: { ctx: PhonePagesCtx }) {
   useTranslation();
   // 一个 hook 实例同时服务子页和它的两个三级页:表单改到一半在 API Key ↔ 高级 之间切换不丢。
   const v = useVoiceSettings();
+  if (ctx.detail === 'voiceHub') return <HubVoiceEditPage />;
   if (ctx.detail === 'voiceApiKey') return <VoiceApiKeyEditPage v={v} ctx={ctx} />;
   if (ctx.detail === 'voiceAdvanced') return <VoiceAdvancedEditPage v={v} ctx={ctx} />;
-  if (v.storage === 'unsupported') return <SettingsGroup testID="voice-settings-unsupported" footer={tr(VOICE_UNSUPPORTED_TEXT)} />;
+  const hubAvailable = v.hubVoice.supported && (v.hubVoice.enabled || v.hubVoice.canManage);
   const { show } = ctx;
   const { status } = v;
+  const t = v.test;
+  const testValue = t.kind === 'recording' ? tr('settings.copy.195', { v0: v.secondsLeft }) : t.kind === 'transcribing' ? tr('settings.copy.121') : '';
+  const testFooter = (t.kind === 'recording' || t.kind === 'transcribing') && v.interim ? v.interim
+    : t.kind === 'done' ? `${t.text ? tr('settings.copy.196', { v0: t.via === 'stream' ? tr('settings.copy.122') : tr('settings.copy.123'), v1: t.text }) : tr('settings.copy.124')}${t.note ? `\n${t.note}` : ''}`
+      : t.kind === 'error' ? t.message
+        : v.canTest ? tr('settings.copy.125') : tr('settings.copy.126');
+  if (v.storage === 'unsupported') {
+    if (!hubAvailable) return <SettingsGroup testID="voice-settings-unsupported" footer={tr(VOICE_UNSUPPORTED_TEXT)} />;
+    return (
+      <>
+        {show('voice', 'hub') ? <HubVoicePhoneGroup onOpenEdit={() => ctx.openDetail('voiceHub')} /> : null}
+        {show('voice', 'mic') && Platform.OS === 'web' ? <MicDeviceSetting phone /> : null}
+        {show('voice', 'test') ? (
+          <SettingsGroup footer={testFooter} footerTone={t.kind === 'error' ? 'danger' : undefined} testID="voice-test-group">
+            <SettingsRow testID="voice-test" label={tr('settings.copy.133')} value={testValue} busy={v.testBusy} disabled={v.testBusy || !v.canTest} onPress={() => void v.onTest()} />
+          </SettingsGroup>
+        ) : null}
+      </>
+    );
+  }
   const modeNote: { text: string; tone?: SettingsTone } = !streamingSupported(v.platform)
     ? { text: tr('settings.copy.115') }
     : v.mode === 'stream' && v.unavailable ? { text: settingsText(STREAM_UNAVAILABLE_HINT), tone: 'accent' }
@@ -508,14 +530,9 @@ function VoicePhonePage({ ctx }: { ctx: PhonePagesCtx }) {
   const credNote = status.configured && (status.console === 'old' || status.customEndpoint || status.customStreamEndpoint)
     ? `${status.console === 'old' ? tr('settings.copy.194', { v0: status.appId }) : tr('settings.copy.118')}${status.customEndpoint || status.customStreamEndpoint ? tr('settings.copy.119') : ''}`
     : tr('settings.copy.120');
-  const t = v.test;
-  const testValue = t.kind === 'recording' ? tr('settings.copy.195', { v0: v.secondsLeft }) : t.kind === 'transcribing' ? tr('settings.copy.121') : '';
-  const testFooter = (t.kind === 'recording' || t.kind === 'transcribing') && v.interim ? v.interim
-    : t.kind === 'done' ? `${t.text ? tr('settings.copy.196', { v0: t.via === 'stream' ? tr('settings.copy.122') : tr('settings.copy.123'), v1: t.text }) : tr('settings.copy.124')}${t.note ? `\n${t.note}` : ''}`
-      : t.kind === 'error' ? t.message
-        : status.configured ? tr('settings.copy.125') : tr('settings.copy.126');
   return (
     <>
+      {show('voice', 'hub') ? <HubVoicePhoneGroup onOpenEdit={() => ctx.openDetail('voiceHub')} /> : null}
       {show('voice', 'mode') ? (
         <SettingsGroup title={tr('settings.copy.127')} footer={modeNote.text} footerTone={modeNote.tone} testID="voice-mode">
           {v.choices.map(m => (
@@ -546,7 +563,7 @@ function VoicePhonePage({ ctx }: { ctx: PhonePagesCtx }) {
       {show('voice', 'mic') && Platform.OS === 'web' ? <MicDeviceSetting phone /> : null}
       {show('voice', 'test') ? (
         <SettingsGroup footer={testFooter} footerTone={t.kind === 'error' ? 'danger' : undefined} testID="voice-test-group">
-          <SettingsRow testID="voice-test" label={tr('settings.copy.133')} value={testValue} busy={v.testBusy} disabled={v.testBusy || !status.configured} onPress={() => void v.onTest()} />
+          <SettingsRow testID="voice-test" label={tr('settings.copy.133')} value={testValue} busy={v.testBusy} disabled={v.testBusy || !v.canTest} onPress={() => void v.onTest()} />
         </SettingsGroup>
       ) : null}
     </>

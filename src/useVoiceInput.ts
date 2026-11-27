@@ -24,10 +24,18 @@ import { Utterance } from './voice-utterance';
 import { chooseRoute, STREAM_UNAVAILABLE_HINT, type UtteranceResult, type VoiceMode } from './voice-stream-policy';
 import { authMode } from './voice-credentials-model';
 import { currentVoiceMode, loadVoiceMode, markStreamUnavailable, streamUnavailable, voicePlatform } from './voice-prefs';
+import { ensureHubVoiceCredentials, getHubVoiceSnapshot, hubVoiceReady, subscribeHubVoice } from './hub-voice';
 
 export const LIMITS = { minSeconds: MIN_UTTERANCE_SECONDS, maxSeconds: MAX_UTTERANCE_SECONDS };
 
-/** appFetch(桌面走 Tauri plugin-http,手机走 RN fetch)适配成 doubao-asr 的 FetchLike。 */
+/** 优先读本机个人凭据；未配置个人凭据时读 Hub 统一发放的内存凭据（#5653）。 */
+export async function loadEffectiveVoiceCredentials(): Promise<VoiceCredentials | null> {
+  const local = await loadVoiceCredentials();
+  if (local && local.accessToken) return local;
+  return ensureHubVoiceCredentials();
+}
+
+/** appFetch(桌面走 Tauri plugin-http,手机走 RN fetch,鸿蒙走原生 rcp)适配成 doubao-asr 的 FetchLike。 */
 export const asrFetch: FetchLike = (url, init) => appFetch(url, init as RequestInit) as ReturnType<FetchLike>;
 
 /** 录到的 PCM → 文本。设置页「测试」和聊天页共用。 */
@@ -53,11 +61,11 @@ export function currentRoute(mode: VoiceMode = currentVoiceMode()): VoiceMode {
   return chooseRoute({ mode, platform: voicePlatform(), streamUnavailable: !!streamUnavailable() });
 }
 
-/** 新建一句话的编排器。设置页「测试」和聊天页共用。 */
+/** 新建一句话的编排器。设置页「测试」和聊天页共用（流式与极速版均自动兼容 Hub 发放 Key）。 */
 export function newUtterance(route: VoiceMode, onInterim: (text: string) => void): Utterance {
   return new Utterance({
     route,
-    loadCreds: loadVoiceCredentials,
+    loadCreds: loadEffectiveVoiceCredentials,
     openSession: (creds, cb) => new StreamingAsrSession(creds, { wsFactory: nativeWsFactory, onInterim: cb }),
     onInterim,
   });
@@ -69,7 +77,7 @@ export async function finishUtteranceWith(u: Utterance, captured: Captured | nul
   const r = await u.finish(
     async () => {
       if (!captured) throw new AsrError('too_short');
-      return transcribeCaptured(await loadVoiceCredentials(), captured);
+      return transcribeCaptured(await loadEffectiveVoiceCredentials(), captured);
     },
     (failure, upstream) => markStreamUnavailable(failure, upstream),
   );
@@ -130,7 +138,10 @@ export function useVoiceInput(opts: {
 }): VoiceInput {
   const recorder = useVoiceRecorder();
   const sim = useSyncExternalStore(VOICE_SIM ? voiceSimStore.subscribe : noSim, simSnapshot, simSnapshot);
-  const configured = useSyncExternalStore(subscribeConfigured, getConfigured, getConfigured);
+  const localConfigured = useSyncExternalStore(subscribeConfigured, getConfigured, getConfigured);
+  const hubVoice = useSyncExternalStore(subscribeHubVoice, getHubVoiceSnapshot, getHubVoiceSnapshot);
+  const hubConfigured = hubVoiceReady(hubVoice);
+  const configured = localConfigured || hubConfigured;
   const [state, setState] = useState<VoiceState>(IDLE);
   const stateRef = useRef<VoiceState>(IDLE);
   const [now, setNow] = useState(Date.now());
@@ -187,7 +198,7 @@ export function useVoiceInput(opts: {
           } catch (e) {
             const err = e instanceof AsrError ? e : new AsrError('upstream_error');
             if (err.code === 'not_configured') setSettingsPrompt(true);
-            const creds = await loadVoiceCredentials().catch(() => null);
+            const creds = await loadEffectiveVoiceCredentials().catch(() => null);
             dispatch({ type: 'failed', message: asrErrorMessage(err.code, err.upstream, creds ? authMode(creds) : undefined) });
           } finally {
             if (utteranceRef.current === u) { utteranceRef.current = null; setInterim(''); }
@@ -231,7 +242,7 @@ export function useVoiceInput(opts: {
     return () => clearTimeout(id);
   }, [settingsPrompt]);
 
-  const available = voiceStorageKind() !== 'unsupported' && recorder.supported;
+  const available = (voiceStorageKind() !== 'unsupported' || hubConfigured) && recorder.supported;
 
   return {
     available,
@@ -250,7 +261,7 @@ export function useVoiceInput(opts: {
       onResponderGrant: (e) => {
         startYRef.current = e.nativeEvent.pageY;
         setSettingsPrompt(false);
-        dispatch({ type: 'press', configured: getConfigured(), now: Date.now() });
+        dispatch({ type: 'press', configured: getConfigured() || hubVoiceReady(), now: Date.now() });
       },
       onResponderMove: (e) => {
         const zone = optsRef.current.zoneAt?.(e.nativeEvent.pageX, e.nativeEvent.pageY, zoneOfPhase(stateRef.current.phase)) ?? null;

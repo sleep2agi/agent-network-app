@@ -310,6 +310,9 @@ const copy = [
   ['左侧栏', 'Sidebar'],
   ['关掉的入口不在主窗口左侧显示；Agent 和设置一直在。', 'Hidden entries disappear from the main window’s left bar. Agents and Settings always stay.'],
   ['切换到 组织', 'Go to Org'],
+  // 末尾追加(编号按位置):#5653 Hub 统一配置语音输入（ASR）。
+  ['服务器统一语音服务', 'Hub-managed voice service'],
+  ['服务器统一语音', 'Hub voice service'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);
