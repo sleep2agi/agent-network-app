@@ -16,7 +16,7 @@ ck('最多 8 条', (normalizePendingSecretRequests(Array.from({ length: 20 }, (_
 
 const section = readFileSync(new URL('./ScopedSecretsSection.tsx', import.meta.url), 'utf8');
 ck('密钥页渲染举手卡片（REST pending + snapshot.pending 去重），已配置的不出现', /pendingRest/.test(section) && /<SecretRequestCard/.test(section) && /!(displayedKeys|snapshot\?\.keys)\.some/.test(section));
-ck('保存走既有的 put 流程并带 revision', /action:'put',key:p\.key,value:v,revision:snapshot!\.revision/.test(section));
+ck('保存走既有的 put 流程并带 revision（无 snapshot 时即时拉取）', /action:\s*'put',\s*key:\s*p\.key,\s*value:\s*v/.test(section) && /resolveRevisionForWrite/.test(section));
 ck('Daemon 托管节点合并展示独立 node-secrets.json 键名且独立键覆盖 Daemon 默认 (#5505)', JSON.stringify(mergeNodeSecretKeys(
   [{ key: 'A_KEY', source: 'daemon' }, { key: 'B_KEY', source: 'node' }],
   [{ key: 'A_KEY', source: 'node' }, { key: 'GITHUB_TOKEN', source: 'node' }],

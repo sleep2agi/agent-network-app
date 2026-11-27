@@ -2,7 +2,13 @@ import type { HubConfig } from './api';
 import { providerFetch } from './daemon-provider-management-api';
 import { parseProviderRpc } from './daemon-provider-management';
 import { manageSecrets, type SecretScope, type SecretWrite } from './scoped-secrets';
-export function scopedSecrets(cfg: HubConfig, scope: SecretScope, signal: AbortSignal, write?: SecretWrite) {
+export function scopedSecrets(
+  cfg: HubConfig,
+  scope: SecretScope,
+  signal: AbortSignal,
+  write?: SecretWrite,
+  options?: { timeoutMs?: number; pollMs?: number },
+) {
   return manageSecrets(scope,async(args, requestSignal, containsKey)=>{
     const response=await providerFetch(`${cfg.serverUrl.replace(/\/$/,'')}/mcp`,{
       method:'POST',signal:requestSignal,
@@ -30,5 +36,5 @@ export function scopedSecrets(cfg: HubConfig, scope: SecretScope, signal: AbortS
       if(['secret_admin_required','user_token_required','scoped_secrets_upgrade_required','node_secrets_upgrade_required','invalid_secret_input'].includes(value.error))return {ok:false,error:value.error};
     } catch {}
     return {ok:false,error:'unconfirmed'};
-  },signal,write);
+  },signal,write,options);
 }
