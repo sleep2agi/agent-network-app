@@ -28,7 +28,17 @@ console.log('PASS chat fork source: opencode-sdk v2 accepted, v1 still refused')
 // Hand-started node (no daemon created/adopted it): the Hub always 409s before any reason.
 const unmanaged = select([session], [{ ...node, managed: 'none' } as HubNode]);
 assert.deepEqual(unmanaged, { ok: false, error: 'fork_source_not_managed' });
-assert.match(describeForkSourceError('fork_source_not_managed'), /daemon/);
+assert.match(describeForkSourceError('fork_source_not_managed'), /守护进程/);
+// 2026-11-27：不再让用户「先去节点信息里收编」—— fork 弹窗里直接给收编控件，成功后自动重查 fork 源。
+{
+  const { readFileSync } = await import('node:fs');
+  const palette = readFileSync(new URL('./ChatForkPalette.tsx', import.meta.url), 'utf8');
+  assert.match(palette, /error === 'fork_source_not_managed'/);
+  assert.match(palette, /<NodeAdoptionControls\b/);
+  assert.match(palette, /initialDialog="adopt"/);
+  assert.match(palette, /onRefresh=\{\(\) => setAttempt\(a => a \+ 1\)\}/);
+  assert.doesNotMatch(describeForkSourceError('fork_source_not_managed'), /节点信息里/);
+}
 assert.equal(select([session], [{ ...node, managed: 'created' } as HubNode]).ok, true);
 assert.equal(select([session], [{ ...node, managed: 'adopted' } as HubNode]).ok, true);
 assert.equal(select([session], [node]).ok, true); // older Hub: no `managed` field

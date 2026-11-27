@@ -35,7 +35,7 @@ const FORK_SOURCE_ERROR_TEXT: Record<string, string> = {
   fork_node_not_unique: '在节点列表里找不到唯一对应的节点，无法 fork。',
   fork_requires_opencode_v2: '只有 OpenCode V2 节点支持独立 fork。',
   fork_native_session_missing: '这个节点还没有 OpenCode 会话（ses_），无法 fork。',
-  fork_source_not_managed: '这个节点是手动启动的，没有 daemon 管理，Hub 不允许 fork。请先在节点信息里把它收编到所在机器的 daemon，再 fork。',
+  fork_source_not_managed: '这个节点是手动启动的，还没交给守护进程管理，所以暂时不能 fork。',
 };
 
 /** Human text for a chatForkSource error code; unknown codes are shown as-is. */
