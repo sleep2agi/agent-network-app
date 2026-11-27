@@ -2,6 +2,7 @@
 import { strict as assert } from 'node:assert';
 import {
   confirmComposerModelSwitch,
+  composerModelSwitchUnsupported,
   confirmComposerVariantSwitch,
   filterPaletteModels,
   groupPaletteModels,
@@ -91,6 +92,13 @@ ck('variant map only carries known models', Object.keys(vmap).join(',') === 'p/m
 const ack = { update_id: 'u1', status: 'applied', terminal: true, requested_model: 'p/m' };
 const afterOk = { model_effective: 'p/m', last_update: ack };
 ck('matching ack + readback confirmed', confirmComposerModelSwitch({ after: afterOk, updateId: 'u1', requested: 'p/m' }).confirmed);
+const unsupportedReceipt = { update_id: 'u1', terminal: true, status: 'rejected', error: 'unsupported' };
+ck('explicit synchronous refusal gets the model settings fallback', composerModelSwitchUnsupported('unsupported'));
+ck('matching terminal unsupported receipt gets the model settings fallback', composerModelSwitchUnsupported(null, { updateId: 'u1', last: unsupportedReceipt }));
+ck('stale, pending and unrelated errors do not get the model settings fallback',
+  !composerModelSwitchUnsupported(null, { updateId: 'u2', last: unsupportedReceipt }) &&
+  !composerModelSwitchUnsupported(null, { updateId: 'u1', last: { ...unsupportedReceipt, terminal: false } }) &&
+  !composerModelSwitchUnsupported('permission_denied'));
 ck('missing ack rejected', !confirmComposerModelSwitch({ after: { model_effective: 'p/m' }, updateId: 'u1', requested: 'p/m' }).confirmed);
 ck('wrong update id rejected', !confirmComposerModelSwitch({ after: afterOk, updateId: 'u2', requested: 'p/m' }).confirmed);
 ck('nonterminal ack rejected', !confirmComposerModelSwitch({ after: { model_effective: 'p/m', last_update: { ...ack, terminal: false } }, updateId: 'u1', requested: 'p/m' }).confirmed);

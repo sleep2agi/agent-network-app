@@ -110,5 +110,10 @@ ck('列表只从节点自报或服务器目录来，不含内置模型常量',
     }));
 }
 
+// #5712: open the existing model section, not a retry or a second model write.
+ck('模型切换不支持时的入口直达现有节点模型设置',
+  palette.includes('testID="model-palette-open-model-settings"') &&
+  /onOpenModelSettings=\{onOpenNodeSettings \? \(\) => \{[\s\S]*?requestNodeSection\(nodeInfoSectionKey\(cfg\.profileId \?\? cfg\.serverUrl, alias\), 'model'\);\s*onOpenNodeSettings\(\)/.test(chat));
+
 console.log(`\n${p}/${t} 通过`);
 process.exit(p === t ? 0 : 1);
