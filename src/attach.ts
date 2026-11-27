@@ -10,7 +10,7 @@ import { createSerialQueue, resizeForUpload } from './native-resize';
 import { attachmentFromFile } from './desktop-file-intake';
 import { resolveUploadNetworkId, uploadUrlFor, type UploadOptions } from './upload-url';
 import { getHubStorageSnapshot } from './hub-storage';
-import { computeSha256Hex, HUB_LOCAL_FALLBACK_MAX_BYTES, tryDirectUploadBytes } from './direct-storage';
+import { computeSha256Hex, HUB_LOCAL_FALLBACK_MAX_BYTES, tryDirectUploadBytes, tryNativeDirectUpload } from './direct-storage';
 import { isTauriDesktop } from './desktop-download';
 import { isHarmonyShell } from './harmony-bridge';
 import { t } from './i18n';
@@ -319,7 +319,6 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: Upload
       }
     } else {
       // Native iOS / Android: stream binary directly from disk via FileSystem.uploadAsync(BINARY_CONTENT).
-      const base = cfg.serverUrl.replace(/\/+$/, '');
       const fileInfo = await FileSystem.getInfoAsync(img.uri).catch(() => ({ exists: false } as const));
       const size = (fileInfo.exists && typeof (fileInfo as any).size === 'number' && (fileInfo as any).size > 0)
         ? (fileInfo as any).size as number
@@ -334,106 +333,39 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: Upload
             sha256 = '';
           }
         }
-        const presign = await withDeadline(
-          appFetch(`${base}/api/uploads/presign`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: img.fileName,
-              mime: img.mimeType,
-              size,
-              ...(sha256 ? { sha256 } : {}),
-              ...(networkId ? { network_id: networkId } : {}),
-              ...(opts.purpose ? { purpose: opts.purpose } : {}),
-            }),
-          }).then(async r => ({ status: r.status, ok: r.ok, body: await r.json().catch(() => null) })),
-          30_000,
-          () => null,
-        ).catch(() => null);
-        if (presign?.status === 413 && presign.body?.limit_bytes) {
-          throw new Error(`文件超过 ${Math.round(Number(presign.body.limit_bytes) / (1024 * 1024))}MB 上限`);
+        const nativeRes = await tryNativeDirectUpload({
+          serverUrl: cfg.serverUrl,
+          token: cfg.token,
+          networkId: networkId ?? undefined,
+          purpose: opts.purpose,
+          name: img.fileName,
+          mime: img.mimeType,
+          size,
+          sha256: sha256 || undefined,
+          timeoutMessage: uploadTimeoutMessage(),
+          fetchImpl: (input, init) => withDeadline(appFetch(input, init), 30_000, () => {
+            throw new Error(uploadTimeoutMessage());
+          }),
+          putFile: (url, headers) => withDeadline(
+            FileSystem.uploadAsync(url, img.uri, {
+              httpMethod: 'PUT',
+              uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+              headers,
+            }).catch(() => ({ status: 0 })),
+            uploadDeadlineMs,
+            () => null,
+          ),
+        });
+        if (nativeRes.kind === 'uploaded') {
+          return nativeRes.file;
         }
-        if (presign?.ok && presign.body?.ok && presign.body.mode === 'direct' && typeof presign.body.file_id === 'string') {
-          const canFallbackHub = size <= HUB_LOCAL_FALLBACK_MAX_BYTES;
-          let nativeDirectErr: string | null = null;
-
-          if (!presign.body.skip_upload && presign.body.upload?.url) {
-            const toHeaders = (raw: unknown): Record<string, string> => {
-              const h: Record<string, string> = {};
-              if (raw && typeof raw === 'object') {
-                for (const [k, v] of Object.entries(raw as Record<string, unknown>)) {
-                  if (typeof v === 'string') h[k] = v;
-                }
-              }
-              return h;
-            };
-            const putCandidates: Array<{ url: string; headers: Record<string, string> }> = [
-              { url: String(presign.body.upload.url), headers: toHeaders(presign.body.upload.headers) },
-            ];
-            if (typeof presign.body.fallback_upload?.url === 'string' && presign.body.fallback_upload.url) {
-              putCandidates.push({
-                url: String(presign.body.fallback_upload.url),
-                headers: toHeaders(presign.body.fallback_upload.headers),
-              });
-            }
-            let putSucceeded = false;
-            for (const cand of putCandidates) {
-              const putRes = await withDeadline(
-                FileSystem.uploadAsync(cand.url, img.uri, {
-                  httpMethod: 'PUT',
-                  uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-                  headers: cand.headers,
-                }).catch(() => ({ status: 0 })),
-                uploadDeadlineMs,
-                () => null,
-              );
-              if (!putRes) {
-                nativeDirectErr = uploadTimeoutMessage();
-                continue;
-              }
-              if (putRes.status >= 200 && putRes.status < 300) {
-                putSucceeded = true;
-                break;
-              }
-              nativeDirectErr = putRes.status > 0 ? `直传存储失败（HTTP ${putRes.status}）` : '直传外部存储连接失败';
-            }
-            if (!putSucceeded && !canFallbackHub) {
-              throw new Error(nativeDirectErr || '直传外部存储连接失败');
-            }
-            if (!putSucceeded) {
-              nativeDirectErr = nativeDirectErr || '直传外部存储连接失败';
-            }
+        if (nativeRes.kind === 'error') {
+          if (nativeRes.error === 'payload_too_large' && nativeRes.limitBytes) {
+            throw new Error(`文件超过 ${Math.round(nativeRes.limitBytes / (1024 * 1024))}MB 上限`);
           }
-
-          if (!nativeDirectErr) {
-            const comp = await withDeadline(
-              appFetch(`${base}/api/uploads/complete`, {
-                method: 'POST',
-                headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-                body: JSON.stringify({ file_id: presign.body.file_id }),
-              }).then(async r => ({ ok: r.ok, status: r.status, body: await r.json().catch(() => null) })).catch(() => null),
-              30_000,
-              () => null,
-            );
-            if (comp?.ok && comp.body?.ok) {
-              return {
-                file_id: comp.body.file_id,
-                path: typeof comp.body.path === 'string' ? comp.body.path : '',
-                url: typeof comp.body.url === 'string' ? comp.body.url : `/api/files/${comp.body.file_id}`,
-                size: typeof comp.body.size === 'number' ? comp.body.size : size,
-                mime: typeof comp.body.mime === 'string' ? comp.body.mime : img.mimeType,
-              };
-            }
-            const errText = !comp
-              ? uploadTimeoutMessage()
-              : String(comp.body?.message || comp.body?.error || `HTTP ${comp.status}`);
-            const hardAuthOrQuota = comp && (comp.status === 401 || comp.status === 403 || comp.status === 413 || comp.status === 429);
-            if (hardAuthOrQuota || !canFallbackHub) {
-              throw new Error(errText);
-            }
-            // <=12 MiB transient direct complete failure: fall through to Hub /api/upload below.
-          }
+          throw new Error(UPLOAD_ERROR_HINTS[nativeRes.error] ?? nativeRes.message);
         }
+        // kind === 'fallback_hub': continue to Hub multipart /api/upload below
       }
     }
   }

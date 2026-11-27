@@ -162,12 +162,20 @@ export async function tryDirectUploadBytes(opts: {
     return { kind: 'fallback_hub' };
   }
 
+  const canFallbackHub = opts.bytes.byteLength <= HUB_LOCAL_FALLBACK_MAX_BYTES;
+
   if (presignRes.status === 404 || presignRes.status === 405 || presignRes.status === 501) {
     return { kind: 'fallback_hub' };
   }
   const presignBody: any = await presignRes.json().catch(() => null);
   if (!presignRes.ok) {
-    if (presignRes.status === 401 || presignRes.status === 403 || presignRes.status === 413 || presignRes.status === 429) {
+    if (
+      presignRes.status === 401
+      || presignRes.status === 403
+      || presignRes.status === 413
+      || presignRes.status === 429
+      || !canFallbackHub
+    ) {
       return {
         kind: 'error',
         error: String(presignBody?.error || `HTTP ${presignRes.status}`),
@@ -180,8 +188,6 @@ export async function tryDirectUploadBytes(opts: {
   if (!presignBody?.ok || presignBody.mode !== 'direct' || typeof presignBody.file_id !== 'string') {
     return { kind: 'fallback_hub' };
   }
-
-  const canFallbackHub = opts.bytes.byteLength <= HUB_LOCAL_FALLBACK_MAX_BYTES;
 
   if (!presignBody.skip_upload) {
     const candidates: Array<{ url: string; method: string; headers: Record<string, string> }> = [];
@@ -200,18 +206,31 @@ export async function tryDirectUploadBytes(opts: {
       });
     }
     if (candidates.length === 0) {
-      return { kind: 'fallback_hub' };
+      return canFallbackHub
+        ? { kind: 'fallback_hub' }
+        : { kind: 'error', error: 'storage_presign_bad_response', message: '外部存储未返回有效上传地址' };
     }
-    // Plain web browsers forbid sending a Cookie header via fetch(); fall back cleanly to Hub upload.
+    // Plain web browsers forbid sending a Cookie header via fetch(); fall back to Hub when <= 12 MiB,
+    // or surface a clear browser limitation error when > 12 MiB (never waste bandwidth into Hub 413).
     if (opts.isPlainBrowser && hasForbiddenBrowserHeader(candidates[0].headers)) {
-      return { kind: 'fallback_hub', corsFallback: true };
+      if (canFallbackHub) return { kind: 'fallback_hub', corsFallback: true };
+      return {
+        kind: 'error',
+        error: 'browser_cookie_forbidden',
+        message: '浏览器环境无法直传超过 12MB 的 ModelScope 文件，请使用桌面客户端或切换为私有阿里云 OSS / AWS S3',
+      };
     }
 
     let putOk = false;
     let lastErr: DirectUploadResult = { kind: 'error', error: 'storage_put_network', message: '直传外部存储连接失败' };
     for (const cand of candidates) {
       if (opts.isPlainBrowser && hasForbiddenBrowserHeader(cand.headers)) {
-        return { kind: 'fallback_hub', corsFallback: true };
+        if (canFallbackHub) return { kind: 'fallback_hub', corsFallback: true };
+        return {
+          kind: 'error',
+          error: 'browser_cookie_forbidden',
+          message: '浏览器环境无法直传超过 12MB 的 ModelScope 文件，请使用桌面客户端或切换为私有阿里云 OSS / AWS S3',
+        };
       }
       try {
         const putRes = await opts.fetchImpl(cand.url, {
@@ -242,8 +261,11 @@ export async function tryDirectUploadBytes(opts: {
       }
     }
     if (!putOk) {
-      if (opts.isPlainBrowser) return { kind: 'fallback_hub', corsFallback: true };
-      if (canFallbackHub) return { kind: 'fallback_hub', degradedFallback: true };
+      if (canFallbackHub) {
+        return opts.isPlainBrowser
+          ? { kind: 'fallback_hub', corsFallback: true }
+          : { kind: 'fallback_hub', degradedFallback: true };
+      }
       return lastErr;
     }
   }
@@ -282,6 +304,156 @@ export async function tryDirectUploadBytes(opts: {
       path: typeof completeBody.path === 'string' ? completeBody.path : '',
       url: typeof completeBody.url === 'string' ? completeBody.url : `/api/files/${completeBody.file_id}`,
       size: typeof completeBody.size === 'number' ? completeBody.size : opts.bytes.byteLength,
+      mime: typeof completeBody.mime === 'string' ? completeBody.mime : opts.mime,
+      storage_provider: typeof completeBody.storage_provider === 'string' ? completeBody.storage_provider : presignBody.provider,
+    },
+  };
+}
+
+/**
+ * Pure native (iOS / Android) direct upload orchestrator used by `src/attach.ts`.
+ * Extracted here with injectable `putFile` so Tier 1 -> Tier 2 -> Tier 3 and >12 MiB
+ * presign 5xx behavior are directly unit-testable without RN runtime dependencies.
+ */
+export async function tryNativeDirectUpload(opts: {
+  serverUrl: string;
+  token: string;
+  networkId?: string;
+  purpose?: string;
+  name: string;
+  mime: string;
+  size: number;
+  sha256?: string;
+  timeoutMessage: string;
+  fetchImpl: DirectFetchLike;
+  putFile: (url: string, headers: Record<string, string>) => Promise<{ status: number } | null>;
+}): Promise<DirectUploadResult> {
+  const base = opts.serverUrl.replace(/\/+$/, '');
+  const canFallbackHub = opts.size <= HUB_LOCAL_FALLBACK_MAX_BYTES;
+
+  let presignRes: Response;
+  try {
+    presignRes = await opts.fetchImpl(`${base}/api/uploads/presign`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${opts.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        name: opts.name,
+        mime: opts.mime,
+        size: opts.size,
+        ...(opts.sha256 ? { sha256: opts.sha256 } : {}),
+        ...(opts.networkId ? { network_id: opts.networkId } : {}),
+        ...(opts.purpose ? { purpose: opts.purpose } : {}),
+      }),
+    });
+  } catch {
+    return canFallbackHub
+      ? { kind: 'fallback_hub' }
+      : { kind: 'error', error: 'storage_presign_network', message: '请求外部存储预签名失败' };
+  }
+
+  if (presignRes.status === 404 || presignRes.status === 405 || presignRes.status === 501) {
+    return { kind: 'fallback_hub' };
+  }
+  const presignBody: any = await presignRes.json().catch(() => null);
+  if (!presignRes.ok) {
+    if (
+      presignRes.status === 401
+      || presignRes.status === 403
+      || presignRes.status === 413
+      || presignRes.status === 429
+      || !canFallbackHub
+    ) {
+      return {
+        kind: 'error',
+        error: String(presignBody?.error || `HTTP ${presignRes.status}`),
+        message: String(presignBody?.message || presignBody?.error || `HTTP ${presignRes.status}`),
+        limitBytes: typeof presignBody?.limit_bytes === 'number' ? presignBody.limit_bytes : undefined,
+      };
+    }
+    return { kind: 'fallback_hub' };
+  }
+  if (!presignBody?.ok || presignBody.mode !== 'direct' || typeof presignBody.file_id !== 'string') {
+    return { kind: 'fallback_hub' };
+  }
+
+  let putSucceeded = !!presignBody.skip_upload;
+  let lastPutErr: DirectUploadResult = { kind: 'error', error: 'storage_put_network', message: '直传外部存储连接失败' };
+
+  if (!presignBody.skip_upload) {
+    const putCandidates: Array<{ url: string; headers: Record<string, string> }> = [];
+    if (typeof presignBody.upload?.url === 'string' && presignBody.upload.url) {
+      putCandidates.push({
+        url: presignBody.upload.url,
+        headers: cleanHeaders(presignBody.upload.headers),
+      });
+    }
+    if (typeof presignBody.fallback_upload?.url === 'string' && presignBody.fallback_upload.url) {
+      putCandidates.push({
+        url: presignBody.fallback_upload.url,
+        headers: cleanHeaders(presignBody.fallback_upload.headers),
+      });
+    }
+    if (putCandidates.length === 0) {
+      return canFallbackHub
+        ? { kind: 'fallback_hub' }
+        : { kind: 'error', error: 'storage_presign_bad_response', message: '外部存储未返回有效上传地址' };
+    }
+    for (const cand of putCandidates) {
+      const putRes = await opts.putFile(cand.url, cand.headers);
+      if (!putRes) {
+        lastPutErr = { kind: 'error', error: 'storage_put_timeout', message: opts.timeoutMessage };
+        continue;
+      }
+      if (putRes.status >= 200 && putRes.status < 300) {
+        putSucceeded = true;
+        break;
+      }
+      lastPutErr = putRes.status > 0
+        ? { kind: 'error', error: `storage_put_${putRes.status}`, message: `直传存储失败（HTTP ${putRes.status}）` }
+        : { kind: 'error', error: 'storage_put_network', message: '直传外部存储连接失败' };
+    }
+  }
+
+  if (!putSucceeded) {
+    if (canFallbackHub) return { kind: 'fallback_hub', degradedFallback: true };
+    return lastPutErr;
+  }
+
+  let completeRes: Response;
+  try {
+    completeRes = await opts.fetchImpl(`${base}/api/uploads/complete`, {
+      method: 'POST',
+      headers: { Authorization: `Bearer ${opts.token}`, 'Content-Type': 'application/json' },
+      body: JSON.stringify({ file_id: presignBody.file_id }),
+    });
+  } catch {
+    if (canFallbackHub) return { kind: 'fallback_hub', degradedFallback: true };
+    return { kind: 'error', error: 'storage_complete_network', message: '完成直传确认失败' };
+  }
+
+  const completeBody: any = await completeRes.json().catch(() => null);
+  if (!completeRes.ok || !completeBody?.ok || typeof completeBody.file_id !== 'string') {
+    const hardAuthOrQuota = completeRes.status === 401
+      || completeRes.status === 403
+      || completeRes.status === 413
+      || completeRes.status === 429;
+    if (!hardAuthOrQuota && canFallbackHub) {
+      return { kind: 'fallback_hub', degradedFallback: true };
+    }
+    return {
+      kind: 'error',
+      error: String(completeBody?.error || `HTTP ${completeRes.status}`),
+      message: String(completeBody?.message || completeBody?.error || `HTTP ${completeRes.status}`),
+    };
+  }
+
+  return {
+    kind: 'uploaded',
+    file: {
+      file_id: completeBody.file_id,
+      path: typeof completeBody.path === 'string' ? completeBody.path : '',
+      url: typeof completeBody.url === 'string' ? completeBody.url : `/api/files/${completeBody.file_id}`,
+      size: typeof completeBody.size === 'number' ? completeBody.size : opts.size,
       mime: typeof completeBody.mime === 'string' ? completeBody.mime : opts.mime,
       storage_provider: typeof completeBody.storage_provider === 'string' ? completeBody.storage_provider : presignBody.provider,
     },
