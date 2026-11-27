@@ -102,12 +102,20 @@ function hasForbiddenBrowserHeader(headers: Record<string, string>): boolean {
   return Object.keys(headers).some((k) => k.toLowerCase() === 'cookie');
 }
 
+export const HUB_LOCAL_FALLBACK_MAX_BYTES = 12 * 1024 * 1024;
+
+/** Append `proxy=1` to a Hub `/api/files/:id` URL so Hub streams remote files instead of 302-looping back to an unreachable external URL. */
+export function appendHubProxyParam(url: string): string {
+  if (/[?&]proxy=(?:1|true)(?:&|$)/i.test(url)) return url;
+  return url.includes('?') ? `${url}&proxy=1` : `${url}?proxy=1`;
+}
+
 export type DirectUploadResult =
   | {
       kind: 'uploaded';
       file: { file_id: string; path: string; url: string; size: number; mime: string; storage_provider?: string };
     }
-  | { kind: 'fallback_hub'; corsFallback?: boolean }
+  | { kind: 'fallback_hub'; corsFallback?: boolean; degradedFallback?: boolean }
   | { kind: 'error'; error: string; message: string; limitBytes?: number };
 
 /**
@@ -173,37 +181,70 @@ export async function tryDirectUploadBytes(opts: {
     return { kind: 'fallback_hub' };
   }
 
+  const canFallbackHub = opts.bytes.byteLength <= HUB_LOCAL_FALLBACK_MAX_BYTES;
+
   if (!presignBody.skip_upload) {
-    const putUrl = presignBody.upload?.url;
-    if (typeof putUrl !== 'string' || !putUrl) {
+    const candidates: Array<{ url: string; method: string; headers: Record<string, string> }> = [];
+    if (typeof presignBody.upload?.url === 'string' && presignBody.upload.url) {
+      candidates.push({
+        url: presignBody.upload.url,
+        method: presignBody.upload?.method || 'PUT',
+        headers: cleanHeaders(presignBody.upload?.headers),
+      });
+    }
+    if (typeof presignBody.fallback_upload?.url === 'string' && presignBody.fallback_upload.url) {
+      candidates.push({
+        url: presignBody.fallback_upload.url,
+        method: presignBody.fallback_upload?.method || 'PUT',
+        headers: cleanHeaders(presignBody.fallback_upload?.headers),
+      });
+    }
+    if (candidates.length === 0) {
       return { kind: 'fallback_hub' };
     }
-    const headers = cleanHeaders(presignBody.upload?.headers);
     // Plain web browsers forbid sending a Cookie header via fetch(); fall back cleanly to Hub upload.
-    if (opts.isPlainBrowser && hasForbiddenBrowserHeader(headers)) {
+    if (opts.isPlainBrowser && hasForbiddenBrowserHeader(candidates[0].headers)) {
       return { kind: 'fallback_hub', corsFallback: true };
     }
-    try {
-      const putRes = await opts.fetchImpl(putUrl, {
-        method: presignBody.upload?.method || 'PUT',
-        headers,
-        body: new Blob([new Uint8Array(opts.bytes)], { type: opts.mime || 'application/octet-stream' }),
-        signal: opts.signal,
-      });
-      if (!putRes.ok) {
-        if (opts.isPlainBrowser) return { kind: 'fallback_hub', corsFallback: true };
-        return { kind: 'error', error: `storage_put_${putRes.status}`, message: `直传存储失败（HTTP ${putRes.status}）` };
+
+    let putOk = false;
+    let lastErr: DirectUploadResult = { kind: 'error', error: 'storage_put_network', message: '直传外部存储连接失败' };
+    for (const cand of candidates) {
+      if (opts.isPlainBrowser && hasForbiddenBrowserHeader(cand.headers)) {
+        return { kind: 'fallback_hub', corsFallback: true };
       }
-      const ct = (putRes.headers.get('Content-Type') || '').toLowerCase();
-      if (ct.includes('application/json')) {
-        const j: any = await putRes.json().catch(() => null);
-        if ((typeof j?.Code === 'number' && j.Code !== 200) || j?.Success === false || j?.success === false) {
-          return { kind: 'error', error: 'storage_put_rejected', message: String(j?.Message || '直传存储被拒绝') };
+      try {
+        const putRes = await opts.fetchImpl(cand.url, {
+          method: cand.method,
+          headers: cand.headers,
+          body: new Blob([new Uint8Array(opts.bytes)], { type: opts.mime || 'application/octet-stream' }),
+          signal: opts.signal,
+        });
+        if (!putRes.ok) {
+          lastErr = { kind: 'error', error: `storage_put_${putRes.status}`, message: `直传存储失败（HTTP ${putRes.status}）` };
+          continue;
         }
+        const ct = (putRes.headers.get('Content-Type') || '').toLowerCase();
+        let rejected = false;
+        if (ct.includes('application/json')) {
+          const j: any = await putRes.json().catch(() => null);
+          if ((typeof j?.Code === 'number' && j.Code !== 200) || j?.Success === false || j?.success === false) {
+            lastErr = { kind: 'error', error: 'storage_put_rejected', message: String(j?.Message || '直传存储被拒绝') };
+            rejected = true;
+          }
+        }
+        if (!rejected) {
+          putOk = true;
+          break;
+        }
+      } catch {
+        lastErr = { kind: 'error', error: 'storage_put_network', message: '直传外部存储连接失败' };
       }
-    } catch {
+    }
+    if (!putOk) {
       if (opts.isPlainBrowser) return { kind: 'fallback_hub', corsFallback: true };
-      return { kind: 'error', error: 'storage_put_network', message: '直传外部存储连接失败' };
+      if (canFallbackHub) return { kind: 'fallback_hub', degradedFallback: true };
+      return lastErr;
     }
   }
 
@@ -219,11 +260,15 @@ export async function tryDirectUploadBytes(opts: {
       signal: opts.signal,
     });
   } catch {
+    if (canFallbackHub) return { kind: 'fallback_hub', degradedFallback: true };
     return { kind: 'error', error: 'storage_complete_network', message: '完成直传确认失败' };
   }
 
   const completeBody: any = await completeRes.json().catch(() => null);
   if (!completeRes.ok || !completeBody?.ok || typeof completeBody.file_id !== 'string') {
+    if (canFallbackHub && completeRes.status !== 401 && completeRes.status !== 403 && completeRes.status !== 413 && completeRes.status !== 429) {
+      return { kind: 'fallback_hub', degradedFallback: true };
+    }
     return {
       kind: 'error',
       error: String(completeBody?.error || `HTTP ${completeRes.status}`),
@@ -244,7 +289,7 @@ export async function tryDirectUploadBytes(opts: {
 }
 
 export type DirectDownloadTarget =
-  | { kind: 'direct'; url: string; headers: Record<string, string>; provider?: string }
+  | { kind: 'direct'; url: string; fallbackUrl?: string; headers: Record<string, string>; provider?: string }
   | { kind: 'hub' };
 
 /**
@@ -278,6 +323,7 @@ export async function resolveDirectDownloadTarget(opts: {
       return {
         kind: 'direct',
         url: body.url,
+        ...(typeof body.fallback_url === 'string' && body.fallback_url ? { fallbackUrl: body.fallback_url } : {}),
         headers,
         provider: typeof body.provider === 'string' ? body.provider : undefined,
       };

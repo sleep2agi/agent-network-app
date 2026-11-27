@@ -3,7 +3,7 @@
 //   - 图片的「下载原图」走 <a download>,WKWebView / WebView2 不会真的下载。
 // 现在:前端带 Bearer 取字节 → base64 → Rust `save_download` 写进系统「下载」目录 → 返回路径,
 // 再用 opener 在访达/资源管理器里定位。凭据只用于取字节,不进 DOM、不进下载管理器。
-import { resolveDirectDownloadTarget } from './direct-storage';
+import { appendHubProxyParam, resolveDirectDownloadTarget } from './direct-storage';
 import { isHarmonyShell } from './harmony-bridge';
 
 export type AuthedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
@@ -27,16 +27,20 @@ export async function downloadAuthedBytes(fetcher: AuthedFetch, url: string, tok
     fetchImpl: fetcher,
   });
   if (target.kind === 'direct') {
-    try {
-      const directRes = await fetcher(target.url, { headers: target.headers });
-      if (directRes.ok) response = directRes;
-      else try { await directRes.body?.cancel?.(); } catch { /* ignore */ }
-    } catch {
-      /* CORS or direct network error → fall back to Hub URL */
+    const directCandidates = target.fallbackUrl ? [target.url, target.fallbackUrl] : [target.url];
+    for (const directUrl of directCandidates) {
+      try {
+        const directRes = await fetcher(directUrl, { headers: target.headers });
+        if (directRes.ok) { response = directRes; break; }
+        try { await directRes.body?.cancel?.(); } catch { /* ignore */ }
+      } catch {
+        /* CORS or direct network error → try regional fallback or Hub proxy */
+      }
     }
   }
   if (!response) {
-    response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
+    const hubFallbackUrl = target.kind === 'direct' ? appendHubProxyParam(url) : url;
+    response = await fetcher(hubFallbackUrl, { headers: { Authorization: `Bearer ${token}` } });
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const declared = Number(response.headers.get('content-length'));
