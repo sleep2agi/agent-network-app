@@ -5,6 +5,7 @@ import {
   isChatSecretSavedLocally,
   markChatSecretSavedLocally,
   runChatSecretAutoApply,
+  SECRET_SHADOWED_COPY,
   type ChatSecretApplyState,
 } from './chat-secret-auto-apply';
 import type { NodeLifecycleResult } from './api';
@@ -134,6 +135,66 @@ async function run() {
     markChatSecretSavedLocally('hub|net', 'n1', 'DASHSCOPE_API_KEY');
     ck('保存后同节点同键记住已保存、不同键不串台', isChatSecretSavedLocally('hub|net', 'n1', 'DASHSCOPE_API_KEY') && !isChatSecretSavedLocally('hub|net', 'n1', 'OTHER_KEY'));
     __resetChatSecretSavedMemoryForTest();
+  }
+
+  // 8. #5675 PR-3: hot_applied -> immediate applied + wake, ZERO restart_node calls
+  {
+    const states: ChatSecretApplyState[] = [];
+    let restartCalls = 0;
+    let woke = 0;
+    const ctrl = new AbortController();
+    const res = await runChatSecretAutoApply({
+      activation: 'hot_applied',
+      signal: ctrl.signal,
+      pollMs: 0,
+      onState: s => states.push(s),
+      restartNode: async () => { restartCalls++; return { ok: true }; },
+      readNodeStatus: async () => ({ status: 'idle', inFlightCount: 0 }),
+      onApplied: () => { woke++; },
+    });
+    ck('hot_applied 立即生效且不触发重启，唤醒 1 次', res === 'applied' && JSON.stringify(states) === JSON.stringify(['applied']) && restartCalls === 0 && woke === 1, { res, states, restartCalls, woke });
+  }
+
+  // 9. #5675 PR-3: hot_pending_idle -> wait idle without restart_node, then applied + wake
+  {
+    const states: ChatSecretApplyState[] = [];
+    let restartCalls = 0;
+    let statusCalls = 0;
+    let woke = 0;
+    const ctrl = new AbortController();
+    const res = await runChatSecretAutoApply({
+      activation: 'hot_pending_idle',
+      signal: ctrl.signal,
+      pollMs: 0,
+      maxBusyPolls: 5,
+      onState: s => states.push(s),
+      restartNode: async () => { restartCalls++; return { ok: true }; },
+      readNodeStatus: async () => {
+        statusCalls++;
+        return statusCalls < 3 ? { status: 'working', inFlightCount: 1 } : { status: 'idle', inFlightCount: 0 };
+      },
+      onApplied: () => { woke++; },
+    });
+    ck('hot_pending_idle 等空闲后热生效且全程 0 次重启', res === 'applied' && JSON.stringify(states) === JSON.stringify(['waiting_idle', 'applied']) && restartCalls === 0 && statusCalls === 3 && woke === 1, { res, states, restartCalls, statusCalls, woke });
+  }
+
+  // 10. #5675 PR-3: shadowed -> exact copy, ZERO restart_node, ZERO wake
+  {
+    const states: ChatSecretApplyState[] = [];
+    let restartCalls = 0;
+    let woke = 0;
+    const ctrl = new AbortController();
+    const res = await runChatSecretAutoApply({
+      activation: 'shadowed',
+      signal: ctrl.signal,
+      pollMs: 0,
+      onState: s => states.push(s),
+      restartNode: async () => { restartCalls++; return { ok: true }; },
+      readNodeStatus: async () => ({ status: 'idle', inFlightCount: 0 }),
+      onApplied: () => { woke++; },
+    });
+    ck('shadowed 文案精确匹配规范', chatSecretApplyText('shadowed') === '这个 Key 被节点启动环境里的同名设置覆盖了，在这里改不会生效；请到节点配置里删掉那一项' && SECRET_SHADOWED_COPY === chatSecretApplyText('shadowed'));
+    ck('shadowed 不重启、不唤醒、返回 shadowed', res === 'shadowed' && JSON.stringify(states) === JSON.stringify(['shadowed']) && restartCalls === 0 && woke === 0, { res, states, restartCalls, woke });
   }
 
   console.log(`chat-secret-auto-apply: ${p}/${t} passed`);

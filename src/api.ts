@@ -65,6 +65,7 @@ export interface Session extends TurnCapabilityReport {
    *  can apply env changes to its own secrets.env at the next start. Absent ⇒ an
    *  older node/hub; the section hides instead of offering a button that expires. */
   node_secrets_capable?: boolean;
+  secrets_hot_capable?: boolean;
   /** #1474 — hub ≥ #1474: JSON array of the env key NAMES this node has, from
    *  its own `secrets.env`. **NAMES ONLY** — the node-side collector parses and
    *  drops values, and the hub rejects anything that is not a name. Absent ⇒ the
