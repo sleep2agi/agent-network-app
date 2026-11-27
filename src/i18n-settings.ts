@@ -313,6 +313,7 @@ const copy = [
   // 末尾追加(编号按位置):#5653 Hub 统一配置语音输入（ASR）。
   ['服务器统一语音服务', 'Hub-managed voice service'],
   ['服务器统一语音', 'Hub voice service'],
+  ['文件存储中转', 'External file storage relay'],
 ] as const;
 export const settingsTranslations = Object.fromEntries(copy.map((pair, index) => [`settings.copy.${index}`, pair]));
 registerTranslations(settingsTranslations);

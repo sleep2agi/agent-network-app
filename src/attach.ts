@@ -9,6 +9,10 @@ import { compressedFileName, isDraftImage, PICKER_QUALITY, planCompression } fro
 import { createSerialQueue, resizeForUpload } from './native-resize';
 import { attachmentFromFile } from './desktop-file-intake';
 import { resolveUploadNetworkId, uploadUrlFor, type UploadOptions } from './upload-url';
+import { getHubStorageSnapshot } from './hub-storage';
+import { computeSha256Hex, tryDirectUploadBytes } from './direct-storage';
+import { isTauriDesktop } from './desktop-download';
+import { isHarmonyShell } from './harmony-bridge';
 import { t } from './i18n';
 
 // Image/file attachments (#220 roadmap ③) — fully wired end to end:
@@ -261,6 +265,139 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: Upload
   const networkId = await resolveUploadNetworkId(opts, cfg.networkId, () => fetchNetworkId(cfg));
   if (networkId && !cfg.networkId) cfg.networkId = networkId;
   const uploadUrl = uploadUrlFor(cfg.serverUrl, { ...opts, ...(networkId ? { networkId } : {}) });
+
+  // External storage relay direct upload (ModelScope / Aliyun OSS / AWS S3 — 0 bytes through Hub).
+  // Triggered when Hub advertises external storage enabled, or when file size exceeds local 12 MiB Hub cap.
+  const hubStorage = getHubStorageSnapshot();
+  const knownSize = img.fileSize ?? img.webFile?.size ?? 0;
+  const shouldTryDirect = hubStorage.enabled || knownSize > 12 * 1024 * 1024;
+  if (shouldTryDirect) {
+    if (Platform.OS === 'web') {
+      const bytes = await (async (): Promise<Uint8Array | null> => {
+        try {
+          if (img.webFile) return new Uint8Array(await img.webFile.arrayBuffer());
+          const r = await fetch(img.uri);
+          if (!r.ok) return null;
+          return new Uint8Array(await r.arrayBuffer());
+        } catch {
+          return null;
+        }
+      })();
+      if (bytes && bytes.byteLength > 0) {
+        const ctrl = new AbortController();
+        const directRes = await withDeadline(
+          tryDirectUploadBytes({
+            serverUrl: cfg.serverUrl,
+            token: cfg.token,
+            networkId: networkId ?? undefined,
+            purpose: opts.purpose,
+            bytes,
+            name: img.fileName,
+            mime: img.mimeType,
+            isPlainBrowser: !isTauriDesktop() && !isHarmonyShell(),
+            fetchImpl: appFetch,
+            signal: ctrl.signal,
+          }),
+          uploadDeadlineMs,
+          () => null,
+        );
+        if (!directRes) {
+          ctrl.abort();
+          throw new Error(uploadTimeoutMessage());
+        }
+        if (directRes.kind === 'uploaded') {
+          return directRes.file;
+        }
+        if (directRes.kind === 'error') {
+          if (directRes.error === 'payload_too_large' && directRes.limitBytes) {
+            throw new Error(`文件超过 ${Math.round(directRes.limitBytes / (1024 * 1024))}MB 上限`);
+          }
+          throw new Error(UPLOAD_ERROR_HINTS[directRes.error] ?? directRes.message);
+        }
+        // kind === 'fallback_hub': continue to Hub /api/upload below
+      }
+    } else {
+      // Native iOS / Android: stream binary directly from disk via FileSystem.uploadAsync(BINARY_CONTENT).
+      const base = cfg.serverUrl.replace(/\/+$/, '');
+      const fileInfo = await FileSystem.getInfoAsync(img.uri).catch(() => ({ exists: false } as const));
+      const size = (fileInfo.exists && typeof (fileInfo as any).size === 'number' && (fileInfo as any).size > 0)
+        ? (fileInfo as any).size as number
+        : (img.fileSize ?? 0);
+      if (size > 0) {
+        let sha256 = '';
+        if (!hubStorage.configured || hubStorage.provider === 'modelscope') {
+          try {
+            const r = await fetch(img.uri);
+            sha256 = await computeSha256Hex(new Uint8Array(await r.arrayBuffer()));
+          } catch {
+            sha256 = '';
+          }
+        }
+        const presign = await withDeadline(
+          appFetch(`${base}/api/uploads/presign`, {
+            method: 'POST',
+            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+              name: img.fileName,
+              mime: img.mimeType,
+              size,
+              ...(sha256 ? { sha256 } : {}),
+              ...(networkId ? { network_id: networkId } : {}),
+              ...(opts.purpose ? { purpose: opts.purpose } : {}),
+            }),
+          }).then(async r => ({ status: r.status, ok: r.ok, body: await r.json().catch(() => null) })),
+          30_000,
+          () => null,
+        ).catch(() => null);
+        if (presign?.status === 413 && presign.body?.limit_bytes) {
+          throw new Error(`文件超过 ${Math.round(Number(presign.body.limit_bytes) / (1024 * 1024))}MB 上限`);
+        }
+        if (presign?.ok && presign.body?.ok && presign.body.mode === 'direct' && typeof presign.body.file_id === 'string') {
+          if (!presign.body.skip_upload && presign.body.upload?.url) {
+            const headers: Record<string, string> = {};
+            if (presign.body.upload.headers && typeof presign.body.upload.headers === 'object') {
+              for (const [k, v] of Object.entries(presign.body.upload.headers)) {
+                if (typeof v === 'string') headers[k] = v;
+              }
+            }
+            const putRes = await withDeadline(
+              FileSystem.uploadAsync(String(presign.body.upload.url), img.uri, {
+                httpMethod: 'PUT',
+                uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+                headers,
+              }),
+              uploadDeadlineMs,
+              () => null,
+            );
+            if (!putRes) throw new Error(uploadTimeoutMessage());
+            if (putRes.status < 200 || putRes.status >= 300) {
+              throw new Error(`直传存储失败（HTTP ${putRes.status}）`);
+            }
+          }
+          const comp = await withDeadline(
+            appFetch(`${base}/api/uploads/complete`, {
+              method: 'POST',
+              headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
+              body: JSON.stringify({ file_id: presign.body.file_id }),
+            }).then(async r => ({ ok: r.ok, status: r.status, body: await r.json().catch(() => null) })),
+            30_000,
+            () => null,
+          );
+          if (!comp) throw new Error(uploadTimeoutMessage());
+          if (!comp.ok || !comp.body?.ok) {
+            throw new Error(String(comp.body?.message || comp.body?.error || `HTTP ${comp.status}`));
+          }
+          return {
+            file_id: comp.body.file_id,
+            path: typeof comp.body.path === 'string' ? comp.body.path : '',
+            url: typeof comp.body.url === 'string' ? comp.body.url : `/api/files/${comp.body.file_id}`,
+            size: typeof comp.body.size === 'number' ? comp.body.size : size,
+            mime: typeof comp.body.mime === 'string' ? comp.body.mime : img.mimeType,
+          };
+        }
+      }
+    }
+  }
   // The hub REQUIRES a Content-Length header (411 otherwise, per #221).
   // RN's fetch streams FormData chunked on Android — Vincent's first
   // image send died on exactly that (tg 737) — so native goes through

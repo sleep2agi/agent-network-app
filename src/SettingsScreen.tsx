@@ -61,6 +61,7 @@ import { keepAliveAvailable, keepAliveLastError, keepAliveRunning, subscribeKeep
 import { refreshNotifyDiagnostics, sendTestNotification } from './notifier-runtime';
 import XiaomiGuideModal from './XiaomiGuideModal';
 import VoiceSettingsSection from './VoiceSettingsSection';
+import { HubStorageSettingsCard } from './HubStorageSettingsCard';
 import { getHubVoiceSnapshot, subscribeHubVoice } from './hub-voice';
 import UiScaleSettings from './UiScaleSettings';
 import LanguageSettings from './LanguageSettings';
@@ -1028,6 +1029,7 @@ export default function SettingsScreen({
                   />
                 </SettingsGroup>
               ) : null}
+              {show('account', 'storage') ? <HubStorageSettingsCard /> : null}
               {show('account', 'logout') && canLogout ? (
                 // 危险操作单独最后一组(和上面隔开),整行红字居中。
                 <View testID="settings-account-danger">

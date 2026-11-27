@@ -151,6 +151,8 @@ const downloadAttachmentOnce = async (
   /** 边下边报:已写入的字节数 + 服务端声明总量(拿不到就是 undefined)。
    *  admin 2026-10-26「下载显示一下剩余时长」—— 手机端原来只有转圈。 */
   onProgress?: (received: number, total?: number) => void,
+  /** Optional direct external storage target resolver (ModelScope / OSS / S3, 0 Hub bytes). */
+  resolveDirect?: () => Promise<{ url: string; headers: Record<string, string> } | null>,
 ): Promise<string> => {
   const dest = cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope(serverUrl, token));
   const info = await fs.getInfoAsync(dest);
@@ -185,8 +187,11 @@ const downloadAttachmentOnce = async (
   const cleanup = async () => { await fs.deleteAsync(part, { idempotent: true }).catch(() => {}); };
 
   let r: { status: number; headers?: Record<string, string> };
-  const download = fs.downloadAsync(`${serverUrl}/api/files/${fileId}`, part, {
-    headers: { Authorization: `Bearer ${token}` },
+  const direct = resolveDirect ? await resolveDirect().catch(() => null) : null;
+  const downloadUrl = direct?.url ?? `${serverUrl}/api/files/${fileId}`;
+  const downloadHeaders = direct ? direct.headers : { Authorization: `Bearer ${token}` };
+  const download = fs.downloadAsync(downloadUrl, part, {
+    headers: downloadHeaders,
   });
   // 进度:downloadAsync 不给我们字节数,那就每 400ms 看一眼 part 文件长到多大了。
   // 只报数、不改任何判定 —— 成败仍由下面的校验决定。
@@ -296,6 +301,7 @@ export const downloadAttachmentWith = (
   name?: string,
   mime?: string,
   onProgress?: (received: number, total?: number) => void,
+  resolveDirect?: () => Promise<{ url: string; headers: Record<string, string> } | null>,
 ): Promise<string> => {
   const key = cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope(serverUrl, token));
   const existing = inFlight.get(key);
@@ -315,7 +321,7 @@ export const downloadAttachmentWith = (
       try { l(received, total); } catch { /* 一个监听者出错不影响别人 */ }
     }
   };
-  entry.promise = downloadAttachmentOnce(fs, cacheDir, serverUrl, token, fileId, name, mime, fanOut)
+  entry.promise = downloadAttachmentOnce(fs, cacheDir, serverUrl, token, fileId, name, mime, fanOut, resolveDirect)
     .finally(() => { inFlight.delete(key); });
   inFlight.set(key, entry);
   return entry.promise;

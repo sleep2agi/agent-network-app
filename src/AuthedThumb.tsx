@@ -22,6 +22,9 @@ import { Text } from './ui-text';
 import { colors, onThemeChange, spacing, radius } from './theme';
 import { useBubbleInk } from './bubble-ink';
 import { useTranslation } from './i18n-react';
+import { appFetch } from './app-fetch';
+import { resolveDirectDownloadTarget } from './direct-storage';
+import { getHubStorageSnapshot } from './hub-storage';
 import './i18n-chat';
 
 // Server-side attachment thumbnails were black boxes on device (Vincent
@@ -52,6 +55,16 @@ export const downloadAttachment = (
     FileSystem as unknown as DownloadFs,
     FileSystem.cacheDirectory ?? '',
     serverUrl, token, fileId, name, mime, onProgress,
+    async () => {
+      if (!getHubStorageSnapshot().supported) return null;
+      const target = await resolveDirectDownloadTarget({
+        fileUrl: `${serverUrl.replace(/\/+$/, '')}/api/files/${encodeURIComponent(fileId)}`,
+        token,
+        isPlainBrowser: false,
+        fetchImpl: appFetch,
+      });
+      return target.kind === 'direct' ? { url: target.url, headers: target.headers } : null;
+    },
   );
 
 /** 同一个附件(服务器 + 凭据作用域 + 文件)的下载任务键:卡片、视频、「下载视频」共用,切会话回来还在。 */
@@ -187,7 +200,9 @@ export function AuthedVideo({
   const progress = job?.kind === 'downloading' ? job.progress : undefined;
   // #511 — say which LAYER failed (the job stores describeAttachmentError's sentence).
   const error = job?.kind === 'error' ? `${job.message}，点击重试` : null;
-  const tooLarge = typeof size === 'number' && size > MAX_ATTACHMENT_BYTES;
+  const hubStorage = getHubStorageSnapshot();
+  const maxVideoBytes = hubStorage.enabled ? Math.max(MAX_ATTACHMENT_BYTES, hubStorage.maxFileBytes) : MAX_ATTACHMENT_BYTES;
+  const tooLarge = typeof size === 'number' && size > maxVideoBytes;
 
   const load = async () => {
     if (busy || localUri || tooLarge) return;

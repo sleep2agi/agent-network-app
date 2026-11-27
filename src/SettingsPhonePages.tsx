@@ -43,6 +43,7 @@ import { persistUiScale, UiScalePreview } from './UiScaleSettings';
 import { DENSITY_OPTIONS, FONT_SIZE_OPTIONS, uiScale, uiScaleLayoutWide, uiScaleSummary } from './ui-scale';
 import { CONSOLE_HELP, useVoiceSettings, VOICE_UNSUPPORTED_TEXT } from './VoiceSettingsSection';
 import { HubVoiceEditPage, HubVoicePhoneGroup } from './HubVoiceSettingsCard';
+import { HubStorageEditPage, HubStoragePhoneGroup } from './HubStorageSettingsCard';
 import MicDeviceSetting from './MicDeviceSetting';
 import { MODE_LABELS, STREAM_UNAVAILABLE_HINT, streamingSupported } from './voice-stream-policy';
 import { VOLC_CONSOLE_URL } from './voice-credentials-model';
@@ -136,7 +137,7 @@ export type PhonePagesCtx = {
 export default function SettingsPhonePage({ page, ctx }: { page: SettingsCategoryKey; ctx: PhonePagesCtx }) {
   useTranslation();
   switch (page) {
-    case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} /> : <AccountPage ctx={ctx} />;
+    case 'account': return ctx.detail === 'loginDevices' ? <LoginDevicesPage ctx={ctx} /> : ctx.detail === 'changePassword' && ctx.canChangePassword ? <ChangePasswordEditPage ctx={ctx} /> : ctx.detail === 'storageHub' ? <HubStorageEditPage /> : <AccountPage ctx={ctx} />;
     case 'users':
       // 成员 / 分组的三级页照旧直接画;列表层是「组织与权限」两个页签(org-access-model.ts)。
       // 三级页(成员 / 分组)开着时也走同一个 OrgAccessPage,成员面板留在原树位置,编辑状态不丢。
@@ -249,6 +250,7 @@ function AccountPage({ ctx }: { ctx: PhonePagesCtx }) {
           ) : null}
         </SettingsGroup>
       ) : null}
+      {show('account', 'storage') ? <HubStoragePhoneGroup onOpenEdit={() => ctx.openDetail('storageHub')} /> : null}
     </>
   );
 }
