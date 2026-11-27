@@ -642,6 +642,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.625:
+
+            - 新功能：服务器统一语音。设置 → 语音输入 里最下面新增「服务器统一语音服务」：管理员填一次火山引擎凭据，全网成员就不用各自配 Key（建议单独开子账号并设用量上限）；管理员还能给子账号设用量上限。没配凭据时这一块不会出现。
+            - 修复：设置页不再因为读不到语音配置就凭空出现语音卡片，也不会挤掉下方的麦克风选择行。
+
             What's new in 0.2.624:
 
             - 新功能：节点日志面板更好用 —— 最新的日志显示在最上面；第一次只读最新 150 行，往下翻到底点「加载更早的」才继续要；「详细」开关看每行原文和调试行，简洁模式只留主句；复制与导出始终是原文；实时跟随从 3 秒改成 5 秒一轮，少占服务器。
