@@ -3,6 +3,9 @@
 //   - 图片的「下载原图」走 <a download>,WKWebView / WebView2 不会真的下载。
 // 现在:前端带 Bearer 取字节 → base64 → Rust `save_download` 写进系统「下载」目录 → 返回路径,
 // 再用 opener 在访达/资源管理器里定位。凭据只用于取字节,不进 DOM、不进下载管理器。
+import { resolveDirectDownloadTarget } from './direct-storage';
+import { isHarmonyShell } from './harmony-bridge';
+
 export type AuthedFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 export function bytesToBase64(bytes: Uint8Array): string {
@@ -15,7 +18,26 @@ export function bytesToBase64(bytes: Uint8Array): string {
 }
 
 export async function downloadAuthedBytes(fetcher: AuthedFetch, url: string, token: string, onProgress?: (received: number, total?: number) => void): Promise<Uint8Array> {
-  const response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
+  // Prefer direct external storage download (0 Hub bytes) when available, with transparent fallback to Hub URL.
+  let response: Response | null = null;
+  const target = await resolveDirectDownloadTarget({
+    fileUrl: url,
+    token,
+    isPlainBrowser: !isTauriDesktop() && !isHarmonyShell(),
+    fetchImpl: fetcher,
+  });
+  if (target.kind === 'direct') {
+    try {
+      const directRes = await fetcher(target.url, { headers: target.headers });
+      if (directRes.ok) response = directRes;
+      else try { await directRes.body?.cancel?.(); } catch { /* ignore */ }
+    } catch {
+      /* CORS or direct network error → fall back to Hub URL */
+    }
+  }
+  if (!response) {
+    response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
+  }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   const declared = Number(response.headers.get('content-length'));
   const total = Number.isFinite(declared) && declared > 0 ? declared : undefined;

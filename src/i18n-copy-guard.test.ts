@@ -29,6 +29,7 @@ import './i18n-runtime-support';
 import './i18n-node-permissions';
 import './i18n-node-grants';
 import './i18n-hub-voice';
+import './i18n-hub-storage';
 
 let p = 0, t = 0;
 const ck = (name: string, ok: boolean) => { t++; if (ok) p++; console.log(`${ok ? 'PASS' : 'FAIL'}: ${name}`); };
@@ -69,6 +70,7 @@ migrated.push('src/AgentOrgScreen.tsx');
 migrated.push('src/NodePermissionSection.tsx');
 migrated.push('src/NodeGrantsCard.tsx');
 migrated.push('src/HubVoiceSettingsCard.tsx');
+migrated.push('src/HubStorageSettingsCard.tsx');
 function untranslated(file: string, raw: string): string[] {
   const source = raw.replace(/\r\n?/g, '\n');
   const tree = ts.createSourceFile(file, source, ts.ScriptTarget.Latest, true, ts.ScriptKind.TSX);

@@ -47,6 +47,8 @@ export const SETTINGS_CATEGORIES: readonly SettingsCategory[] = [
       { key: 'devices', label: '登录设备', keywords: ['设备', '会话', '退出其他设备', '登出', '安全', 'devices', 'sessions', 'sign out', 'security'] },
       // 修改密码(#653,Vincent「admin 自己登录在客户端里面，它自己有个 UI 去改」):POST /api/auth/password。本地工作区账号没有。
       { key: 'changePassword', label: '修改密码', keywords: ['密码', '改密码', '修改密码', '弱密码', '安全', 'password', 'change password', 'security'] },
+      // 外部存储中转(ModelScope / 阿里云 OSS / AWS S3):文件/图片/视频直传直下,不占 Hub 带宽。
+      { key: 'storage', label: '文件存储中转', keywords: ['存储', '中转', '图传', '文件', '图片', '视频', '带宽', 'modelscope', '魔搭', '阿里云', 'oss', 'aws', 's3', 'storage', 'relay', 'upload'] },
       { key: 'switchAccount', label: '切换账号', keywords: ['切换', '服务器', '多账号', 'switch', 'account', 'server'] },
       { key: 'logout', label: '移除当前账号', keywords: ['退出', '登出', 'logout'] },
     ],
@@ -334,7 +336,7 @@ export function phoneSettingsGroups(available: readonly Pick<SettingsCategory, '
 // ── 手机子页里的三级页(Vincent 2026-09-27「设置界面有点体验太差」)───────────────────────────
 // 子页只放行(标签 · 值 · ›);要输入的东西(API Key、接口地址、免打扰时段)点进三级编辑页再改,
 // 和微信 设置 → 个人信息 → 名字 一样。返回键 / Esc 先退三级页,再退子页。
-export type SettingsDetailKey = 'voiceHub' | 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'changePassword' | 'userMember' | 'userGroup' | 'changelog';
+export type SettingsDetailKey = 'voiceHub' | 'voiceApiKey' | 'voiceAdvanced' | 'quietHours' | 'loginDevices' | 'changePassword' | 'storageHub' | 'userMember' | 'userGroup' | 'changelog';
 
 export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   voiceHub: '服务器统一语音',
@@ -343,6 +345,7 @@ export const SETTINGS_DETAIL_TITLE: Record<SettingsDetailKey, string> = {
   quietHours: '免打扰时段',
   loginDevices: '登录设备',
   changePassword: '修改密码',
+  storageHub: '文件存储中转',
   userMember: '成员',
   userGroup: '分组',
   changelog: '更新日志',
@@ -367,6 +370,7 @@ export const SETTINGS_DETAIL_PARENT: Record<SettingsDetailKey, SettingsCategoryK
   quietHours: 'notifications',
   loginDevices: 'account',
   changePassword: 'account',
+  storageHub: 'account',
   userMember: 'users',
   userGroup: 'users',
   changelog: 'about',

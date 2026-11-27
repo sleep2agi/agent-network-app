@@ -1,3 +1,7 @@
+import { resolveDirectDownloadTarget } from './direct-storage';
+import { isTauriDesktop } from './desktop-download';
+import { isHarmonyShell } from './harmony-bridge';
+
 export type ImageFetch = (input: RequestInfo | URL, init?: RequestInit) => Promise<Response>;
 
 const imageMimeFromName = (name: string): string => {
@@ -27,7 +31,25 @@ export async function downloadImageObjectUrl(
   createObjectUrl: (blob: Blob) => string = URL.createObjectURL,
   hintedMime?: string,
 ): Promise<string> {
-  const response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
+  let response: Response | null = null;
+  const target = await resolveDirectDownloadTarget({
+    fileUrl: url,
+    token,
+    isPlainBrowser: !isTauriDesktop() && !isHarmonyShell(),
+    fetchImpl: fetcher,
+  });
+  if (target.kind === 'direct') {
+    try {
+      const directRes = await fetcher(target.url, { headers: target.headers });
+      if (directRes.ok) response = directRes;
+      else try { await directRes.body?.cancel?.(); } catch { /* ignore */ }
+    } catch {
+      /* CORS or direct network error → fall back to Hub URL */
+    }
+  }
+  if (!response) {
+    response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
+  }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   let blob = await response.blob();
   if (!blob.size) throw new Error('empty image response');
