@@ -6,6 +6,7 @@ import { useEffect, useRef, useState } from 'react';
 import { View } from 'react-native';
 import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig } from './api';
 import { scopedSecrets } from './scoped-secrets-api';
+import type { SecretActivation } from './scoped-secrets';
 import SecretRequestCard, { type SecretRequestPhase } from './SecretRequestCard';
 import { secretSaveErrorText, secretSavedMessage, selectChatSecretScopes, type ChatSecretRequest } from './chat-secret-request';
 import {
@@ -40,11 +41,12 @@ export default function ChatSecretCard({ cfg, alias, request, alreadySaved, onSa
     autoApplyCtrl.current?.abort();
   }, []);
 
-  const startAutoApply = (daemonId: string | null) => {
+  const startAutoApply = (daemonId: string | null, activation?: SecretActivation) => {
     autoApplyCtrl.current?.abort();
     const ctrl = new AbortController();
     autoApplyCtrl.current = ctrl;
     void runChatSecretAutoApply({
+      activation,
       signal: ctrl.signal,
       onState: setApplyState,
       restartNode: () => runNodeLifecycleAction(cfg, 'restart_node', {
@@ -95,9 +97,33 @@ export default function ChatSecretCard({ cfg, alias, request, alreadySaved, onSa
       const put = await scopedSecrets(cfg, scope, ctrl.signal, { action: 'put', key: request.key, value, revision: listed.snapshot.revision });
       if (ctrl.signal.aborted) return;
       if (put.kind === 'ready') {
-        markChatSecretSavedLocally(scopeKey, request.nodeId, request.key);
+        let activation: SecretActivation = put.snapshot.activation;
+        // #5675 PR-3: Daemon 托管节点写进 scoped-secrets.json 后，Daemon 不改自身 env，
+        // 若子节点在线且支持 node_secrets / hot activation，发一次只带 key 名的 reload 拿子节点的权威 activation。
+        if (scope.daemonId !== null) {
+          try {
+            const { sessions } = await fetchNodeStatus(cfg, alias);
+            const hit = (sessions ?? []).find(s => (s.node_id && s.node_id === request.nodeId) || (alias && s.alias === alias));
+            if (hit && hit.status !== 'offline' && (hit.secrets_hot_capable === true || hit.node_secrets_capable === true)) {
+              const reloaded = await scopedSecrets(
+                cfg,
+                { networkId: cfg.networkId, daemonId: null, nodeId: request.nodeId },
+                ctrl.signal,
+                { action: 'reload', key: request.key },
+                { timeoutMs: 5000 },
+              ).catch(() => null);
+              if (reloaded && reloaded.kind === 'ready') {
+                activation = reloaded.snapshot.activation;
+              }
+            }
+          } catch { /* keep put.snapshot.activation fallback */ }
+          if (ctrl.signal.aborted) return;
+        }
+        if (activation !== 'shadowed') {
+          markChatSecretSavedLocally(scopeKey, request.nodeId, request.key);
+        }
         setPhase('saved');
-        startAutoApply(daemonId);
+        startAutoApply(daemonId, activation);
         return;
       }
       lastErrorKind = put.kind;
@@ -108,7 +134,7 @@ export default function ChatSecretCard({ cfg, alias, request, alreadySaved, onSa
   };
 
   const statusText = chatSecretApplyText(applyState, alias);
-  const statusColor = applyState === 'waiting_idle'
+  const statusColor = applyState === 'waiting_idle' || applyState === 'shadowed'
     ? colors.blocked
     : applyState === 'applied'
       ? colors.running

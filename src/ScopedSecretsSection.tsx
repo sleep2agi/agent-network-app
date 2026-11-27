@@ -3,12 +3,13 @@ import { ActivityIndicator, Pressable, View } from 'react-native';
 import { Text, TextInput } from './ui-text';
 import { fetchNodeSecretRequests, runNodeLifecycleAction, type HubConfig } from './api';
 import { scopedSecrets } from './scoped-secrets-api';
-import { mergeNodeSecretKeys, nodeSecretsNeedsUpgrade, validSecretInput, type SecretScope, type SecretSnapshot, type SecretWrite } from './scoped-secrets';
+import { mergeNodeSecretKeys, nodeSecretsNeedsUpgrade, validSecretInput, type SecretActivation, type SecretScope, type SecretSnapshot } from './scoped-secrets';
 import {
   SECRET_LIST_SOFT_TIMEOUT_MS,
   secretFormEditable,
   secretListStatusText,
   secretSaveDisabled,
+  secretWriteOutcome,
   type SecretHardBlock,
   type SecretListState,
 } from './scoped-secrets-ui-model';
@@ -24,13 +25,13 @@ import { providerHttpWarning } from './daemon-provider-management-api';
 import { colors, spacing, radius, type } from './theme';
 import { buttonStyle, buttonTextStyle } from './elevation';
 
-type Props = { cfg: HubConfig; daemonId?: string | null; nodeId?: string | null; nodeRuntimeVersion?: string | null; nodeSecretsCapable?: boolean; alias?: string; configUpdateCapable?: boolean | null | undefined; online?: boolean };
+type Props = { cfg: HubConfig; daemonId?: string | null; nodeId?: string | null; nodeRuntimeVersion?: string | null; nodeSecretsCapable?: boolean; secretsHotCapable?: boolean; alias?: string; configUpdateCapable?: boolean | null | undefined; online?: boolean };
 
 export default function ScopedSecretsSection(props: Props) {
   return <Page key={JSON.stringify([props.cfg.serverUrl, props.cfg.networkId, props.cfg.token, props.daemonId, props.nodeId, props.nodeRuntimeVersion])} {...props} />;
 }
 
-function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, alias, configUpdateCapable, online }: Props) {
+function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, secretsHotCapable, alias, configUpdateCapable, online }: Props) {
   const { t } = useTranslation();
   const [snapshot, setSnapshot] = useState<SecretSnapshot | null>(null);
   const [independentSnap, setIndependentSnap] = useState<SecretSnapshot | null>(null);
@@ -42,6 +43,8 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
   const [hardBlock, setHardBlock] = useState<SecretHardBlock>(null);
   const [writing, setWriting] = useState(false);
   const [notice, setNotice] = useState('');
+  const [noticeTone, setNoticeTone] = useState<'muted' | 'running' | 'blocked'>('muted');
+  const [activationKind, setActivationKind] = useState<SecretActivation | null>(null);
   const [deleting, setDeleting] = useState<string | null>(null);
   // #4827 —— agent 举手要的 key：卡片级 saving/saved 状态（写完整份刷新后由 pending 消失体现）。
   const [requestSaving, setRequestSaving] = useState<string | null>(null);
@@ -94,6 +97,24 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
     setRestartChoice({ kind: 'manual', command: manualRestartCommand(alias) });
   }, [alias, clearRestartTimer]);
 
+  const applyWriteOutcome = useCallback((
+    activation: SecretActivation | undefined,
+    action: 'put' | 'delete',
+    isIndependentScope: boolean,
+  ) => {
+    const outcome = secretWriteOutcome(activation, action, isIndependentScope);
+    setActivationKind(outcome.kind);
+    setNoticeTone(outcome.tone);
+    setNotice(outcome.text ?? (outcome.i18nKey ? t(outcome.i18nKey) : ''));
+    if (outcome.shouldOfferRestart) {
+      offerRestartAfterSave();
+    } else {
+      clearRestartTimer();
+      setCountdown(null);
+      setRestartChoice(null);
+    }
+  }, [clearRestartTimer, offerRestartAfterSave, t]);
+
   const loadList = async () => {
     if (!supported || upgradeRequired) return;
     listCtrl.current?.abort();
@@ -101,6 +122,8 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
     listCtrl.current = ctrl;
     setListState('loading');
     setNotice('');
+    setNoticeTone('muted');
+    setActivationKind(null);
     setDeleting(null);
     const pendingRead = nodeId ? fetchNodeSecretRequests(cfg, nodeId) : Promise.resolve([]);
     const primaryScope: SecretScope = { networkId: cfg.networkId!, daemonId: daemonId ?? null, nodeId: nodeId ?? null };
@@ -143,7 +166,7 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
     return { ok: false, kind: listed.kind };
   };
 
-  const runWrite = async (write: Omit<SecretWrite, 'revision'> & { revision?: number }, targetIndependent = false) => {
+  const runWrite = async (write: { action: 'put' | 'delete'; key: string; value?: string; revision?: number }, targetIndependent = false) => {
     if (!supported || upgradeRequired || writeCtrl.current) return;
     listCtrl.current?.abort();
     listCtrl.current = null;
@@ -151,6 +174,8 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
     writeCtrl.current = ctrl;
     setWriting(true);
     setNotice('');
+    setNoticeTone('muted');
+    setActivationKind(null);
     setDeleting(null);
     if (write.action === 'put') setValue('');
 
@@ -179,9 +204,15 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
       ...(write.value !== undefined ? { value: write.value } : {}),
       revision: revRes.revision,
     });
-    const extraRead = daemonId && nodeId && nodeSecretsCapable && !targetIndependent && result.kind === 'ready'
-      ? scopedSecrets(cfg, independentScope, ctrl.signal, undefined, { timeoutMs: SECRET_LIST_SOFT_TIMEOUT_MS }).catch(() => null)
-      : Promise.resolve(null);
+    // #5675 PR-3: Daemon 托管节点保存/删除成功后，若子节点在线且支持 node_secrets / hot activation，
+    // 发一次仅携带键名的 node_secret_reload 同步刷新 independentSnap 并读取子节点权威 activation。
+    const canReloadChild = Boolean(daemonId && nodeId && !targetIndependent && result.kind === 'ready'
+      && online !== false && (secretsHotCapable || nodeSecretsCapable));
+    const extraRead = canReloadChild
+      ? scopedSecrets(cfg, independentScope, ctrl.signal, { action: 'reload', key: write.key }, { timeoutMs: SECRET_LIST_SOFT_TIMEOUT_MS }).catch(() => null)
+      : daemonId && nodeId && nodeSecretsCapable && !targetIndependent && result.kind === 'ready'
+        ? scopedSecrets(cfg, independentScope, ctrl.signal, undefined, { timeoutMs: SECRET_LIST_SOFT_TIMEOUT_MS }).catch(() => null)
+        : Promise.resolve(null);
     const extraResult = await extraRead;
     const pendingRead = nodeId ? fetchNodeSecretRequests(cfg, nodeId) : Promise.resolve([]);
     void pendingRead.then(rows => { if (mounted.current) setPendingRest(rows); });
@@ -190,8 +221,7 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
     if (targetIndependent) {
       if (result.kind === 'ready') {
         setIndependentSnap(result.snapshot);
-        setNotice(t(write.action === 'put' ? 'scopedSecrets.nodeSaved' : 'scopedSecrets.nodeDeleted'));
-        offerRestartAfterSave();
+        applyWriteOutcome(result.snapshot.activation, write.action, true);
       } else {
         setNotice(t(`scopedSecrets.${result.kind === 'cancelled' ? 'unconfirmed' : result.kind}`));
       }
@@ -202,10 +232,10 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
         setHardBlock(null);
         setSnapshot(result.snapshot);
         setListState('ready');
-        setNotice(t(independent
-          ? write.action === 'put' ? 'scopedSecrets.nodeSaved' : 'scopedSecrets.nodeDeleted'
-          : write.action === 'put' ? 'scopedSecrets.saved' : 'scopedSecrets.deleted'));
-        offerRestartAfterSave();
+        const effectiveActivation = (canReloadChild && extraResult && extraResult.kind === 'ready')
+          ? extraResult.snapshot.activation
+          : result.snapshot.activation;
+        applyWriteOutcome(effectiveActivation, write.action, independent);
       } else {
         if (result.kind === 'unsupported' || result.kind === 'forbidden') setHardBlock(result.kind);
         setNotice(t(result.kind === 'unsupported' && independent ? 'scopedSecrets.nodeUnsupported' : `scopedSecrets.${result.kind === 'cancelled' ? 'unconfirmed' : result.kind}`));
@@ -240,7 +270,7 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
   return <View testID="scoped-secrets" style={{ gap: spacing.md }}>
     <Text style={{ fontSize: type.title, fontWeight: '600', color: colors.text }}>{t('scopedSecrets.title')}</Text>
     <Text style={{ color: colors.textMuted }}>{t(independent ? 'scopedSecrets.nodeIndependent' : nodeId ? 'scopedSecrets.node' : 'scopedSecrets.daemon')}</Text>
-    <Text style={{ color: colors.textMuted, fontSize: type.small }}>{t(independent ? 'scopedSecrets.nodeBoundary' : 'scopedSecrets.boundary')}</Text>
+    <Text style={{ color: colors.textMuted, fontSize: type.small }}>{t(secretsHotCapable ? 'scopedSecrets.nodeHotBoundary' : independent ? 'scopedSecrets.nodeBoundary' : 'scopedSecrets.boundary')}</Text>
     {providerHttpWarning(cfg.serverUrl) ? <Text style={{ color: colors.textMuted }}>{t('providerManagement.httpWarning')}</Text> : null}
     {!supported ? <Text>{t('scopedSecrets.unbound')}</Text> : upgradeRequired ? <View testID="scoped-secret-upgrade" style={{ gap: spacing.sm }}>
       <Text style={{ color: colors.text }}>{t('scopedSecrets.nodeRuntimeVersion', { version: nodeRuntimeVersion! })}</Text>
@@ -303,7 +333,16 @@ function Page({ cfg, daemonId, nodeId, nodeRuntimeVersion, nodeSecretsCapable, a
         if (!validSecretInput(key.trim(), value)) { setNotice(t('scopedSecrets.invalid')); return; }
         void runWrite({ action: 'put', key: key.trim(), value });
       }} />
-      {notice ? <Text testID="scoped-secret-notice" style={{ color: colors.textMuted }}>{notice}</Text> : null}
+      {notice ? (
+        <View
+          testID={activationKind ? `scoped-secret-activation-${activationKind}` : undefined}
+          style={activationKind === 'shadowed' ? { borderWidth: 1, borderColor: colors.blocked, borderRadius: radius.md, padding: spacing.sm } : undefined}
+        >
+          <Text testID="scoped-secret-notice" style={{ color: noticeTone === 'blocked' ? colors.blocked : noticeTone === 'running' ? colors.running : colors.textMuted }}>
+            {notice}
+          </Text>
+        </View>
+      ) : null}
     </>}
   </View>;
 }

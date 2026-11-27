@@ -12,6 +12,10 @@
 //      - 明确不支持远程重启（manual / adopted 等）→ 显示手动重启命令，不发会误触发 AI 报错的唤醒消息。
 import type { NodeLifecycleResult } from './api';
 import { manualRestartCommand } from './node-restart-after-secret';
+import type { SecretActivation } from './scoped-secrets';
+
+export const SECRET_SHADOWED_COPY =
+  '这个 Key 被节点启动环境里的同名设置覆盖了，在这里改不会生效；请到节点配置里删掉那一项';
 
 export type ChatSecretApplyState =
   | 'idle'
@@ -19,6 +23,7 @@ export type ChatSecretApplyState =
   | 'waiting_idle'
   | 'restarting'
   | 'applied'
+  | 'shadowed'
   | 'manual';
 
 export interface NodeActivityProbe {
@@ -27,10 +32,12 @@ export interface NodeActivityProbe {
 }
 
 export interface ChatSecretAutoApplyDeps {
+  /** #5675 PR-3 — 节点回执中的 activation 状态（老节点/未升级为 next_start 或缺省）。 */
+  activation?: SecretActivation | null;
   restartNode: () => Promise<NodeLifecycleResult>;
   readNodeStatus: () => Promise<NodeActivityProbe | null>;
   onState: (state: ChatSecretApplyState) => void;
-  /** 仅在重启生效后调用，用来发唤醒消息（绝不在重启前调用，避免把节点弄忙自锁）。 */
+  /** 仅在生效后调用，用来发唤醒消息（shadowed 或未生效时不调用）。 */
   onApplied?: () => void;
   signal: AbortSignal;
   pollMs?: number;
@@ -83,6 +90,8 @@ export function chatSecretApplyText(state: ChatSecretApplyState, alias?: string)
       return '保存好了，节点正在自动重载生效，稍后即可直接使用。';
     case 'applied':
       return '已自动生效，可以直接继续对话。';
+    case 'shadowed':
+      return SECRET_SHADOWED_COPY;
     case 'manual':
       return `保存好了。该节点不支持远程重启，请手动执行：${manualRestartCommand(alias)}`;
     case 'idle':
@@ -130,17 +139,52 @@ async function finishAfterRestartAccepted(deps: ChatSecretAutoApplyDeps): Promis
 
 export async function runChatSecretAutoApply(
   deps: ChatSecretAutoApplyDeps,
-): Promise<'applied' | 'manual' | 'aborted'> {
+): Promise<'applied' | 'shadowed' | 'manual' | 'aborted'> {
   const {
+    activation,
     restartNode,
     readNodeStatus,
     onState,
+    onApplied,
     signal,
     pollMs = 3000,
     maxBusyPolls = 200,
   } = deps;
 
   if (signal.aborted) return 'aborted';
+
+  // #5675 PR-3: shadowed -> outer env / config.json overrides this key; restarting will NOT help.
+  if (activation === 'shadowed') {
+    onState('shadowed');
+    return 'shadowed';
+  }
+
+  // #5675 PR-3: hot_applied -> already live in node memory (and any owned resident child cycled).
+  // No restart_node needed!
+  if (activation === 'hot_applied') {
+    onState('applied');
+    onApplied?.();
+    return 'applied';
+  }
+
+  // #5675 PR-3: hot_pending_idle -> node will hot-apply automatically when current turn finishes.
+  // Poll until idle without issuing restart_node, then wake the node.
+  if (activation === 'hot_pending_idle') {
+    onState('waiting_idle');
+    for (let i = 0; i < maxBusyPolls; i++) {
+      if (!(await waitAbortable(pollMs, signal))) return 'aborted';
+      const probe = await readNodeStatus().catch(() => null);
+      if (signal.aborted) return 'aborted';
+      if (isNodeBusyForRestart(probe)) continue;
+      onState('applied');
+      onApplied?.();
+      return 'applied';
+    }
+    if (signal.aborted) return 'aborted';
+    return 'aborted';
+  }
+
+  // Fallback (activation === 'next_start' or legacy node): PR-1 idle-restart flow.
   onState('applying');
 
   const first = await restartNode().catch(() => ({ ok: false as const, error: 'restart_failed' }));

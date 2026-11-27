@@ -944,6 +944,7 @@ export default function NodeDetailScreen({
           nodeId={node?.node_id}
           nodeRuntimeVersion={s.version}
           nodeSecretsCapable={s.node_secrets_capable === true}
+          secretsHotCapable={s.secrets_hot_capable === true}
           alias={alias}
           configUpdateCapable={node?.lifecycle_controllable ? true : configUpdateCapable}
           online={online}

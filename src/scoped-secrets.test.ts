@@ -16,6 +16,22 @@ check('only explicit write sends a key, never polling',requests.length===2&&requ
 check('no value in result',!JSON.stringify(result).includes('TEST-ONLY-fixture'));
 check('wrong node rejected',parseSecretSnapshot({...snapshot,node_id:'other'},scope)===null);
 check('value-bearing receipt rejected',parseSecretSnapshot({...snapshot,value:'bad'},scope)===null);
+for (const activation of ['next_start','hot_applied','hot_pending_idle','shadowed'] as const) {
+  check(`accepts activation=${activation}`, parseSecretSnapshot({...snapshot,activation},scope)?.activation===activation);
+}
+check('unknown activation rejected', parseSecretSnapshot({...snapshot,activation:'bogus'},scope)===null);
+const reloadCalls:any[]=[];
+const reloaded=await manageSecrets({...scope,daemonId:null},async(args,_signal,containsKey)=>{
+  reloadCalls.push({args,containsKey});
+  return args.action==='read'
+    ? {ok:true,request_id:'nsk_33333333-3333-4333-8333-333333333333',daemon_node_id:null,node_id:scope.nodeId,status:'succeeded',snapshot:{...snapshot,daemon_node_id:null,activation:'hot_applied'}}
+    : {ok:true,request_id:'nsk_33333333-3333-4333-8333-333333333333',status:'pending'};
+},new AbortController().signal,{action:'reload',key:'TEST_VENDOR_KEY'},{pollMs:0});
+check('reload succeeds without revision and never sends value',
+  reloaded.kind==='ready' && reloaded.snapshot.activation==='hot_applied'
+  && reloadCalls.length===2 && !reloadCalls[0].containsKey && reloadCalls[0].args.action==='reload'
+  && reloadCalls[0].args.key==='TEST_VENDOR_KEY' && !Object.hasOwn(reloadCalls[0].args,'value')
+  && !Object.hasOwn(reloadCalls[0].args,'revision'));
 const old=await manageSecrets(scope,async()=>({ok:false,error:'scoped_secrets_upgrade_required'}),new AbortController().signal);
 check('old software is not simulated success',old.kind==='unsupported');
 const denied=await manageSecrets(scope,async()=>({ok:false,error:'secret_admin_required'}),new AbortController().signal);
