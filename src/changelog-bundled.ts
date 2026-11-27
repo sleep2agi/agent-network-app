@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.630:",
+  "",
+  "- 新功能：设置 → 账号 → 「文件存储中转」，可把文件、图片、视频直接存到 ModelScope / 阿里云 OSS / AWS S3，大文件不再占 Hub 带宽（不配置就和现在完全一样）。支持一键「测试连接」、保存加密的 Key、清除配置；用公开仓库时会提示隐私风险。",
+  "",
   "What's new in 0.2.629:",
   "",
   "- 新功能：手动启动的节点在 fork 弹窗里可以直接「交给守护进程管理」——只有一台守护进程时自动选上、工作目录自动预填，确认后自动进入 fork；收编失败会把原因说清楚，不再提示「当前 Hub 版本不提供该能力」。",
