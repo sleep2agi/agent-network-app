@@ -554,7 +554,9 @@ export default function NodeSourcePalette({ cfg, sourceNodeId, networkId, sessio
           <Ionicons name="close" size={18} color={colors.textSecondary} />
         </Pressable>
       </View>
-      {caps.hubNoticeKey ? (
+      {/* 2026-11-27（admin 截图）：fork 源本身不可用（手动启动、没有 daemon）时，读不到 daemon 能力是这个原因造成的，
+          不是 Hub 版本旧 —— 再挂一句「当前 Hub 版本不提供该能力」是误报。真实原因由下面的 forkSourceError 说。 */}
+      {caps.hubNoticeKey && !(forkOnly && forkSourceError) ? (
         <Text style={[styles.headerSub, { color: colors.textSecondary }]} numberOfLines={2} testID="source-capability-hub-notice">{t(caps.hubNoticeKey)}</Text>
       ) : null}
       {/* Fork 当前节点（admin 11-11「有点丑」）：不摆 network / node id、mode= 这类内部字段，改成一句人话；

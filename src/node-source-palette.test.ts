@@ -181,4 +181,11 @@ ck('fork name: other families do not count', suggestForkChildName('TMA知识库�
 ck('fork name: a session id is not a name (falls back)', suggestForkChildName('ses_abc', family) === null && suggestForkChildName('', family) === null);
 ck('busy: working/running/busy wait; idle/unknown do not', ['working', 'Running', ' busy '].every(isSourceBusyStatus) && !['idle', 'online', '', undefined, null].some(isSourceBusyStatus));
 
+// admin 2026-11-27 截图：手动启动的 fork 源已经给出真实原因时，不能再挂「当前 Hub 版本不提供该能力」的误报。
+{
+  // @ts-expect-error bun 运行时
+  const src = require('node:fs').readFileSync(new URL('./NodeSourcePalette.tsx', import.meta.url), 'utf8') as string;
+  ck('fork source error suppresses the hub-version notice', /caps\.hubNoticeKey && !\(forkOnly && forkSourceError\)/.test(src));
+}
+
 console.log(`\n${n}/${n} passed`);
