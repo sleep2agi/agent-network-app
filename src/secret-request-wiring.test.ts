@@ -26,7 +26,7 @@ ck('Daemon 托管节点合并展示独立 node-secrets.json 键名且独立键�
   { key: 'GITHUB_TOKEN', source: 'node', independentOnly: true },
 ]));
 const chatCard = readFileSync(new URL('./ChatSecretCard.tsx', import.meta.url), 'utf8');
-ck('聊天密钥卡保存后提供立即重启按钮 (#5505)', chatCard.includes('runNodeLifecycleAction') && chatCard.includes('立即重启使其生效'));
+ck('聊天密钥卡保存后自动排队空闲生效，无自锁且无需手动点第二个重启按钮 (#5675)', chatCard.includes('runChatSecretAutoApply') && chatCard.includes('runNodeLifecycleAction') && !chatCard.includes('立即重启使其生效'));
 const api = readFileSync(new URL('./scoped-secrets.ts', import.meta.url), 'utf8');
 ck('pending 从 list 响应透传进 snapshot', /normalizePendingSecretRequests\(\(request as any\)\?\.pending\)/.test(api));
 ck('REST GET /secrets 读 pending（轮询端点不带）', /fetchNodeSecretRequests/.test(readFileSync(new URL('./api.ts', import.meta.url), 'utf8')));

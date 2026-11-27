@@ -1,15 +1,22 @@
 // admin 2026-11-24 —— 聊天里的「密钥」卡：AI 调 request_secret 后，这张卡代替那条兜底文字出现在回复气泡里。
-// 保存 = 先读节点密钥拿 revision，再 put；成功后以用户身份发一句「已在卡片里保存 X」让 AI 继续。
+// #5675 PR-1 —— 消除自锁：保存成功后绝不先发唤醒消息把节点弄忙，也不再让用户点第二个「立即重启」按钮；
+// 改为卡片直接提示「保存好了，节点空闲时自动生效」，自动排队到节点空闲后触发重启，生效后再发唤醒消息。
 // 值只在输入框状态和 put 参数里，不进消息、不进日志、不给 AI。
 import { useEffect, useRef, useState } from 'react';
-import { Pressable, View } from 'react-native';
-import { fetchHubNodes, runNodeLifecycleAction, type HubConfig } from './api';
+import { View } from 'react-native';
+import { fetchHubNodes, fetchNodeStatus, runNodeLifecycleAction, type HubConfig } from './api';
 import { scopedSecrets } from './scoped-secrets-api';
 import SecretRequestCard, { type SecretRequestPhase } from './SecretRequestCard';
 import { secretSaveErrorText, secretSavedMessage, selectChatSecretScopes, type ChatSecretRequest } from './chat-secret-request';
-import { manualRestartCommand } from './node-restart-after-secret';
+import {
+  chatSecretApplyText,
+  isChatSecretSavedLocally,
+  markChatSecretSavedLocally,
+  runChatSecretAutoApply,
+  type ChatSecretApplyState,
+} from './chat-secret-auto-apply';
 import { Text } from './ui-text';
-import { colors, radius, spacing, type, weight } from './theme';
+import { colors, type } from './theme';
 
 export default function ChatSecretCard({ cfg, alias, request, alreadySaved, onSaved }: {
   cfg: HubConfig;
@@ -17,15 +24,51 @@ export default function ChatSecretCard({ cfg, alias, request, alreadySaved, onSa
   request: ChatSecretRequest;
   /** 后面的消息里已经有「已保存」⇒ 直接显示已保存（重开聊天时）。 */
   alreadySaved: boolean;
-  /** 保存成功：父级用正常发送路径发出这句话。 */
+  /** 重启生效后：父级用正常发送路径发出唤醒消息。 */
   onSaved: (message: string) => void;
 }) {
-  const [phase, setPhase] = useState<SecretRequestPhase>(alreadySaved ? 'saved' : 'idle');
+  const scopeKey = `${cfg.serverUrl}|${cfg.networkId ?? ''}`;
+  const initialSaved = alreadySaved || isChatSecretSavedLocally(scopeKey, request.nodeId, request.key);
+  const [phase, setPhase] = useState<SecretRequestPhase>(initialSaved ? 'saved' : 'idle');
   const [error, setError] = useState<string | undefined>();
-  const [restartState, setRestartState] = useState<'idle' | 'restarting' | 'restarted' | 'busy' | 'manual'>('idle');
+  const [applyState, setApplyState] = useState<ChatSecretApplyState>('idle');
   const live = useRef<AbortController | null>(null);
+  const autoApplyCtrl = useRef<AbortController | null>(null);
   useEffect(() => { if (alreadySaved) setPhase('saved'); }, [alreadySaved]);
-  useEffect(() => () => live.current?.abort(), []);
+  useEffect(() => () => {
+    live.current?.abort();
+    autoApplyCtrl.current?.abort();
+  }, []);
+
+  const startAutoApply = (daemonId: string | null) => {
+    autoApplyCtrl.current?.abort();
+    const ctrl = new AbortController();
+    autoApplyCtrl.current = ctrl;
+    void runChatSecretAutoApply({
+      signal: ctrl.signal,
+      onState: setApplyState,
+      restartNode: () => runNodeLifecycleAction(cfg, 'restart_node', {
+        node_id: request.nodeId,
+        alias: alias ?? '',
+        ...(daemonId ? { lifecycle_daemon_node_id: daemonId } : {}),
+      }),
+      readNodeStatus: async () => {
+        try {
+          const { sessions } = await fetchNodeStatus(cfg, alias);
+          const hit = (sessions ?? []).find(s => (s.node_id && s.node_id === request.nodeId) || (alias && s.alias === alias));
+          if (!hit) return null;
+          const inFlight = (hit as { process_in_flight_count?: unknown }).process_in_flight_count;
+          return {
+            status: hit.status,
+            inFlightCount: typeof inFlight === 'number' ? inFlight : null,
+          };
+        } catch {
+          return null;
+        }
+      },
+      onApplied: () => onSaved(secretSavedMessage(request)),
+    });
+  };
 
   const save = async (value: string) => {
     if (phase === 'saving' || phase === 'saved' || !cfg.networkId) return;
@@ -52,8 +95,9 @@ export default function ChatSecretCard({ cfg, alias, request, alreadySaved, onSa
       const put = await scopedSecrets(cfg, scope, ctrl.signal, { action: 'put', key: request.key, value, revision: listed.snapshot.revision });
       if (ctrl.signal.aborted) return;
       if (put.kind === 'ready') {
+        markChatSecretSavedLocally(scopeKey, request.nodeId, request.key);
         setPhase('saved');
-        onSaved(secretSavedMessage(request));
+        startAutoApply(daemonId);
         return;
       }
       lastErrorKind = put.kind;
@@ -63,56 +107,20 @@ export default function ChatSecretCard({ cfg, alias, request, alreadySaved, onSa
     setError(secretSaveErrorText(lastErrorKind));
   };
 
-  const restartNodeNow = async () => {
-    if (restartState === 'restarting' || restartState === 'restarted') return;
-    setRestartState('restarting');
-    const r = await runNodeLifecycleAction(cfg, 'restart_node', { node_id: request.nodeId, alias: alias ?? '' });
-    if (r.ok) { setRestartState('restarted'); return; }
-    if (r.error === 'node_busy_in_flight') { setRestartState('busy'); return; }
-    setRestartState('manual');
-  };
+  const statusText = chatSecretApplyText(applyState, alias);
+  const statusColor = applyState === 'waiting_idle'
+    ? colors.blocked
+    : applyState === 'applied'
+      ? colors.running
+      : colors.textMuted;
 
-  const savedFooter = (
+  const savedFooter = statusText ? (
     <View style={{ gap: 4 }}>
-      {restartState === 'restarted' ? (
-        <Text testID={`chat-secret-${request.key}-restarted`} style={{ color: colors.textMuted, fontSize: type.small }}>
-          已下发重启指令，节点正在重启生效，稍后会重新上线。
-        </Text>
-      ) : (
-        <View style={{ flexDirection: 'row', alignItems: 'center', flexWrap: 'wrap', gap: spacing.sm }}>
-          <Pressable
-            testID={`chat-secret-${request.key}-restart`}
-            accessibilityRole="button"
-            disabled={restartState === 'restarting'}
-            onPress={() => { void restartNodeNow(); }}
-            style={{
-              paddingHorizontal: spacing.sm,
-              paddingVertical: 5,
-              borderRadius: radius.surface,
-              borderWidth: 1,
-              borderColor: colors.border,
-              backgroundColor: colors.bg,
-              opacity: restartState === 'restarting' ? 0.5 : 1,
-            }}
-          >
-            <Text style={{ color: colors.accent, fontSize: type.small, fontWeight: weight.strong }}>
-              {restartState === 'restarting' ? '正在下发重启…' : '立即重启使其生效'}
-            </Text>
-          </Pressable>
-        </View>
-      )}
-      {restartState === 'busy' ? (
-        <Text style={{ color: colors.blocked, fontSize: type.small }}>
-          节点正在执行任务，暂未重启；完成后再点一次即可生效。
-        </Text>
-      ) : null}
-      {restartState === 'manual' ? (
-        <Text style={{ color: colors.textMuted, fontSize: type.small }}>
-          该节点不支持远程重启，请手动执行：{manualRestartCommand(alias)}
-        </Text>
-      ) : null}
+      <Text testID={`chat-secret-${request.key}-apply-${applyState}`} style={{ color: statusColor, fontSize: type.small }}>
+        {statusText}
+      </Text>
     </View>
-  );
+  ) : null;
 
   return (
     <SecretRequestCard
