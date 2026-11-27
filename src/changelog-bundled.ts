@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.631:",
+  "",
+  "- 修复：文件存储中转只接受**私有**仓库 / 私有 Bucket。公开的会被 Hub 直接拒绝并说明原因（「请将仓库/Bucket 设为私有后再试」），避免文件被别人看到；已保存的公开地址配置会被忽略并按私有方式访问。",
+  "",
   "What's new in 0.2.630:",
   "",
   "- 新功能：设置 → 账号 → 「文件存储中转」，可把文件、图片、视频直接存到 ModelScope / 阿里云 OSS / AWS S3，大文件不再占 Hub 带宽（不配置就和现在完全一样）。支持一键「测试连接」、保存加密的 Key、清除配置；用公开仓库时会提示隐私风险。",
