@@ -22,7 +22,62 @@ export const INTERRUPT_CONFIRM_MS = 8000;
  *  否则用户点了没生效、三分钟后回合自然结束，界面也会说「已停止」，那是假消息。 */
 export const LATE_EVIDENCE_MS = 30_000;
 
+/** 点击「停止」后的快轮询间隔（毫秒）。常规在线状态轮询是 30 秒，不等它才能在 1–2 秒内确认停止。 */
+export const INTERRUPT_POLL_MS = 1500;
+
+/** 确认「已停止」后胶囊提示自动收起的时长（毫秒）。 */
+export const INTERRUPT_CLEAR_MS = 2200;
+
 export type InterruptPhase = 'idle' | 'sending' | 'waiting' | 'interrupted' | 'unconfirmed' | 'failed' | 'unsupported';
+
+export interface StopButtonPresentation {
+  tone: 'danger' | 'busy' | 'success' | 'muted';
+  kind: 'stop' | 'spinner' | 'check' | 'retry';
+  /** 永远是紧凑短文案 key，绝不把长段超时/错误说明塞进输入栏按钮里撑爆工具栏。 */
+  labelKey: 'chat.interrupt.button' | 'chat.interrupt.stopping' | 'chat.interrupt.interrupted' | 'chat.interrupt.retryShort' | 'chat.interrupt.unsupportedShort';
+}
+
+export function stopButtonPresentation(phase: InterruptPhase): StopButtonPresentation {
+  switch (phase) {
+    case 'sending':
+    case 'waiting':
+      return { tone: 'busy', kind: 'spinner', labelKey: 'chat.interrupt.stopping' };
+    case 'interrupted':
+      return { tone: 'success', kind: 'check', labelKey: 'chat.interrupt.interrupted' };
+    case 'unconfirmed':
+    case 'failed':
+      return { tone: 'danger', kind: 'retry', labelKey: 'chat.interrupt.retryShort' };
+    case 'unsupported':
+      return { tone: 'muted', kind: 'stop', labelKey: 'chat.interrupt.unsupportedShort' };
+    default:
+      return { tone: 'danger', kind: 'stop', labelKey: 'chat.interrupt.button' };
+  }
+}
+
+const TERMINAL_TASK_STATUSES = new Set(['replied', 'failed', 'cancelled', 'expired']);
+const ACTIVE_TASK_STATUSES = new Set(['running', 'acked', 'delivered']);
+
+/** 捕捉点击「停止」那一刻正在执行的入站任务 ID。队列有下一条排队时，停掉上一条会秒接下一条导致
+ *  sessionStatus 维持 working；记录点击时的活跃 task_id，看到它进入终态即可确认这一轮已被停下。 */
+export function activeInterruptTaskId(
+  messages: ReadonlyArray<{ task_id?: string | null; status?: string | null }>,
+): string {
+  const running = messages.find(m => m.task_id && (m.status ?? '').trim().toLowerCase() === 'running');
+  if (running?.task_id) return running.task_id;
+  const open = messages.find(m => m.task_id && ACTIVE_TASK_STATUSES.has((m.status ?? '').trim().toLowerCase()));
+  return open?.task_id ?? '';
+}
+
+/** 点击停止时记录的活跃任务进入终态 ⇒ 证明该轮确实已停止（即使队列下一条立刻接棒）。 */
+export function taskSettledProvesInterrupted(
+  baselineTaskId: string | null | undefined,
+  messages: ReadonlyArray<{ task_id?: string | null; status?: string | null }>,
+): boolean {
+  if (!baselineTaskId) return false;
+  const row = messages.find(m => m.task_id === baselineTaskId);
+  if (!row) return false;
+  return TERMINAL_TASK_STATUSES.has((row.status ?? '').trim().toLowerCase());
+}
 
 export interface InterruptState {
   phase: InterruptPhase;

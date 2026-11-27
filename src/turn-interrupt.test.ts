@@ -5,14 +5,19 @@
 // 真凭据只有两种 —— 节点回执里 interrupted=true，或会话状态真的从「在飞」翻走。
 import { readFileSync } from 'node:fs';
 import {
+  INTERRUPT_CLEAR_MS,
   INTERRUPT_CONFIRM_MS,
+  INTERRUPT_POLL_MS,
   LATE_EVIDENCE_MS,
   ackProvesInterrupted,
+  activeInterruptTaskId,
   idleInterrupt,
   interruptAfterSend,
   interruptable,
   replyProvesInterrupted,
   statusFlipProvesInterrupted,
+  stopButtonPresentation,
+  taskSettledProvesInterrupted,
 } from './turn-interrupt';
 
 let passed = 0;
@@ -95,6 +100,37 @@ ck('empty status is not a flip', !statusFlipProvesInterrupted('working', ''));
     /\[cfg, alias\]\)[\s\S]{0,400}setInterrupt\(idleInterrupt\(\)\)[\s\S]{0,120}setComposerNotice\(null\)/.test(screen));
   ck('late evidence has an upper bound so a natural turn end cannot be misread as a stop',
     screen.includes('lateEvidenceAllowed') && screen.includes('LATE_EVIDENCE_MS'));
+  ck('fast confirmation poll runs on INTERRUPT_POLL_MS instead of waiting 30s',
+    INTERRUPT_POLL_MS === 1500 && screen.includes('INTERRUPT_POLL_MS'));
+  ck('confirmed stop auto-clears back to idle after INTERRUPT_CLEAR_MS',
+    INTERRUPT_CLEAR_MS > 0 && screen.includes('INTERRUPT_CLEAR_MS'));
+  ck('active running task settlement counts as proof even if a queued next task keeps status=working',
+    screen.includes('activeInterruptTaskId(messages)') && screen.includes('taskSettledProvesInterrupted('));
+  ck('unconfirmed/failed detail moves into composerNotice instead of bloating the stop button',
+    screen.includes("setComposerNotice(t('chat.interrupt.unconfirmed'))"));
+  const btn = readFileSync(new URL('./ComposerStopButton.tsx', import.meta.url), 'utf8');
+  ck('stop button renders a compact pill via stopButtonPresentation (never verbose unconfirmed text in label)',
+    btn.includes('stopButtonPresentation(state.phase)') && btn.includes('borderRadius: radius.pill'));
+}
+
+// ── 按钮紧凑展示 + 活跃任务终态凭据 ────────────────────────────────────────
+{
+  ck('idle stop button shows compact danger stop pill', stopButtonPresentation('idle').labelKey === 'chat.interrupt.button' && stopButtonPresentation('idle').tone === 'danger');
+  ck('sending/waiting show compact spinner pill', stopButtonPresentation('sending').kind === 'spinner' && stopButtonPresentation('waiting').labelKey === 'chat.interrupt.stopping');
+  ck('unconfirmed/failed stay compact retry pill (not verbose essay)', stopButtonPresentation('unconfirmed').labelKey === 'chat.interrupt.retryShort' && stopButtonPresentation('failed').labelKey === 'chat.interrupt.retryShort');
+  ck('interrupted shows compact success check pill', stopButtonPresentation('interrupted').tone === 'success' && stopButtonPresentation('interrupted').kind === 'check');
+
+  const queued = [
+    { task_id: 't_next', status: 'delivered' },
+    { task_id: 't_curr', status: 'running' },
+    { task_id: 't_old', status: 'replied' },
+  ];
+  ck('activeInterruptTaskId prefers the currently running task over queued ones', activeInterruptTaskId(queued) === 't_curr');
+  ck('activeInterruptTaskId falls back to newest open task when none marked running yet', activeInterruptTaskId([{ task_id: 't_d', status: 'delivered' }]) === 't_d');
+  ck('taskSettledProvesInterrupted stays false while baseline task is still running', !taskSettledProvesInterrupted('t_curr', queued));
+  ck('taskSettledProvesInterrupted turns true when baseline task settles even if next task starts running',
+    taskSettledProvesInterrupted('t_curr', [{ task_id: 't_next', status: 'running' }, { task_id: 't_curr', status: 'replied' }]));
+  ck('empty baseline task id proves nothing', !taskSettledProvesInterrupted('', [{ task_id: 't_curr', status: 'replied' }]));
 }
 
 console.log(`turn-interrupt: ${passed}/${total}`);
