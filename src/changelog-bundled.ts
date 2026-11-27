@@ -5,6 +5,11 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.626:",
+  "",
+  "- 修复：在聊天卡片里保存密钥后不用再手动重启 —— 节点空闲时会自动生效；它正在干活时会提示「做完这件事后自动生效」。",
+  "- 修复：节点的「密钥」页不再一直转圈锁住表单；读不到已有名称时照样能直接保存新密钥。",
+  "",
   "What's new in 0.2.625:",
   "",
   "- 新功能：服务器统一语音。设置 → 语音输入 里最下面新增「服务器统一语音服务」：管理员填一次火山引擎凭据，全网成员就不用各自配 Key（建议单独开子账号并设用量上限）；管理员还能给子账号设用量上限。没配凭据时这一块不会出现。",
