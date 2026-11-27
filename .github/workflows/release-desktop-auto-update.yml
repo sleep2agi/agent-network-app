@@ -642,6 +642,10 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.629:
+
+            - 新功能：手动启动的节点在 fork 弹窗里可以直接「交给守护进程管理」——只有一台守护进程时自动选上、工作目录自动预填，确认后自动进入 fork；收编失败会把原因说清楚，不再提示「当前 Hub 版本不提供该能力」。
+
             What's new in 0.2.628:
 
             - 改进：保存密钥后，根据节点回执显示「已生效」「等待空闲」或「下次启动生效」；支持热生效的节点无需重启。若同名启动环境变量覆盖了密钥，会明确提示到节点配置处理。
