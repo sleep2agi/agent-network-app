@@ -404,6 +404,11 @@ export default function ComposerModelPalette({ cfg, node, targetError, currentMo
         setModelSwitchUnsupported(true);
         return;
       }
+      if (!verdict.confirmed && res.update_id && after?.last_update?.update_id === res.update_id
+          && after.last_update.status === 'restarting') {
+        setNotice(t('chat.modelPicker.switchRestarting'));
+        return;
+      }
       if (!verdict.confirmed && !verdict.ackOnly) {
         setErrorText(t('chat.modelPicker.failed', { message: t('chat.modelPicker.acceptedUnconfirmed') }));
         setErrorDetail(verdict.reason);

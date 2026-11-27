@@ -54,6 +54,7 @@ export const chatTranslations = {
   'chat.modelPicker.failed': ['失败:{message}', 'Failed: {message}'],
   'chat.modelPicker.switchUnsupported': ['这个节点暂不支持在对话中途换模型。可到节点设置查看可用的换模型方式；如果需要重启，请等当前任务完成。', 'This node cannot switch models during a conversation. Check Node Settings for available options. If a restart is required, wait for the current task to finish.'],
   'chat.modelPicker.openModelSettings': ['打开节点模型设置', 'Open node model settings'],
+  'chat.modelPicker.switchRestarting': ['模型设置已下发，节点正在重启。请等节点重新上线，再查看当前模型。', 'Model settings were sent and the node is restarting. Check the current model when it comes back online.'],
   'chat.modelPicker.conflict': ['配置在别处被改过了，已重新加载，请再选一次。', 'The config changed elsewhere. Reloaded; pick again.'],
   'chat.modelPicker.noConfig': ['还没读到节点配置，无法确认回读，暂不能切换', 'The node config has not been read, so a switch cannot be confirmed yet'],
   'chat.modelPicker.effectiveModelUnknown': ['生效模型未知（model_effective 缺失），不能写档位', 'Effective model unknown (model_effective missing); cannot write a variant'],
