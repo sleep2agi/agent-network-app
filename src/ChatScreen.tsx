@@ -79,7 +79,7 @@ import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ComposerStopButton from './ComposerStopButton';
 import ComposerInjectButton from './ComposerInjectButton';
-import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, INTERRUPT_CONFIRM_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
+import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, activeInterruptTaskId, taskSettledProvesInterrupted, INTERRUPT_CONFIRM_MS, INTERRUPT_POLL_MS, INTERRUPT_CLEAR_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
 import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
 import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
@@ -2406,6 +2406,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
    *  否则状态在工具回执回来之前就翻 idle（停止很快时会这样），翻走这一拍就被「上一拍」吃掉，
    *  之后再也等不到第二次翻转 ⇒ 界面永远停在「节点未确认」。 */
   const interruptBaselineRef = useRef('');
+  const interruptTaskIdRef = useRef('');
   const interruptTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   /** 点击时刻：迟到凭据只在这个时间点之后 LATE_EVIDENCE_MS 内算数（否则会把自然结束当成停止成功）。 */
   const interruptSentAtRef = useRef(0);
@@ -2557,17 +2558,22 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       clearInterval(t);
     };
   }, [cfg, alias, foreground]);
-  // #4591 —— 点「停止」：先记下此刻的消息集合（回执只认之后新出现的），发控制消息，再等真凭据（窗口 INTERRUPT_CONFIRM_MS，迟到凭据上限 LATE_EVIDENCE_MS）。
+  // #4591 —— 点「停止」：先记下此刻的消息集合与活跃任务（回执只认之后新出现的），发控制消息，
+  // 再用 1.5s 快轮询等真凭据（窗口 INTERRUPT_CONFIRM_MS，迟到凭据上限 LATE_EVIDENCE_MS）。
+  // 详细超时/失败提示走输入框上方 composerNotice，不把一长串灰字焊在工具栏按钮里。
   const pressInterrupt = () => {
     if (!turnCaps.interrupt || interruptBusy || !interruptable(sessionStatus)) return;
     interruptSeenRef.current = new Set(messages.map(interruptIdOf));
     interruptSentAtRef.current = Date.now();
     interruptBaselineRef.current = sessionStatus ?? '';
+    interruptTaskIdRef.current = activeInterruptTaskId(messages);
     setInterrupt({ phase: 'sending', detail: null });
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     void interruptTurn(cfg, alias).then(res => {
       if (!res.ok) {
-        setInterrupt(interruptAfterSend({ sent: res.unsupported ? 'unsupported' : 'failed', confirmed: false, timedOut: false, detail: res.error }));
+        const next = interruptAfterSend({ sent: res.unsupported ? 'unsupported' : 'failed', confirmed: false, timedOut: false, detail: res.error });
+        setInterrupt(next);
+        setComposerNotice(next.phase === 'unsupported' ? t('chat.interrupt.unsupported') : t('chat.interrupt.failed', { message: next.detail ?? '' }));
         return;
       }
       // Hub 只给 accepted；只有 interrupted===true 才算截断凭据。
@@ -2575,19 +2581,56 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       setInterrupt(interruptAfterSend({ sent: 'ok', confirmed, timedOut: false }));
       if (confirmed) return;
       interruptTimerRef.current = setTimeout(() => {
-        setInterrupt(prev => (prev.phase === 'waiting' ? interruptAfterSend({ sent: 'ok', confirmed: false, timedOut: true }) : prev));
+        setInterrupt(prev => {
+          if (prev.phase !== 'waiting') return prev;
+          setComposerNotice(t('chat.interrupt.unconfirmed'));
+          return interruptAfterSend({ sent: 'ok', confirmed: false, timedOut: true });
+        });
       }, INTERRUPT_CONFIRM_MS);
     });
   };
   useEffect(() => () => { if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current); }, []);
-  // 真凭据之一：节点回执（`interrupt {"ok":true,"interrupted":true}`）作为新消息出现。
+  // 点完停止后不等 30s 常规状态轮询：以 INTERRUPT_POLL_MS 快查节点状态与原活跃任务终态，1–2s 内就能确认停止。
   useEffect(() => {
-    // unconfirmed 之后仍要继续听：超过窗口才到的真凭据（回执 / 状态翻转）照样把状态升回来，
+    if (!foreground) return;
+    if (!(interrupt.phase === 'waiting' || (interrupt.phase === 'unconfirmed' && lateEvidenceAllowed()))) return;
+    let live = true;
+    const probe = async () => {
+      if (!live) return;
+      if (interrupt.phase === 'unconfirmed' && !lateEvidenceAllowed()) return;
+      try {
+        const data = await fetchStatus(cfg);
+        const s = (data.sessions ?? []).find(x => x.alias === alias);
+        if (live && s?.status) setSessionStatus(s.status);
+      } catch {
+        /* ignore transient poll error */
+      }
+      const trackedTaskId = interruptTaskIdRef.current;
+      if (!live || !trackedTaskId) return;
+      try {
+        const taskData = await fetchTasks(cfg, { to_name: alias, limit: 10, skipStats: true });
+        if (live && taskSettledProvesInterrupted(trackedTaskId, taskData.tasks ?? [])) {
+          setInterrupt({ phase: 'interrupted', detail: null });
+        }
+      } catch {
+        /* ignore transient poll error */
+      }
+    };
+    const first = setTimeout(() => { void probe(); }, 500);
+    const timer = setInterval(() => { void probe(); }, INTERRUPT_POLL_MS);
+    return () => { live = false; clearTimeout(first); clearInterval(timer); };
+  }, [cfg, alias, foreground, interrupt.phase]);
+  // 真凭据之一：节点回执（`interrupt {"ok":true,"interrupted":true}`）作为新消息出现，或原活跃任务进入终态。
+  useEffect(() => {
+    // unconfirmed 之后仍要继续听：超过窗口才到的真凭据（回执 / 状态翻转 / 任务终态）照样把状态升回来，
     // 否则用户只会停在一句「未确认」上，而其实早就停了。
     if (interrupt.phase !== 'waiting' && interrupt.phase !== 'unconfirmed') return;
     if (interrupt.phase === 'unconfirmed' && !lateEvidenceAllowed()) return;
     const seen = interruptSeenRef.current;
-    if (messages.some(m => !seen.has(interruptIdOf(m)) && replyProvesInterrupted(m.content ?? m.result ?? ''))) {
+    if (
+      messages.some(m => !seen.has(interruptIdOf(m)) && replyProvesInterrupted(m.content ?? m.result ?? ''))
+      || taskSettledProvesInterrupted(interruptTaskIdRef.current, messages)
+    ) {
       setInterrupt({ phase: 'interrupted', detail: null });
     }
   }, [messages, interrupt.phase]);
@@ -2600,6 +2643,22 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       setInterrupt({ phase: 'interrupted', detail: null });
     }
   }, [sessionStatus, interrupt.phase]);
+  // 已停止 / 过期未确认 / 失败态不再永久挂死在输入栏上。
+  useEffect(() => {
+    if (interrupt.phase === 'interrupted') {
+      setComposerNotice(t('chat.interrupt.interrupted'));
+      const timer = setTimeout(() => setInterrupt(idleInterrupt()), INTERRUPT_CLEAR_MS);
+      return () => clearTimeout(timer);
+    }
+    if ((interrupt.phase === 'unconfirmed' || interrupt.phase === 'failed' || interrupt.phase === 'unsupported') && !interruptable(sessionStatus)) {
+      const timer = setTimeout(() => setInterrupt(idleInterrupt()), INTERRUPT_CLEAR_MS);
+      return () => clearTimeout(timer);
+    }
+    if (interrupt.phase === 'unsupported') {
+      const timer = setTimeout(() => setInterrupt(idleInterrupt()), 3500);
+      return () => clearTimeout(timer);
+    }
+  }, [interrupt.phase, sessionStatus]);
 
   const [nodeRuntimeMeta, setNodeRuntimeMeta] = useState<{ runtime: string | null; generation: string | null }>({ runtime: null, generation: null });
 
@@ -2616,6 +2675,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     interruptBaselineRef.current = '';
     setInterrupt(idleInterrupt());
     setComposerNotice(null);
+    interruptTaskIdRef.current = '';
     setNodeDescription('');
     setNodeRuntimeMeta({ runtime: null, generation: null });
   }, [cfg, alias]);
