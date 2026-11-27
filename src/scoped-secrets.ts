@@ -1,8 +1,10 @@
 export type SecretScope = { networkId: string; daemonId: string | null; nodeId: string | null };
+export const SECRET_ACTIVATION_STATES = ['next_start', 'hot_applied', 'hot_pending_idle', 'shadowed'] as const;
+export type SecretActivation = (typeof SECRET_ACTIVATION_STATES)[number];
 /** #4827 —— agent 举手的待填密钥（hub 的 list 响应里 `pending`；30 分钟 TTL）。 */
 export type PendingSecretRequest = { key: string; label?: string; requested_at?: string; by_node_id?: string };
 export type SecretSnapshot = { network_id: string; daemon_node_id: string | null; node_id: string | null;
-  revision: number; activation: 'next_start'; keys: { key: string; source: 'daemon' | 'node' }[];
+  revision: number; activation: SecretActivation; keys: { key: string; source: 'daemon' | 'node' }[];
   /** 只来自 list 调用；写操作后可能仍是上一拍的值（下一次刷新会更新）。 */
   pending?: PendingSecretRequest[] };
 export type MergedSecretKey = { key: string; source: 'daemon' | 'node'; independentOnly?: boolean };
@@ -41,7 +43,9 @@ export function normalizePendingSecretRequests(v: unknown): PendingSecretRequest
   return out.length ? out : undefined;
 }
 export type SecretResult = { kind: 'ready'; snapshot: SecretSnapshot } | { kind: 'unconfirmed' | 'cancelled' | 'forbidden' | 'unsupported' | 'invalid' };
-export type SecretWrite = { action: 'put' | 'delete'; key: string; value?: string; revision: number };
+export type SecretWrite =
+  | { action: 'put' | 'delete'; key: string; value?: string; revision: number }
+  | { action: 'reload'; key?: string };
 // Only known release versions preflight here; custom/unknown builds still use Hub capability readback.
 export function nodeSecretsNeedsUpgrade(version?: string | null): boolean {
   const match = /^(\d+)\.(\d+)\.(\d+)(?:-preview\.(\d+))?$/.exec(version ?? '');
@@ -58,7 +62,7 @@ export function validSecretInput(key: string, value: string): boolean {
 export function parseSecretSnapshot(v: any, scope: SecretScope): SecretSnapshot | null {
   if (!v || Object.keys(v).some(k=>!['network_id','daemon_node_id','node_id','revision','activation','keys'].includes(k))
     || v.network_id !== scope.networkId || v.daemon_node_id !== scope.daemonId || v.node_id !== scope.nodeId
-    || !Number.isSafeInteger(v.revision) || v.revision < 0 || v.activation !== 'next_start' || !Array.isArray(v.keys) || v.keys.length > 256
+    || !Number.isSafeInteger(v.revision) || v.revision < 0 || !(SECRET_ACTIVATION_STATES as readonly string[]).includes(v.activation) || !Array.isArray(v.keys) || v.keys.length > 256
     || new Set(v.keys.map((x:any)=>x?.key)).size !== v.keys.length || v.keys.some((x:any)=>!x
       || Object.keys(x).some(k=>!['key','source'].includes(k)) || typeof x.key !== 'string' || !/^[A-Z_][A-Z0-9_]{0,127}$/.test(x.key)
       || !['node','daemon'].includes(x.source) || (!scope.nodeId && x.source !== 'daemon') || (!scope.daemonId && x.source !== 'node'))) return null;
@@ -80,7 +84,11 @@ export async function manageSecrets(scope: SecretScope, rpc: Rpc, signal: AbortS
     : ['unsupported','scoped_secrets_upgrade_required','node_secrets_upgrade_required'].includes(r?.error) ? 'unsupported' : 'unconfirmed'});
   try {
     const request=await call({action:write?.action ?? 'list',id:scope.daemonId ?? scope.nodeId,network_id:scope.networkId,node_id:scope.nodeId,
-      ...(write ? {key:write.key,revision:write.revision,...(write.action==='put'?{value:write.value}:{})} : {})},write?.action==='put');
+      ...(write
+        ? write.action === 'reload'
+          ? (write.key ? { key: write.key } : {})
+          : { key: write.key, revision: write.revision, ...(write.action === 'put' ? { value: write.value } : {}) }
+        : {})},write?.action==='put');
     const requestIdPattern=scope.daemonId ? /^dsk_[a-f0-9-]{36}$/ : /^nsk_[a-f0-9-]{36}$/;
     if (!request?.ok || request.status !== 'pending' || !requestIdPattern.test(request.request_id)) return errorResult(request);
     while (!ctrl.signal.aborted) {
@@ -90,7 +98,8 @@ export async function manageSecrets(scope: SecretScope, rpc: Rpc, signal: AbortS
       if (r.status==='succeeded') {
         const snapshot=parseSecretSnapshot(r.snapshot,scope);
         const owns=(source:string)=>source === (scope.nodeId?'node':'daemon');
-        if (!snapshot || (write && (snapshot.revision !== write.revision+1
+        const mutating = write && write.action !== 'reload';
+        if (!snapshot || (mutating && (snapshot.revision !== write.revision+1
           || (write.action==='put' && !snapshot.keys.some(k=>k.key===write.key&&owns(k.source)))
           || (write.action==='delete' && snapshot.keys.some(k=>k.key===write.key&&owns(k.source)))))) return {kind:'unconfirmed'};
         const pending = normalizePendingSecretRequests((request as any)?.pending);
