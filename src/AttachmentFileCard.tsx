@@ -1,6 +1,7 @@
 import { ActivityIndicator, Pressable, StyleSheet, View, type GestureResponderEvent } from 'react-native';
 import { Text } from './ui-text';
-import { colors, onThemeChange, radius, weight } from './theme';
+import { Ionicons } from './icons';
+import { colors, onThemeChange, radius, themeMode, weight } from './theme';
 import { filePresentation, fileStatusKey, formatFileSize, type FileCardStatus } from './attachment-file-model';
 import { useTranslation } from './i18n-react';
 import './i18n-chat';
@@ -13,6 +14,10 @@ export default function AttachmentFileCard({ name, mime, size, status = 'ready',
 }) {
   const { t } = useTranslation();
   const file = filePresentation(name, mime);
+  const isDark = themeMode() === 'dark';
+  const ink = isDark ? file.darkColor : file.color;
+  const iconBg = `${ink}${isDark ? '1c' : '12'}`;
+  const iconBorder = `${ink}${isDark ? '36' : '26'}`;
   const busy = status === 'uploading' || status === 'downloading';
   const failed = status === 'error' || status === 'sendFailed';
   const sizeText = formatFileSize(size);
@@ -33,9 +38,14 @@ export default function AttachmentFileCard({ name, mime, size, status = 'ready',
             <Text style={[styles.secondary, failed && styles.error]} testID={`attachment-file-status-${status}`}>{statusText}{progress ? ` · ${progress}` : ''}</Text>
           </View>
         </View>
-        <View style={[styles.icon, { backgroundColor: file.color }]} accessibilityElementsHidden importantForAccessibility="no-hide-descendants">
-          <View style={styles.fold} /><View style={styles.foldCut} />
-          <Text style={styles.iconLabel}>{file.label}</Text>
+        <View
+          testID="attachment-file-icon"
+          style={[styles.iconTile, { backgroundColor: iconBg, borderColor: iconBorder }]}
+          accessibilityElementsHidden
+          importantForAccessibility="no-hide-descendants"
+        >
+          <Ionicons name={file.icon} size={22} color={ink} />
+          <Text style={[styles.iconBadge, { color: ink }]} numberOfLines={1} testID="attachment-file-badge">{file.badge}</Text>
         </View>
       </View>
       <View style={styles.footer}>
@@ -48,18 +58,16 @@ export default function AttachmentFileCard({ name, mime, size, status = 'ready',
 const makeStyles = () => StyleSheet.create({
   card: { width: 300, maxWidth: '100%', alignSelf: 'flex-start', marginTop: 6, borderRadius: radius.control, borderWidth: 1, borderColor: colors.border, backgroundColor: colors.card, overflow: 'hidden' },
   pressed: { opacity: 0.8 },
-  body: { flexDirection: 'row', alignItems: 'center', padding: 14, gap: 16, minHeight: 100 },
+  body: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 14, paddingVertical: 12, gap: 14, minHeight: 82 },
   info: { flex: 1, minWidth: 0 },
   name: { fontSize: 15, lineHeight: 21, fontWeight: '500', color: colors.text },
   title: { flexDirection: 'row', alignItems: 'flex-end' },
   stem: { flexShrink: 1, minWidth: 0 },
   extension: { flexShrink: 0, maxWidth: '45%' },
-  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 8 },
+  meta: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: 6, marginTop: 6 },
   secondary: { fontSize: 11, lineHeight: 16, color: colors.textMuted },
-  icon: { width: 46, height: 56, borderRadius: radius.mark, overflow: 'hidden', justifyContent: 'flex-end', alignItems: 'center', paddingBottom: 9 },
-  foldCut: { position: 'absolute', top: 0, right: 0, borderTopWidth: 13, borderLeftWidth: 13, borderTopColor: colors.card, borderLeftColor: 'transparent' },
-  fold: { position: 'absolute', top: 0, right: 0, width: 13, height: 13, backgroundColor: '#ffffff55', borderBottomLeftRadius: radius.inline },
-  iconLabel: { color: '#ffffff', fontSize: 10, fontWeight: weight.strong },
+  iconTile: { width: 48, height: 54, borderRadius: radius.control, borderWidth: 1, justifyContent: 'center', alignItems: 'center', gap: 3, paddingHorizontal: 4 },
+  iconBadge: { fontSize: 9, lineHeight: 11, fontWeight: weight.strong, letterSpacing: 0.5 },
   footer: { borderTopWidth: StyleSheet.hairlineWidth, borderColor: colors.border, paddingHorizontal: 14, paddingVertical: 7 },
   footerText: { color: colors.textMuted, fontSize: 11, lineHeight: 16 },
   error: { color: colors.failed },

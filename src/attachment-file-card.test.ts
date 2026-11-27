@@ -14,10 +14,41 @@ assert.equal(formatFileSize(1024), '1.0 KB');
 assert.equal(formatFileSize(10.5 * 1024 ** 2), '10.5 MB');
 assert.equal(formatFileSize(1024 ** 3), '1.0 GB');
 for (const size of [undefined, -1, NaN, Infinity]) assert.equal(formatFileSize(size), undefined);
-for (const [name, label] of [['proposal.DOCX', 'DOC'], ['slides.pptx', 'PPT'], ['report.pdf', 'PDF'], ['table.xlsx', 'XLS'], ['table.csv', 'XLS'], ['bundle.tar.gz', 'ZIP'], ['app.tsx', 'CODE'], ['README.md', 'MD'], ['notes.txt', 'TXT'], ['unknown', 'FILE']]) {
+for (const [name, label] of [['proposal.DOCX', 'DOC'], ['slides.pptx', 'PPT'], ['report.pdf', 'PDF'], ['table.xlsx', 'XLS'], ['table.csv', 'XLS'], ['bundle.tar.gz', 'ZIP'], ['app.tsx', 'CODE'], ['README.md', 'MD'], ['notes.txt', 'TXT'], ['01_Trap_144BPM.mp3', 'AUDIO'], ['demo.mp4', 'VIDEO'], ['cover.png', 'IMG'], ['unknown', 'FILE']]) {
   assert.equal(filePresentation(name).label, label);
 }
 assert.equal(filePresentation('unnamed', 'application/pdf').label, 'PDF');
+// Audio & Video media files get dedicated vector icons, format badges, and light/dark palettes (no longer generic gray FILE).
+const mp3 = filePresentation('01_Trap_C.B.P.D_144BPM.mp3');
+assert.equal(mp3.kind, 'audio');
+assert.equal(mp3.badge, 'MP3');
+assert.equal(mp3.icon, 'musical-notes');
+assert.notEqual(mp3.color, filePresentation('unknown').color);
+assert.notEqual(mp3.darkColor, filePresentation('unknown').darkColor);
+assert.equal(filePresentation('voice.m4a').badge, 'M4A');
+assert.equal(filePresentation('master.flac').badge, 'FLAC');
+assert.equal(filePresentation('stream', 'audio/mpeg').badge, 'AUDIO');
+assert.equal(filePresentation('stream', 'audio/mpeg').icon, 'musical-notes');
+const mp4 = filePresentation('demo_clip.mp4');
+assert.equal(mp4.kind, 'video');
+assert.equal(mp4.badge, 'MP4');
+assert.equal(mp4.icon, 'play-circle');
+assert.notEqual(mp4.color, mp3.color);
+assert.equal(filePresentation('capture.MOV').badge, 'MOV');
+assert.equal(filePresentation('clip.webm').badge, 'WEBM');
+assert.equal(filePresentation('stream', 'video/mp4').badge, 'VIDEO');
+assert.equal(filePresentation('stream', 'video/mp4').icon, 'play-circle');
+assert.equal(filePresentation('photo.webp').badge, 'WEBP');
+assert.equal(filePresentation('photo.webp').icon, 'image');
+assert.equal(filePresentation('table.csv').badge, 'CSV');
+// Every icon emitted by filePresentation must exist in the Ionicons glyph map (no '?' fallback).
+const ionGlyphs = JSON.parse(readFileSync(new URL('../node_modules/@expo/vector-icons/build/vendor/react-native-vector-icons/glyphmaps/Ionicons.json', import.meta.url), 'utf8')) as Record<string, number>;
+for (const sample of ['a.mp3', 'a.mp4', 'a.png', 'a.pdf', 'a.docx', 'a.pptx', 'a.xlsx', 'a.zip', 'a.tsx', 'a.md', 'a.txt', 'unknown']) {
+  const pres = filePresentation(sample);
+  assert.equal(typeof ionGlyphs[pres.icon], 'number', `icon ${pres.icon} for ${sample} must exist in Ionicons glyphMap`);
+  assert.match(pres.color, /^#[0-9a-f]{6}$/i);
+  assert.match(pres.darkColor, /^#[0-9a-f]{6}$/i);
+}
 assert.equal(filePresentation('very-long-'.repeat(100) + 'proposal.PDF').extension, '.PDF');
 assert.equal(filePresentation('.gitignore').extension, '.gitignore');
 assert.equal(localFileStatus(), 'queued');
@@ -126,6 +157,8 @@ assert.ok(card.includes('<ActivityIndicator') && card.includes("status === 'uplo
 assert.ok(card.includes('progress?: string') && card.includes('{progress ?') && !/percent|Math\.round\(.*100/.test(card), 'card renders a caller-supplied progress string only (no fabricated numbers)');
 assert.ok(card.includes('backgroundColor: colors.card') && card.includes('color: colors.text'));
 assert.ok(card.includes('useTranslation()') && card.includes('t(fileStatusKey[status])'), 'file cards resolve current language reactively');
+assert.ok(card.includes('<Ionicons name={file.icon}') && card.includes('file.badge') && card.includes("themeMode() === 'dark'"), 'file cards render vector icon + format badge with light/dark palette');
+assert.ok(!card.includes('foldCut'), 'legacy CSS dog-ear fold hack is removed');
 assert.ok(desktop.indexOf('busy.current = true') < desktop.indexOf('await chooseSavePath(name)'));
 assert.ok(!desktop.includes('openPath') && !desktop.includes('shell'));
 assert.ok(native.includes('await runNativeDownload(serverUrl, token, fileId, name, resolvedMime, size, etaLabel)') && native.includes('await Sharing.shareAsync(local'));

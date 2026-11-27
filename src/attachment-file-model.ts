@@ -33,20 +33,73 @@ export function formatFileSize(size?: number): string | undefined {
   return `${value.toFixed(1)} ${units[i]}`;
 }
 
-export function filePresentation(name: string, mime = ''): { label: string; color: string; extension: string } {
+export type FileCategory =
+  | 'audio' | 'video' | 'image'
+  | 'pdf' | 'doc' | 'ppt' | 'xls' | 'zip' | 'code' | 'md' | 'txt' | 'file';
+
+export type FileIconName =
+  | 'musical-notes' | 'play-circle' | 'image'
+  | 'document-text' | 'easel' | 'grid' | 'archive'
+  | 'code-slash' | 'reader' | 'document-text-outline' | 'document-outline';
+
+export interface FilePresentation {
+  /** 语义分类标签（DOC / PDF / AUDIO / VIDEO / FILE 等）。 */
+  label: string;
+  /** 图标角标短文案：音视频/图片优先展示直观扩展名（MP3 / MP4 / WAV / MOV 等），过长或缺失时回退分类标签。 */
+  badge: string;
+  /** 语义分类，供卡片和预览按类别分派。 */
+  kind: FileCategory;
+  /** Ionicons 矢量图标名。 */
+  icon: FileIconName;
+  /** 浅色主题下的图标与标签主色（在浅色微底上 ≥ 4.5:1）。 */
+  color: string;
+  /** 深色主题下的图标与标签主色（在深色微底上 ≥ 4.5:1）。 */
+  darkColor: string;
+  /** 原始扩展名（含前导点，如 `.mp3` / `.PDF` / `.gitignore`）。 */
+  extension: string;
+}
+
+const shortBadge = (ext: string, fallback: string): string =>
+  /^[a-z0-9]{2,4}$/.test(ext) ? ext.toUpperCase() : fallback;
+
+export function filePresentation(name: string, mime = ''): FilePresentation {
   const extension = /\.([^.\s/\\]+)$/.exec(name)?.[1] ?? '';
   const ext = extension.toLowerCase();
-  let label = 'FILE';
-  let color = '#667085';
-  if (/^(docx?|odt|rtf)$/.test(ext) || /word|opendocument.text/.test(mime)) { label = 'DOC'; color = '#2864b4'; }
-  else if (ext === 'pdf' || mime === 'application/pdf') { label = 'PDF'; color = '#c83b42'; }
-  else if (/^(pptx?|odp)$/.test(ext) || /presentation|powerpoint/.test(mime)) { label = 'PPT'; color = '#c45336'; }
-  else if (/^(xlsx?|csv|ods)$/.test(ext) || /spreadsheet|excel|csv/.test(mime)) { label = 'XLS'; color = '#25784d'; }
-  else if (/^(zip|rar|7z|gz|tar|bz2|xz)$/.test(ext) || /zip|compressed|tar/.test(mime)) { label = 'ZIP'; color = '#9364ad'; }
-  else if (/^(js|jsx|ts|tsx|json|py|rs|go|java|c|cpp|h|html|css|sh|yaml|yml|xml|sql)$/.test(ext) || /json|javascript|xml/.test(mime)) { label = 'CODE'; color = '#426f86'; }
-  else if (/^(md|markdown|mdx)$/.test(ext) || mime === 'text/markdown') { label = 'MD'; color = '#3b5bdb'; }
-  else if (/^(txt|log)$/.test(ext) || mime.startsWith('text/')) { label = 'TXT'; }
-  return { label, color, extension: extension ? `.${extension}` : '' };
+  const suffix = extension ? `.${extension}` : '';
+  if (/^(mp3|wav|m4a|aac|flac|ogg|opus|wma|aiff)$/.test(ext) || mime.startsWith('audio/')) {
+    return { label: 'AUDIO', badge: shortBadge(ext, 'AUDIO'), kind: 'audio', icon: 'musical-notes', color: '#7c3aed', darkColor: '#a78bfa', extension: suffix };
+  }
+  if (/^(mp4|mov|mkv|webm|avi|m4v|flv|wmv|3gp)$/.test(ext) || mime.startsWith('video/')) {
+    return { label: 'VIDEO', badge: shortBadge(ext, 'VIDEO'), kind: 'video', icon: 'play-circle', color: '#c2410c', darkColor: '#fb923c', extension: suffix };
+  }
+  if (/^(png|jpe?g|webp|gif|svg|heic|heif|avif|bmp|ico)$/.test(ext) || mime.startsWith('image/')) {
+    return { label: 'IMG', badge: shortBadge(ext, 'IMG'), kind: 'image', icon: 'image', color: '#0369a1', darkColor: '#38bdf8', extension: suffix };
+  }
+  if (/^(docx?|odt|rtf)$/.test(ext) || /word|opendocument\.text/.test(mime)) {
+    return { label: 'DOC', badge: 'DOC', kind: 'doc', icon: 'document-text', color: '#2563eb', darkColor: '#60a5fa', extension: suffix };
+  }
+  if (ext === 'pdf' || mime === 'application/pdf') {
+    return { label: 'PDF', badge: 'PDF', kind: 'pdf', icon: 'document-text', color: '#dc2626', darkColor: '#f87171', extension: suffix };
+  }
+  if (/^(pptx?|odp)$/.test(ext) || /presentation|powerpoint/.test(mime)) {
+    return { label: 'PPT', badge: 'PPT', kind: 'ppt', icon: 'easel', color: '#b45309', darkColor: '#fbbf24', extension: suffix };
+  }
+  if (/^(xlsx?|csv|ods)$/.test(ext) || /spreadsheet|excel|csv/.test(mime)) {
+    return { label: 'XLS', badge: ext === 'csv' ? 'CSV' : 'XLS', kind: 'xls', icon: 'grid', color: '#15803d', darkColor: '#4ade80', extension: suffix };
+  }
+  if (/^(zip|rar|7z|gz|tar|bz2|xz)$/.test(ext) || /zip|compressed|tar/.test(mime)) {
+    return { label: 'ZIP', badge: 'ZIP', kind: 'zip', icon: 'archive', color: '#a21caf', darkColor: '#e879f9', extension: suffix };
+  }
+  if (/^(js|jsx|ts|tsx|json|py|rs|go|java|c|cpp|h|html|css|sh|yaml|yml|xml|sql)$/.test(ext) || /json|javascript|xml/.test(mime)) {
+    return { label: 'CODE', badge: 'CODE', kind: 'code', icon: 'code-slash', color: '#0f766e', darkColor: '#2dd4bf', extension: suffix };
+  }
+  if (/^(md|markdown|mdx)$/.test(ext) || mime === 'text/markdown') {
+    return { label: 'MD', badge: 'MD', kind: 'md', icon: 'reader', color: '#4338ca', darkColor: '#818cf8', extension: suffix };
+  }
+  if (/^(txt|log)$/.test(ext) || mime.startsWith('text/')) {
+    return { label: 'TXT', badge: 'TXT', kind: 'txt', icon: 'document-text-outline', color: '#475569', darkColor: '#94a3b8', extension: suffix };
+  }
+  return { label: 'FILE', badge: 'FILE', kind: 'file', icon: 'document-outline', color: '#475569', darkColor: '#94a3b8', extension: suffix };
 }
 
 // ── admin 2026-11-11「能不能新增 md 文档预览」──────────────────────────────────────────
