@@ -101,7 +101,7 @@ export default function AgyLoginCard({ cfg, alias, onDone }: { cfg: HubConfig; a
             <Text style={s.hint}>授权码只发给这台节点，不经过对话模型、不落日志。</Text>
             {busy && !url ? <ActivityIndicator style={{ marginVertical: spacing.md }} /> : null}
             {url ? (
-              <Pressable testID="agy-login-url" accessibilityRole="link" onPress={() => void openExternal(url)} style={s.linkRow}>
+              <Pressable testID="agy-login-url" accessibilityRole="link" onPress={() => { void openExternal(url).catch(() => {}); }} style={s.linkRow}>
                 <Text style={s.link}>在浏览器打开 Google 登录页</Text>
               </Pressable>
             ) : null}

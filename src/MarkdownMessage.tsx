@@ -19,7 +19,7 @@ export async function openMarkdownUrl(url: string) {
 function LinkText({ url, label }: { url: string; label: string }) {
   const styles = useMd();
   const safe = isSafeMarkdownUrl(url);
-  return <Text accessibilityRole={safe ? 'link' : undefined} style={safe ? styles.link : undefined} onPress={safe ? (event) => { event.stopPropagation(); void openMarkdownUrl(url); } : undefined}>{label}</Text>;
+  return <Text accessibilityRole={safe ? 'link' : undefined} style={safe ? styles.link : undefined} onPress={safe ? (event) => { event.stopPropagation(); void openMarkdownUrl(url).catch(() => {}); } : undefined}>{label}</Text>;
 }
 
 function InlineNodes({ nodes }: { nodes: InlineNode[] }) {

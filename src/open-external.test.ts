@@ -107,11 +107,17 @@ const DIRECT = [
   { name: 'window.open', re: /\b(?:window|globalThis)\s*\.\s*open\s*\(/ },
   { name: 'plugin-opener openUrl', re: /(?:\bopenUrl\s*\(|['"]@tauri-apps\/plugin-opener['"][^;\n]*\bopenUrl\b|\{\s*[^}]*\bopenUrl\b[^}]*\}\s*from\s*['"]@tauri-apps\/plugin-opener['"])/ },
 ];
+// iOS 致命陷阱守卫：动态 import('react-native') 会走 Metro asyncRequire -> metroImportAll，
+// 遍历 react-native/index.js 的全部 92 个 getter（包括 PushNotificationIOS -> new NativeEventEmitter(null)），
+// 在 iOS/iPadOS 上立即触发 guardedLoadModule -> ErrorUtils.reportFatalError -> RCTFatal 闪退。
+// 全仓（包含 open-external.ts 自身）均禁止动态 import('react-native')。
+const DYNAMIC_RN_IMPORT = /(?<!typeof\s+)\bimport\s*\(\s*['"]react-native['"]\s*\)/;
 function findings(rel: string, src: string): string[] {
-  if (rel === HELPER) return [];
   const out: string[] = [];
   normalizeEol(src).split('\n').forEach((line, i) => {
     const code = line.replace(/^\s*(\/\/|\*|\/\*).*$/, '').replace(/\/\/.*$/, '');
+    if (DYNAMIC_RN_IMPORT.test(code)) out.push(`${rel}:${i + 1} dynamic import('react-native')`);
+    if (rel === HELPER) return;
     for (const d of DIRECT) if (d.re.test(code)) out.push(`${rel}:${i + 1} ${d.name}`);
   });
   return out;
@@ -119,18 +125,20 @@ function findings(rel: string, src: string): string[] {
 
 const scanned = collect(ROOT);
 const all = scanned.flatMap(rel => findings(rel, readFileSync(join(ROOT, rel), 'utf8')));
-ck(`全仓 ${scanned.length} 个源文件没有绕过 open-external 的外链调用`, all.length === 0, all.join('; '));
+ck(`全仓 ${scanned.length} 个源文件没有绕过 open-external 的外链调用或动态 import('react-native')`, all.length === 0, all.join('; '));
 ck('取集包含 helper 自己和已知调用方', scanned.includes(HELPER) && scanned.includes('src/VoiceSettingsSection.tsx') && scanned.includes('src/MarkdownMessage.tsx') && scanned.includes('App.tsx'));
 const helperSrc = readFileSync(join(ROOT, HELPER), 'utf8');
-ck('helper 自己确实持有三条路', /openUrl\(/.test(helperSrc) && /Linking\.openURL\(/.test(helperSrc) && /g\.open!\(/.test(helperSrc));
+ck('helper 自己确实持有三条路且用同步 require 加载 react-native（不触发 metroImportAll）', /openUrl\(/.test(helperSrc) && /Linking\.openURL\(/.test(helperSrc) && /g\.open!\(/.test(helperSrc) && /require\(\s*['"]react-native['"]\s*\)/.test(helperSrc));
 ck('语音设置的控制台链接经 openExternal', readFileSync(join(ROOT, 'src/VoiceSettingsSection.tsx'), 'utf8').includes('openExternal(VOLC_CONSOLE_URL)'));
 
 // 判据自检:坏行必须被报,注释里的提及和 helper 自身不报;CRLF 不影响。
 ck('判据:Linking.openURL 被报', findings('src/X.tsx', "onPress={() => void Linking.openURL(URL)}").length === 1);
 ck('判据:window.open 被报', findings('src/X.tsx', "window.open(url, '_blank')").length === 1);
 ck('判据:plugin-opener openUrl 被报', findings('src/X.tsx', "import { openUrl } from '@tauri-apps/plugin-opener';\nawait openUrl(u);").length >= 1);
+ck('判据:动态 import(react-native) 全仓含 helper 自身都被报', findings('src/X.ts', "const { Linking } = await import('react-native');").length === 1 && findings(HELPER, 'const { Linking } = await import("react-native");').length === 1);
+ck('判据:静态 import 与 require(react-native) 不误报', findings(HELPER, "const { Linking } = require('react-native');\nimport { Linking as L } from 'react-native';").length === 0);
 ck('判据:revealItemInDir 不误报', findings('src/X.ts', "const { revealItemInDir } = await import('@tauri-apps/plugin-opener');").length === 0);
-ck('判据:注释里的提及不报', findings('src/X.ts', '// 以前直接 Linking.openURL(url)\n * window.open(url)').length === 0);
+ck('判据:注释里的提及不报', findings('src/X.ts', '// 以前直接 Linking.openURL(url)\n * window.open(url)\n// 禁止 await import("react-native")').length === 0);
 ck('判据:helper 自身豁免', findings(HELPER, 'Linking.openURL(url)').length === 0);
 ck('判据:CRLF 行尾照样报且行号对', findings('src/X.ts', 'a\r\nLinking.openURL(u)\r\n')[0]?.endsWith(':2 Linking.openURL') === true);
 
