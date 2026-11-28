@@ -27,6 +27,7 @@ import LiveOrgMapNative, { nativeOrgMapActive } from './LiveOrgMapNative';
 import { attentionAgents, needsAttention, PHONE_AVATAR_STACK, phoneDeptFacts, phoneLevel, phoneSearch } from './org-phone-list';
 import { isAgentLive } from './org-showcase-model';
 import { peekOrg, recallOrg, rememberOrg } from './swr-cache';
+import { mobileGlowActive } from './glow-mode';
 
 /** canManageStructure = 网络 owner / admin(或 Hub 管理员):能建根部门;旧 Hub 没有 viewer_can 时也按它决定能不能改。 */
 type Props = { cfg: HubConfig; networkId?: string; phone: boolean; canManageStructure?: boolean;
@@ -45,7 +46,7 @@ export default function AgentOrgScreen(p: Props) {
   const [, refreshTheme] = useState(0);
   useEffect(() => onThemeChange(() => refreshTheme(n => n + 1)), []);
   return (
-    <View testID="agent-org-page" style={[styles.page, p.fullWidth && styles.pageFill]}>
+    <View testID="agent-org-page" style={[styles.page, p.fullWidth && styles.pageFill, p.phone && styles.pagePhone]}>
       {p.networkId
         ? <OrgBody key={JSON.stringify([p.cfg.serverUrl, p.cfg.token, p.networkId])} cfg={p.cfg} networkId={p.networkId} phone={p.phone} canManageStructure={!!p.canManageStructure} fill={!!p.fullWidth && !p.phone} onOpenAgent={p.onOpenAgent} title={p.title} renderMembers={p.renderMembers} renderPeople={p.renderPeople} />
         : <NoNetwork />}
@@ -77,6 +78,8 @@ function writeCollapsed(ids: ReadonlySet<string>) {
 
 function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canManageStructure: boolean; fill?: boolean; onOpenAgent?: (alias: string) => void; title?: string; renderMembers?: () => ReactNode; renderPeople?: (deptId: string | null, onSelect: (id: string | null) => void) => ReactNode }) {
   const { t } = useTranslation();
+  const win = useWindowDimensions();
+  const narrowFill = !!p.fill && win.width < 920;
   const [attempt, setAttempt] = useState(0);
   const [phase, setPhase] = useState<{ kind: 'loading' } | { kind: 'error'; reason: string } | { kind: 'ready'; data: AgentOrgData | null }>({ kind: 'loading' });
   const [focus, setFocus] = useState<string | null | undefined>(undefined);
@@ -261,7 +264,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
         <SettingsGroup testID="agent-org-empty-hub"><SettingsRow label={t('agentOrg.oldHub')} /></SettingsGroup>
       ) : null}
       {data && (showTree || showDetail || (p.phone && view === 'chart')) ? (
-        <View testID="agent-org-tree" style={p.fill ? styles.workspaceFill : p.phone && view === 'chart' ? { flex: 1, minHeight: 0 } : p.phone ? styles.workspacePhone : styles.workspace}>
+        <View testID="agent-org-tree" style={p.fill ? [styles.workspaceFill, mobileGlowActive() && { backgroundColor: 'transparent' }] : p.phone && view === 'chart' ? { flex: 1, minHeight: 0 } : p.phone ? styles.workspacePhone : styles.workspace}>
           {/* 手机看架构图:不再套一层外框 + 「16 个部门 · 27 个未归属」工具条(架构图自己就有这些数)。 */}
           {!p.fill && !p.phone ? <View style={styles.toolbar} testID="agent-org-department-actions">
             <View style={styles.toolbarContext}>
@@ -275,7 +278,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
           </View> : null}
           <View style={!p.phone ? [styles.columns, p.fill && styles.fillColumns] : undefined}>
           {showTree ? (
-            <View testID="agent-org-navigation" style={!p.phone ? [styles.navigation, p.fill && styles.navigationFill] : undefined}>
+            <View testID="agent-org-navigation" style={!p.phone ? [styles.navigation, p.fill && styles.navigationFill, narrowFill && { width: 216 }, p.fill && mobileGlowActive() && { backgroundColor: 'transparent', borderRightColor: colors.border + '66' }] : undefined}>
               {p.fill ? <>
                 <DepartmentTree fill title={p.title} data={data} placed={placed} focus={view !== 'dept' ? undefined : focus} onFocus={focusDept} collapsed={collapsed} onToggle={toggleCollapsed}
                   nav={[
@@ -283,10 +286,10 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                     { key: 'chart', label: t('agentOrg.showcase.nav'), icon: 'git-network-outline', selected: view === 'chart', onPress: () => setView('chart') },
                     ...(p.renderMembers ? [{ key: 'members', label: t('agentOrg.membersTitle'), icon: 'shield-checkmark-outline' as const, selected: view === 'members', onPress: () => setView('members') }] : []),
                   ]}
-                  onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, false); }}
+                  onMenu={(dept, x, y) => { openDeptMenu(dept, x, y, !pointerUi()); }}
                   summary={t('agentOrg.summary', { departments: data.departments.length, unowned: agentCount(placed, data, null) })}
                   onCreateRoot={canCreateRoot ? () => runMenu('createRoot', null) : undefined} />
-                <View testID="agent-org-info" style={styles.treeFooter}>
+                <View testID="agent-org-info" style={[styles.treeFooter, mobileGlowActive() && { borderTopColor: colors.border + '66' }]}>
                   {/* 右键能编辑这件事要一直看得见（不然管理员不知道能改）；只这一行小字，其余说明仍收在「关于这棵树」里。 */}
                   {editHint ? <View style={styles.treeFooterHint}>{editHint}</View> : null}
                   <Pressable testID="agent-org-info-toggle" accessibilityRole="button" accessibilityState={{ expanded: infoOpen }} onPress={() => setInfoOpen(v => !v)} style={styles.treeFooterToggle}>
@@ -316,7 +319,7 @@ function OrgBody(p: { cfg: HubConfig; networkId: string; phone: boolean; canMana
                   admin 2026-11-20「安卓端跟折叠屏也要跟电脑同步」：安卓用 react-native-svg 版（同一套几何/数据），
                   iOS 单独评估，暂不切；手机在 chart 视图里看到的就是这个图。 */}
               {nativeOrgMapActive()
-                ? <LiveOrgMapNative cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} />
+                ? <LiveOrgMapNative cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} besideSidebar={!!p.fill} />
                 : (!p.phone && Platform.OS === 'web'
                   ? <LiveOrgMap cfg={p.cfg} data={data} placed={placed} onOpenAgent={p.onOpenAgent} />
                   : <OrgShowcase compact={!!p.phone} data={data} placed={placed} statusByAlias={p.phone ? statusByAlias : undefined} title={p.title ?? t('agentOrg.workspaceTitle')} onOpenDept={focusDept} onOpenAgent={p.onOpenAgent} />)}
@@ -760,6 +763,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
   fill?: boolean; note?: string; onMove?: (nodeId: string, departmentId: string | null) => void; moveBusy?: boolean; onOpenAgent?: (alias: string) => void;
   tab?: 'agents' | 'people'; onTab?: (tab: 'agents' | 'people') => void; people?: ReactNode }) {
   const { t } = useTranslation();
+  const win = useWindowDimensions();
   const [query, setQuery] = useState('');
   const [moving, setMoving] = useState<PlacedAgent | null>(null);
   const [bulkOpen, setBulkOpen] = useState(false);
@@ -784,7 +788,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
   const deptPath = p.focus ? deptPathLabel(orgTree(p.data), p.focus) : '';
   if (p.fill) return (
     <View testID="agent-org-detail-card" style={styles.detailFill}>
-      <View style={styles.detailHeadFill}>
+      <View style={[styles.detailHeadFill, mobileGlowActive() && { borderBottomColor: colors.border + '66' }]}>
         <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
           <View style={styles.memberTitle}>
             <Text numberOfLines={1} style={[styles.title, { flexShrink: 1 }]}>{title}</Text>
@@ -892,7 +896,7 @@ function DepartmentDetail(p: { data: AgentOrgData; placed: PlacedAgent[]; focus:
         <Ionicons name="search-outline" size={17} color={colors.textMuted} />
         <TextInput testID="agent-org-member-search" value={query} onChangeText={setQuery} placeholder={t('agentOrg.searchAgents')} accessibilityLabel={t('agentOrg.searchAgents')} placeholderTextColor={colors.textMuted} style={styles.searchInput} />
       </View>
-      <ScrollView ref={memberScroll} testID="agent-org-member-list" style={styles.memberList} contentContainerStyle={{ paddingBottom: spacing.sm }} keyboardShouldPersistTaps="handled">
+      <ScrollView ref={memberScroll} testID="agent-org-member-list" style={[styles.memberList, p.phone && { maxHeight: Math.max(400, Math.round(win.height - 280)) }]} contentContainerStyle={{ paddingBottom: spacing.sm }} keyboardShouldPersistTaps="handled">
       {children.map(child => p.phone ? (
         <Pressable key={child.id} testID={`agent-org-child-${child.id}`} accessibilityRole="button" onPress={() => p.onFocus(child.id)}
           style={({ pressed }) => [styles.agentRow, pressed && { backgroundColor: colors.rowHover }]}>
@@ -930,6 +934,7 @@ function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void;
     // 整页:一行 48 高;负责人放右侧一列(以前每行第二行都是「负责人 admin」);
     // 有 lifecycle 的 Hub 在头像角上标运行 / 未运行;悬停出「移动到…」。
     const live = agent.lifecycleState == null ? null : agent.lifecycleState === 'active' && stale === null;
+    const pointer = pointerUi();
     // 整行可点 → 节点页(落在「权限」)。以前行不可点,点上去只会选中文字。
     return <Pressable testID={`agent-org-agent-${agent.nodeId}`} focusable={!!p.onOpen} disabled={!p.onOpen} onPress={p.onOpen}
       accessibilityRole={p.onOpen ? 'button' : undefined} accessibilityLabel={p.onOpen ? t('agentOrg.openAgent', { name: agent.alias }) : undefined}
@@ -943,7 +948,7 @@ function AgentLine(p: { agent: PlacedAgent; fill?: boolean; onMove?: () => void;
         <Text numberOfLines={1} style={[styles.ownerCol, !agent.ownerName && { fontStyle: 'italic' }]}>{agent.ownerName ?? t('agentOrg.noOwner')}</Text>
         <View style={[styles.rowActionSlot, { flexDirection: 'row', alignItems: 'center', justifyContent: 'flex-end', gap: 2 }]}>
           {p.onMove ? <Pressable testID={`agent-org-agent-${agent.nodeId}-move`} accessibilityRole="button" accessibilityLabel={`${t('agentOrg.moveTo')} ${agent.alias}`} onPress={e => { e.stopPropagation?.(); p.onMove!(); }}
-            style={({ hovered: h, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [styles.moveButton, { opacity: hovered || h ? 1 : 0 }, (h || pressed) && { backgroundColor: colors.rowActive }]}>
+            style={({ hovered: h, pressed }: PressableStateCallbackType & { hovered?: boolean }) => [styles.moveButton, { opacity: !pointer || hovered || h ? 1 : 0 }, (h || pressed) && { backgroundColor: colors.rowActive }]}>
             <Ionicons name="return-up-forward-outline" size={14} color={colors.accent} />
             <Text style={{ color: colors.accent, fontSize: typeScale.small, fontWeight: '500' }}>{t('agentOrg.moveTo')}</Text>
           </Pressable> : null}
@@ -1139,6 +1144,8 @@ const makeStyles = () => StyleSheet.create({
   // 手机/窄窗仍按原有单列布局（`phone` 分支不变）。
   page: { width: '100%', maxWidth: 760, alignSelf: 'stretch' },
   pageFill: { maxWidth: '100%', flex: 1, minHeight: 0 },
+  // 手机 / 竖屏平板单列（admin 2026-11-28 iPad 截图）：不套设置页的 760 上限，避免宽屏右侧留出一大片黑边。
+  pagePhone: { maxWidth: '100%' },
   fillRoot: { flex: 1, minHeight: 0 },
   // 整页:不再套卡片 —— 左边是贴着一级栏的整条侧栏(同「Agent」页的列表栏),右边是内容。
   workspaceFill: { flex: 1, minHeight: 0, marginHorizontal: 0, borderWidth: 0, backgroundColor: colors.bg },
@@ -1175,7 +1182,7 @@ const makeStyles = () => StyleSheet.create({
   agentRowFill: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, minHeight: 48, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   folderBadge: { width: 30, height: 30, borderRadius: radius.pill, backgroundColor: colors.subtleFill, alignItems: 'center', justifyContent: 'center' },
   liveDot: { position: 'absolute', right: -1, bottom: -1, width: 10, height: 10, borderRadius: radius.pill, borderWidth: 2, borderColor: colors.card },
-  ownerCol: { width: 140, flexShrink: 1, color: colors.textMuted, fontSize: typeScale.small, textAlign: 'right' },
+  ownerCol: { maxWidth: 140, flexShrink: 1, color: colors.textMuted, fontSize: typeScale.small, textAlign: 'right' },
   rowActionSlot: { width: 112, alignItems: 'flex-end' },
   moveButton: { flexDirection: 'row', alignItems: 'center', gap: 4, height: 28, paddingHorizontal: spacing.sm, borderRadius: radius.item },
   toolbar: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, padding: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border },

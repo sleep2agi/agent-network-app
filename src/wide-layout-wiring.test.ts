@@ -85,6 +85,16 @@ ck('shell → rail slot → content → (two-pane | phone screens), in that orde
 ck('rail slot renders null (not a different element) when hidden', /\{railShown \? \([\s\S]*?<MobileNavRail[\s\S]*?\/>\s*\) : null\}/.test(app.slice(shellStart, contentAt)));
 // Desktop untouched: its workspace never mounts the mobile rail.
 ck('desktop workspace does not mount MobileNavRail', !desk.includes('MobileNavRail'));
+// iPad landscape / tablet wide org (admin 2026-11-28 screenshot): twoPane uses the full-width two-column OrgWorkspace
+// (phone={layout === 'phone'}), and phone mode drops the 760px cap so portrait iPads never show a right-side void.
+const orgScreen = readFileSync(new URL('./AgentOrgScreen.tsx', import.meta.url), 'utf8').replace(/\r\n/g, '\n');
+ck('org tab uses two-column fullWidth workspace on twoPane (iPad landscape / tablet) and phone layout only on phone',
+  app.includes("<OrgWorkspace cfg={cfg} phone={layout === 'phone'}"));
+ck('AgentOrgScreen phone mode removes 760px cap (no right-side void on portrait iPad) and fill mode stays transparent under mobile glow',
+  orgScreen.includes('pagePhone: { maxWidth: \'100%\' }')
+  && orgScreen.includes('p.phone && styles.pagePhone')
+  && orgScreen.includes('mobileGlowActive() && { backgroundColor: \'transparent\' }')
+  && orgScreen.includes('!pointer || hovered || h ? 1 : 0'));
 
 console.log(`${p}/${t} passed`);
 process.exit(p === t ? 0 : 1);
