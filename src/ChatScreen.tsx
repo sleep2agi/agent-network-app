@@ -79,7 +79,7 @@ import type { HubNode } from './api';
 import ComposerModelPalette from './ComposerModelPalette';
 import ComposerStopButton from './ComposerStopButton';
 import ComposerInjectButton from './ComposerInjectButton';
-import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, statusFlipProvesInterrupted, ackProvesInterrupted, activeInterruptTaskId, taskSettledProvesInterrupted, INTERRUPT_CONFIRM_MS, INTERRUPT_POLL_MS, INTERRUPT_CLEAR_MS, LATE_EVIDENCE_MS, type InterruptState } from './turn-interrupt';
+import { idleInterrupt, interruptable, interruptAfterSend, replyProvesInterrupted, hasFreshInterruptReply, statusFlipProvesInterrupted, ackProvesInterrupted, activeInterruptTaskId, taskSettledProvesInterrupted, hasActiveInboundTurn, isStopSuppressed, effectiveTurnStatus, INTERRUPT_CONFIRM_MS, INTERRUPT_EXIT_GRACE_MS, INTERRUPT_POLL_MS, INTERRUPT_CLEAR_MS, LATE_EVIDENCE_MS, POST_STOP_SUPPRESS_MS, type InterruptState, type StopSuppression } from './turn-interrupt';
 import { interruptThenConfirm, shouldInterruptBeforeSend } from './turn-steer';
 import { agentSentRow, firstPaintRows, isOutgoingRow, mergeConversationSides, outgoingReplyAuthor, cachedOutgoing, type OutgoingCache } from './chat-outgoing';
 import { canSteer, steerThenConfirm, STEER_ACK_WINDOW_MS } from './steer-delivery';
@@ -769,6 +769,8 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4685：插话要等回执（最长 ~10s）。这期间再点一次会真的发两条 steer，所以用同步 ref 防连点
   // （state 来不及，点击间隔 < 一次渲染）。
   const injectBusyRef = useRef(false);
+  // 打断并发送在慢退出 runtime（如 antigravity-acp）上可能等待 10–20s；同步 ref 防止连点重复打断/发送。
+  const interruptSendBusyRef = useRef(false);
   visibleConversationKeyRef.current = conversationKeyFor;
   const requestGateRef = useRef<ReturnType<typeof createConversationRequestGate> | null>(null);
   if (!requestGateRef.current) requestGateRef.current = createConversationRequestGate();
@@ -2138,6 +2140,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         try { await reconcileStartedConversation(); } catch { /* next open refreshes it */ }
         return;
       }
+      setPostStopSuppress(null);
       setSendConfirmation(sendConfirmationFromResponse(response));
       // Keep the echo on screen, marked delivered, until the server row arrives; the merge in
       // load() drops it once a fetched row carries the same task_id (or matches by content/time).
@@ -2145,6 +2148,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       setMessages(prev => prev.map(t => (t._localId === localId ? { ...t, _pending: false, _confirmedTaskId: confirmedTaskId } : t)));
       recordSendBubble(dashboardRequestIdForLocalId(localId), 'sent');
       await load(limitRef.current);
+      scheduleQuickStatusRefresh();
     } catch (sendError) {
       const failReason = sendFailureReason(sendError) ?? undefined;
       const definiteRejection = isDefiniteSendRejection(sendError);
@@ -2232,7 +2236,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     // 只有在飞时才走这条路。按钮在空闲时本就不出现；但状态可能在这一拍翻走（轮询滞后/回合刚结束），
     // 所以这里**不能**「不满足条件就落回普通发送」—— 用户点的是插话，悄悄变成普通消息等于骗他。
     if (opts?.interruptFirst === true && !turnCaps.interrupt) return;
-    if (opts?.inject === true && (!turnCaps.steer || !canSteer(sessionStatus))) {
+    if (opts?.inject === true && (!turnCaps.steer || !canSteer(turnStatus))) {
       setComposerNotice(t('chat.inject.missed'));
       return;
     }
@@ -2288,33 +2292,75 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         injectBusyRef.current = false;
       }
     }
-    if (opts?.interruptFirst === true && shouldInterruptBeforeSend(sessionStatus)) {
-      setComposerNotice(t('chat.steer.interrupting'));
-      const { verdict, detail } = await interruptThenConfirm({
-        interrupt: () => interruptTurn(cfg, alias),
-        readStatus: async () => {
-          try {
-            const data = await fetchStatus(cfg);
-            return (data.sessions ?? []).find(x => x.alias === alias)?.status ?? null;
-          } catch {
-            return null;
-          }
-        },
-        sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
-        windowMs: INTERRUPT_CONFIRM_MS,
-        pollMs: 1000,
-      });
-      if (verdict !== 'confirmed') {
-        setComposerNotice(
-          verdict === 'unsupported' ? t('chat.steer.unsupported')
-            : verdict === 'failed' ? t('chat.steer.failed', { message: detail ?? '' })
-              : t('chat.steer.unconfirmed'),
-        );
-        return;
+    if (opts?.interruptFirst === true && shouldInterruptBeforeSend(turnStatus)) {
+      if (interruptSendBusyRef.current) return;
+      interruptSendBusyRef.current = true;
+      setInterruptSending(true);
+      const startedKey = visibleConversationKeyRef.current;
+      const seenBefore = new Set(messages.map(interruptIdOf));
+      const interruptStartedAt = Date.now();
+      const baselineTaskId = activeInterruptTaskId(messages, alias);
+      try {
+        setComposerNotice(t('chat.steer.interrupting'));
+        const { verdict, detail } = await interruptThenConfirm({
+          interrupt: () => interruptTurn(cfg, alias),
+          readStatus: async () => {
+            try {
+              const data = await fetchStatus(cfg);
+              return (data.sessions ?? []).find(x => x.alias === alias)?.status ?? null;
+            } catch {
+              return null;
+            }
+          },
+          readTaskSettled: async () => {
+            if (!baselineTaskId) return false;
+            const cached = conversations.peek(startedKey)?.messages ?? [];
+            if (taskSettledProvesInterrupted(baselineTaskId, cached)) return true;
+            try {
+              const taskData = await fetchTasks(cfg, { to_name: alias, limit: 10, skipStats: true });
+              return taskSettledProvesInterrupted(baselineTaskId, taskData.tasks ?? []);
+            } catch {
+              return false;
+            }
+          },
+          readReplyProof: async () => {
+            const cached = conversations.peek(startedKey)?.messages ?? [];
+            if (hasFreshInterruptReply(cached, seenBefore, interruptIdOf, interruptStartedAt)) return true;
+            try {
+              const msgData = await fetchChatUserMessages(cfg);
+              const fresh = proactiveItemsForAgent(msgData.messages as any, alias, cfg.username);
+              return hasFreshInterruptReply(fresh, seenBefore, interruptIdOf, interruptStartedAt);
+            } catch {
+              return false;
+            }
+          },
+          onReplyAcked: () => {
+            if (mountedRef.current && visibleConversationKeyRef.current === startedKey) {
+              setComposerNotice(t('chat.steer.waitingExit'));
+            }
+          },
+          sleep: ms => new Promise(resolve => setTimeout(resolve, ms)),
+          windowMs: INTERRUPT_CONFIRM_MS,
+          graceWindowMs: INTERRUPT_EXIT_GRACE_MS,
+          pollMs: 1000,
+        });
+        if (!mountedRef.current || visibleConversationKeyRef.current !== startedKey) return;
+        if (verdict !== 'confirmed') {
+          setComposerNotice(
+            verdict === 'unsupported' ? t('chat.steer.unsupported')
+              : verdict === 'failed' ? t('chat.steer.failed', { message: detail ?? '' })
+                : t('chat.steer.unconfirmed'),
+          );
+          return;
+        }
+        setPostStopSuppress(null);
+        setComposerNotice(t('chat.steer.interrupted'));
+        // #4592 自审：不要本地乐观改写会话状态。打断确认后立刻发新指令，状态马上又会变成 working，
+        // 写 idle 只会让 UI 闪一下；交给状态刷新自然更新。
+      } finally {
+        interruptSendBusyRef.current = false;
+        if (mountedRef.current) setInterruptSending(false);
       }
-      setComposerNotice(t('chat.steer.interrupted'));
-      // #4592 自审：不要本地乐观改写会话状态。打断确认后立刻发新指令，状态马上又会变成 working，
-      // 写 idle 只会让 UI 闪一下；交给 30 秒状态轮询自然刷新。
     }
     // 引用条在前、正文在后;agent 端看到的是「@作者: 被引用内容」+ 正文,客户端渲染时再拆开。
     const content = quote ? buildQuote(quote.text, 40, quote.author) + body : body;
@@ -2401,6 +2447,10 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   // #4591 —— 停止当前回合。Hub 回 accepted 只代表控制消息**入队**，真凭据来自节点回执 / 回合结束；
   // 窗口内没等到就照实说「已发送，节点未确认」，不假装成功（同档位那套 pending≠applied）；迟到凭据 30s 内仍可升级。
   const [interrupt, setInterrupt] = useState<InterruptState>(idleInterrupt);
+  const [interruptSending, setInterruptSending] = useState(false);
+  const [postStopSuppress, setPostStopSuppress] = useState<StopSuppression | null>(null);
+  const quickStatusTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const prevActiveTurnRef = useRef<boolean | null>(null);
   const interruptSeenRef = useRef<Set<string>>(new Set());
   /** 点击那一刻的会话状态：判「回合真的结束了」要跟**点击时**比，不能跟上一次轮询比。
    *  否则状态在工具回执回来之前就翻 idle（停止很快时会这样），翻走这一拍就被「上一拍」吃掉，
@@ -2412,7 +2462,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const interruptSentAtRef = useRef(0);
   const lateEvidenceAllowed = () => Date.now() - interruptSentAtRef.current <= LATE_EVIDENCE_MS;
   const interruptBusy = interrupt.phase === 'sending' || interrupt.phase === 'waiting';
-  const interruptIdOf = (m: { task_id?: string; created_at?: string; content?: string }) => `${m.task_id ?? ''}|${m.created_at ?? ''}|${m.content ?? ''}`;
+  const interruptIdOf = (m: { task_id?: string | null; created_at?: string | null; content?: string | null }) => `${m.task_id ?? ''}|${m.created_at ?? ''}|${m.content ?? ''}`;
+  const activeInboundTaskId = useMemo(() => activeInterruptTaskId(messages, alias), [messages, alias]);
+  const hasActiveTurnTask = useMemo(() => hasActiveInboundTurn(messages, alias), [messages, alias]);
+  const stopSuppressed = isStopSuppressed(postStopSuppress, { sessionStatus, activeTaskId: activeInboundTaskId });
+  const turnStatus = effectiveTurnStatus({ sessionStatus, hasActiveTurnTask, suppressedAfterStop: stopSuppressed });
   const [controlSession, setControlSession] = useState<Session | null>(null);
   // Vincent 2026-10-19: the chat header had empty space next to the name —
   // show which model this agent is running (same row the 30s poll already has).
@@ -2530,43 +2584,59 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     const timer = setInterval(poll, 30_000);
     return () => { live = false; clearInterval(timer); if (expiry) clearTimeout(expiry); };
   }, [cfg, alias, composerModelScope, foreground, modelStatusTick]);
+  const refreshSessionStatus = useCallback(async () => {
+    const startedKey = visibleConversationKeyRef.current;
+    try {
+      const data = await fetchStatus(cfg);
+      if (!mountedRef.current || visibleConversationKeyRef.current !== startedKey) return;
+      const s = (data.sessions ?? []).find(x => x.alias === alias);
+      setSessionStatus(s?.status ?? 'offline');
+      setSessionModel(typeof s?.model === 'string' ? s.model : '');
+      const next = chatInfoCaps(s);
+      setLightCaps(c => (c.rules === next.rules && c.skills === next.skills ? c : next));
+    } catch {
+      /* keep last */
+    }
+  }, [cfg, alias]);
+  const scheduleQuickStatusRefresh = useCallback((delayMs = 1500) => {
+    if (quickStatusTimerRef.current) clearTimeout(quickStatusTimerRef.current);
+    quickStatusTimerRef.current = setTimeout(() => {
+      quickStatusTimerRef.current = null;
+      if (mountedRef.current && foreground) void refreshSessionStatus();
+    }, delayMs);
+  }, [foreground, refreshSessionStatus]);
+  useEffect(() => () => { if (quickStatusTimerRef.current) clearTimeout(quickStatusTimerRef.current); }, []);
   // Deliberately a slower, separate poll than the 5s message poll above:
   // an agent's online/offline state changes far less often than messages
   // do, so 30s keeps the status badge fresh without doubling the chat's
   // request rate. Don't merge the two — they have different freshness needs.
   useEffect(() => {
     if (!foreground) return;
-    let live = true;
-    const poll = async () => {
-      try {
-        const data = await fetchStatus(cfg);
-        const s = (data.sessions ?? []).find(x => x.alias === alias);
-        if (live) {
-          setSessionStatus(s?.status ?? 'offline');
-          setSessionModel(typeof s?.model === 'string' ? s.model : '');
-          const next = chatInfoCaps(s);
-          setLightCaps(c => (c.rules === next.rules && c.skills === next.skills ? c : next));
-        }
-      } catch {
-        /* keep last */
-      }
-    };
-    poll();
-    const t = setInterval(poll, 30000);
+    void refreshSessionStatus();
+    const t = setInterval(() => { void refreshSessionStatus(); }, 30000);
     return () => {
-      live = false;
       clearInterval(t);
     };
-  }, [cfg, alias, foreground]);
+  }, [foreground, refreshSessionStatus]);
+  // 当 5s 消息流检测到入站活跃任务开始或结束时，主动拉一次轻量 status（+ 1.5s 补一次兜底心跳延迟），
+  // 避免「停止 / 打断并发送」按钮受 30s 常规状态轮询拖累而迟到或回合结束后残留 15–20s。
+  useEffect(() => {
+    if (!foreground) return;
+    const prev = prevActiveTurnRef.current;
+    prevActiveTurnRef.current = hasActiveTurnTask;
+    if (prev === null || prev === hasActiveTurnTask) return;
+    void refreshSessionStatus();
+    scheduleQuickStatusRefresh(1500);
+  }, [foreground, hasActiveTurnTask, refreshSessionStatus, scheduleQuickStatusRefresh]);
   // #4591 —— 点「停止」：先记下此刻的消息集合与活跃任务（回执只认之后新出现的），发控制消息，
   // 再用 1.5s 快轮询等真凭据（窗口 INTERRUPT_CONFIRM_MS，迟到凭据上限 LATE_EVIDENCE_MS）。
   // 详细超时/失败提示走输入框上方 composerNotice，不把一长串灰字焊在工具栏按钮里。
   const pressInterrupt = () => {
-    if (!turnCaps.interrupt || interruptBusy || !interruptable(sessionStatus)) return;
+    if (!turnCaps.interrupt || interruptBusy || !interruptable(turnStatus)) return;
     interruptSeenRef.current = new Set(messages.map(interruptIdOf));
     interruptSentAtRef.current = Date.now();
     interruptBaselineRef.current = sessionStatus ?? '';
-    interruptTaskIdRef.current = activeInterruptTaskId(messages);
+    interruptTaskIdRef.current = activeInterruptTaskId(messages, alias);
     setInterrupt({ phase: 'sending', detail: null });
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
     void interruptTurn(cfg, alias).then(res => {
@@ -2628,7 +2698,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
     if (interrupt.phase === 'unconfirmed' && !lateEvidenceAllowed()) return;
     const seen = interruptSeenRef.current;
     if (
-      messages.some(m => !seen.has(interruptIdOf(m)) && replyProvesInterrupted(m.content ?? m.result ?? ''))
+      hasFreshInterruptReply(messages, seen, interruptIdOf, interruptSentAtRef.current)
       || taskSettledProvesInterrupted(interruptTaskIdRef.current, messages)
     ) {
       setInterrupt({ phase: 'interrupted', detail: null });
@@ -2636,6 +2706,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   }, [messages, interrupt.phase]);
   // 真凭据之二：会话状态从「在飞」翻走（回合真的结束）。只在刚发过停止时才算。
   useEffect(() => {
+    // 若点击时因 30s 状态轮询滞后 sessionStatus 还是 idle（靠 hasActiveTurnTask 触发了停止），
+    // 等待期间一旦观察到 working，就把基线升成 working，这样随后翻回 idle 也能作为凭据。
+    if ((interrupt.phase === 'sending' || interrupt.phase === 'waiting') && !interruptable(interruptBaselineRef.current) && interruptable(sessionStatus)) {
+      interruptBaselineRef.current = sessionStatus;
+    }
     // 跟「点击那一刻」比，而不是跟上一拍比：停止很快时状态会在工具回执回来前就翻掉，
     // 那一拍如果被当成「上一拍」就会把唯一一次证据吃掉（真机 chuqi 报的「明明停了却显示未确认」就是这个）。
     if (!(interrupt.phase === 'waiting' || (interrupt.phase === 'unconfirmed' && lateEvidenceAllowed()))) return;
@@ -2647,10 +2722,11 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   useEffect(() => {
     if (interrupt.phase === 'interrupted') {
       setComposerNotice(t('chat.interrupt.interrupted'));
+      setPostStopSuppress(prev => prev ?? { at: Date.now(), baselineTaskId: interruptTaskIdRef.current });
       const timer = setTimeout(() => setInterrupt(idleInterrupt()), INTERRUPT_CLEAR_MS);
       return () => clearTimeout(timer);
     }
-    if ((interrupt.phase === 'unconfirmed' || interrupt.phase === 'failed' || interrupt.phase === 'unsupported') && !interruptable(sessionStatus)) {
+    if ((interrupt.phase === 'unconfirmed' || interrupt.phase === 'failed' || interrupt.phase === 'unsupported') && !interruptable(turnStatus)) {
       const timer = setTimeout(() => setInterrupt(idleInterrupt()), INTERRUPT_CLEAR_MS);
       return () => clearTimeout(timer);
     }
@@ -2658,7 +2734,28 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
       const timer = setTimeout(() => setInterrupt(idleInterrupt()), 3500);
       return () => clearTimeout(timer);
     }
-  }, [interrupt.phase, sessionStatus]);
+  }, [interrupt.phase, turnStatus]);
+  // 停止已确认但 sessionStatus 仍是陈旧 working 时：立即同步拉一次状态并短间隔追到真实 idle，
+  // 期间用 postStopSuppress 阻止 2.2s 清态瞬间「■ 停止」按钮回弹。
+  useEffect(() => {
+    if (!postStopSuppress) return;
+    if (!interruptable(sessionStatus) || (activeInboundTaskId && activeInboundTaskId !== postStopSuppress.baselineTaskId)) {
+      setPostStopSuppress(null);
+      return;
+    }
+    const remaining = postStopSuppress.at + POST_STOP_SUPPRESS_MS - Date.now();
+    if (remaining <= 0) {
+      setPostStopSuppress(null);
+      return;
+    }
+    if (foreground) void refreshSessionStatus();
+    const pollTimer = foreground ? setInterval(() => { void refreshSessionStatus(); }, INTERRUPT_POLL_MS) : null;
+    const expireTimer = setTimeout(() => setPostStopSuppress(null), remaining);
+    return () => {
+      if (pollTimer) clearInterval(pollTimer);
+      clearTimeout(expireTimer);
+    };
+  }, [postStopSuppress, sessionStatus, activeInboundTaskId, foreground, refreshSessionStatus]);
 
   const [nodeRuntimeMeta, setNodeRuntimeMeta] = useState<{ runtime: string | null; generation: string | null }>({ runtime: null, generation: null });
 
@@ -2670,6 +2767,12 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const [nodeDescription, setNodeDescription] = useState<string>('');
   useEffect(() => {
     if (interruptTimerRef.current) clearTimeout(interruptTimerRef.current);
+    if (quickStatusTimerRef.current) clearTimeout(quickStatusTimerRef.current);
+    quickStatusTimerRef.current = null;
+    prevActiveTurnRef.current = null;
+    interruptSendBusyRef.current = false;
+    setInterruptSending(false);
+    setPostStopSuppress(null);
     interruptSeenRef.current = new Set();
     interruptSentAtRef.current = 0;
     interruptBaselineRef.current = '';
@@ -3791,27 +3894,27 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 </Pressable>
               ) : null}
               {/* 「停止」只在节点在跑、或打断还在进行 / 刚有结果时出现；空闲时一直挂着一个灰按钮只是噪音。 */}
-              {turnCaps.interrupt && (interruptable(sessionStatus) || interrupt.phase !== 'idle') ? <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} desktop onPress={pressInterrupt} /> : null}
-              {turnCaps.interrupt && interruptable(sessionStatus) ? (
+              {turnCaps.interrupt && (interruptable(turnStatus) || interrupt.phase !== 'idle') ? <ComposerStopButton state={interrupt} enabled={interruptable(turnStatus)} desktop onPress={pressInterrupt} /> : null}
+              {turnCaps.interrupt && interruptable(turnStatus) ? (
                 <Pressable
                   accessibilityRole="button"
                   accessibilityLabel={t('chat.steer.action')}
                   accessibilityHint={t('chat.steer.actionHint')}
                   testID="composer-interrupt-send"
                   onPress={() => void submit({ interruptFirst: true })}
-                  disabled={!canSend(draft, attached.length > 0, sending)}
+                  disabled={!canSend(draft, attached.length > 0, sending) || interruptSending}
                   hitSlop={{ top: 6, bottom: 6 }}
                   style={({ pressed }) => [
-                    { flexDirection: 'row', alignItems: 'center', gap: ds(3), paddingHorizontal: ds(2) },
-                    !canSend(draft, attached.length > 0, sending) && { opacity: 0.45 },
+                    styles.composerTurnAction,
+                    (!canSend(draft, attached.length > 0, sending) || interruptSending) && { opacity: 0.45 },
                     pressed && { opacity: 0.7 },
                   ]}
                 >
                   <Ionicons name="flash-outline" size={12} color={colors.textMuted} />
-                  <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
+                  <Text style={styles.composerTurnActionText} numberOfLines={1}>{t('chat.steer.action')}</Text>
                 </Pressable>
               ) : null}
-              {turnCaps.steer && canSteer(sessionStatus) ? (
+              {turnCaps.steer && canSteer(turnStatus) ? (
                 <ComposerInjectButton
                   enabled={canSend(draft, attached.length > 0, sending) && attached.length === 0}
                   desktop
@@ -3910,34 +4013,40 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           <Ionicons name="chevron-down" size={10} color={colors.textMuted} />
         </Pressable>
         ) : null}
-        {turnCaps.interrupt && (interruptable(sessionStatus) || interrupt.phase !== 'idle') ? <ComposerStopButton state={interrupt} enabled={interruptable(sessionStatus)} onPress={pressInterrupt} /> : null}
-        {turnCaps.interrupt && interruptable(sessionStatus) ? (
-                <Pressable
-                  accessibilityRole="button"
-                  accessibilityLabel={t('chat.steer.action')}
-                  accessibilityHint={t('chat.steer.actionHint')}
-                  testID="composer-interrupt-send"
-                  onPress={() => void submit({ interruptFirst: true })}
-                  disabled={!canSend(draft, attached.length > 0, sending)}
-                  hitSlop={{ top: 6, bottom: 6 }}
-                  style={({ pressed }) => [
-                    { flexDirection: 'row', alignItems: 'center', gap: ds(3), paddingHorizontal: ds(2) },
-                    !canSend(draft, attached.length > 0, sending) && { opacity: 0.45 },
-                    pressed && { opacity: 0.7 },
-                  ]}
-                >
-                  <Ionicons name="flash-outline" size={12} color={colors.textMuted} />
-                  <Text style={{ fontSize: 11, color: colors.textMuted }} numberOfLines={1}>{t('chat.steer.action')}</Text>
-                </Pressable>
-              ) : null}
-              {turnCaps.steer && canSteer(sessionStatus) ? (
-                <ComposerInjectButton
-                  enabled={canSend(draft, attached.length > 0, sending) && attached.length === 0}
-                  desktop
-                  onPress={() => void submit({ inject: true })}
-                />
-              ) : null}
       </View>
+      {/* 手机窄屏在飞态：把「停止 / 打断并发送 / 插话」放到独立动作行（不挤占模型胶囊所在行，也避开左右 60dp 缩进），
+          避免 OpenCode V2 满载五控件时把最左侧模型选择胶囊压成空白圆角条；空闲时不渲染，零高度增量。 */}
+      {((turnCaps.interrupt && (interruptable(turnStatus) || interrupt.phase !== 'idle'))
+        || (turnCaps.steer && canSteer(turnStatus) && canSend(draft, attached.length > 0, sending) && attached.length === 0)) ? (
+        <View style={styles.composerTurnRow} testID="composer-turn-row">
+          {turnCaps.interrupt && (interruptable(turnStatus) || interrupt.phase !== 'idle') ? <ComposerStopButton state={interrupt} enabled={interruptable(turnStatus)} onPress={pressInterrupt} /> : null}
+          {turnCaps.interrupt && interruptable(turnStatus) ? (
+            <Pressable
+              accessibilityRole="button"
+              accessibilityLabel={t('chat.steer.action')}
+              accessibilityHint={t('chat.steer.actionHint')}
+              testID="composer-interrupt-send"
+              onPress={() => void submit({ interruptFirst: true })}
+              disabled={!canSend(draft, attached.length > 0, sending) || interruptSending}
+              hitSlop={{ top: 6, bottom: 6 }}
+              style={({ pressed }) => [
+                styles.composerTurnAction,
+                (!canSend(draft, attached.length > 0, sending) || interruptSending) && { opacity: 0.45 },
+                pressed && { opacity: 0.7 },
+              ]}
+            >
+              <Ionicons name="flash-outline" size={12} color={colors.textMuted} />
+              <Text style={styles.composerTurnActionText} numberOfLines={1}>{t('chat.steer.action')}</Text>
+            </Pressable>
+          ) : null}
+          {turnCaps.steer && canSteer(turnStatus) ? (
+            <ComposerInjectButton
+              enabled={canSend(draft, attached.length > 0, sending) && attached.length === 0}
+              onPress={() => void submit({ inject: true })}
+            />
+          ) : null}
+        </View>
+      ) : null}
       <View style={[styles.inputRow, { alignItems: composerRowAlign(inputLines, voiceMode), paddingBottom: spacing.sm + (plusMenuOpen ? 0 : composerInset) }]} onLayout={event => setInputRowLocalTop(event.nativeEvent.layout.y)}>
         {/* 微信式(composer-row-layout.ts):左 🎤/⌨ 切换 | 中 输入框或「按住 说话」 | 右 ＋ ⇄「发送」。
             ⤢ 在左列顶上,只在输入超过 3 行时出现(左列靠 stretch 撑满整行高度,不压输入框)。 */}
@@ -4163,6 +4272,9 @@ const makeStyles = (B = bubbleLayout()) =>
   // 左右内边距在渲染时按输入框所在列算（composerModelRowInset），底部带 Android 手势条安全区。
   // 模型胶囊可收缩（长名中间省略），档位胶囊不收缩，两者同高同底色。
   composerModelRow: { flexDirection: 'row', alignItems: 'center', gap: spacing.xs },
+  composerTurnRow: { flexDirection: 'row', flexWrap: 'wrap', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.md, paddingTop: spacing.xs },
+  composerTurnAction: { flexDirection: 'row', alignItems: 'center', gap: ds(3), paddingHorizontal: ds(2), flexShrink: 0 },
+  composerTurnActionText: { fontSize: 11, color: colors.textMuted },
   composerModelPill: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 1, minWidth: 0, height: 24, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },
   composerModelPillText: { fontSize: ds(11), lineHeight: 14, color: colors.textSecondary, flexShrink: 1, minWidth: 0 },
   composerVariantPill: { flexDirection: 'row', alignItems: 'center', gap: 4, flexShrink: 0, height: 24, paddingHorizontal: 8, borderRadius: radius.pill, backgroundColor: colors.inputBg },

@@ -348,6 +348,7 @@ export const chatTranslations = {
   'chat.steer.action': ['打断并发送', 'Interrupt & send'],
   'chat.steer.actionHint': ['先停止正在跑的回合，再把这条作为新指令发出', 'Stop the running turn, then send this as a new instruction'],
   'chat.steer.interrupting': ['正在打断上一轮…', 'Interrupting the running turn…'],
+  'chat.steer.waitingExit': ['已收到停止确认，等待本轮退出后发送…', 'Stop confirmed; waiting for the turn to exit before sending…'],
   'chat.steer.interrupted': ['上一轮已打断，正在发送新指令', 'Previous turn stopped; sending your new instruction'],
   'chat.steer.unconfirmed': ['上一轮未确认停止，这条没有发出（草稿还在，可再发一次）', 'The previous turn did not confirm it stopped, so this was not sent (your draft is kept — send again)'],
   'chat.steer.failed': ['打断失败：{message}（草稿还在）', 'Could not interrupt: {message} (your draft is kept)'],

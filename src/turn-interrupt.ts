@@ -28,6 +28,14 @@ export const INTERRUPT_POLL_MS = 1500;
 /** 确认「已停止」后胶囊提示自动收起的时长（毫秒）。 */
 export const INTERRUPT_CLEAR_MS = 2200;
 
+/** 「打断并发送」收到节点 `interrupted:true` 回执后，等待慢退出 runtime（如 antigravity-acp，
+ *  退出耗时 9–16s）翻为 idle 或任务落终态的宽限窗口（毫秒）。 */
+export const INTERRUPT_EXIT_GRACE_MS = 20_000;
+
+/** 点击「停止」并已确认后，抑制陈旧 `sessionStatus === 'working'` 短暂回弹的上限（毫秒）。
+ *  真实状态翻回 idle 或出现新活跃任务时会立即解除，不会永久吞掉真实运行态。 */
+export const POST_STOP_SUPPRESS_MS = 15_000;
+
 export type InterruptPhase = 'idle' | 'sending' | 'waiting' | 'interrupted' | 'unconfirmed' | 'failed' | 'unsupported';
 
 export interface StopButtonPresentation {
@@ -54,18 +62,111 @@ export function stopButtonPresentation(phase: InterruptPhase): StopButtonPresent
   }
 }
 
-const TERMINAL_TASK_STATUSES = new Set(['replied', 'failed', 'cancelled', 'expired']);
-const ACTIVE_TASK_STATUSES = new Set(['running', 'acked', 'delivered']);
+const TERMINAL_TASK_STATUSES = new Set(['replied', 'completed', 'done', 'failed', 'timeout', 'cancelled', 'canceled', 'expired']);
+const ACTIVE_TASK_STATUSES = new Set(['running', 'in_progress', 'started', 'acked', 'delivered']);
+const IN_FLIGHT_TASK_STATUSES = new Set(['running', 'in_progress', 'started']);
 
-/** 捕捉点击「停止」那一刻正在执行的入站任务 ID。队列有下一条排队时，停掉上一条会秒接下一条导致
+export interface TurnTaskRow {
+  task_id?: string | null;
+  status?: string | null;
+  from_name?: string | null;
+  to_name?: string | null;
+  result?: string | null;
+  reply?: string | null;
+  created_at?: string | null;
+  consumed_at?: string | null;
+  runtime_submitted_at?: string | null;
+  _localId?: string | null;
+  _proactive?: boolean;
+}
+
+const stamped = (v: unknown): boolean => typeof v === 'string' && v.trim().length > 0;
+
+function parseHubUtcMs(raw: string | null | undefined): number {
+  if (!raw) return NaN;
+  const trimmed = raw.trim();
+  if (!trimmed) return NaN;
+  if (trimmed.includes('T') || /(?:Z|[+-]\d{2}:?\d{2})$/i.test(trimmed)) return Date.parse(trimmed);
+  return Date.parse(`${trimmed.replace(' ', 'T')}Z`);
+}
+
+function isOutgoingTaskForAlias(m: TurnTaskRow, alias?: string): boolean {
+  if (!alias) return false;
+  return m.from_name === alias && m.to_name !== alias;
+}
+
+/** 捕捉点击「停止」/「打断并发送」那一刻正在执行的入站任务 ID。队列有下一条排队时，停掉上一条会秒接下一条导致
  *  sessionStatus 维持 working；记录点击时的活跃 task_id，看到它进入终态即可确认这一轮已被停下。 */
 export function activeInterruptTaskId(
-  messages: ReadonlyArray<{ task_id?: string | null; status?: string | null }>,
+  messages: ReadonlyArray<TurnTaskRow>,
+  alias?: string,
 ): string {
-  const running = messages.find(m => m.task_id && (m.status ?? '').trim().toLowerCase() === 'running');
+  const candidates = messages.filter(m =>
+    m.task_id && !m._localId && !m._proactive && !m.result && !m.reply && !isOutgoingTaskForAlias(m, alias),
+  );
+  const running = candidates.find(m => IN_FLIGHT_TASK_STATUSES.has((m.status ?? '').trim().toLowerCase()));
   if (running?.task_id) return running.task_id;
-  const open = messages.find(m => m.task_id && ACTIVE_TASK_STATUSES.has((m.status ?? '').trim().toLowerCase()));
+  const open = candidates.find(m => ACTIVE_TASK_STATUSES.has((m.status ?? '').trim().toLowerCase()));
   return open?.task_id ?? '';
+}
+
+/** 聊天消息列表中是否存在该节点正在执行的入站任务（10 分钟防陈旧窗口，同页头 processing 口径）。
+ *  用于让「停止 / 打断并发送 / 插话」不等 30s 常规状态轮询即可与页头「正在处理…」同步出现。 */
+export function hasActiveInboundTurn(
+  messages: ReadonlyArray<TurnTaskRow>,
+  alias?: string,
+  now = Date.now(),
+  maxAgeMs = 10 * 60 * 1000,
+): boolean {
+  return messages.some(m => {
+    if (m._localId || m._proactive || m.result || m.reply) return false;
+    if (isOutgoingTaskForAlias(m, alias)) return false;
+    const status = (m.status ?? '').trim().toLowerCase();
+    if (TERMINAL_TASK_STATUSES.has(status)) return false;
+    const inFlight = IN_FLIGHT_TASK_STATUSES.has(status) || stamped(m.consumed_at) || stamped(m.runtime_submitted_at);
+    if (!inFlight) return false;
+    const createdMs = parseHubUtcMs(m.created_at);
+    return Number.isFinite(createdMs) && now - createdMs < maxAgeMs;
+  });
+}
+
+export interface StopSuppression {
+  at: number;
+  baselineTaskId: string;
+}
+
+/** 已确认停止后，抑制尚未刷新的陈旧 `sessionStatus === 'working'` 防止「✓ 已停止」收起时按钮短暂回弹。
+ *  一旦真实状态翻离 working、出现新的活跃任务（如队列下一条或用户新发）或超过上限，立即解除。 */
+export function isStopSuppressed(
+  suppression: StopSuppression | null,
+  input: {
+    sessionStatus: string | null | undefined;
+    activeTaskId: string;
+    now?: number;
+  },
+): boolean {
+  if (!suppression) return false;
+  const now = input.now ?? Date.now();
+  if (now - suppression.at > POST_STOP_SUPPRESS_MS) return false;
+  if (!interruptable(input.sessionStatus)) return false;
+  if (!input.activeTaskId) return true;
+  return !!suppression.baselineTaskId && input.activeTaskId === suppression.baselineTaskId;
+}
+
+/** 计算驱动输入栏回合控制按钮（停止 / 打断并发送 / 插话）的有效运行态：
+ *  1) 刚确认停止且处于陈旧 working 抑制窗内 ⇒ idle（杜绝确认后短暂回弹）；
+ *  2) Hub 会话状态本身在飞 ⇒ 沿用该状态；
+ *  3) 会话未离线且 5s 消息流已有正在执行的入站任务 ⇒ working（不等 30s 状态轮询）。 */
+export function effectiveTurnStatus(input: {
+  sessionStatus: string | null | undefined;
+  hasActiveTurnTask: boolean;
+  suppressedAfterStop: boolean;
+}): string {
+  if (input.suppressedAfterStop) return 'idle';
+  const raw = (input.sessionStatus ?? '').trim().toLowerCase();
+  if (interruptable(raw)) return raw;
+  if (input.hasActiveTurnTask && raw !== 'offline') return 'working';
+  return raw;
 }
 
 /** 点击停止时记录的活跃任务进入终态 ⇒ 证明该轮确实已停止（即使队列下一条立刻接棒）。 */
@@ -141,6 +242,23 @@ export function interruptAfterSend(input: {
   if (input.confirmed) return { phase: 'interrupted', detail: null };
   if (input.timedOut) return { phase: 'unconfirmed', detail: null };
   return { phase: 'waiting', detail: null };
+}
+
+/** 检查消息列表中是否出现了点击之后新到达的节点中断成功回执（同时用 seen 集合 + 时间戳防历史旧回执误判）。 */
+export function hasFreshInterruptReply(
+  messages: ReadonlyArray<{ task_id?: string | null; created_at?: string | null; content?: string | null; result?: string | null }>,
+  seenIds: ReadonlySet<string>,
+  idOf: (m: { task_id?: string | null; created_at?: string | null; content?: string | null }) => string,
+  startedAtMs: number,
+  clockSkewToleranceMs = 15_000,
+): boolean {
+  return messages.some(m => {
+    if (seenIds.has(idOf(m))) return false;
+    if (!replyProvesInterrupted(m.content ?? m.result ?? '')) return false;
+    const createdMs = parseHubUtcMs(m.created_at);
+    if (Number.isFinite(createdMs) && createdMs < startedAtMs - clockSkewToleranceMs) return false;
+    return true;
+  });
 }
 
 /** 会话状态从「在飞」翻走后算不算截断证据。只在**我们自己刚发过停止**时用，
