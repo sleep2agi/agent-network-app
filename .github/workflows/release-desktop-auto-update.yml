@@ -642,6 +642,11 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.632:
+
+            - 修复（iPhone / iPad 必崩）：点聊天里的任何链接会直接闪退 —— 已修。现在链接正常交给系统浏览器打开，不会再崩。
+            - 改进：存储直传增加了三级回落 —— 传输加速端点抖动时自动切标准区域地址；再不行（12 MB 以内）自动改走 Hub，不会再“上传失败”卡住。下载同样三级回落，对方能打开大视频。
+
             What's new in 0.2.631:
 
             - 修复：文件存储中转只接受**私有**仓库 / 私有 Bucket。公开的会被 Hub 直接拒绝并说明原因（「请将仓库/Bucket 设为私有后再试」），避免文件被别人看到；已保存的公开地址配置会被忽略并按私有方式访问。
