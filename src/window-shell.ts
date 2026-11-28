@@ -133,3 +133,27 @@ export const popoutHeaderChrome = (chrome: PopoutChrome, base: number): { dataSe
   const pad = popoutHeaderPadding(chrome, base);
   return { dataSet: { tauriDragRegion: 'deep' }, style: { paddingLeft: pad.left, paddingRight: pad.right } };
 };
+
+/**
+ * macOS 分离聊天窗页头是否居中显示头像 / 名字 / 状态（admin 2026-11-28 截图「左上角放着也很奇怪啊」）：
+ * 独立小窗没有左侧栏缓冲，把圆形头像紧挨着左上角红黄绿三颗圆点左对齐显得拥挤且主次不分。
+ * 仅 macOS 分离聊天窗居中（类似 macOS 原生 / 微信独立小窗）；Windows 控件在右上角，主窗 / 手机保持左对齐。
+ */
+export const popoutHeaderCentersIdentity = (chrome: PopoutChrome): boolean => chrome === 'mac';
+
+/**
+ * macOS 分离聊天窗居中时，给 `headerIdentity` 右侧补上的对称留白（像素），
+ * 让头像 + 名字/状态按整个聊天页头的水平中心居中，而非因左侧红黄绿灯让位（80px）和右侧 ⋯ 按钮宽度不对称而右偏。
+ * 非居中模式返回 0。
+ */
+export const popoutHeaderCenterBalanceRight = (
+  chrome: PopoutChrome,
+  base: number,
+  moreWidth: number,
+  gap: number,
+): number => {
+  if (!popoutHeaderCentersIdentity(chrome)) return 0;
+  const leftInset = popoutHeaderPadding(chrome, base).left;
+  const rightOccupied = base + (moreWidth > 0 ? moreWidth + gap : 0);
+  return Math.max(0, leftInset - rightOccupied);
+};

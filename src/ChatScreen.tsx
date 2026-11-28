@@ -63,7 +63,7 @@ import { createUploadMemo, removeAttachmentAt, UPLOAD_CONCURRENCY, withUploadSta
 import type { UploadedFile } from './attach';
 import { colors, onThemeChange, radius, spacing, themeMode } from './theme';
 import { bubbleInk, MineBubble } from './bubble-ink';
-import { popoutHeaderChrome, type PopoutChrome } from './window-shell';
+import { popoutHeaderCenterBalanceRight, popoutHeaderCentersIdentity, popoutHeaderChrome, type PopoutChrome } from './window-shell';
 import NodeSessionControl from './NodeSessionControl';
 import ChatForkPalette from './ChatForkPalette';
 import { sessionControlTarget } from './node-session-control';
@@ -1307,6 +1307,14 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
   const pointer = pointerUi(desktop);
   // 分离聊天窗:页头 = 标题栏(整行拖动 + 给红黄绿灯 / – □ × 让位);其余场景是空对象,页头不变。
   const headerChrome = popoutHeaderChrome(windowChrome, spacing.lg);
+  // macOS 分离聊天窗:红黄绿灯在左上角,把头像+名字居中到页头正中,并按左右占用差补齐对称留白。
+  const centerHeaderIdentity = popoutHeaderCentersIdentity(windowChrome);
+  const centerHeaderBalance = popoutHeaderCenterBalanceRight(
+    windowChrome,
+    spacing.lg,
+    moreInToolRail ? 0 : HEADER_MORE_WIDTH,
+    spacing.md,
+  );
   // 放大阅读:单条消息的全屏可选中视图(我们的代码块很长,气泡里读不完)。
   const [expandFor, setExpandFor] = useState<MessageSelection | null>(null);
   // #537 手机长按 = 就地选区 + 微信式浮动菜单(MessageSelectOverlay)。null = 没在选。
@@ -3057,7 +3065,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                 <AliasAvatar alias={alias} size={32} />
               </AvatarStatusRing>
               {/* The name column is the only flexible child; the ⋯ is the header's single action. */}
-              <View style={styles.headerTitleCol} testID="chat-header-title">
+              <View style={centerHeaderIdentity ? styles.headerTitleColCentered : styles.headerTitleCol} testID="chat-header-title">
                 <View style={styles.headerTitleLine}>
                   <Text style={[styles.title, { flexShrink: 1, minWidth: 0 }]} numberOfLines={1} ellipsizeMode="tail" ref={fullTextTitleRef(alias) as any}>
                     {alias}
@@ -3084,7 +3092,7 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
                     ) : null}
                     {nodeDescription ? (
                       <Text
-                        style={[styles.subtitleDesc, { color: colors.textMuted }]}
+                        style={[centerHeaderIdentity ? styles.subtitleDescCentered : styles.subtitleDesc, { color: colors.textMuted }]}
                         numberOfLines={1}
                         ellipsizeMode="tail"
                         testID="chat-header-desc"
@@ -3099,7 +3107,18 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
           );
           // 分离聊天窗：这一行是标题栏，不包 Pressable（否则 Tauri 不把它当拖动区）。
           if (windowChrome) {
-            return <View style={styles.headerIdentity} testID="chat-header-identity">{identity}</View>;
+            return (
+              <View
+                style={[
+                  styles.headerIdentity,
+                  centerHeaderIdentity && styles.headerIdentityCentered,
+                  centerHeaderBalance > 0 ? { paddingRight: centerHeaderBalance } : null,
+                ]}
+                testID="chat-header-identity"
+              >
+                {identity}
+              </View>
+            );
           }
           return (
             <Pressable
@@ -4231,6 +4250,8 @@ function MessageHoverActions({ side, styles, onCopy, onMore }: {
   );
 }
 
+const HEADER_MORE_WIDTH = 36;
+
 // Bubble-chain layout comes from bubble-layout.ts (shared with DmChatScreen, run through Yoga by
 // bubble-layout.test.ts); this file adds the paint.
 const makeStyles = (B = bubbleLayout()) =>
@@ -4258,6 +4279,7 @@ const makeStyles = (B = bubbleLayout()) =>
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
   subtitleRow: { flexDirection: 'row', alignItems: 'center', minWidth: 0, marginTop: 1 },
   subtitleDesc: { flex: 1, minWidth: 0, fontSize: 11 },
+  subtitleDescCentered: { flexShrink: 1, minWidth: 0, fontSize: 11 },
   // The single ⋯: a 36 dp target flush with the right padding. Icon buttons are measured by their box
   // (tests/test-layout-sweep: the box is the symmetric thing), so left and right padding match.
   headerMore: { width: 36, height: ds(34), borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
@@ -4283,7 +4305,9 @@ const makeStyles = (B = bubbleLayout()) =>
   // 头像+名字这一整块现在是一个可点的整体（见 chat-header-identity）：行容器接过原来
   // headerTitleCol 的 flex:1，自己内部再给名字列同样的 flex:1，布局比例和点不动时完全一样。
   headerIdentity: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, flex: 1, minWidth: 0 },
+  headerIdentityCentered: { justifyContent: 'center' },
   headerTitleCol: { flex: 1, minWidth: 0 },
+  headerTitleColCentered: { flexGrow: 0, flexShrink: 1, minWidth: 0 },
   headerTitleLine: { flexDirection: 'row', alignItems: 'center', gap: 4, minWidth: 0 },
   beginning: {
     color: colors.textMuted,
