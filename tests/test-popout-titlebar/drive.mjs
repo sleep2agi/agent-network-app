@@ -90,6 +90,7 @@ const measure = () => {
   const header = [...document.querySelectorAll('[data-testid="chat-header"],[data-testid="screen-header"]')].filter(vis)[0] ?? null;
   const more = document.querySelector('[data-testid="chat-header-more"]') ?? document.querySelector('[data-testid="chat-tool-more"]');
   const avatar = header ? header.firstElementChild : null;
+  const avatarRing = document.querySelector('[data-testid="chat-header-ring"]') ?? (avatar ? avatar.firstElementChild : null);
   const title = document.querySelector('[data-testid="chat-header-title"]');
   const back = header ? [...header.querySelectorAll('[role="button"]')].find(el => el.getAttribute('aria-label') === '返回') : null;
   return {
@@ -100,7 +101,7 @@ const measure = () => {
     header: box(header),
     headerTestId: header?.getAttribute('data-testid') ?? null,
     headerDrag: header?.getAttribute('data-tauri-drag-region') ?? null,
-    more: box(more), avatar: box(avatar), title: box(title), back: box(back),
+    more: box(more), avatar: box(avatar), avatarRing: box(avatarRing), title: box(title), back: box(back),
   };
 };
 
@@ -195,6 +196,9 @@ try {
   ck('mac-chat: 页头顶边贴窗口顶', m.header && m.header.y === 0, JSON.stringify(m.header));
   ck('mac-chat: 红黄绿灯在页头这一行里', lights.b <= m.header.b, `${lights.b} ≤ ${m.header?.b}`);
   ck('mac-chat: 头像 / 名字不压在红黄绿灯下(左沿 ≥ 灯右沿 + 8)', !!m.avatar && m.avatar.x >= lights.r + 8 && !overlap(m.avatar, lights) && !overlap(m.title, lights), `avatar.x=${m.avatar?.x} lights.r=${lights.r}`);
+  const headerMidX = m.header ? m.header.x + m.header.w / 2 : -99;
+  const groupMidX = m.avatarRing && m.title ? (m.avatarRing.x + m.title.r) / 2 : -99;
+  ck('mac-chat: 头像 + 名字水平居中于页头(避免紧挨红黄绿灯)', !!m.avatarRing && !!m.title && Math.abs(groupMidX - headerMidX) <= 4, `groupMidX=${groupMidX} headerMidX=${headerMidX}`);
   const lightsMid = (lights.y + lights.b) / 2, avatarMid = m.avatar ? m.avatar.y + m.avatar.h / 2 : -99;
   ck('mac-chat: 红黄绿灯和头像行垂直居中对齐(差 ≤ 2px)', Math.abs(lightsMid - avatarMid) <= 2, `lights=${lightsMid} avatar=${avatarMid}`);
   ck('mac-chat: 页头是 deep 拖动区', m.headerDrag === 'deep', String(m.headerDrag));
