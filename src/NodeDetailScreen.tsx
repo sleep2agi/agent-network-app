@@ -451,6 +451,11 @@ export default function NodeDetailScreen({
 
   // 分离聊天窗里的「节点信息」:页头同样兼当标题栏(见 window-shell.ts popoutChatChrome)。
   const headerChrome = popoutHeaderChrome(windowChrome, spacing.lg);
+  const headerBackStyle = ({ pressed, hovered }: any) => ({
+    width: 32, height: 32, borderRadius: radius.item, alignItems: 'center' as const, justifyContent: 'center' as const,
+    backgroundColor: pressed ? colors.rowActive : hovered ? colors.rowHover : 'transparent',
+    marginLeft: windowChrome === 'mac' ? 4 : 0,
+  });
   const header = (
     <View
       testID="screen-header"
@@ -458,16 +463,17 @@ export default function NodeDetailScreen({
       style={[{
         flexDirection: 'row',
         alignItems: 'center',
+        minHeight: 54,
         paddingHorizontal: spacing.lg,
-        paddingVertical: spacing.md,
+        paddingVertical: spacing.sm,
         borderBottomWidth: 1,
         borderBottomColor: colors.border,
-        gap: spacing.md,
+        gap: spacing.sm,
       }, headerChrome.style]}
     >
       {paneShowsBack(desktop) ? (
-        <Pressable onPress={guardedBack} testID={PANE_BACK_TEST_ID} hitSlop={12} accessibilityRole="button" accessibilityLabel="返回">
-          <Text style={{ color: colors.accent, fontSize: 28 }}>‹</Text>
+        <Pressable onPress={guardedBack} testID={PANE_BACK_TEST_ID} hitSlop={8} accessibilityRole="button" accessibilityLabel="返回" style={headerBackStyle}>
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
       ) : null}
       <Text style={{ color: colors.text, fontSize: 17, fontWeight: '600' }}>{readOnly ? '节点信息' : '节点详情'}</Text>
