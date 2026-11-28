@@ -16,6 +16,7 @@ registerTranslations({
   'hubStorage.hubManagedSummary': ['已由 Hub 平台默认托管并启用（{provider} · {target} · 单文件上限 {mb} MB），全网成员与节点开箱即用，无需手动配置。', 'Enabled and managed by this Hub ({provider} · {target} · up to {mb} MB). All members and nodes work automatically with zero setup.'],
   'hubStorage.hubManagedFooter': ['当前网络使用 Hub 平台托管的私有外部存储（按网络目录隔离，鉴权直传不占 Hub 带宽）。如需换用独立存储桶，可随时填写自定义覆盖。', 'This network uses Hub-managed private external storage (per-network isolation, authenticated direct transfer). Override with custom credentials anytime if needed.'],
   'hubStorage.customizeShow': ['自定义此网络存储（覆盖 Hub 托管） ›', 'Use custom storage for this network ›'],
+  'hubStorage.customizeShowPhone': ['自定义此网络存储（覆盖 Hub 托管）', 'Use custom storage for this network'],
   'hubStorage.customizeHide': ['收起自定义覆盖表单', 'Hide custom override form'],
   'hubStorage.resetToManaged': ['恢复 Hub 托管', 'Restore Hub default'],
   'hubStorage.restoredManaged': ['已清除自定义覆盖，恢复使用 Hub 平台托管存储', 'Cleared custom override — restored Hub-managed storage'],

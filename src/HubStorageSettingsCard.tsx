@@ -536,9 +536,10 @@ export function HubStoragePhoneGroup({ onOpenEdit }: { onOpenEdit: () => void })
   if (!hub.supported || (!hub.enabled && !hub.canManage)) return null;
   const ready = hub.enabled && hub.configured;
   const isLegacyModelscope = isLegacyModelscopeState(hub);
+  const isHubManaged = hub.source === 'hub_managed';
   const mb = Math.round((hub.maxFileBytes || 100 * 1024 * 1024) / (1024 * 1024));
   const footer = hub.canManage
-    ? tr('hubStorage.phoneHint')
+    ? (isHubManaged ? tr('hubStorage.hubManagedFooter') : tr('hubStorage.phoneHint'))
     : (ready
       ? tr('hubStorage.memberFooterEnabled', { provider: providerLabel(hub.provider), mb })
       : tr('hubStorage.memberFooterDisabled'));
@@ -587,7 +588,7 @@ export function HubStorageEditPage() {
           />
           <SettingsRow
             testID="hub-storage-customize-toggle"
-            label={customize ? tr('hubStorage.customizeHide') : tr('hubStorage.customizeShow')}
+            label={customize ? tr('hubStorage.customizeHide') : tr('hubStorage.customizeShowPhone')}
             chevron
             onPress={() => setCustomize(v => !v)}
           />
