@@ -1395,8 +1395,8 @@ export default function SettingsScreen({
                   用 openExternal(iOS 上先 canOpenURL),不走内嵌 webview。 */}
               {show('about', 'version') ? (
                 <SettingsGroup title={tr('about.groupSupport')}>
-                  <SettingsRow label={tr('settings.copy.293')} value="anet.sh" onPress={() => { void openExternal('https://www.anet.sh'); }} testID="settings-support-link" />
-                  <SettingsRow label={tr('settings.copy.292')} onPress={() => { void openExternal('https://www.anet.sh/privacy'); }} testID="settings-privacy-link" />
+                  <SettingsRow label={tr('settings.copy.293')} value="anet.sh" onPress={() => { void openExternal('https://www.anet.sh').catch(() => {}); }} testID="settings-support-link" />
+                  <SettingsRow label={tr('settings.copy.292')} onPress={() => { void openExternal('https://www.anet.sh/privacy').catch(() => {}); }} testID="settings-privacy-link" />
                 </SettingsGroup>
               ) : null}
               {show('about', 'version') || (lastFatal && show('about', 'lastCrash')) ? (
@@ -1424,7 +1424,7 @@ export default function SettingsScreen({
                   // subtitle 直接告诉他该装哪一版(从内置更新日志里算,拿不到就不写)。
                   <SettingsRow label={tr('settings.copy.294')}
                     subtitle={ROLLBACK_TARGET ? `${tr('settings.copy.295')} v${ROLLBACK_TARGET}` : undefined}
-                    onPress={() => { void openExternal(rollbackReleaseUrl(ROLLBACK_TARGET)); }} testID="settings-history-releases-link" />
+                    onPress={() => { void openExternal(rollbackReleaseUrl(ROLLBACK_TARGET)).catch(() => {}); }} testID="settings-history-releases-link" />
                 ) : null}
                 {lastFatal && show('about', 'lastCrash') ? (
                   <SettingsActionRow label={tr('fatal.copyRow')} subtitle={fatalSummary(lastFatal)} onPress={() => { void copyLastFatal(lastFatal); }} testID="settings-last-crash-row" />

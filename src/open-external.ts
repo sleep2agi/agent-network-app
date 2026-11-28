@@ -55,12 +55,17 @@ function realDeps(): OpenExternalDeps {
     harmonyOpen: hasHarmonyOpen ? url => hb!.openExternalUrl!(url) : undefined,
     windowOpen: typeof g.open === 'function' ? (url, target, features) => g.open!(url, target, features) : null,
     linkingOpen: async url => {
-      const { Linking } = await import('react-native');
-      // iOS 上「点链接就崩」的防呆(admin 2026-10-31 截图:AI 军团已崩溃):
-      // 先问系统能不能开,再开;能用 canOpenURL 挡住的情况就别把异常甩到原生层。
-      // canOpenURL 本身失败(权限/未实现)时按「能开」处理,保持旧行为。
-      const can = await Linking.canOpenURL(url).catch(() => true);
-      if (can === false) throw new Error(`cannot open ${url.slice(0, 40)}`);
+      // 严禁在这里写 `await import('react-native')`！(admin 2026-10-31 / 2026-11-28 iPhone & iPad 点链接必崩根因)：
+      // Metro 把动态 import() 编译成 asyncRequire -> metroImportAll；而 react-native/index.js 是 CommonJS
+      // （无 __esModule），metroImportAll 会遍历全部 92 个 getter，触发 PushNotificationIOS ->
+      // new NativeEventEmitter(null)（Expo 不链已废弃的 React-RCTPushNotification），在 Metro
+      // guardedLoadModule 里直接调 ErrorUtils.reportFatalError -> RCTFatal 瞬间 SIGABRT 闪退。
+      // 用同步 require('react-native') 只求值单个 Linking getter，绝不触发 metroImportAll；
+      // 且留在 linkingOpen 函数体内，纯 Node/Bun 单测不加载 react-native。
+      // 对已白名单校验为 http(s):// 的链接直接调 Linking.openURL（iOS 9+ 对未列在 LSApplicationQueriesSchemes
+      // 的 scheme 调 canOpenURL 可能返回 false，且 Apple 已弃用对网页链接前置 canOpenURL；openURL 异步回调失败
+      // 只会 reject Promise，不会原生崩溃）。
+      const { Linking } = require('react-native') as { Linking: { openURL: (u: string) => Promise<unknown> } };
       return Linking.openURL(url);
     },
   };

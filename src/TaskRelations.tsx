@@ -91,7 +91,7 @@ export function ExternalLink({ item }: { item: Requirement }) {
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, flexWrap: 'wrap' }} testID="req-external">
       <Ionicons name={github ? 'logo-github' : 'link-outline'} size={15} color={colors.textSecondary} />
       {item.externalUrl ? (
-        <Pressable accessibilityRole="link" onPress={() => { void openExternal(item.externalUrl!); }} testID="req-external-link">
+        <Pressable accessibilityRole="link" onPress={() => { void openExternal(item.externalUrl!).catch(() => {}); }} testID="req-external-link">
           <Text style={s.link}>{github ? tr('tasks.copy.221') : tr('tasks.copy.222')}</Text>
         </Pressable>
       ) : null}

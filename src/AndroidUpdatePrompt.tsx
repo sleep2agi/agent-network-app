@@ -75,7 +75,7 @@ export default function AndroidUpdatePrompt({ currentVersion = APP_VERSION }: { 
           </View>
           <View style={styles.notes}>
             {notesView.link ? (
-              <Pressable testID="android-update-notes-link" style={styles.notesLink} onPress={() => { void openExternal(notesView.link!.url); }} accessibilityRole="link" hitSlop={8}>
+              <Pressable testID="android-update-notes-link" style={styles.notesLink} onPress={() => { void openExternal(notesView.link!.url).catch(() => {}); }} accessibilityRole="link" hitSlop={8}>
                 <Text style={styles.link}>{notesView.link.label}</Text>
                 <Ionicons name="open-outline" size={14} color={colors.accent} />
               </Pressable>

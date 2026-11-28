@@ -234,7 +234,7 @@ export default function DaemonOverviewSection({
                     copied={copied === gap.id}
                     busy={installing || probing}
                     onCopy={() => { if (gap.command) void copy(gap.id, gap.command); }}
-                    onDocs={() => { void openExternal(gap.docsUrl); }}
+                    onDocs={() => { void openExternal(gap.docsUrl).catch(() => {}); }}
                     onInstall={() => { void install(); }}
                     t={t}
                   />
