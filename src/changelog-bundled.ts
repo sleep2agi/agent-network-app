@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.633:",
+  "",
+  "- 修复：iPad 横屏和折叠屏/平板上的「组织」页右侧大片空白没了 —— 宽屏改用两栏布局，卡片按屏宽展开；iPad 竖屏也不再被卡在左侧 760px、部门成员列表不再被截断。",
+  "",
   "What's new in 0.2.632:",
   "",
   "- 修复（iPhone / iPad 必崩）：点聊天里的任何链接会直接闪退 —— 已修。现在链接正常交给系统浏览器打开，不会再崩。",
