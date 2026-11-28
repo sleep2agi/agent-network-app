@@ -63,7 +63,9 @@ export const downloadAttachment = (
         isPlainBrowser: false,
         fetchImpl: appFetch,
       });
-      return target.kind === 'direct' ? { url: target.url, headers: target.headers } : null;
+      return target.kind === 'direct'
+        ? { url: target.url, fallbackUrl: target.fallbackUrl, headers: target.headers }
+        : null;
     },
   );
 

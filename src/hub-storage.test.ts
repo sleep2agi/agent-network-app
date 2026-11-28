@@ -18,13 +18,18 @@ import {
   type HubStorageFetchLike,
 } from './hub-storage';
 import {
+  appendHubProxyParam,
   computeSha256Hex,
   directFileDescriptorUrl,
   extractFileIdFromUrl,
+  HUB_LOCAL_FALLBACK_MAX_BYTES,
   resolveDirectDownloadTarget,
   sha256HexSync,
   tryDirectUploadBytes,
+  tryNativeDirectUpload,
 } from './direct-storage';
+import { downloadAuthedBytes } from './desktop-download';
+import { downloadAttachmentWith, type DownloadFs } from './attach-download';
 import { setLanguagePreference, t } from './i18n';
 import './i18n-hub-storage';
 
@@ -275,6 +280,248 @@ const run = async () => {
       })) as typeof fetch,
     });
     ck('Plain web browser skips direct ModelScope Cookie download (uses Hub proxy)', dlBrowserFallback.kind === 'hub');
+
+    // Upload Tier-2 (accelerate PUT fails -> regional fallback_upload succeeds)
+    const t2Calls: string[] = [];
+    const upTier2 = await tryDirectUploadBytes({
+      serverUrl: 'https://hub.example.com',
+      token: 'utok_hub',
+      bytes,
+      name: 'demo.png',
+      mime: 'image/png',
+      isPlainBrowser: false,
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        const u = String(input);
+        t2Calls.push(u);
+        if (u.endsWith('/api/uploads/presign')) {
+          return Response.json({
+            ok: true,
+            mode: 'direct',
+            provider: 's3',
+            file_id: 'tier2app1234567890abcdef12345678',
+            skip_upload: false,
+            upload: { method: 'PUT', url: 'https://b.s3-accelerate.amazonaws.com/k', headers: {} },
+            fallback_upload: { method: 'PUT', url: 'https://b.s3.us-west-1.amazonaws.com/k', headers: {} },
+          });
+        }
+        if (u.includes('s3-accelerate')) throw new Error('edge timeout');
+        if (u.includes('s3.us-west-1')) return new Response('', { status: 200 });
+        if (u.endsWith('/api/uploads/complete')) {
+          return Response.json({ ok: true, file_id: 'tier2app1234567890abcdef12345678', url: '/api/files/tier2app1234567890abcdef12345678', size: bytes.byteLength, mime: 'image/png' });
+        }
+        return new Response('', { status: 404 });
+      }) as typeof fetch,
+    });
+    ck('Upload Tier-2: retries regional fallback_upload when accelerate PUT fails', upTier2.kind === 'uploaded' && t2Calls.length === 4);
+
+    // Upload Tier-3: <=12MiB direct PUT failure degrades cleanly to Hub /api/upload even on Desktop/Native
+    const upTier3 = await tryDirectUploadBytes({
+      serverUrl: 'https://hub.example.com',
+      token: 'utok_hub',
+      bytes,
+      name: 'small.png',
+      mime: 'image/png',
+      isPlainBrowser: false,
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        const u = String(input);
+        if (u.endsWith('/api/uploads/presign')) {
+          return Response.json({
+            ok: true,
+            mode: 'direct',
+            provider: 's3',
+            file_id: 'tier3app1234567890abcdef12345678',
+            skip_upload: false,
+            upload: { method: 'PUT', url: 'https://b.s3-accelerate.amazonaws.com/k', headers: {} },
+          });
+        }
+        throw new Error('network unreachable');
+      }) as typeof fetch,
+    });
+    ck('Upload Tier-3: <=12MiB direct network error degrades to Hub fallback', upTier3.kind === 'fallback_hub' && upTier3.degradedFallback === true);
+
+    // P1 regression: Native iOS/Android Tier-1 503 -> Tier-2 200 MUST proceed to /api/uploads/complete!
+    const nativeSteps: string[] = [];
+    const nativeTier2 = await tryNativeDirectUpload({
+      serverUrl: 'https://hub.example.com',
+      token: 'utok_hub',
+      name: 'big-video.mp4',
+      mime: 'video/mp4',
+      size: HUB_LOCAL_FALLBACK_MAX_BYTES + 1024 * 1024,
+      timeoutMessage: 'timeout',
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        const u = String(input);
+        nativeSteps.push(u);
+        if (u.endsWith('/api/uploads/presign')) {
+          return Response.json({
+            ok: true,
+            mode: 'direct',
+            provider: 's3',
+            file_id: 'nativetier21234567890abcdef12345',
+            skip_upload: false,
+            upload: { method: 'PUT', url: 'https://b.s3-accelerate.amazonaws.com/k', headers: {} },
+            fallback_upload: { method: 'PUT', url: 'https://b.s3.us-west-1.amazonaws.com/k', headers: {} },
+          });
+        }
+        if (u.endsWith('/api/uploads/complete')) {
+          return Response.json({
+            ok: true,
+            file_id: 'nativetier21234567890abcdef12345',
+            url: '/api/files/nativetier21234567890abcdef12345',
+            size: HUB_LOCAL_FALLBACK_MAX_BYTES + 1024 * 1024,
+            mime: 'video/mp4',
+          });
+        }
+        return new Response('', { status: 404 });
+      }) as typeof fetch,
+      putFile: async (url) => {
+        nativeSteps.push(`PUT ${url}`);
+        return url.includes('s3-accelerate') ? { status: 503 } : { status: 200 };
+      },
+    });
+    ck(
+      'Native iOS/Android P1: Tier-1 503 -> Tier-2 200 clears error and completes upload',
+      nativeTier2.kind === 'uploaded' && nativeSteps.length === 4 && nativeSteps[3].endsWith('/api/uploads/complete'),
+    );
+
+    // P2 regression: >12MiB in plain browser NEVER falls back to Hub /api/upload on 503 or Cookie restriction
+    const oversizeBytes = new Uint8Array(HUB_LOCAL_FALLBACK_MAX_BYTES + 1);
+    const browserOversize503 = await tryDirectUploadBytes({
+      serverUrl: 'https://hub.example.com',
+      token: 'utok_hub',
+      bytes: oversizeBytes,
+      name: '13mb.mp4',
+      mime: 'video/mp4',
+      isPlainBrowser: true,
+      fetchImpl: (async (input: RequestInfo | URL) => {
+        const u = String(input);
+        if (u.endsWith('/api/uploads/presign')) {
+          return Response.json({
+            ok: true,
+            mode: 'direct',
+            provider: 's3',
+            file_id: 'oversize1234567890abcdef12345678',
+            skip_upload: false,
+            upload: { method: 'PUT', url: 'https://b.s3-accelerate.amazonaws.com/k', headers: {} },
+          });
+        }
+        return new Response('unavailable', { status: 503 });
+      }) as typeof fetch,
+    });
+    ck('Plain browser P2: >12MiB direct 503 returns real error (no Hub 413 fallback)', browserOversize503.kind === 'error' && browserOversize503.error === 'storage_put_503');
+
+    const browserOversizeCookie = await tryDirectUploadBytes({
+      serverUrl: 'https://hub.example.com',
+      token: 'utok_hub',
+      bytes: oversizeBytes,
+      name: '13mb-ms.mp4',
+      mime: 'video/mp4',
+      isPlainBrowser: true,
+      fetchImpl: (async () => Response.json({
+        ok: true,
+        mode: 'direct',
+        provider: 'modelscope',
+        file_id: 'oversizecookie1234567890abcdef12',
+        skip_upload: false,
+        upload: { method: 'PUT', url: 'https://www.modelscope.cn/lfs/k', headers: { Cookie: 'm_session_id=x' } },
+      })) as typeof fetch,
+    });
+    ck('Plain browser P2: >12MiB Cookie restriction returns clear error (no Hub 413 fallback)', browserOversizeCookie.kind === 'error' && browserOversizeCookie.error === 'browser_cookie_forbidden');
+
+    // P2 regression: presign 502 on >12MiB returns real 502 error instead of falling into Hub 413 (both Web/Desktop & Native)
+    const webPresign502 = await tryDirectUploadBytes({
+      serverUrl: 'https://hub.example.com',
+      token: 'utok_hub',
+      bytes: oversizeBytes,
+      name: '13mb-presign.mp4',
+      mime: 'video/mp4',
+      isPlainBrowser: false,
+      fetchImpl: (async () => Response.json({ ok: false, error: 'storage_presign_failed', message: 'LFS upstream 502' }, { status: 502 })) as typeof fetch,
+    });
+    ck('Web/Desktop P2: >12MiB presign 502 returns real error (no Hub 413 fallback)', webPresign502.kind === 'error' && webPresign502.error === 'storage_presign_failed');
+
+    const nativePresign502 = await tryNativeDirectUpload({
+      serverUrl: 'https://hub.example.com',
+      token: 'utok_hub',
+      name: '13mb-native.mp4',
+      mime: 'video/mp4',
+      size: HUB_LOCAL_FALLBACK_MAX_BYTES + 1,
+      timeoutMessage: 'timeout',
+      fetchImpl: (async () => Response.json({ ok: false, error: 'storage_presign_failed', message: 'LFS upstream 502' }, { status: 502 })) as typeof fetch,
+      putFile: async () => ({ status: 200 }),
+    });
+    ck('Native P2: >12MiB presign 502 returns real error (no Hub 413 fallback)', nativePresign502.kind === 'error' && nativePresign502.error === 'storage_presign_failed');
+
+    // Download 3-tier cascade on desktop-download: primary -> fallback_url -> Hub ?proxy=1
+    const dlCalls: string[] = [];
+    const dlOut = await downloadAuthedBytes(
+      (async (input: RequestInfo | URL) => {
+        const u = String(input);
+        dlCalls.push(u);
+        if (u.endsWith('/direct')) {
+          return Response.json({
+            ok: true,
+            mode: 'direct',
+            provider: 's3',
+            url: 'https://b.s3-accelerate.amazonaws.com/k',
+            fallback_url: 'https://b.s3.us-west-1.amazonaws.com/k',
+            headers: {},
+          });
+        }
+        if (u.includes('s3-accelerate')) throw new Error('edge fail');
+        if (u.includes('s3.us-west-1')) return new Response('err', { status: 503 });
+        if (u === appendHubProxyParam('https://hub.test/api/files/abcdef1234567890')) {
+          return new Response(bytes, { status: 200, headers: { 'content-length': String(bytes.byteLength) } });
+        }
+        return new Response('', { status: 404 });
+      }) as typeof fetch,
+      'https://hub.test/api/files/abcdef1234567890',
+      'utok_hub',
+    );
+    ck('Desktop download cascades primary -> regional fallback -> Hub ?proxy=1', dlOut.byteLength === bytes.byteLength && dlCalls.length === 4 && dlCalls[3].endsWith('?proxy=1'));
+
+    // Native iOS/Android downloadAttachmentWith 3-tier cascade: primary -> fallbackUrl -> Hub ?proxy=1
+    const nativeUrls: string[] = [];
+    const memFiles = new Map<string, string>();
+    const fakeFs: DownloadFs = {
+      async getInfoAsync(uri) {
+        const v = memFiles.get(uri);
+        return v !== undefined ? { exists: true, size: v.length } : { exists: false };
+      },
+      async downloadAsync(url, dest) {
+        nativeUrls.push(url);
+        if (url.includes('s3-accelerate')) throw new Error('tls reset');
+        if (url.includes('s3.us-west-1')) {
+          memFiles.set(dest, 'bad');
+          return { status: 503 };
+        }
+        memFiles.set(dest, 'native-ok-bytes');
+        return { status: 200, headers: { 'content-length': '15' } };
+      },
+      async deleteAsync(uri) { memFiles.delete(uri); },
+      async moveAsync({ from, to }) {
+        const v = memFiles.get(from);
+        if (v !== undefined) { memFiles.set(to, v); memFiles.delete(from); }
+      },
+      async readAsStringAsync(uri) { return memFiles.get(uri) ?? ''; },
+      async readDirectoryAsync() { return []; },
+      async writeAsStringAsync(uri, contents) { memFiles.set(uri, contents); },
+    };
+    const landed = await downloadAttachmentWith(
+      fakeFs,
+      '/cache/',
+      'https://hub.test',
+      'utok_hub',
+      'nativefb12345678',
+      'pic.png',
+      'image/png',
+      undefined,
+      async () => ({
+        url: 'https://b.s3-accelerate.amazonaws.com/k',
+        fallbackUrl: 'https://b.s3.us-west-1.amazonaws.com/k',
+        headers: {},
+      }),
+    );
+    ck('Native iOS/Android downloadAttachmentWith cascades primary -> regional -> Hub ?proxy=1', landed.includes('nativefb12345678') && nativeUrls.length === 3 && nativeUrls[2] === 'https://hub.test/api/files/nativefb12345678?proxy=1');
   }
 
   console.log('# 5 Security & wiring contracts');

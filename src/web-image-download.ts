@@ -1,4 +1,4 @@
-import { resolveDirectDownloadTarget } from './direct-storage';
+import { appendHubProxyParam, resolveDirectDownloadTarget } from './direct-storage';
 import { isTauriDesktop } from './desktop-download';
 import { isHarmonyShell } from './harmony-bridge';
 
@@ -39,16 +39,20 @@ export async function downloadImageObjectUrl(
     fetchImpl: fetcher,
   });
   if (target.kind === 'direct') {
-    try {
-      const directRes = await fetcher(target.url, { headers: target.headers });
-      if (directRes.ok) response = directRes;
-      else try { await directRes.body?.cancel?.(); } catch { /* ignore */ }
-    } catch {
-      /* CORS or direct network error → fall back to Hub URL */
+    const directCandidates = target.fallbackUrl ? [target.url, target.fallbackUrl] : [target.url];
+    for (const directUrl of directCandidates) {
+      try {
+        const directRes = await fetcher(directUrl, { headers: target.headers });
+        if (directRes.ok) { response = directRes; break; }
+        try { await directRes.body?.cancel?.(); } catch { /* ignore */ }
+      } catch {
+        /* CORS or direct network error → try regional fallback or Hub proxy */
+      }
     }
   }
   if (!response) {
-    response = await fetcher(url, { headers: { Authorization: `Bearer ${token}` } });
+    const hubFallbackUrl = target.kind === 'direct' ? appendHubProxyParam(url) : url;
+    response = await fetcher(hubFallbackUrl, { headers: { Authorization: `Bearer ${token}` } });
   }
   if (!response.ok) throw new Error(`HTTP ${response.status}`);
   let blob = await response.blob();

@@ -152,7 +152,7 @@ const downloadAttachmentOnce = async (
    *  admin 2026-10-26「下载显示一下剩余时长」—— 手机端原来只有转圈。 */
   onProgress?: (received: number, total?: number) => void,
   /** Optional direct external storage target resolver (ModelScope / OSS / S3, 0 Hub bytes). */
-  resolveDirect?: () => Promise<{ url: string; headers: Record<string, string> } | null>,
+  resolveDirect?: () => Promise<{ url: string; fallbackUrl?: string; headers: Record<string, string> } | null>,
 ): Promise<string> => {
   const dest = cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope(serverUrl, token));
   const info = await fs.getInfoAsync(dest);
@@ -186,71 +186,87 @@ const downloadAttachmentOnce = async (
 
   const cleanup = async () => { await fs.deleteAsync(part, { idempotent: true }).catch(() => {}); };
 
-  let r: { status: number; headers?: Record<string, string> };
   const direct = resolveDirect ? await resolveDirect().catch(() => null) : null;
-  const downloadUrl = direct?.url ?? `${serverUrl}/api/files/${fileId}`;
-  const downloadHeaders = direct ? direct.headers : { Authorization: `Bearer ${token}` };
-  const download = fs.downloadAsync(downloadUrl, part, {
-    headers: downloadHeaders,
-  });
-  // 进度:downloadAsync 不给我们字节数,那就每 400ms 看一眼 part 文件长到多大了。
-  // 只报数、不改任何判定 —— 成败仍由下面的校验决定。
-  let polling: ReturnType<typeof setInterval> | null = null;
-  if (onProgress) {
-    let total: number | undefined;
-    polling = setInterval(() => {
-      void (async () => {
-        try {
-          const info = await fs.getInfoAsync(part);
-          if (info.exists && typeof info.size === 'number') onProgress(info.size, total);
-        } catch { /* 轮询失败不影响下载 */ }
-      })();
-    }, 400) as unknown as ReturnType<typeof setInterval>;
-    // 第一个 chunk 可能 400ms 内就落地:立刻报一次 0,让 UI 马上进「下载中」。
-    onProgress(0, undefined);
-  }
-  try {
-    r = await download;
-  } catch (e) {
-    // #10 CR2: downloadAsync itself can throw (native abort, offline, DNS,
-    // TLS). The native module may have already opened and partly written
-    // `part` before failing — clean it up before rethrowing so the next
-    // attempt doesn't confuse itself with half-written bytes.
-    if (polling) clearInterval(polling);
-    await cleanup();
-    throw e;
-  }
+  const attempts: Array<{ url: string; headers: Record<string, string> }> = direct
+    ? [
+        { url: direct.url, headers: direct.headers },
+        ...(direct.fallbackUrl ? [{ url: direct.fallbackUrl, headers: direct.headers }] : []),
+        { url: `${serverUrl}/api/files/${fileId}?proxy=1`, headers: { Authorization: `Bearer ${token}` } },
+      ]
+    : [{ url: `${serverUrl}/api/files/${fileId}`, headers: { Authorization: `Bearer ${token}` } }];
 
-  if (polling) { clearInterval(polling); polling = null; }
+  for (let attemptIdx = 0; attemptIdx < attempts.length; attemptIdx++) {
+    const hasNextFallback = attemptIdx + 1 < attempts.length;
+    const { url: downloadUrl, headers: downloadHeaders } = attempts[attemptIdx];
+    await cleanup();
 
-  if (r.status < 200 || r.status > 299) {
-    // The body sitting in `part` right now is the server's error payload —
-    // read a slice of it for the message, then delete it. Never let it
-    // become the "file".
-    let detail = '';
-    try { detail = (await fs.readAsStringAsync(part)).slice(0, 200); } catch { /* body unreadable */ }
-    await cleanup();
-    throw new AttachmentDownloadError(
-      r.status,
-      detail,
-      `下载失败：服务端返回 ${r.status}${detail ? `（${detail}）` : ''}`,
-    );
-  }
+    let r: { status: number; headers?: Record<string, string> };
+    const download = fs.downloadAsync(downloadUrl, part, {
+      headers: downloadHeaders,
+    });
+    // 进度:downloadAsync 不给我们字节数,那就每 400ms 看一眼 part 文件长到多大了。
+    // 只报数、不改任何判定 —— 成败仍由下面的校验决定。
+    let polling: ReturnType<typeof setInterval> | null = null;
+    if (onProgress) {
+      let total: number | undefined;
+      polling = setInterval(() => {
+        void (async () => {
+          try {
+            const info = await fs.getInfoAsync(part);
+            if (info.exists && typeof info.size === 'number') onProgress(info.size, total);
+          } catch { /* 轮询失败不影响下载 */ }
+        })();
+      }, 400) as unknown as ReturnType<typeof setInterval>;
+      // 第一个 chunk 可能 400ms 内就落地:立刻报一次 0,让 UI 马上进「下载中」。
+      onProgress(0, undefined);
+    }
+    try {
+      r = await download;
+    } catch (e) {
+      // #10 CR2: downloadAsync itself can throw (native abort, offline, DNS,
+      // TLS). The native module may have already opened and partly written
+      // `part` before failing — clean it up before retrying fallback or rethrowing.
+      if (polling) clearInterval(polling);
+      await cleanup();
+      if (hasNextFallback) continue;
+      throw e;
+    }
 
-  const declared = header(r.headers, 'content-length');
-  const got = await fs.getInfoAsync(part);
-  const actual = got.size ?? 0;
-  if (!got.exists || actual === 0) {
-    await cleanup();
-    throw new AttachmentDownloadError(r.status, '', '下载失败：服务端返回了空内容');
-  }
-  if (declared !== undefined && Number.isFinite(Number(declared)) && Number(declared) !== actual) {
-    await cleanup();
-    throw new AttachmentDownloadError(
-      r.status,
-      `content-length=${declared} actual=${actual}`,
-      `下载失败：内容长度不符（声称 ${declared} 字节，实收 ${actual} 字节）`,
-    );
+    if (polling) { clearInterval(polling); polling = null; }
+
+    if (r.status < 200 || r.status > 299) {
+      // The body sitting in `part` right now is the server's error payload —
+      // read a slice of it for the message, then delete it. Never let it
+      // become the "file".
+      let detail = '';
+      try { detail = (await fs.readAsStringAsync(part)).slice(0, 200); } catch { /* body unreadable */ }
+      await cleanup();
+      if (hasNextFallback) continue;
+      throw new AttachmentDownloadError(
+        r.status,
+        detail,
+        `下载失败：服务端返回 ${r.status}${detail ? `（${detail}）` : ''}`,
+      );
+    }
+
+    const declared = header(r.headers, 'content-length');
+    const got = await fs.getInfoAsync(part);
+    const actual = got.size ?? 0;
+    if (!got.exists || actual === 0) {
+      await cleanup();
+      if (hasNextFallback) continue;
+      throw new AttachmentDownloadError(r.status, '', '下载失败：服务端返回了空内容');
+    }
+    if (declared !== undefined && Number.isFinite(Number(declared)) && Number(declared) !== actual) {
+      await cleanup();
+      if (hasNextFallback) continue;
+      throw new AttachmentDownloadError(
+        r.status,
+        `content-length=${declared} actual=${actual}`,
+        `下载失败：内容长度不符（声称 ${declared} 字节，实收 ${actual} 字节）`,
+      );
+    }
+    break;
   }
 
   // Atomic-enough landing: `dest` appears only once the bytes are validated.
@@ -301,7 +317,7 @@ export const downloadAttachmentWith = (
   name?: string,
   mime?: string,
   onProgress?: (received: number, total?: number) => void,
-  resolveDirect?: () => Promise<{ url: string; headers: Record<string, string> } | null>,
+  resolveDirect?: () => Promise<{ url: string; fallbackUrl?: string; headers: Record<string, string> } | null>,
 ): Promise<string> => {
   const key = cachePathIn(cacheDir, fileId, name, mime, attachmentCacheScope(serverUrl, token));
   const existing = inFlight.get(key);

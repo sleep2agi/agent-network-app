@@ -10,7 +10,7 @@ import { createSerialQueue, resizeForUpload } from './native-resize';
 import { attachmentFromFile } from './desktop-file-intake';
 import { resolveUploadNetworkId, uploadUrlFor, type UploadOptions } from './upload-url';
 import { getHubStorageSnapshot } from './hub-storage';
-import { computeSha256Hex, tryDirectUploadBytes } from './direct-storage';
+import { computeSha256Hex, HUB_LOCAL_FALLBACK_MAX_BYTES, tryDirectUploadBytes, tryNativeDirectUpload } from './direct-storage';
 import { isTauriDesktop } from './desktop-download';
 import { isHarmonyShell } from './harmony-bridge';
 import { t } from './i18n';
@@ -303,22 +303,22 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: Upload
         );
         if (!directRes) {
           ctrl.abort();
-          throw new Error(uploadTimeoutMessage());
-        }
-        if (directRes.kind === 'uploaded') {
+          if (bytes.byteLength > HUB_LOCAL_FALLBACK_MAX_BYTES) {
+            throw new Error(uploadTimeoutMessage());
+          }
+          // <=12 MiB direct upload timed out: fall through to Hub /api/upload below.
+        } else if (directRes.kind === 'uploaded') {
           return directRes.file;
-        }
-        if (directRes.kind === 'error') {
+        } else if (directRes.kind === 'error') {
           if (directRes.error === 'payload_too_large' && directRes.limitBytes) {
             throw new Error(`文件超过 ${Math.round(directRes.limitBytes / (1024 * 1024))}MB 上限`);
           }
           throw new Error(UPLOAD_ERROR_HINTS[directRes.error] ?? directRes.message);
         }
-        // kind === 'fallback_hub': continue to Hub /api/upload below
+        // kind === 'fallback_hub' (or <=12 MiB timeout): continue to Hub /api/upload below
       }
     } else {
       // Native iOS / Android: stream binary directly from disk via FileSystem.uploadAsync(BINARY_CONTENT).
-      const base = cfg.serverUrl.replace(/\/+$/, '');
       const fileInfo = await FileSystem.getInfoAsync(img.uri).catch(() => ({ exists: false } as const));
       const size = (fileInfo.exists && typeof (fileInfo as any).size === 'number' && (fileInfo as any).size > 0)
         ? (fileInfo as any).size as number
@@ -333,68 +333,39 @@ export const uploadImage = async (cfg: HubConfig, img: PickedImage, opts: Upload
             sha256 = '';
           }
         }
-        const presign = await withDeadline(
-          appFetch(`${base}/api/uploads/presign`, {
-            method: 'POST',
-            headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-            body: JSON.stringify({
-              name: img.fileName,
-              mime: img.mimeType,
-              size,
-              ...(sha256 ? { sha256 } : {}),
-              ...(networkId ? { network_id: networkId } : {}),
-              ...(opts.purpose ? { purpose: opts.purpose } : {}),
-            }),
-          }).then(async r => ({ status: r.status, ok: r.ok, body: await r.json().catch(() => null) })),
-          30_000,
-          () => null,
-        ).catch(() => null);
-        if (presign?.status === 413 && presign.body?.limit_bytes) {
-          throw new Error(`文件超过 ${Math.round(Number(presign.body.limit_bytes) / (1024 * 1024))}MB 上限`);
-        }
-        if (presign?.ok && presign.body?.ok && presign.body.mode === 'direct' && typeof presign.body.file_id === 'string') {
-          if (!presign.body.skip_upload && presign.body.upload?.url) {
-            const headers: Record<string, string> = {};
-            if (presign.body.upload.headers && typeof presign.body.upload.headers === 'object') {
-              for (const [k, v] of Object.entries(presign.body.upload.headers)) {
-                if (typeof v === 'string') headers[k] = v;
-              }
-            }
-            const putRes = await withDeadline(
-              FileSystem.uploadAsync(String(presign.body.upload.url), img.uri, {
-                httpMethod: 'PUT',
-                uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
-                headers,
-              }),
-              uploadDeadlineMs,
-              () => null,
-            );
-            if (!putRes) throw new Error(uploadTimeoutMessage());
-            if (putRes.status < 200 || putRes.status >= 300) {
-              throw new Error(`直传存储失败（HTTP ${putRes.status}）`);
-            }
-          }
-          const comp = await withDeadline(
-            appFetch(`${base}/api/uploads/complete`, {
-              method: 'POST',
-              headers: { Authorization: `Bearer ${cfg.token}`, 'Content-Type': 'application/json' },
-              body: JSON.stringify({ file_id: presign.body.file_id }),
-            }).then(async r => ({ ok: r.ok, status: r.status, body: await r.json().catch(() => null) })),
-            30_000,
+        const nativeRes = await tryNativeDirectUpload({
+          serverUrl: cfg.serverUrl,
+          token: cfg.token,
+          networkId: networkId ?? undefined,
+          purpose: opts.purpose,
+          name: img.fileName,
+          mime: img.mimeType,
+          size,
+          sha256: sha256 || undefined,
+          timeoutMessage: uploadTimeoutMessage(),
+          fetchImpl: (input, init) => withDeadline(appFetch(input, init), 30_000, () => {
+            throw new Error(uploadTimeoutMessage());
+          }),
+          putFile: (url, headers) => withDeadline(
+            FileSystem.uploadAsync(url, img.uri, {
+              httpMethod: 'PUT',
+              uploadType: FileSystem.FileSystemUploadType.BINARY_CONTENT,
+              headers,
+            }).catch(() => ({ status: 0 })),
+            uploadDeadlineMs,
             () => null,
-          );
-          if (!comp) throw new Error(uploadTimeoutMessage());
-          if (!comp.ok || !comp.body?.ok) {
-            throw new Error(String(comp.body?.message || comp.body?.error || `HTTP ${comp.status}`));
-          }
-          return {
-            file_id: comp.body.file_id,
-            path: typeof comp.body.path === 'string' ? comp.body.path : '',
-            url: typeof comp.body.url === 'string' ? comp.body.url : `/api/files/${comp.body.file_id}`,
-            size: typeof comp.body.size === 'number' ? comp.body.size : size,
-            mime: typeof comp.body.mime === 'string' ? comp.body.mime : img.mimeType,
-          };
+          ),
+        });
+        if (nativeRes.kind === 'uploaded') {
+          return nativeRes.file;
         }
+        if (nativeRes.kind === 'error') {
+          if (nativeRes.error === 'payload_too_large' && nativeRes.limitBytes) {
+            throw new Error(`文件超过 ${Math.round(nativeRes.limitBytes / (1024 * 1024))}MB 上限`);
+          }
+          throw new Error(UPLOAD_ERROR_HINTS[nativeRes.error] ?? nativeRes.message);
+        }
+        // kind === 'fallback_hub': continue to Hub multipart /api/upload below
       }
     }
   }
