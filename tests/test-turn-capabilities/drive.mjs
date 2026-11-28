@@ -36,6 +36,16 @@ try {
       await page.evaluate(() => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve))));
       const ids = ['composer-stop-entry', 'composer-interrupt-send', 'composer-inject'];
       for (let i = 0; i < ids.length; i++) assert.equal(await page.getByTestId(ids[i]).count(), expected[i], `${mobile ? 'mobile' : 'desktop'} ${name} ${ids[i]}`);
+      if (mobile && name === 'both') {
+        const modelRow = await page.getByTestId('composer-model-row').boundingBox();
+        const modelEntry = await page.getByTestId('composer-model-entry').boundingBox();
+        const turnRow = await page.getByTestId('composer-turn-row').boundingBox();
+        const stopEntry = await page.getByTestId('composer-stop-entry').boundingBox();
+        assert.ok(modelRow && modelEntry && turnRow && stopEntry, 'mobile full-toolbar rows should all render');
+        assert.ok(modelEntry.width >= 60, `mobile model pill should not be squashed into a blank bar (width=${modelEntry.width})`);
+        assert.ok(turnRow.y >= modelRow.y + modelRow.height - 1, 'mobile turn controls sit cleanly below model row without overlapping');
+        assert.ok(stopEntry.x >= 0 && stopEntry.x + stopEntry.width <= 390, 'mobile stop button stays inside viewport');
+      }
       if (!mobile && name === 'both') {
         await page.locator('[data-agent-alias="示例-B"]').first().click();
         await page.getByTestId('chat-header-title').filter({ hasText: '示例-B' }).waitFor();

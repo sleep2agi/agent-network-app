@@ -67,26 +67,129 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
   ck('old hub is unsupported, not failed', r2.verdict === 'unsupported' && r2.detail === 'old hub');
 }
 
+// ── 慢退出 runtime（如 antigravity-acp）：+3s 回执 interrupted:true，+12s 才翻 idle ──
+{
+  let clock = 1000;
+  let ackNotices = 0;
+  const r = await interruptThenConfirm({
+    interrupt: async () => ({ ok: true, payload: { ok: true, accepted: true, control: 'interrupt' } }),
+    readStatus: async () => (clock >= 13_000 ? 'idle' : 'working'),
+    readTaskSettled: async () => false,
+    readReplyProof: async () => clock >= 4000,
+    onReplyAcked: () => { ackNotices += 1; },
+    sleep: async ms => { clock += ms; },
+    now: () => clock,
+    windowMs: 8000,
+    graceWindowMs: 20_000,
+    pollMs: 1000,
+  });
+  ck('slow runtime (+3s reply ack, +12s idle flip) confirms instead of timing out at 8s', r.verdict === 'confirmed', { r, clock });
+  ck('waits for idle teardown after +3s ack instead of sending prematurely', clock === 13_000, { clock });
+  ck('notifies onReplyAcked exactly once when reply proof arrives', ackNotices === 1, { ackNotices });
+}
+
+// ── 收到节点 interrupted:true 后即使宽限期结束仍未见 idle（如队列秒接下一条），不丢发送 ──
+{
+  let clock = 0;
+  const r = await interruptThenConfirm({
+    interrupt: async () => ({ ok: true, payload: { ok: true, accepted: true } }),
+    readStatus: async () => 'working',
+    readTaskSettled: async () => false,
+    readReplyProof: async () => clock >= 3000,
+    sleep: async ms => { clock += ms; },
+    now: () => clock,
+    windowMs: 8000,
+    graceWindowMs: 20_000,
+    pollMs: 1000,
+  });
+  ck('explicit node interrupted:true still confirms after grace window instead of dropping draft', r.verdict === 'confirmed' && clock >= 23_000, { r, clock });
+}
+
+// ── 队列下一条秒接导致 status 一直 working，但基线任务已落终态 ⇒ 立即 confirmed ──
+{
+  let clock = 0;
+  const r = await interruptThenConfirm({
+    interrupt: async () => ({ ok: true, payload: { ok: true, accepted: true } }),
+    readStatus: async () => 'working',
+    readTaskSettled: async () => clock >= 2000,
+    readReplyProof: async () => false,
+    sleep: async ms => { clock += ms; },
+    now: () => clock,
+    windowMs: 8000,
+    graceWindowMs: 20_000,
+    pollMs: 1000,
+  });
+  ck('baseline task settlement confirms interrupt-and-send immediately even while status stays working', r.verdict === 'confirmed' && clock === 2000, { r, clock });
+}
+
+// ── 没有任何回执且一直 working ⇒ 8s 窗口到点即停，不空等 20s 宽限期 ──────────
+{
+  let clock = 0;
+  const r = await interruptThenConfirm({
+    interrupt: async () => ({ ok: true, payload: { ok: true, accepted: true } }),
+    readStatus: async () => 'working',
+    readTaskSettled: async () => false,
+    readReplyProof: async () => false,
+    sleep: async ms => { clock += ms; },
+    now: () => clock,
+    windowMs: 8000,
+    graceWindowMs: 20_000,
+    pollMs: 1000,
+  });
+  ck('no proof at all stays unconfirmed promptly at windowMs (never burns grace window)', r.verdict === 'unconfirmed' && clock === 9000, { r, clock });
+}
+
+// ── 点击时 status 仍滞后在 idle：先观察到 working 再翻 idle，或拿到回执且已 idle ⇒ confirmed ──
+{
+  let clock = 0;
+  const r1 = await interruptThenConfirm({
+    interrupt: async () => ({ ok: true, payload: { ok: true, accepted: true } }),
+    readStatus: async () => (clock === 0 ? 'idle' : clock < 3000 ? 'working' : 'idle'),
+    sleep: async ms => { clock += ms; },
+    now: () => clock,
+    windowMs: 8000,
+    pollMs: 1000,
+  });
+  ck('stale pre-click idle upgrades baseline when working is seen and confirms on flip back to idle', r1.verdict === 'confirmed' && clock === 3000, { r1, clock });
+
+  clock = 0;
+  const r2 = await interruptThenConfirm({
+    interrupt: async () => ({ ok: true, payload: { ok: true, accepted: true } }),
+    readStatus: async () => 'idle',
+    readReplyProof: async () => clock >= 2000,
+    sleep: async ms => { clock += ms; },
+    now: () => clock,
+    windowMs: 8000,
+    graceWindowMs: 20_000,
+    pollMs: 1000,
+  });
+  ck('node reply proof while status is already idle confirms immediately without burning grace window', r2.verdict === 'confirmed' && clock === 2000, { r2, clock });
+}
+
 // ── 接线守卫：发送路径必须「先打断再发」，且复用同一套判据 ─────────────────
 {
   const screen = readFileSync(new URL('./ChatScreen.tsx', import.meta.url), 'utf8');
   const steer = readFileSync(new URL('./turn-steer.ts', import.meta.url), 'utf8');
   ck('composer only interrupts when the explicit action asked for it',
-    screen.includes("opts?.interruptFirst === true && shouldInterruptBeforeSend(sessionStatus)") && screen.includes('interruptThenConfirm({'));
+    screen.includes("opts?.interruptFirst === true && shouldInterruptBeforeSend(turnStatus)") && screen.includes('interruptThenConfirm({'));
   ck('plain send never calls interruptThenConfirm on its own',
-    /if \(shouldInterruptBeforeSend\(sessionStatus\)\) \{/.test(screen) === false);
+    /if \(shouldInterruptBeforeSend\((?:sessionStatus|turnStatus)\)\) \{/.test(screen) === false);
   ck('the explicit action exists next to send (both layouts)',
     (screen.match(/testID="composer-interrupt-send"/g) ?? []).length === 2 && screen.includes("submit({ interruptFirst: true })"));
   // 契约守护（#518）：普通发送永远是 1 个请求、不打断 —— 与 idle 与否无关。
   ck('plain send keeps the one-request contract (interrupt needs the explicit opt-in)',
-    screen.includes("opts?.interruptFirst === true && shouldInterruptBeforeSend(sessionStatus)")
-    && /if \(shouldInterruptBeforeSend\(sessionStatus\)\) \{/.test(screen) === false);
+    screen.includes("opts?.interruptFirst === true && shouldInterruptBeforeSend(turnStatus)")
+    && /if \(shouldInterruptBeforeSend\((?:sessionStatus|turnStatus)\)\) \{/.test(screen) === false);
   // 空闲时两条路都不打断：按钮只在在飞时渲染，submit 的打断分支也要在飞才成立。
   ck('idle shows no interrupt action and never interrupts',
-    (screen.match(/\{turnCaps\.interrupt && interruptable\(sessionStatus\) \? \(/g) ?? []).length === 2
+    (screen.match(/\{turnCaps\.interrupt && interruptable\(turnStatus\) \? \(/g) ?? []).length === 2
     && !shouldInterruptBeforeSend('idle'));
   ck('no send when the interrupt is unconfirmed',
     /verdict !== 'confirmed'[\s\S]{0,400}return;/.test(screen));
+  ck('interrupt-and-send wires reply proof, task settlement, grace window, and double-tap guard',
+    screen.includes('readReplyProof:') && screen.includes('readTaskSettled:')
+    && screen.includes('graceWindowMs: INTERRUPT_EXIT_GRACE_MS')
+    && screen.includes('interruptSendBusyRef.current'));
   // #4592 自审：确认停下后不要本地乐观把会话状态写成 idle —— 新指令马上又会是 working，会闪。
   ck('confirm does not optimistically rewrite session status', !/setSessionStatus\('idle'\)/.test(screen));
   ck('reuses the #4591 proof helpers instead of a second copy',
@@ -101,7 +204,7 @@ const deps = (over: Partial<Parameters<typeof interruptThenConfirm>[0]> = {}) =>
   ck('inject is guarded against double taps',
     /injectBusyRef\.current\) return;/.test(screen) && /finally \{[\s\S]{0,80}injectBusyRef\.current = false/.test(screen));
   ck('inject never silently degrades to a normal send',
-    /opts\?\.inject === true && \(!turnCaps\.steer \|\| !canSteer\(sessionStatus\)\)[\s\S]{0,200}return;/.test(screen));
+    /opts\?\.inject === true && \(!turnCaps\.steer \|\| !canSteer\(turnStatus\)\)[\s\S]{0,200}return;/.test(screen));
   ck('inject ack watcher does not treat user content as an ack', !/row\.content/.test(screen.split('readRecent')[1]?.slice(0, 400) ?? ''));
   ck('user-facing copy avoids the word steer', !/插话|steer/i.test(readFileSync(new URL('./i18n-chat.ts', import.meta.url), 'utf8').split('chat.steer.')[1]?.slice(0, 400) ?? ''));
 }
