@@ -14,6 +14,7 @@ import { LEGACY_SESSION_ID } from './session-registry';
 
 export type HubStorageProvider = 'modelscope' | 'oss' | 's3';
 export type HubStorageRepoType = 'dataset' | 'model';
+export type HubStorageSource = 'network' | 'hub_managed' | 'none';
 
 // ModelScope lacks per-object signed URLs so it cannot be configured for private network storage;
 // only private S3 / Aliyun OSS buckets are selectable for new configs (legacy ModelScope remains readable).
@@ -33,6 +34,8 @@ export type HubStorageConfigState = {
   loaded: boolean;
   enabled: boolean;
   configured: boolean;
+  source: HubStorageSource;
+  hubManagedAvailable: boolean;
   provider: HubStorageProvider;
   endpoint: string;
   region: string;
@@ -108,6 +111,8 @@ export const EMPTY_HUB_STORAGE: HubStorageConfigState = {
   loaded: false,
   enabled: false,
   configured: false,
+  source: 'none',
+  hubManagedAvailable: false,
   provider: 's3',
   endpoint: '',
   region: '',
@@ -152,12 +157,19 @@ function normalizeProvider(raw: unknown): HubStorageProvider {
   return 's3';
 }
 
+function normalizeSource(raw: unknown, configured: boolean): HubStorageSource {
+  if (raw === 'hub_managed' || raw === 'network' || raw === 'none') return raw;
+  return configured ? 'network' : 'none';
+}
+
 function parsePublicConfig(scopeKey: string, body: unknown): HubStorageConfigState | null {
   if (!body || typeof body !== 'object') return null;
   const o = body as Record<string, unknown>;
   if (o.ok !== true || typeof o.configured !== 'boolean' || typeof o.enabled !== 'boolean') return null;
   const configured = o.configured;
   const enabled = configured && o.enabled;
+  const source = normalizeSource(o.source, configured);
+  const hubManagedAvailable = o.hub_managed_available === true || source === 'hub_managed';
   const rawMax = typeof o.max_file_bytes === 'number' && Number.isFinite(o.max_file_bytes)
     ? Math.min(Math.max(Math.floor(o.max_file_bytes), MIN_HUB_STORAGE_MAX_BYTES), MAX_HUB_STORAGE_MAX_BYTES)
     : DEFAULT_HUB_STORAGE_MAX_BYTES;
@@ -167,6 +179,8 @@ function parsePublicConfig(scopeKey: string, body: unknown): HubStorageConfigSta
     loaded: true,
     enabled,
     configured,
+    source,
+    hubManagedAvailable,
     provider: normalizeProvider(o.provider),
     endpoint: typeof o.endpoint === 'string' ? o.endpoint : '',
     region: typeof o.region === 'string' ? o.region : '',
@@ -223,7 +237,8 @@ export function mergeHubStorageWrite(
   current: HubStorageConfigState,
   form: HubStorageAdminForm,
 ): { ok: true; body: HubStorageWriteInput } | { ok: false; reasonKey: string } {
-  const sameProvider = current.configured && current.provider === form.provider;
+  // Network override of a Hub-managed default must supply its own credentials (never copy Hub env secrets into DB).
+  const sameProvider = current.configured && current.source !== 'hub_managed' && current.provider === form.provider;
   const endpoint = form.endpoint.trim();
   if (!isValidOptionalUrl(endpoint)) {
     return { ok: false, reasonKey: 'hubStorage.err.urlInvalid' };
@@ -316,6 +331,8 @@ function setSnapshot(next: HubStorageConfigState): void {
     snapshot.loaded === next.loaded &&
     snapshot.enabled === next.enabled &&
     snapshot.configured === next.configured &&
+    snapshot.source === next.source &&
+    snapshot.hubManagedAvailable === next.hubManagedAvailable &&
     snapshot.provider === next.provider &&
     snapshot.endpoint === next.endpoint &&
     snapshot.region === next.region &&

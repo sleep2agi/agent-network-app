@@ -37,9 +37,17 @@ export const outlineIcon = (name: string): any => {
   return map && map[`${name}-outline`] !== undefined ? `${name}-outline` : name;
 };
 
-export type SettingsTone = 'default' | 'accent' | 'danger' | 'muted';
+export type SettingsTone = 'default' | 'accent' | 'danger' | 'warn' | 'muted';
 const toneColor = (tone: SettingsTone | undefined, fallback: string): string =>
-  tone === 'accent' ? colors.accent : tone === 'danger' ? colors.failed : tone === 'muted' ? colors.textMuted : fallback;
+  tone === 'accent'
+    ? colors.accent
+    : tone === 'danger'
+      ? colors.failed
+      : tone === 'warn'
+        ? colors.blocked
+        : tone === 'muted'
+          ? colors.textMuted
+          : fallback;
 
 /** 子页滚动区的内容样式(首块离顶栏的距离、底部留白)。 */
 export function settingsPageContentStyle() {
