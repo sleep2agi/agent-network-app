@@ -420,7 +420,13 @@ export function HubStorageSettingsCard() {
                     accessibilityLabel={tr('hubStorage.endpointLabel')}
                     value={form.endpoint}
                     onChangeText={endpoint => setForm(f => ({ ...f, endpoint }))}
-                    placeholder={form.provider === 'modelscope' ? tr('hubStorage.endpointPlaceholderMs') : tr('hubStorage.endpointPlaceholderCloud')}
+                    placeholder={
+                      form.provider === 'modelscope'
+                        ? tr('hubStorage.endpointPlaceholderMs')
+                        : form.provider === 'oss'
+                          ? tr('hubStorage.endpointPlaceholderOss')
+                          : tr('hubStorage.endpointPlaceholderS3')
+                    }
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -628,7 +634,13 @@ export function HubStorageEditPage() {
           testID="hub-storage-endpoint"
           value={form.endpoint}
           onChangeText={endpoint => setForm(f => ({ ...f, endpoint }))}
-          placeholder="https://…"
+          placeholder={
+            form.provider === 'modelscope'
+              ? tr('hubStorage.endpointPlaceholderMs')
+              : form.provider === 'oss'
+                ? tr('hubStorage.endpointPlaceholderOss')
+                : tr('hubStorage.endpointPlaceholderS3')
+          }
         />
       </SettingsGroup>
 

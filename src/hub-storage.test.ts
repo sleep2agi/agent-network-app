@@ -100,6 +100,17 @@ const run = async () => {
 
     const rNoPubUrl = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'a/b', apiToken: 'tok123456', publicBaseUrl: 'https://cdn.example.com/public' });
     ck('Strict private-only: mergeHubStorageWrite never sends non-empty public_base_url', rNoPubUrl.ok && rNoPubUrl.body.public_base_url === '');
+
+    const rS3Accel = mergeHubStorageWrite(base, {
+      ...initialHubStorageForm(base),
+      provider: 's3',
+      bucket: 'anet-private-usw1',
+      region: 'us-west-1',
+      endpoint: 'https://s3-accelerate.amazonaws.com',
+      accessKeyId: 'AKIA123456',
+      accessKeySecret: 'Secret999999',
+    });
+    ck('AWS S3: accepts Transfer Acceleration endpoint', rS3Accel.ok && rS3Accel.body.endpoint === 'https://s3-accelerate.amazonaws.com');
   }
 
   console.log('# 3 Reactive store: refresh, scope isolation, old Hub 404 downgrade, test & clear');
