@@ -43,6 +43,9 @@ function providerLabel(provider: HubStorageProvider): string {
 function hubStorageStatusText(s: HubStorageConfigState): string {
   if (!s.configured) return tr('hubStorage.statusUnconfigured');
   const p = providerLabel(s.provider);
+  if (s.enabled && s.source === 'hub_managed') {
+    return tr('hubStorage.statusHubManaged', { provider: p });
+  }
   if (s.enabled) {
     return s.keyHint
       ? tr('hubStorage.statusEnabled', { provider: p, tail: s.keyHint })
@@ -51,9 +54,15 @@ function hubStorageStatusText(s: HubStorageConfigState): string {
   return tr('hubStorage.statusDisabled', { provider: p, tail: s.keyHint || '…' });
 }
 
+function hubManagedTargetLabel(s: HubStorageConfigState): string {
+  if (s.provider === 'modelscope') return s.repoId || 'ModelScope';
+  return [s.bucket, s.region].filter(Boolean).join(' · ') || providerLabel(s.provider);
+}
+
 function useHubStorageEditor() {
   const hub = useSyncExternalStore(subscribeHubStorage, getHubStorageSnapshot, getHubStorageSnapshot);
   const [form, setForm] = useState<HubStorageAdminForm>(() => initialHubStorageForm(hub));
+  const [customize, setCustomize] = useState(false);
   const [advanced, setAdvanced] = useState(() => !!hub.endpoint);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
@@ -73,6 +82,7 @@ function useHubStorageEditor() {
   }, [
     hub.scopeKey,
     hub.configured,
+    hub.source,
     hub.enabled,
     hub.provider,
     hub.repoId,
@@ -103,6 +113,7 @@ function useHubStorageEditor() {
       const res = await saveHubStorageConfig(cfg, merged.body);
       if (res.ok) {
         setForm(initialHubStorageForm(res.state));
+        setCustomize(false);
         setMsg({
           tone: 'ok',
           text: tr('hubStorage.saved', { mb: Math.round(res.state.maxFileBytes / (1024 * 1024)) }),
@@ -116,15 +127,19 @@ function useHubStorageEditor() {
     }
   };
 
-  const onTest = async () => {
+  const onTest = async (testManagedDirect = false) => {
     const cfg = getActiveHubStorageConfig();
     if (!cfg) { setMsg({ tone: 'err', text: tr('hubStorage.err.noHub') }); return; }
-    const merged = mergeHubStorageWrite(hub, form);
-    if (!merged.ok) { setMsg({ tone: 'err', text: tr(merged.reasonKey) }); return; }
+    let draftBody: ReturnType<typeof mergeHubStorageWrite> extends infer R ? (R extends { ok: true; body: infer B } ? B | undefined : never) : never = undefined;
+    if (!testManagedDirect) {
+      const merged = mergeHubStorageWrite(hub, form);
+      if (!merged.ok) { setMsg({ tone: 'err', text: tr(merged.reasonKey) }); return; }
+      draftBody = merged.body;
+    }
     setTesting(true);
     setMsg(null);
     try {
-      const res = await testHubStorageConfig(cfg, merged.body);
+      const res = await testHubStorageConfig(cfg, draftBody);
       if (res.ok) {
         const baseText = tr('hubStorage.testOk', { msg: res.message, ms: res.latencyMs });
         setMsg({
@@ -143,7 +158,7 @@ function useHubStorageEditor() {
   const onToggleEnabled = async (next: boolean) => {
     setForm(f => ({ ...f, enabled: next }));
     const cfg = getActiveHubStorageConfig();
-    if (!cfg || !hub.configured) return;
+    if (!cfg || !hub.configured || hub.source === 'hub_managed') return;
     if (hub.provider === 'modelscope' && next) {
       setForm(f => ({ ...f, enabled: hub.enabled }));
       setMsg({ tone: 'err', text: tr('hubStorage.modelscopeDisabledHint') });
@@ -183,7 +198,11 @@ function useHubStorageEditor() {
       const res = await clearHubStorageConfig(cfg);
       if (res.ok) {
         setForm(initialHubStorageForm(res.state));
-        setMsg({ tone: 'ok', text: tr('hubStorage.cleared') });
+        setCustomize(false);
+        setMsg({
+          tone: 'ok',
+          text: res.state.source === 'hub_managed' ? tr('hubStorage.restoredManaged') : tr('hubStorage.cleared'),
+        });
       } else {
         const text = res.error === 'network' ? tr('hubStorage.err.network') : tr('hubStorage.clearFailed', { msg: res.message });
         setMsg({ tone: 'err', text });
@@ -193,19 +212,23 @@ function useHubStorageEditor() {
     }
   };
 
-  return { hub, form, setForm, advanced, setAdvanced, busy, testing, msg, setProvider, onSave, onTest, onToggleEnabled, onClear };
+  return { hub, form, setForm, customize, setCustomize, advanced, setAdvanced, busy, testing, msg, setProvider, onSave, onTest, onToggleEnabled, onClear };
 }
 
 /** 宽屏 / 桌面设置页里的「文件存储中转」卡片。旧版 Hub 自动隐藏。 */
 export function HubStorageSettingsCard() {
   useTranslation();
-  const { hub, form, setForm, advanced, setAdvanced, busy, testing, msg, setProvider, onSave, onTest, onToggleEnabled, onClear } = useHubStorageEditor();
+  const { hub, form, setForm, customize, setCustomize, advanced, setAdvanced, busy, testing, msg, setProvider, onSave, onTest, onToggleEnabled, onClear } = useHubStorageEditor();
 
   if (!hub.supported || (!hub.enabled && !hub.canManage)) return null;
   const ready = hub.enabled && hub.configured;
+  const isHubManaged = hub.source === 'hub_managed';
+  const showForm = !isHubManaged || customize;
   const mb = Math.round((hub.maxFileBytes || 100 * 1024 * 1024) / (1024 * 1024));
   const footer = hub.canManage
-    ? (!hub.vaultReady ? tr('hubStorage.vaultMissing') : tr('hubStorage.adminFooter'))
+    ? (isHubManaged && !customize
+      ? tr('hubStorage.hubManagedFooter')
+      : (!hub.vaultReady ? tr('hubStorage.vaultMissing') : tr('hubStorage.adminFooter')))
     : (ready
       ? tr('hubStorage.memberFooterEnabled', { provider: providerLabel(hub.provider), mb })
       : tr('hubStorage.memberFooterDisabled'));
@@ -214,7 +237,7 @@ export function HubStorageSettingsCard() {
     <SettingsGroup
       title={tr('hubStorage.title')}
       footer={footer}
-      footerTone={hub.canManage && !hub.vaultReady ? 'accent' : undefined}
+      footerTone={hub.canManage && showForm && !hub.vaultReady ? 'accent' : undefined}
       testID="hub-storage-group"
     >
       <SettingsControlRow label={tr('hubStorage.rowLabel')} testID="hub-storage-status-row">
@@ -223,7 +246,57 @@ export function HubStorageSettingsCard() {
         </Text>
       </SettingsControlRow>
 
-      {hub.canManage ? (
+      {hub.canManage && isHubManaged ? (
+        <SettingsCardContent testID="hub-storage-managed-summary">
+          <View style={styles.formStack}>
+            <Text style={styles.hint} testID="hub-storage-managed-text">
+              {tr('hubStorage.hubManagedSummary', {
+                provider: providerLabel(hub.provider),
+                target: hubManagedTargetLabel(hub),
+                mb,
+              })}
+            </Text>
+            <View style={styles.actions}>
+              {!customize ? (
+                <Pressable
+                  accessibilityRole="button"
+                  accessibilityLabel={tr('hubStorage.test')}
+                  disabled={busy || testing}
+                  onPress={() => void onTest(true)}
+                  style={({ pressed }) => [styles.secondary, (busy || testing) && styles.disabled, pressed && { opacity: 0.7 }]}
+                  testID="hub-storage-test-managed"
+                >
+                  <Text style={styles.secondaryText}>{testing ? tr('hubStorage.testing') : tr('hubStorage.test')}</Text>
+                </Pressable>
+              ) : null}
+              <Pressable
+                accessibilityRole="button"
+                accessibilityState={{ expanded: customize }}
+                onPress={() => setCustomize(v => !v)}
+                hitSlop={6}
+                testID="hub-storage-customize-toggle"
+              >
+                <Text style={styles.link}>{customize ? tr('hubStorage.customizeHide') : tr('hubStorage.customizeShow')}</Text>
+              </Pressable>
+            </View>
+            {!customize && msg ? (
+              <Text
+                style={[
+                  styles.hint,
+                  msg.tone === 'ok' && styles.okText,
+                  msg.tone === 'warn' && styles.warnText,
+                  msg.tone === 'err' && styles.error,
+                ]}
+                testID="hub-storage-msg"
+              >
+                {msg.text}
+              </Text>
+            ) : null}
+          </View>
+        </SettingsCardContent>
+      ) : null}
+
+      {hub.canManage && showForm ? (
         <>
           <SettingsControlRow
             label={tr('hubStorage.enableSwitch')}
@@ -308,7 +381,7 @@ export function HubStorageSettingsCard() {
                 accessibilityLabel={tr('hubStorage.akLabel')}
                 value={form.accessKeyId}
                 onChangeText={accessKeyId => setForm(f => ({ ...f, accessKeyId }))}
-                placeholder={hub.configured && hub.provider === form.provider
+                placeholder={hub.configured && hub.source !== 'hub_managed' && hub.provider === form.provider
                   ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
                   : tr('hubStorage.akPlaceholder')}
                 placeholderTextColor={colors.textMuted}
@@ -322,7 +395,7 @@ export function HubStorageSettingsCard() {
                 accessibilityLabel={tr('hubStorage.skLabel')}
                 value={form.accessKeySecret}
                 onChangeText={accessKeySecret => setForm(f => ({ ...f, accessKeySecret }))}
-                placeholder={hub.configured && hub.provider === form.provider
+                placeholder={hub.configured && hub.source !== 'hub_managed' && hub.provider === form.provider
                   ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
                   : tr('hubStorage.skPlaceholderNew')}
                 placeholderTextColor={colors.textMuted}
@@ -406,16 +479,16 @@ export function HubStorageSettingsCard() {
                 >
                   <Text style={styles.secondaryText}>{testing ? tr('hubStorage.testing') : tr('hubStorage.test')}</Text>
                 </Pressable>
-                {hub.configured ? (
+                {hub.configured && hub.source !== 'hub_managed' ? (
                   <Pressable
                     accessibilityRole="button"
-                    accessibilityLabel={tr('hubStorage.clear')}
+                    accessibilityLabel={hub.hubManagedAvailable ? tr('hubStorage.resetToManaged') : tr('hubStorage.clear')}
                     disabled={busy || testing}
                     onPress={() => void onClear()}
                     style={({ pressed }) => [styles.secondary, pressed && { opacity: 0.7 }]}
                     testID="hub-storage-clear"
                   >
-                    <Text style={styles.secondaryText}>{tr('hubStorage.clear')}</Text>
+                    <Text style={styles.secondaryText}>{hub.hubManagedAvailable ? tr('hubStorage.resetToManaged') : tr('hubStorage.clear')}</Text>
                   </Pressable>
                 ) : null}
               </View>
@@ -472,10 +545,52 @@ export function HubStoragePhoneGroup({ onOpenEdit }: { onOpenEdit: () => void })
 /** 手机三级页：设置 → 账号 → 文件存储中转（严格仅使用 settings-kit）。 */
 export function HubStorageEditPage() {
   useTranslation();
-  const { hub, form, setForm, busy, testing, msg, setProvider, onSave, onTest, onToggleEnabled, onClear } = useHubStorageEditor();
+  const { hub, form, setForm, customize, setCustomize, busy, testing, msg, setProvider, onSave, onTest, onToggleEnabled, onClear } = useHubStorageEditor();
+  const isHubManaged = hub.source === 'hub_managed';
+  const showForm = !isHubManaged || customize;
+  const mb = Math.round((hub.maxFileBytes || 100 * 1024 * 1024) / (1024 * 1024));
 
   return (
     <>
+      {isHubManaged ? (
+        <SettingsGroup
+          title={tr('hubStorage.title')}
+          footer={tr('hubStorage.hubManagedSummary', {
+            provider: providerLabel(hub.provider),
+            target: hubManagedTargetLabel(hub),
+            mb,
+          })}
+          testID="hub-storage-managed-summary"
+        >
+          <SettingsRow
+            testID="hub-storage-status-row"
+            label={tr('hubStorage.rowLabel')}
+            value={hubStorageStatusText(hub)}
+            valueTone="accent"
+          />
+          <SettingsRow
+            testID="hub-storage-customize-toggle"
+            label={customize ? tr('hubStorage.customizeHide') : tr('hubStorage.customizeShow')}
+            chevron
+            onPress={() => setCustomize(v => !v)}
+          />
+        </SettingsGroup>
+      ) : null}
+
+      {isHubManaged && !customize ? (
+        <>
+          <SettingsButton label={testing ? tr('hubStorage.testing') : tr('hubStorage.test')} busy={testing} disabled={busy} onPress={() => void onTest(true)} testID="hub-storage-test-managed" />
+          {msg ? (
+            <SettingsGroup
+              testID="hub-storage-msg"
+              footer={msg.text}
+              footerTone={msg.tone === 'err' ? 'danger' : 'accent'}
+            />
+          ) : null}
+        </>
+      ) : null}
+
+      {showForm ? <>
       <SettingsGroup
         title={tr('hubStorage.title')}
         footer={!hub.vaultReady ? tr('hubStorage.vaultMissing') : tr('hubStorage.adminFooter')}
@@ -541,7 +656,7 @@ export function HubStorageEditPage() {
           testID="hub-storage-ak"
           value={form.accessKeyId}
           onChangeText={accessKeyId => setForm(f => ({ ...f, accessKeyId }))}
-          placeholder={hub.configured && hub.provider === form.provider
+          placeholder={hub.configured && hub.source !== 'hub_managed' && hub.provider === form.provider
             ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
             : tr('hubStorage.akPlaceholder')}
         />
@@ -550,7 +665,7 @@ export function HubStorageEditPage() {
           testID="hub-storage-sk"
           value={form.accessKeySecret}
           onChangeText={accessKeySecret => setForm(f => ({ ...f, accessKeySecret }))}
-          placeholder={hub.configured && hub.provider === form.provider
+          placeholder={hub.configured && hub.source !== 'hub_managed' && hub.provider === form.provider
             ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
             : tr('hubStorage.skPlaceholderNew')}
           secureTextEntry
@@ -591,9 +706,10 @@ export function HubStorageEditPage() {
           footerTone={msg.tone === 'err' ? 'danger' : 'accent'}
         />
       ) : null}
-      {hub.configured ? (
-        <SettingsButton variant="destructive" label={tr('hubStorage.clear')} disabled={busy || testing} onPress={() => void onClear()} testID="hub-storage-clear" />
+      {hub.configured && hub.source !== 'hub_managed' ? (
+        <SettingsButton variant="destructive" label={hub.hubManagedAvailable ? tr('hubStorage.resetToManaged') : tr('hubStorage.clear')} disabled={busy || testing} onPress={() => void onClear()} testID="hub-storage-clear" />
       ) : null}
+      </> : null}
     </>
   );
 }

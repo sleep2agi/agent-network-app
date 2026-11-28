@@ -563,12 +563,62 @@ const run = async () => {
     let badFooter = false;
     for (const lang of ['zh', 'en'] as const) {
       setLanguagePreference(lang);
-      for (const k of ['hubStorage.adminFooter', 'hubStorage.memberFooterEnabled', 'hubStorage.memberFooterDisabled', 'hubStorage.vaultMissing', 'hubStorage.phoneHint']) {
+      for (const k of ['hubStorage.adminFooter', 'hubStorage.memberFooterEnabled', 'hubStorage.memberFooterDisabled', 'hubStorage.vaultMissing', 'hubStorage.phoneHint', 'hubStorage.hubManagedFooter', 'hubStorage.hubManagedSummary']) {
         if (/下面|下方|以下|below/i.test(t(k))) badFooter = true;
       }
     }
     setLanguagePreference('zh');
     ck('No footer copy uses forbidden directional words (下面/below)', !badFooter);
+
+    // Hub-managed default storage state parsing & override credential discipline
+    const managedSnap = await refreshHubStorageConfig(
+      { serverUrl: 'https://managed-hub.test', token: 'utok_m1', networkId: 'net_m1' },
+      {
+        force: true,
+        fetchImpl: async () => ({
+          status: 200,
+          ok: true,
+          json: async () => ({
+            ok: true,
+            network_id: 'net_m1',
+            enabled: true,
+            configured: true,
+            source: 'hub_managed',
+            hub_managed_available: true,
+            provider: 's3',
+            bucket: 'anet-platform-private',
+            region: 'us-west-1',
+            endpoint: 'https://s3-accelerate.amazonaws.com',
+            prefix: 'anet-files',
+            public_base_url: '',
+            max_file_bytes: 150 * 1024 * 1024,
+            key_hint: '…MPLE',
+            can_manage: true,
+            vault_ready: true,
+            updated_at: null,
+          }),
+        }),
+      },
+    );
+    ck('Parses Hub-managed storage source and hubManagedAvailable cleanly',
+      managedSnap.configured && managedSnap.enabled && managedSnap.source === 'hub_managed' && managedSnap.hubManagedAvailable);
+    const overrideWithoutSecret = mergeHubStorageWrite(managedSnap, initialHubStorageForm(managedSnap));
+    ck('Overriding Hub-managed storage requires network own credentials (never reuses Hub env secret)',
+      !overrideWithoutSecret.ok && overrideWithoutSecret.reasonKey === 'hubStorage.err.akSkRequired');
+    let testedEmptyBody = '';
+    const testManaged = await testHubStorageConfig(
+      { serverUrl: 'https://managed-hub.test', token: 'utok_m1', networkId: 'net_m1' },
+      undefined,
+      {
+        fetchImpl: async (_url, init) => {
+          testedEmptyBody = init.body || '';
+          return { status: 200, ok: true, json: async () => ({ ok: true, provider: 's3', latency_ms: 42, visibility: 'private', message: 'S3 私有桶连接正常' }) };
+        },
+      },
+    );
+    ck('Testing Hub-managed storage sends no draft credentials and succeeds', testManaged.ok && !testedEmptyBody.includes('access_key'));
+    ck('HubStorageSettingsCard renders Hub-managed summary & customize toggle',
+      cardSrc.includes('hub-storage-managed-summary') && cardSrc.includes('hub-storage-test-managed') && cardSrc.includes('hub-storage-customize-toggle'));
   }
 
   console.log(`\nhub-storage: ${pass}/${total} passed`);
