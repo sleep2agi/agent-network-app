@@ -23,4 +23,5 @@ registerTranslations({
   'userAvatar.uploadUnsupported': ['此 Hub 尚不支持本地头像上传，请升级 Hub。当前头像未更改。', 'This Hub does not support local avatar uploads yet. Upgrade the Hub. Your current avatar is unchanged.'],
   'userAvatar.invalid': ['请输入有效的 HTTP/HTTPS 图片网址，不支持本地文件或数据地址。', 'Enter a valid HTTP/HTTPS image URL, not a local file or data URL.'],
   'userAvatar.pick': ['选择头像 {n}', 'Choose avatar {n}'],
+  'userAvatar.presets': ['预设头像', 'Preset avatars'],
 });
