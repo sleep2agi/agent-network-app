@@ -18,7 +18,10 @@ import { chatSecretRequestFromMeta, secretSavedAfter } from './chat-secret-reque
 import * as Clipboard from 'expo-clipboard';
 import AliasAvatar from './AliasAvatar';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
+import AttachmentAudioDesktop from './AttachmentAudioDesktop';
 import AttachmentFileCard from './AttachmentFileCard';
+import AuthedAudio from './AuthedAudio';
+import { isPlayableAudio } from './attachment-audio-model';
 import { localFileStatus } from './attachment-file-model';
 import AuthedThumb, { AttachmentFile, AuthedVideo, mimeFromName } from './AuthedThumb';
 import AuthedWebThumb from './AuthedWebThumb';
@@ -223,6 +226,7 @@ interface AttachmentView {
   name: string;
   isImage: boolean;
   isVideo: boolean;
+  isAudio: boolean;
   /** local file uri for fresh echoes, authed API uri otherwise */
   uri?: string;
   /** authed API uris need RN Image headers — unavailable on web <img> */
@@ -254,6 +258,7 @@ const makePusher = (serverUrl: string, out: AttachmentView[]) => {
       name,
       isImage: isImageLike(name, resolved),
       isVideo: isVideoLike(name, resolved),
+      isAudio: isPlayableAudio(name, resolved),
       uri: `${serverUrl}/api/files/${fileId}`,
       needsAuth: true,
       mime: resolved,
@@ -282,6 +287,7 @@ const sentAttachmentViews = (item: ChatItem, serverUrl: string): AttachmentView[
         name: img.fileName,
         isImage: isImageLike(img.fileName, img.mimeType),
         isVideo: isVideoLike(img.fileName, img.mimeType),
+        isAudio: isPlayableAudio(img.fileName, img.mimeType),
         uri: hubFileId ? `${serverUrl}/api/files/${hubFileId}` : img.uri,
         needsAuth: hubFileId ? true : undefined,
         mime: img.mimeType,
@@ -1924,6 +1930,25 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         size={a.size}
         serverUrl={cfg.serverUrl}
         token={cfg.token}
+      />
+    ) : a.isAudio && a.needsAuth && Platform.OS !== 'web' ? (
+      <AuthedAudio
+        key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
+        fileId={a.key}
+        name={a.name}
+        mime={a.mime}
+        size={a.size}
+        serverUrl={cfg.serverUrl}
+        token={cfg.token}
+      />
+    ) : a.isAudio && a.needsAuth && a.uri && Platform.OS === 'web' ? (
+      <AttachmentAudioDesktop
+        key={`${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`}
+        uri={a.uri}
+        name={a.name}
+        mime={a.mime}
+        token={cfg.token}
+        size={a.size}
       />
     ) : a.needsAuth && Platform.OS !== 'web' ? (
       <AttachmentFile

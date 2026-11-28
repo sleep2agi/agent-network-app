@@ -14,6 +14,7 @@
 
 import type { HubScheduledRun, HubTask } from './api';
 import { mimeFromName } from './attach-download';
+import { isPlayableAudio } from './attachment-audio-model';
 import { parseAttachmentRefs, parseMetaReplyAttachmentRefs } from './attachment-display';
 import type { StatusTone } from './scheduled-view-model';
 import { parseHubTime } from './time';
@@ -110,6 +111,7 @@ export interface RunAttachment {
   name: string;
   isImage: boolean;
   isVideo: boolean;
+  isAudio: boolean;
   uri: string;
   needsAuth: true;
   mime?: string;
@@ -130,6 +132,7 @@ export function runReplyAttachments(task: Pick<HubTask, 'result' | 'meta_json'> 
       name,
       isImage: (resolved ?? '').startsWith('image/') || /\.(png|jpe?g|gif|webp|heic)$/i.test(name),
       isVideo: (resolved ?? '').startsWith('video/'),
+      isAudio: isPlayableAudio(name, resolved),
       uri: `${serverUrl}/api/files/${fileId}`,
       needsAuth: true,
       mime: resolved,

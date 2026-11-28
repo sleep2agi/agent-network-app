@@ -15,6 +15,7 @@ import { Platform } from 'react-native';
 import { getRecordingPermissionsAsync, requestRecordingPermissionsAsync, setAudioModeAsync, useAudioStream } from 'expo-audio';
 import { float32ToInt16, levelOf, TARGET_SAMPLE_RATE } from './voice-wav';
 import { micApiAvailable, openMicStream } from './mic-device';
+import { stopAllAudioPlayback } from './attachment-audio-model';
 
 export type Captured = { chunks: Int16Array[]; sampleRate: number; channels: number };
 
@@ -112,6 +113,7 @@ export function useVoiceRecorder(): VoiceRecorder {
 
   const start = useCallback(async (): Promise<StartResult> => {
     if (activeRef.current) return { ok: true };
+    stopAllAudioPlayback();
     chunksRef.current = [];
     if (isNative) {
       if (!nativeStream) return { ok: false, reason: '当前设备不支持录音' };
