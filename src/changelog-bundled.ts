@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.636:",
+  "",
+  "- 新功能：聊天里的音频附件（MP3 / M4A / WAV / AAC / FLAC / OGG / OPUS）可以直接在气泡里播放，不用先下载。支持点进度条跳转、1× / 1.25× / 1.5× / 2× 倍速；点第二条会自动暂停上一条，开始语音输入时也会自动暂停。底部仍保留保存 / 分享。",
+  "",
   "What's new in 0.2.635:",
   "",
   "- 新功能：节点详情「概览」会显示这个节点能不能走文件直传（例如「已支持 · 直传 AWS S3」）；旧版本节点会标出「未支持（旧版本，走 Hub 12 MB）」，一眼看出附件是不是绕开 Hub 带宽。",
