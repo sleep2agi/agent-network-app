@@ -22,19 +22,17 @@ import {
   getActiveHubStorageConfig,
   getHubStorageSnapshot,
   initialHubStorageForm,
+  isSelectableHubStorageProvider,
   mergeHubStorageWrite,
   refreshHubStorageConfig,
   saveHubStorageConfig,
+  SELECTABLE_HUB_STORAGE_PROVIDERS,
   subscribeHubStorage,
   testHubStorageConfig,
   type HubStorageAdminForm,
   type HubStorageConfigState,
   type HubStorageProvider,
-  type HubStorageRepoType,
 } from './hub-storage';
-
-const PROVIDERS: readonly HubStorageProvider[] = ['modelscope', 'oss', 's3'];
-const REPO_TYPES: readonly HubStorageRepoType[] = ['dataset', 'model'];
 
 function providerLabel(provider: HubStorageProvider): string {
   if (provider === 'oss') return tr('hubStorage.providerOss');
@@ -56,7 +54,7 @@ function hubStorageStatusText(s: HubStorageConfigState): string {
 function useHubStorageEditor() {
   const hub = useSyncExternalStore(subscribeHubStorage, getHubStorageSnapshot, getHubStorageSnapshot);
   const [form, setForm] = useState<HubStorageAdminForm>(() => initialHubStorageForm(hub));
-  const [advanced, setAdvanced] = useState(() => !!hub.endpoint || hub.repoType === 'model' || (!!hub.revision && hub.revision !== 'master'));
+  const [advanced, setAdvanced] = useState(() => !!hub.endpoint);
   const [busy, setBusy] = useState(false);
   const [testing, setTesting] = useState(false);
   const [msg, setMsg] = useState<{ tone: 'ok' | 'warn' | 'err'; text: string } | null>(null);
@@ -89,6 +87,7 @@ function useHubStorageEditor() {
   ]);
 
   const setProvider = (provider: HubStorageProvider) => {
+    if (!isSelectableHubStorageProvider(provider)) return;
     setForm(f => ({ ...f, provider }));
     setMsg(null);
   };
@@ -145,12 +144,18 @@ function useHubStorageEditor() {
     setForm(f => ({ ...f, enabled: next }));
     const cfg = getActiveHubStorageConfig();
     if (!cfg || !hub.configured) return;
+    if (hub.provider === 'modelscope' && next) {
+      setForm(f => ({ ...f, enabled: hub.enabled }));
+      setMsg({ tone: 'err', text: tr('hubStorage.modelscopeDisabledHint') });
+      return;
+    }
     setBusy(true);
     setMsg(null);
     try {
-      const merged = mergeHubStorageWrite(hub, { ...initialHubStorageForm(hub), enabled: next });
+      const merged = mergeHubStorageWrite(hub, { ...initialHubStorageForm(hub), provider: hub.provider, enabled: next });
       if (!merged.ok) {
         setForm(f => ({ ...f, enabled: hub.enabled }));
+        setMsg({ tone: 'err', text: tr(merged.reasonKey) });
         return;
       }
       const res = await saveHubStorageConfig(cfg, merged.body);
@@ -235,9 +240,14 @@ export function HubStorageSettingsCard() {
 
           <SettingsCardContent testID="hub-storage-admin-form">
             <View style={styles.formStack}>
+              {hub.configured && hub.provider === 'modelscope' ? (
+                <Text style={[styles.hint, styles.warnText]} testID="hub-storage-legacy-modelscope">
+                  {tr('hubStorage.legacyModelscopeInfo', { repo: hub.repoId || tr('hubStorage.providerModelScope') })}
+                </Text>
+              ) : null}
               <Text style={styles.fieldLabel}>{tr('hubStorage.providerLabel')}</Text>
               <View style={styles.chips}>
-                {PROVIDERS.map(p => (
+                {SELECTABLE_HUB_STORAGE_PROVIDERS.map(p => (
                   <Pressable
                     key={p}
                     accessibilityRole="radio"
@@ -251,97 +261,77 @@ export function HubStorageSettingsCard() {
                     </Text>
                   </Pressable>
                 ))}
+                <Pressable
+                  key="modelscope"
+                  disabled
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: false, disabled: true }}
+                  style={[styles.chip, styles.chipDisabled]}
+                  testID="hub-storage-provider-modelscope"
+                >
+                  <Text style={[styles.chipText, styles.chipTextDisabled]}>
+                    {providerLabel('modelscope')}
+                  </Text>
+                </Pressable>
               </View>
+              <Text style={styles.hint} testID="hub-storage-modelscope-hint">
+                {tr('hubStorage.modelscopeDisabledHint')}
+              </Text>
 
-              {form.provider === 'modelscope' ? (
-                <>
-                  <Text style={styles.fieldLabel}>{tr('hubStorage.repoIdLabel')}</Text>
-                  <TextInput
-                    testID="hub-storage-repo-id"
-                    accessibilityLabel={tr('hubStorage.repoIdLabel')}
-                    value={form.repoId}
-                    onChangeText={repoId => setForm(f => ({ ...f, repoId }))}
-                    placeholder={tr('hubStorage.repoIdPlaceholder')}
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                  <Text style={styles.fieldLabel}>{tr('hubStorage.tokenLabel')}</Text>
-                  <TextInput
-                    testID="hub-storage-api-token"
-                    accessibilityLabel={tr('hubStorage.tokenLabel')}
-                    value={form.apiToken}
-                    onChangeText={apiToken => setForm(f => ({ ...f, apiToken }))}
-                    placeholder={hub.configured && hub.provider === 'modelscope'
-                      ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
-                      : tr('hubStorage.tokenPlaceholderNew')}
-                    placeholderTextColor={colors.textMuted}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="password"
-                    style={styles.input}
-                  />
-                </>
-              ) : (
-                <>
-                  <Text style={styles.fieldLabel}>{tr('hubStorage.bucketLabel')}</Text>
-                  <TextInput
-                    testID="hub-storage-bucket"
-                    accessibilityLabel={tr('hubStorage.bucketLabel')}
-                    value={form.bucket}
-                    onChangeText={bucket => setForm(f => ({ ...f, bucket }))}
-                    placeholder={tr('hubStorage.bucketPlaceholder')}
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                  <Text style={styles.fieldLabel}>{tr('hubStorage.regionLabel')}</Text>
-                  <TextInput
-                    testID="hub-storage-region"
-                    accessibilityLabel={tr('hubStorage.regionLabel')}
-                    value={form.region}
-                    onChangeText={region => setForm(f => ({ ...f, region }))}
-                    placeholder={form.provider === 'oss' ? tr('hubStorage.regionPlaceholderOss') : tr('hubStorage.regionPlaceholderS3')}
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                  <Text style={styles.fieldLabel}>{tr('hubStorage.akLabel')}</Text>
-                  <TextInput
-                    testID="hub-storage-ak"
-                    accessibilityLabel={tr('hubStorage.akLabel')}
-                    value={form.accessKeyId}
-                    onChangeText={accessKeyId => setForm(f => ({ ...f, accessKeyId }))}
-                    placeholder={hub.configured && hub.provider === form.provider
-                      ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
-                      : tr('hubStorage.akPlaceholder')}
-                    placeholderTextColor={colors.textMuted}
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    style={styles.input}
-                  />
-                  <Text style={styles.fieldLabel}>{tr('hubStorage.skLabel')}</Text>
-                  <TextInput
-                    testID="hub-storage-sk"
-                    accessibilityLabel={tr('hubStorage.skLabel')}
-                    value={form.accessKeySecret}
-                    onChangeText={accessKeySecret => setForm(f => ({ ...f, accessKeySecret }))}
-                    placeholder={hub.configured && hub.provider === form.provider
-                      ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
-                      : tr('hubStorage.skPlaceholderNew')}
-                    placeholderTextColor={colors.textMuted}
-                    secureTextEntry
-                    autoCapitalize="none"
-                    autoCorrect={false}
-                    textContentType="password"
-                    style={styles.input}
-                  />
-                </>
-              )}
+              <Text style={styles.fieldLabel}>{tr('hubStorage.bucketLabel')}</Text>
+              <TextInput
+                testID="hub-storage-bucket"
+                accessibilityLabel={tr('hubStorage.bucketLabel')}
+                value={form.bucket}
+                onChangeText={bucket => setForm(f => ({ ...f, bucket }))}
+                placeholder={tr('hubStorage.bucketPlaceholder')}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.input}
+              />
+              <Text style={styles.fieldLabel}>{tr('hubStorage.regionLabel')}</Text>
+              <TextInput
+                testID="hub-storage-region"
+                accessibilityLabel={tr('hubStorage.regionLabel')}
+                value={form.region}
+                onChangeText={region => setForm(f => ({ ...f, region }))}
+                placeholder={form.provider === 'oss' ? tr('hubStorage.regionPlaceholderOss') : tr('hubStorage.regionPlaceholderS3')}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.input}
+              />
+              <Text style={styles.fieldLabel}>{tr('hubStorage.akLabel')}</Text>
+              <TextInput
+                testID="hub-storage-ak"
+                accessibilityLabel={tr('hubStorage.akLabel')}
+                value={form.accessKeyId}
+                onChangeText={accessKeyId => setForm(f => ({ ...f, accessKeyId }))}
+                placeholder={hub.configured && hub.provider === form.provider
+                  ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
+                  : tr('hubStorage.akPlaceholder')}
+                placeholderTextColor={colors.textMuted}
+                autoCapitalize="none"
+                autoCorrect={false}
+                style={styles.input}
+              />
+              <Text style={styles.fieldLabel}>{tr('hubStorage.skLabel')}</Text>
+              <TextInput
+                testID="hub-storage-sk"
+                accessibilityLabel={tr('hubStorage.skLabel')}
+                value={form.accessKeySecret}
+                onChangeText={accessKeySecret => setForm(f => ({ ...f, accessKeySecret }))}
+                placeholder={hub.configured && hub.provider === form.provider
+                  ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
+                  : tr('hubStorage.skPlaceholderNew')}
+                placeholderTextColor={colors.textMuted}
+                secureTextEntry
+                autoCapitalize="none"
+                autoCorrect={false}
+                textContentType="password"
+                style={styles.input}
+              />
 
               <Pressable
                 accessibilityRole="button"
@@ -355,40 +345,6 @@ export function HubStorageSettingsCard() {
 
               {advanced ? (
                 <View style={styles.advanced} testID="hub-storage-advanced">
-                  {form.provider === 'modelscope' ? (
-                    <>
-                      <Text style={styles.fieldLabel}>{tr('hubStorage.repoTypeLabel')}</Text>
-                      <View style={styles.chips}>
-                        {REPO_TYPES.map(rt => (
-                          <Pressable
-                            key={rt}
-                            accessibilityRole="radio"
-                            accessibilityState={{ checked: form.repoType === rt }}
-                            onPress={() => setForm(f => ({ ...f, repoType: rt }))}
-                            style={[styles.chip, form.repoType === rt && styles.chipOn]}
-                            testID={`hub-storage-repotype-${rt}`}
-                          >
-                            <Text style={[styles.chipText, form.repoType === rt && styles.chipTextOn]}>
-                              {rt === 'dataset' ? tr('hubStorage.repoTypeDataset') : tr('hubStorage.repoTypeModel')}
-                            </Text>
-                          </Pressable>
-                        ))}
-                      </View>
-                      <Text style={styles.fieldLabel}>{tr('hubStorage.revisionLabel')}</Text>
-                      <TextInput
-                        testID="hub-storage-revision"
-                        accessibilityLabel={tr('hubStorage.revisionLabel')}
-                        value={form.revision}
-                        onChangeText={revision => setForm(f => ({ ...f, revision }))}
-                        placeholder="master"
-                        placeholderTextColor={colors.textMuted}
-                        autoCapitalize="none"
-                        autoCorrect={false}
-                        style={styles.input}
-                      />
-                    </>
-                  ) : null}
-
                   <Text style={styles.fieldLabel}>{tr('hubStorage.prefixLabel')}</Text>
                   <TextInput
                     testID="hub-storage-prefix"
@@ -420,13 +376,7 @@ export function HubStorageSettingsCard() {
                     accessibilityLabel={tr('hubStorage.endpointLabel')}
                     value={form.endpoint}
                     onChangeText={endpoint => setForm(f => ({ ...f, endpoint }))}
-                    placeholder={
-                      form.provider === 'modelscope'
-                        ? tr('hubStorage.endpointPlaceholderMs')
-                        : form.provider === 'oss'
-                          ? tr('hubStorage.endpointPlaceholderOss')
-                          : tr('hubStorage.endpointPlaceholderS3')
-                    }
+                    placeholder={form.provider === 'oss' ? tr('hubStorage.endpointPlaceholderOss') : tr('hubStorage.endpointPlaceholderS3')}
                     placeholderTextColor={colors.textMuted}
                     autoCapitalize="none"
                     autoCorrect={false}
@@ -542,8 +492,16 @@ export function HubStorageEditPage() {
         />
       </SettingsGroup>
 
+      {hub.configured && hub.provider === 'modelscope' ? (
+        <SettingsGroup
+          testID="hub-storage-legacy-modelscope"
+          footer={tr('hubStorage.legacyModelscopeInfo', { repo: hub.repoId || tr('hubStorage.providerModelScope') })}
+          footerTone="accent"
+        />
+      ) : null}
+
       <SettingsGroup title={tr('hubStorage.providerLabel')}>
-        {PROVIDERS.map(p => (
+        {SELECTABLE_HUB_STORAGE_PROVIDERS.map(p => (
           <SettingsChoiceRow
             key={p}
             testID={`hub-storage-provider-${p}`}
@@ -552,67 +510,53 @@ export function HubStorageEditPage() {
             onPress={() => setProvider(p)}
           />
         ))}
+        <SettingsChoiceRow
+          key="modelscope"
+          testID="hub-storage-provider-modelscope"
+          label={providerLabel('modelscope')}
+          subtitle={tr('hubStorage.modelscopeDisabledHint')}
+          selected={false}
+          disabled
+          onPress={() => {}}
+        />
       </SettingsGroup>
 
-      {form.provider === 'modelscope' ? (
-        <SettingsGroup title={tr('hubStorage.providerModelScope')}>
-          <SettingsTextField
-            label={tr('hubStorage.repoIdLabel')}
-            testID="hub-storage-repo-id"
-            value={form.repoId}
-            onChangeText={repoId => setForm(f => ({ ...f, repoId }))}
-            placeholder={tr('hubStorage.repoIdPlaceholder')}
-          />
-          <SettingsTextField
-            label={tr('hubStorage.tokenLabel')}
-            testID="hub-storage-api-token"
-            value={form.apiToken}
-            onChangeText={apiToken => setForm(f => ({ ...f, apiToken }))}
-            placeholder={hub.configured && hub.provider === 'modelscope'
-              ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
-              : tr('hubStorage.tokenPlaceholderNew')}
-            secureTextEntry
-            textContentType="password"
-          />
-        </SettingsGroup>
-      ) : (
-        <SettingsGroup title={providerLabel(form.provider)}>
-          <SettingsTextField
-            label={tr('hubStorage.bucketLabel')}
-            testID="hub-storage-bucket"
-            value={form.bucket}
-            onChangeText={bucket => setForm(f => ({ ...f, bucket }))}
-            placeholder={tr('hubStorage.bucketPlaceholder')}
-          />
-          <SettingsTextField
-            label={tr('hubStorage.regionLabel')}
-            testID="hub-storage-region"
-            value={form.region}
-            onChangeText={region => setForm(f => ({ ...f, region }))}
-            placeholder={form.provider === 'oss' ? tr('hubStorage.regionPlaceholderOss') : tr('hubStorage.regionPlaceholderS3')}
-          />
-          <SettingsTextField
-            label={tr('hubStorage.akLabel')}
-            testID="hub-storage-ak"
-            value={form.accessKeyId}
-            onChangeText={accessKeyId => setForm(f => ({ ...f, accessKeyId }))}
-            placeholder={hub.configured && hub.provider === form.provider
-              ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
-              : tr('hubStorage.akPlaceholder')}
-          />
-          <SettingsTextField
-            label={tr('hubStorage.skLabel')}
-            testID="hub-storage-sk"
-            value={form.accessKeySecret}
-            onChangeText={accessKeySecret => setForm(f => ({ ...f, accessKeySecret }))}
-            placeholder={hub.configured && hub.provider === form.provider
-              ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
-              : tr('hubStorage.skPlaceholderNew')}
-            secureTextEntry
-            textContentType="password"
-          />
-        </SettingsGroup>
-      )}
+      <SettingsGroup title={providerLabel(form.provider)}>
+        <SettingsTextField
+          label={tr('hubStorage.bucketLabel')}
+          testID="hub-storage-bucket"
+          value={form.bucket}
+          onChangeText={bucket => setForm(f => ({ ...f, bucket }))}
+          placeholder={tr('hubStorage.bucketPlaceholder')}
+        />
+        <SettingsTextField
+          label={tr('hubStorage.regionLabel')}
+          testID="hub-storage-region"
+          value={form.region}
+          onChangeText={region => setForm(f => ({ ...f, region }))}
+          placeholder={form.provider === 'oss' ? tr('hubStorage.regionPlaceholderOss') : tr('hubStorage.regionPlaceholderS3')}
+        />
+        <SettingsTextField
+          label={tr('hubStorage.akLabel')}
+          testID="hub-storage-ak"
+          value={form.accessKeyId}
+          onChangeText={accessKeyId => setForm(f => ({ ...f, accessKeyId }))}
+          placeholder={hub.configured && hub.provider === form.provider
+            ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
+            : tr('hubStorage.akPlaceholder')}
+        />
+        <SettingsTextField
+          label={tr('hubStorage.skLabel')}
+          testID="hub-storage-sk"
+          value={form.accessKeySecret}
+          onChangeText={accessKeySecret => setForm(f => ({ ...f, accessKeySecret }))}
+          placeholder={hub.configured && hub.provider === form.provider
+            ? tr('hubStorage.secretPlaceholderSaved', { tail: hub.keyHint || '…' })
+            : tr('hubStorage.skPlaceholderNew')}
+          secureTextEntry
+          textContentType="password"
+        />
+      </SettingsGroup>
 
       <SettingsGroup title={tr('hubStorage.maxSizeLabel')}>
         <SettingsTextField
@@ -634,13 +578,7 @@ export function HubStorageEditPage() {
           testID="hub-storage-endpoint"
           value={form.endpoint}
           onChangeText={endpoint => setForm(f => ({ ...f, endpoint }))}
-          placeholder={
-            form.provider === 'modelscope'
-              ? tr('hubStorage.endpointPlaceholderMs')
-              : form.provider === 'oss'
-                ? tr('hubStorage.endpointPlaceholderOss')
-                : tr('hubStorage.endpointPlaceholderS3')
-          }
+          placeholder={form.provider === 'oss' ? tr('hubStorage.endpointPlaceholderOss') : tr('hubStorage.endpointPlaceholderS3')}
         />
       </SettingsGroup>
 
@@ -690,8 +628,10 @@ const makeStyles = () => StyleSheet.create({
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 4 },
   chip: { borderWidth: 1, borderColor: colors.border, borderRadius: radius.pill, paddingHorizontal: 12, paddingVertical: 6 },
   chipOn: { borderColor: colors.accent, backgroundColor: colors.accent },
+  chipDisabled: { opacity: 0.45 },
   chipText: { color: colors.text, fontSize: 13 },
   chipTextOn: { color: colors.bg, fontWeight: '600' },
+  chipTextDisabled: { color: colors.textMuted },
 });
 
 let styles = makeStyles();

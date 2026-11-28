@@ -15,6 +15,14 @@ import { LEGACY_SESSION_ID } from './session-registry';
 export type HubStorageProvider = 'modelscope' | 'oss' | 's3';
 export type HubStorageRepoType = 'dataset' | 'model';
 
+// ModelScope lacks per-object signed URLs so it cannot be configured for private network storage;
+// only private S3 / Aliyun OSS buckets are selectable for new configs (legacy ModelScope remains readable).
+export const SELECTABLE_HUB_STORAGE_PROVIDERS: readonly HubStorageProvider[] = ['s3', 'oss'];
+
+export function isSelectableHubStorageProvider(provider: HubStorageProvider): boolean {
+  return provider === 's3' || provider === 'oss';
+}
+
 export const DEFAULT_HUB_STORAGE_MAX_BYTES = 100 * 1024 * 1024;
 export const MIN_HUB_STORAGE_MAX_BYTES = 1 * 1024 * 1024;
 export const MAX_HUB_STORAGE_MAX_BYTES = 500 * 1024 * 1024;
@@ -100,7 +108,7 @@ export const EMPTY_HUB_STORAGE: HubStorageConfigState = {
   loaded: false,
   enabled: false,
   configured: false,
-  provider: 'modelscope',
+  provider: 's3',
   endpoint: '',
   region: '',
   bucket: '',
@@ -141,7 +149,7 @@ function profileIdOf(cfg: HubConfig): string {
 
 function normalizeProvider(raw: unknown): HubStorageProvider {
   if (raw === 'oss' || raw === 's3' || raw === 'modelscope') return raw;
-  return 'modelscope';
+  return 's3';
 }
 
 function parsePublicConfig(scopeKey: string, body: unknown): HubStorageConfigState | null {
@@ -177,9 +185,10 @@ function parsePublicConfig(scopeKey: string, body: unknown): HubStorageConfigSta
 }
 
 export function initialHubStorageForm(state: HubStorageConfigState): HubStorageAdminForm {
+  const editableProvider: HubStorageProvider = isSelectableHubStorageProvider(state.provider) ? state.provider : 's3';
   return {
     enabled: state.configured ? state.enabled : true,
-    provider: state.provider,
+    provider: editableProvider,
     repoId: state.repoId,
     repoType: state.repoType,
     revision: state.revision || 'master',
@@ -230,19 +239,16 @@ export function mergeHubStorageWrite(
   const prefix = form.prefix.trim().replace(/^\/+|\/+$/g, '');
 
   if (form.provider === 'modelscope') {
+    // Allow disabling an already-configured legacy ModelScope entry; block creating/enabling/testing ModelScope.
+    if (!sameProvider || form.enabled) {
+      return { ok: false, reasonKey: 'hubStorage.modelscopeDisabledHint' };
+    }
     const repoId = form.repoId.trim().replace(/^\/+|\/+$/g, '');
     if (!/^[A-Za-z0-9._-]{1,100}\/[A-Za-z0-9._-]{1,120}$/.test(repoId) || repoId.includes('..')) {
       return { ok: false, reasonKey: 'hubStorage.err.repoIdRequired' };
     }
-    const token = form.apiToken.trim();
-    if (!token && !sameProvider) {
-      return { ok: false, reasonKey: 'hubStorage.err.tokenRequired' };
-    }
-    if (token && /[\s\x00-\x1f\x7f]/.test(token)) {
-      return { ok: false, reasonKey: 'hubStorage.err.secretWhitespace' };
-    }
     const body: HubStorageWriteInput = {
-      enabled: form.enabled,
+      enabled: false,
       provider: 'modelscope',
       repo_id: repoId,
       repo_type: form.repoType,
@@ -252,7 +258,6 @@ export function mergeHubStorageWrite(
       public_base_url: publicBaseUrl,
       max_file_bytes: maxFileBytes,
     };
-    if (token) body.api_token = token;
     return { ok: true, body };
   }
 

@@ -10,9 +10,11 @@ import {
   EMPTY_HUB_STORAGE,
   getHubStorageSnapshot,
   initialHubStorageForm,
+  isSelectableHubStorageProvider,
   mergeHubStorageWrite,
   refreshHubStorageConfig,
   saveHubStorageConfig,
+  SELECTABLE_HUB_STORAGE_PROVIDERS,
   setActiveHubStorageConfig,
   testHubStorageConfig,
   type HubStorageFetchLike,
@@ -76,18 +78,20 @@ const run = async () => {
   console.log('# 2 Form validation & mergeHubStorageWrite');
   {
     const base = { ...EMPTY_HUB_STORAGE, supported: true, loaded: true, canManage: true };
-    const rBadRepo = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'not-a-repo', apiToken: 'tok_12345678' });
-    ck('ModelScope: rejects invalid repo_id', !rBadRepo.ok && rBadRepo.reasonKey === 'hubStorage.err.repoIdRequired');
+    ck('Default unconfigured provider is s3 (never modelscope)', base.provider === 's3' && initialHubStorageForm(base).provider === 's3');
+    ck('Selectable providers are only s3 and oss', SELECTABLE_HUB_STORAGE_PROVIDERS.join(',') === 's3,oss' && !isSelectableHubStorageProvider('modelscope') && isSelectableHubStorageProvider('s3') && isSelectableHubStorageProvider('oss'));
 
-    const rNoTok = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'owner/anet-files', apiToken: '' });
-    ck('ModelScope: requires token on first save', !rNoTok.ok && rNoTok.reasonKey === 'hubStorage.err.tokenRequired');
-
-    const rOkMs = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'owner/anet-files', apiToken: 'ms_tok_12345678', maxFileMb: '200' });
-    ck('ModelScope: builds valid payload', rOkMs.ok && rOkMs.body.provider === 'modelscope' && rOkMs.body.repo_id === 'owner/anet-files' && rOkMs.body.max_file_bytes === 200 * 1024 * 1024);
+    const rBlockNewMs = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), provider: 'modelscope', repoId: 'owner/anet-files', apiToken: 'ms_tok_12345678' });
+    ck('ModelScope: blocked for new configs with human hint', !rBlockNewMs.ok && rBlockNewMs.reasonKey === 'hubStorage.modelscopeDisabledHint');
+    setLanguagePreference('zh');
+    ck('ModelScope disabled hint matches exact plain-Chinese copy', t('hubStorage.modelscopeDisabledHint') === 'ModelScope 不能做私有存储，请用 S3 或阿里云 OSS 私有桶');
 
     const savedMs = { ...base, configured: true, enabled: true, provider: 'modelscope' as const, repoId: 'owner/anet-files', keyHint: '…5678' };
-    const rKeepSecret = mergeHubStorageWrite(savedMs, { ...initialHubStorageForm(savedMs), apiToken: '', prefix: 'media' });
-    ck('ModelScope: blank token keeps existing secret on same provider', rKeepSecret.ok && rKeepSecret.body.api_token === undefined && rKeepSecret.body.prefix === 'media');
+    ck('Legacy ModelScope: editor form defaults to s3 for migration while saved state remains readable', savedMs.provider === 'modelscope' && initialHubStorageForm(savedMs).provider === 's3');
+    const rBlockEnableMs = mergeHubStorageWrite(savedMs, { ...initialHubStorageForm(savedMs), provider: 'modelscope', enabled: true });
+    ck('Legacy ModelScope: saving/re-enabling ModelScope is blocked', !rBlockEnableMs.ok && rBlockEnableMs.reasonKey === 'hubStorage.modelscopeDisabledHint');
+    const rDisableMs = mergeHubStorageWrite(savedMs, { ...initialHubStorageForm(savedMs), provider: 'modelscope', enabled: false });
+    ck('Legacy ModelScope: disabling existing config remains allowed without token', rDisableMs.ok && rDisableMs.body.provider === 'modelscope' && rDisableMs.body.enabled === false && rDisableMs.body.api_token === undefined);
 
     const rOssBad = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), provider: 'oss', bucket: 'my-bucket', region: 'cn-hangzhou', accessKeyId: 'AK123', accessKeySecret: '' });
     ck('OSS: requires both AK and SK together', !rOssBad.ok && rOssBad.reasonKey === 'hubStorage.err.akSkRequired');
@@ -95,10 +99,10 @@ const run = async () => {
     const rOssOk = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), provider: 'oss', bucket: 'my-bucket', region: 'oss-cn-hangzhou', accessKeyId: 'LTAI5t1234', accessKeySecret: 'Secret9999' });
     ck('OSS: builds valid payload', rOssOk.ok && rOssOk.body.provider === 'oss' && rOssOk.body.bucket === 'my-bucket');
 
-    const rBadSize = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'a/b', apiToken: 'tok123456', maxFileMb: '999' });
+    const rBadSize = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), provider: 's3', bucket: 'anet-private-usw1', region: 'us-west-2', accessKeyId: 'AKIA123456', accessKeySecret: 'Secret999999', maxFileMb: '999' });
     ck('Rejects maxFileMb > 500', !rBadSize.ok && rBadSize.reasonKey === 'hubStorage.err.maxSizeInvalid');
 
-    const rNoPubUrl = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), repoId: 'a/b', apiToken: 'tok123456', publicBaseUrl: 'https://cdn.example.com/public' });
+    const rNoPubUrl = mergeHubStorageWrite(base, { ...initialHubStorageForm(base), provider: 's3', bucket: 'anet-private-usw1', region: 'us-west-2', accessKeyId: 'AKIA123456', accessKeySecret: 'Secret999999', publicBaseUrl: 'https://cdn.example.com/public' });
     ck('Strict private-only: mergeHubStorageWrite never sends non-empty public_base_url', rNoPubUrl.ok && rNoPubUrl.body.public_base_url === '');
 
     const rS3Accel = mergeHubStorageWrite(base, {
@@ -548,6 +552,12 @@ const run = async () => {
     ck('SettingsPhonePages wires HubStoragePhoneGroup and HubStorageEditPage', phoneSrc.includes('<HubStoragePhoneGroup') && phoneSrc.includes('<HubStorageEditPage />'));
     const cardSrc = read('src/HubStorageSettingsCard.tsx');
     ck('HubStorageSettingsCard removes public_base_url input (strict private-only)', !cardSrc.includes('hub-storage-public-url') && !cardSrc.includes('publicUrlLabel'));
+    ck('HubStorageSettingsCard disables ModelScope selection, removes ModelScope credential inputs, and surfaces hint + legacy read-only notice',
+      cardSrc.includes('hub-storage-provider-modelscope')
+      && cardSrc.includes('hubStorage.modelscopeDisabledHint')
+      && cardSrc.includes('hub-storage-legacy-modelscope')
+      && !cardSrc.includes('hub-storage-api-token')
+      && !cardSrc.includes('hub-storage-repo-id'));
 
     // Guard against directional words (下面/below) in footer strings
     let badFooter = false;
