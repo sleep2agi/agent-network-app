@@ -4,8 +4,10 @@ import { Text } from './ui-text';
 import type { HubConfig, HubScheduledRun, HubTask } from './api';
 import MarkdownMessage from './MarkdownMessage';
 import AuthedThumb, { AttachmentFile, AuthedVideo } from './AuthedThumb';
+import AuthedAudio from './AuthedAudio';
 import AuthedWebThumb from './AuthedWebThumb';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
+import AttachmentAudioDesktop from './AttachmentAudioDesktop';
 import ImageViewer from './ImageViewer';
 import { openGallery, viewerImageFor, type ViewerImage, type ViewerState } from './image-viewer-model';
 import { attachmentCacheScope } from './attach-download';
@@ -88,6 +90,12 @@ export default function ScheduleRunResult({ cfg, run, state, onRetry, onOpenChat
     }
     if (a.isVideo && Platform.OS !== 'web') {
       return <AuthedVideo key={key} fileId={a.key} name={a.name} mime={a.mime} size={a.size} serverUrl={cfg.serverUrl} token={cfg.token} />;
+    }
+    if (a.isAudio && Platform.OS !== 'web') {
+      return <AuthedAudio key={key} fileId={a.key} name={a.name} mime={a.mime} size={a.size} serverUrl={cfg.serverUrl} token={cfg.token} />;
+    }
+    if (a.isAudio && Platform.OS === 'web') {
+      return <AttachmentAudioDesktop key={key} uri={a.uri} name={a.name} token={cfg.token} size={a.size} mime={a.mime} />;
     }
     if (Platform.OS !== 'web') {
       return <AttachmentFile key={key} fileId={a.key} name={a.name} mime={a.mime} serverUrl={cfg.serverUrl} token={cfg.token} />;

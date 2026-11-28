@@ -69,11 +69,11 @@ export const downloadAttachment = (
     },
   );
 
-/** 同一个附件(服务器 + 凭据作用域 + 文件)的下载任务键:卡片、视频、「下载视频」共用,切会话回来还在。 */
-const nativeJobKey = (serverUrl: string, token: string, fileId: string) => `native|${attachmentCacheScope(serverUrl, token)}|${fileId}`;
+/** 同一个附件(服务器 + 凭据作用域 + 文件)的下载任务键:卡片、视频、音频、「下载视频」共用,切会话回来还在。 */
+export const nativeJobKey = (serverUrl: string, token: string, fileId: string) => `native|${attachmentCacheScope(serverUrl, token)}|${fileId}`;
 
 /** 在任务表里下载(或复用正在跑的下载),进度按「62% · 剩余约 8 秒」报。 */
-const runNativeDownload = (
+export const runNativeDownload = (
   serverUrl: string, token: string, fileId: string, name: string, mime: string | undefined, size: number | undefined,
   label: (received: number, total: number | undefined, elapsedMs: number) => string | undefined,
 ) => runDownloadJob(nativeJobKey(serverUrl, token, fileId), async (report) => {
@@ -90,7 +90,7 @@ const runNativeDownload = (
   catch (e) { throw new Error(describeAttachmentError(e)); }
 });
 
-const etaLabel = (received: number, total: number | undefined, elapsedMs: number) => {
+export const etaLabel = (received: number, total: number | undefined, elapsedMs: number) => {
   const eta = downloadEta(received, total, elapsedMs);
   const left = formatEta(eta.etaSeconds);
   return eta.percent !== null && left ? `${eta.percent}% · 剩余约 ${left}` : left ? `剩余约 ${left}` : undefined;

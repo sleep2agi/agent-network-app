@@ -16,9 +16,12 @@ import AliasAvatar from './AliasAvatar';
 import HumanAvatar from './HumanAvatar';
 import GroupAvatar from './GroupAvatar';
 import AuthedThumb, { AttachmentFile } from './AuthedThumb';
+import AuthedAudio from './AuthedAudio';
 import AuthedWebThumb from './AuthedWebThumb';
 import AttachmentFileDesktop from './AttachmentFileDesktop';
+import AttachmentAudioDesktop from './AttachmentAudioDesktop';
 import AttachmentFileCard from './AttachmentFileCard';
+import { isPlayableAudio } from './attachment-audio-model';
 import { localFileStatus } from './attachment-file-model';
 import ImageViewer from './ImageViewer';
 import { ackUserMessages, type HubConfig } from './api';
@@ -432,6 +435,10 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
   };
   const renderFile = (a: DmAttachmentView) => {
     const scope = `${attachmentCacheScope(cfg.serverUrl, cfg.token)}-${a.key}`;
+    if (a.needsAuth && isPlayableAudio(a.name, a.mime)) {
+      if (Platform.OS !== 'web') return <AuthedAudio key={scope} fileId={a.key} name={a.name} mime={a.mime} size={a.size} serverUrl={cfg.serverUrl} token={cfg.token} />;
+      return <AttachmentAudioDesktop key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} size={a.size} />;
+    }
     if (a.needsAuth && tauriWeb) return <AttachmentFileDesktop key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} size={a.size} />;
     if (a.needsAuth && Platform.OS !== 'web') return <AttachmentFile key={scope} fileId={a.key} name={a.name} mime={a.mime} size={a.size} serverUrl={cfg.serverUrl} token={cfg.token} />;
     if (a.needsAuth && Platform.OS === 'web') return <AttachmentFileDesktop key={scope} uri={a.uri} name={a.name} mime={a.mime} token={cfg.token} size={a.size} />;
