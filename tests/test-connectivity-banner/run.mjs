@@ -29,11 +29,12 @@ if (OUT) mkdirSync(OUT, { recursive: true });
 // mode.slowNext / mode.hangNext: the next matching read (path prefix) is delayed / never answered — once.
 let mode = { kind: 'ok' };
 let seen = 0;
-// 2026-11-27：flaky 按「每个路径各自」每 N 次断一次，而不是全局每 N 次。
-// 全局计数下，App 同时有好几条轮询在跑，某一条链可能连着撞上 2–3 次断开 —— 那时 App 说「无法连接」是**对的**，
-// 测试却判失败（CI 上约一半概率红，#1751/#1760 各撞一次）。这条用例要测的是「单条读偶尔失败一次不报离线」，
-// 所以每条链都要严格隔一次成功一次。
-const seenByPath = new Map();
+// flaky = 对**真实读请求**（不含 OPTIONS 预检）按到达顺序全局「断一次、成一次」交替。
+// App 的离线规则是「失败持续 ≥ OFFLINE_AFTER_MS(10s) 且中间没有任何一次成功」，统计的是全部读请求。
+// 旧写法（全局计数含预检 / #1761 的按路径计数）都可能让几次失败连在一起、中间没有成功，
+// 超过 10 秒后 App 报「无法连接」其实是对的，测试却判红（#1751/#1760/#1769）。
+// 全局交替保证任意两次失败之间一定夹着一次成功，正好对应「偶尔失败不该报离线」。
+let readsSeen = 0;
 const log = [];
 const cards = [
   { id: 'r1', name: '离线也要看得到的卡片', priority: 'high', column: 'pool', createdAt: '2026-09-28T00:00:00.000Z' },
@@ -57,10 +58,8 @@ const hub = createServer((req, res) => {
   log.push({ at: Date.now(), path, mode: mode.kind });
   if (req.method === 'OPTIONS') { res.writeHead(204, cors()); return res.end(); }
   const answer = () => { res.writeHead(200, { 'content-type': 'application/json', ...cors() }); res.end(JSON.stringify(body(path))); };
-  const key = path.split('?')[0];
-  const nth = (seenByPath.get(key) ?? 0) + 1;
-  seenByPath.set(key, nth);
-  if (mode.kind === 'reset' || (mode.kind === 'flaky' && nth % mode.every === 0)) return req.socket.destroy();
+  readsSeen++;
+  if (mode.kind === 'reset' || (mode.kind === 'flaky' && readsSeen % mode.every === 0)) return req.socket.destroy();
   if (mode.kind === 'hang') return; // never answers
   if (mode.hangNext && path.startsWith(mode.hangNext)) { mode = { ...mode, hangNext: null }; return; }
   if (mode.slowNext && path.startsWith(mode.slowNext)) { mode = { ...mode, slowNext: null }; return void setTimeout(answer, mode.slowMs); }
@@ -235,7 +234,7 @@ mode = { kind: 'ok' };
   const { ctx: c3, page: p3 } = await openTasks();
   await p3.getByText('离线也要看得到的卡片').first().waitFor({ timeout: 30000 });
   seen = 0;
-  seenByPath.clear();
+  readsSeen = 0;
   mode = { kind: 'flaky', every: 2 };
   const flakySeen = await sample(p3, 60_000);
   const resets = log.filter(l => l.mode === 'flaky').length;
