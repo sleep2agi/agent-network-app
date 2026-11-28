@@ -642,6 +642,12 @@ jobs:
           releaseBody: |-
             macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.
 
+            What's new in 0.2.635:
+
+            - 新功能：节点详情「概览」会显示这个节点能不能走文件直传（例如「已支持 · 直传 AWS S3」）；旧版本节点会标出「未支持（旧版本，走 Hub 12 MB）」，一眼看出附件是不是绕开 Hub 带宽。
+            - 修复：「打断并发送」在慢退出运行时（如 antigravity）不再 8 秒就误判超时放弃；停止/打断按钮的出现与消失更跟手，停止确认后不再 2.2 秒回弹。
+            - 修复：安卓窄屏在飞态下最左侧的模型胶囊不再被压扁成空白条（停止/打断/插话移到独立一行，空闲时不占高度）。
+
             What's new in 0.2.634:
 
             - 改进：设置里的文件存储改成只能用私有的 S3 或阿里云 OSS（ModelScope 会把自己的凭证交给下载者，已禁用）；服务器已经配好默认存储时，会直接显示「Hub 托管」，不用自己再配。
