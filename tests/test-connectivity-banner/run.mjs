@@ -14,7 +14,7 @@
 //   recover     : hub back + tap the banner → banner gone within 3 s
 //   cold-hang   : fresh page while the hub accepts connections and never answers → the task page spinner is replaced
 //                 by an error with 重试 within the 20 s deadline (+ margin), never spins forever
-//   flaky       : 60 s where every 2nd request is reset → 「无法连接服务器」 never shown
+//   flaky       : 60 s of isolated resets (one every 11 s) → 「无法连接服务器」 never shown
 import { createServer } from 'node:http';
 import { readFileSync, existsSync, mkdirSync, statSync } from 'node:fs';
 import { join, extname } from 'node:path';
@@ -25,16 +25,17 @@ if (!WEB) throw new Error('need WEB_DIR (expo web export)');
 if (OUT) mkdirSync(OUT, { recursive: true });
 
 // ── mock hub ──────────────────────────────────────────────────────────────
-// mode.kind: ok | reset (destroy every socket) | hang (accept, never answer) | flaky (reset every Nth request)
+// mode.kind: ok | reset (destroy every socket) | hang (accept, never answer) | flaky (reset one read, then answer everything for gapMs)
 // mode.slowNext / mode.hangNext: the next matching read (path prefix) is delayed / never answered — once.
 let mode = { kind: 'ok' };
 let seen = 0;
-// flaky = 对**真实读请求**（不含 OPTIONS 预检）按到达顺序全局「断一次、成一次」交替。
-// App 的离线规则是「失败持续 ≥ OFFLINE_AFTER_MS(10s) 且中间没有任何一次成功」，统计的是全部读请求。
-// 旧写法（全局计数含预检 / #1761 的按路径计数）都可能让几次失败连在一起、中间没有成功，
-// 超过 10 秒后 App 报「无法连接」其实是对的，测试却判红（#1751/#1760/#1769）。
-// 全局交替保证任意两次失败之间一定夹着一次成功，正好对应「偶尔失败不该报离线」。
-let readsSeen = 0;
+// flaky = 隔开的单次失败：断掉一个真实读请求（不含 OPTIONS 预检）后，接下来 gapMs（11s）内全部正常应答。
+// App 的离线规则：失败持续 ≥ OFFLINE_AFTER_MS(10s) 且期间没有一次「被计入」的成功读（只有走 api.ts get() /
+// requirements-hub 的读才计入）。所以按请求计数的交替（全局 #1770 初版 / 按路径 #1761）都不可靠：两条轮询同拍发出时，
+// 计入的那条可能每次都落在「断」上，App 报离线是对的，测试却判红（#1751/#1760/#1769/#1770 CI）。
+// 用时间隔开就有结构保证：两次失败之间至少 11s 全部成功，App 期间必有计入的成功读，失败链不可能达到 10s。
+let lastFlakyResetAt = 0;
+let flakyResets = 0;
 const log = [];
 const cards = [
   { id: 'r1', name: '离线也要看得到的卡片', priority: 'high', column: 'pool', createdAt: '2026-09-28T00:00:00.000Z' },
@@ -58,8 +59,11 @@ const hub = createServer((req, res) => {
   log.push({ at: Date.now(), path, mode: mode.kind });
   if (req.method === 'OPTIONS') { res.writeHead(204, cors()); return res.end(); }
   const answer = () => { res.writeHead(200, { 'content-type': 'application/json', ...cors() }); res.end(JSON.stringify(body(path))); };
-  readsSeen++;
-  if (mode.kind === 'reset' || (mode.kind === 'flaky' && readsSeen % mode.every === 0)) return req.socket.destroy();
+  if (mode.kind === 'flaky' && Date.now() - lastFlakyResetAt >= mode.gapMs) {
+    lastFlakyResetAt = Date.now(); flakyResets++;
+    return req.socket.destroy();
+  }
+  if (mode.kind === 'reset') return req.socket.destroy();
   if (mode.kind === 'hang') return; // never answers
   if (mode.hangNext && path.startsWith(mode.hangNext)) { mode = { ...mode, hangNext: null }; return; }
   if (mode.slowNext && path.startsWith(mode.slowNext)) { mode = { ...mode, slowNext: null }; return void setTimeout(answer, mode.slowMs); }
@@ -228,17 +232,17 @@ mode = { kind: 'hang' };
   await c2.close();
 }
 
-// ── flaky: every 2nd request reset, for 60 s ──
+// ── flaky: isolated resets (one every 11 s), for 60 s ──
 mode = { kind: 'ok' };
 {
   const { ctx: c3, page: p3 } = await openTasks();
   await p3.getByText('离线也要看得到的卡片').first().waitFor({ timeout: 30000 });
   seen = 0;
-  readsSeen = 0;
-  mode = { kind: 'flaky', every: 2 };
+  lastFlakyResetAt = 0; flakyResets = 0;
+  mode = { kind: 'flaky', gapMs: 11_000 };
   const flakySeen = await sample(p3, 60_000);
   const resets = log.filter(l => l.mode === 'flaky').length;
-  record('flaky: 1-in-2 resets for 60 s never says 无法连接', { neverOffline: !flakySeen.some(s => s.includes('无法连接')), someResets: Math.floor(resets / 2) >= 3 }, { seen: flakySeen, requests: resets });
+  record('flaky: isolated resets for 60 s never say 无法连接', { neverOffline: !flakySeen.some(s => s.includes('无法连接')), someResets: flakyResets >= 3 }, { seen: flakySeen, requests: resets, resets: flakyResets });
   await c3.close();
 }
 
