@@ -2756,6 +2756,7 @@ export async function cloneNode(cfg: HubConfig, req: CloneNodeArgs): Promise<Ret
     source_node_id: req.source_node_id,
     name: req.name,
     copy_session: req.copy_session,
+    ...(req.copy_secrets !== undefined ? { copy_secrets: req.copy_secrets } : {}),
     workdir_policy: req.workdir_policy,
   };
   try {

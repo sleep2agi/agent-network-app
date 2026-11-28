@@ -78,11 +78,12 @@ export default function CloneNodeDialog({
   // #1524（负责人 2026-11-19）：默认与 Hub 新默认对齐 —— 不带历史 + 共用源目录；
   // 客户端显式发这两个值，新旧 Hub 行为一致（否则会把 Hub 的新默认覆盖回去）。
   const [copySession, setCopySession] = useState(false);
+  const [copySecrets, setCopySecrets] = useState(true);
   const [workdirPolicy, setWorkdirPolicy] = useState<CloneWorkdirPolicy>('share_source');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState('');
   const [demo, setDemo] = useState(false);
-  const draft = cloneDraft({ source, name, copySession, workdirPolicy, taken: takenNames });
+  const draft = cloneDraft({ source, name, copySession, copySecrets, workdirPolicy, taken: takenNames });
 
   const finish = (outcome: CloneDialogResult) => {
     onDone(outcome);
@@ -104,6 +105,7 @@ export default function CloneNodeDialog({
         pending: true,
         name: result.child_name,
         copySession: result.copy_session,
+        copySecrets: result.copy_secrets ?? copySecrets,
         workdirPolicy: result.workdir_policy,
         sessionDetail: result.sessionDetail,
         departmentNotice: result.departmentNotice ?? null,
@@ -164,7 +166,7 @@ export default function CloneNodeDialog({
             accessibilityRole="button"
             disabled={busy || (!demo && !draft.ok)}
             onPress={() => {
-              if (demo) finish({ demo: true, pending: false, name: draft.ok ? draft.request.name : name.trim(), copySession, workdirPolicy, sessionDetail: null, departmentNotice: null });
+              if (demo) finish({ demo: true, pending: false, name: draft.ok ? draft.request.name : name.trim(), copySession, copySecrets, workdirPolicy, sessionDetail: null, departmentNotice: null });
               else void submit();
             }}
             style={[styles.primaryBtn, (busy || (!demo && !draft.ok)) && { opacity: 0.4 }]}
@@ -232,6 +234,20 @@ export default function CloneNodeDialog({
             disabled={busy || demo}
             onValueChange={setCopySession}
 
+          />
+        </View>
+
+        <View style={{ backgroundColor: colors.subtleFill, borderRadius: radius.control, padding: spacing.sm, flexDirection: 'row', alignItems: 'center', gap: spacing.md }}>
+          <View style={{ flex: 1, minWidth: 0, gap: 2 }}>
+            <Text style={{ color: colors.text, fontSize: typeScale.body, fontWeight: weight.strong }}>{t('nodeClone.copySecrets')}</Text>
+            <Text style={{ color: colors.textMuted, fontSize: typeScale.small, lineHeight: 18 }}>{t('nodeClone.copySecretsHint')}</Text>
+          </View>
+          <AppSwitch
+            testID="clone-node-copy-secrets"
+            accessibilityLabel={t('nodeClone.copySecrets')}
+            value={copySecrets}
+            disabled={busy || demo}
+            onValueChange={value => { setCopySecrets(value); setError(''); }}
           />
         </View>
 
