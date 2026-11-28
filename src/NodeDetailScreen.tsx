@@ -124,6 +124,7 @@ import CloneNodeDialog, { CloneNodeButton } from './CloneNodeDialog';
 import SourceForkDialog from './SourceForkDialog';
 import { cloneAvailability, cloneNoticeMessage } from './node-clone';
 import { isHostSupervisorNode } from './daemon-node';
+import { getHubStorageSnapshot, subscribeHubStorage } from './hub-storage';
 import './i18n-node-clone';
 
 // board #694 —— 只读页(节点信息)唯一放开的两个变更:概览卡片里的重启 / 停止。删除 / 启动仍只在节点详情。
@@ -178,13 +179,21 @@ function NodeActionButton({
 /** 概览网格里的一格:小号灰色标签在上,值在下;空值显示「—」(分得清「没上报」和「坏了」)。
  *  wrap 的格子(session-id)不截成两行省略:整段留在格子里,桌面可划选,手机换行可读。 */
 function FactCell({ fact, columns }: { fact: NodeInfoFact; columns: number }) {
+  const valueColor = fact.tone === 'ok'
+    ? colors.running
+    : fact.tone === 'warn'
+      ? colors.blocked
+      : fact.tone === 'muted'
+        ? colors.textMuted
+        : colors.text;
   return (
     <View style={{ width: `${100 / columns}%`, paddingVertical: spacing.sm, paddingRight: spacing.lg, gap: 2 }}>
       <Text style={{ color: colors.textMuted, fontSize: typeScale.small }}>{fact.label}</Text>
       <Text
         testID={fact.testID}
         style={[
-          { color: colors.text, fontSize: typeScale.body },
+          { color: valueColor, fontSize: typeScale.body },
+          fact.tone === 'ok' || fact.tone === 'warn' ? { fontWeight: weight.strong } : null,
           fact.wrap ? ({ overflowWrap: 'anywhere', wordBreak: 'break-all' } as any) : null,
         ]}
         selectable
@@ -292,6 +301,7 @@ export default function NodeDetailScreen({
   // 注意：这个 hook 必须和其它 hook 放在同一段（之前放在 facts 旁边，早退分支会让 hook 数量变化 → React #310）。
   const [machineAliasTick, setMachineAliasTick] = useState(0);
   useEffect(() => subscribeMachineAliases(() => setMachineAliasTick(v => v + 1)), []);
+  const hubStorage = useSyncExternalStore(subscribeHubStorage, getHubStorageSnapshot, getHubStorageSnapshot);
 
   // 规则文件草稿没保存时,切分区 / 返回之前先问(草稿只活在 NodeRulesSection 里,一卸载就没了)。
   const [rulesDirty, setRulesDirty] = useState(false);
@@ -551,7 +561,7 @@ export default function NodeDetailScreen({
   void machineAliasTick;
   const machineName = machineAliasLabel(node?.hostname ?? s.hostname, machineAliasFor(cfg, node?.hostname ?? s.hostname) ?? null);
   const facts: NodeInfoFact[] = [
-    ...nodeInfoFacts(s, node, cfg.serverUrl),
+    ...nodeInfoFacts(s, node, cfg.serverUrl, hubStorage),
     ...(machineName ? [{ label: '机器', value: machineName }] : []),
     { label: '所属部门', value: department ?? (hasDepartments && node ? '未分配' : undefined) },
     { label: '最后更新', value: formatTime(s.updated_at) },

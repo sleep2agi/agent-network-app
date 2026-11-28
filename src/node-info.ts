@@ -1,5 +1,7 @@
 import type { HubNode, Session } from './api';
+import type { HubStorageConfigState } from './hub-storage';
 import { maskedHubHost } from './mask-hub-address';
+import { nodeDirectStorageStatus, type NodeDirectStorageTone } from './node-direct-storage';
 
 export interface NodeInfoFact {
   label: string;
@@ -7,6 +9,7 @@ export interface NodeInfoFact {
   /** Long opaque values wrap in full (no 2-line ellipsis) so they stay readable and selectable. */
   wrap?: boolean;
   testID?: string;
+  tone?: NodeDirectStorageTone;
 }
 
 /** Full-status resume id. Non-strings and blank values are absent (the cell shows 「—」). */
@@ -79,8 +82,14 @@ const serverFact = (label: string | undefined, hubOrigin: string | undefined): s
 /** Build the safe, read-only node facts shown from a chat header.
  * Deliberately allowlists public fields: tokens, config contents and arbitrary
  * session keys can never become rows by accident. */
-export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl: string): NodeInfoFact[] {
+export function nodeInfoFacts(
+  session: Session,
+  node: HubNode | null,
+  serverUrl: string,
+  hubStorage?: Pick<HubStorageConfigState, 'supported' | 'configured' | 'enabled' | 'provider'> | null,
+): NodeInfoFact[] {
   const hubOrigin = safeServerUrl(serverUrl);
+  const directStorage = nodeDirectStorageStatus({ session, node, hubStorage });
   return [
     { label: '节点名称', value: node?.node_name ?? session.alias },
     { label: '节点 ID', value: node?.node_id ?? session.node_id },
@@ -94,6 +103,7 @@ export function nodeInfoFacts(session: Session, node: HubNode | null, serverUrl:
     { label: '工作路径', value: session.project_dir },
     // Codex 节点才有这一行。值只来自会话上报的 codex_home，没有就写「未上报」。
     ...(isCodexNode(session, node) ? [{ label: 'codex_home', value: visibleCodexHome(session.codex_home) ?? '未上报' }] : []),
+    { label: '文件直传', value: directStorage.label, tone: directStorage.tone, testID: 'node-direct-storage' },
     { label: '节点类型', value: node?.role ?? node?.config_snapshot?.role },
     // admin 2026-10-25：「OpenCodeV2 Runtime 看不出来」——代际就在 config_snapshot.flags 里，
     // 这里直接拼进 Runtime 值，头部小标签与「模型与运行时」摘要卡会一起显示。
