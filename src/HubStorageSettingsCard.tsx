@@ -40,8 +40,17 @@ function providerLabel(provider: HubStorageProvider): string {
   return tr('hubStorage.providerModelScope');
 }
 
+function isLegacyModelscopeState(s: HubStorageConfigState): boolean {
+  return s.configured && s.provider === 'modelscope';
+}
+
 function hubStorageStatusText(s: HubStorageConfigState): string {
   if (!s.configured) return tr('hubStorage.statusUnconfigured');
+  if (isLegacyModelscopeState(s)) {
+    return s.enabled
+      ? tr('hubStorage.statusModelscopeUnsupported')
+      : tr('hubStorage.statusModelscopeDisabled');
+  }
   const p = providerLabel(s.provider);
   if (s.enabled && s.source === 'hub_managed') {
     return tr('hubStorage.statusHubManaged', { provider: p });
@@ -222,6 +231,7 @@ export function HubStorageSettingsCard() {
 
   if (!hub.supported || (!hub.enabled && !hub.canManage)) return null;
   const ready = hub.enabled && hub.configured;
+  const isLegacyModelscope = isLegacyModelscopeState(hub);
   const isHubManaged = hub.source === 'hub_managed';
   const showForm = !isHubManaged || customize;
   const mb = Math.round((hub.maxFileBytes || 100 * 1024 * 1024) / (1024 * 1024));
@@ -241,7 +251,7 @@ export function HubStorageSettingsCard() {
       testID="hub-storage-group"
     >
       <SettingsControlRow label={tr('hubStorage.rowLabel')} testID="hub-storage-status-row">
-        <Text style={[styles.status, ready && styles.statusOk]} testID="hub-storage-status">
+        <Text style={[styles.status, isLegacyModelscope ? styles.statusWarn : (ready && styles.statusOk)]} testID="hub-storage-status">
           {hubStorageStatusText(hub)}
         </Text>
       </SettingsControlRow>
@@ -313,7 +323,7 @@ export function HubStorageSettingsCard() {
 
           <SettingsCardContent testID="hub-storage-admin-form">
             <View style={styles.formStack}>
-              {hub.configured && hub.provider === 'modelscope' ? (
+              {isLegacyModelscope ? (
                 <Text style={[styles.hint, styles.warnText]} testID="hub-storage-legacy-modelscope">
                   {tr('hubStorage.legacyModelscopeInfo', { repo: hub.repoId || tr('hubStorage.providerModelScope') })}
                 </Text>
@@ -347,9 +357,11 @@ export function HubStorageSettingsCard() {
                   </Text>
                 </Pressable>
               </View>
-              <Text style={styles.hint} testID="hub-storage-modelscope-hint">
-                {tr('hubStorage.modelscopeDisabledHint')}
-              </Text>
+              {!isLegacyModelscope ? (
+                <Text style={styles.hint} testID="hub-storage-modelscope-hint">
+                  {tr('hubStorage.modelscopeDisabledHint')}
+                </Text>
+              ) : null}
 
               <Text style={styles.fieldLabel}>{tr('hubStorage.bucketLabel')}</Text>
               <TextInput
@@ -455,6 +467,9 @@ export function HubStorageSettingsCard() {
                     autoCorrect={false}
                     style={styles.input}
                   />
+                  <Text style={styles.hint} testID="hub-storage-advanced-note">
+                    {tr('hubStorage.advancedNote')}
+                  </Text>
                 </View>
               ) : null}
 
@@ -520,6 +535,7 @@ export function HubStoragePhoneGroup({ onOpenEdit }: { onOpenEdit: () => void })
   useEffect(() => { void refreshHubStorageConfig(undefined, { force: false }); }, []);
   if (!hub.supported || (!hub.enabled && !hub.canManage)) return null;
   const ready = hub.enabled && hub.configured;
+  const isLegacyModelscope = isLegacyModelscopeState(hub);
   const mb = Math.round((hub.maxFileBytes || 100 * 1024 * 1024) / (1024 * 1024));
   const footer = hub.canManage
     ? tr('hubStorage.phoneHint')
@@ -534,7 +550,7 @@ export function HubStoragePhoneGroup({ onOpenEdit }: { onOpenEdit: () => void })
         icon="cloud-upload-outline"
         label={tr('hubStorage.rowLabel')}
         value={hubStorageStatusText(hub)}
-        valueTone={ready ? 'accent' : undefined}
+        valueTone={isLegacyModelscope ? 'warn' : (ready ? 'accent' : undefined)}
         chevron={hub.canManage}
         onPress={hub.canManage ? onOpenEdit : undefined}
       />
@@ -546,6 +562,7 @@ export function HubStoragePhoneGroup({ onOpenEdit }: { onOpenEdit: () => void })
 export function HubStorageEditPage() {
   useTranslation();
   const { hub, form, setForm, customize, setCustomize, busy, testing, msg, setProvider, onSave, onTest, onToggleEnabled, onClear } = useHubStorageEditor();
+  const isLegacyModelscope = isLegacyModelscopeState(hub);
   const isHubManaged = hub.source === 'hub_managed';
   const showForm = !isHubManaged || customize;
   const mb = Math.round((hub.maxFileBytes || 100 * 1024 * 1024) / (1024 * 1024));
@@ -584,7 +601,7 @@ export function HubStorageEditPage() {
             <SettingsGroup
               testID="hub-storage-msg"
               footer={msg.text}
-              footerTone={msg.tone === 'err' ? 'danger' : 'accent'}
+              footerTone={msg.tone === 'err' ? 'danger' : msg.tone === 'warn' ? 'warn' : 'accent'}
             />
           ) : null}
         </>
@@ -607,11 +624,11 @@ export function HubStorageEditPage() {
         />
       </SettingsGroup>
 
-      {hub.configured && hub.provider === 'modelscope' ? (
+      {isLegacyModelscope ? (
         <SettingsGroup
           testID="hub-storage-legacy-modelscope"
           footer={tr('hubStorage.legacyModelscopeInfo', { repo: hub.repoId || tr('hubStorage.providerModelScope') })}
-          footerTone="accent"
+          footerTone="warn"
         />
       ) : null}
 
@@ -629,7 +646,7 @@ export function HubStorageEditPage() {
           key="modelscope"
           testID="hub-storage-provider-modelscope"
           label={providerLabel('modelscope')}
-          subtitle={tr('hubStorage.modelscopeDisabledHint')}
+          subtitle={isLegacyModelscope ? undefined : tr('hubStorage.modelscopeDisabledHint')}
           selected={false}
           disabled
           onPress={() => {}}
@@ -673,7 +690,7 @@ export function HubStorageEditPage() {
         />
       </SettingsGroup>
 
-      <SettingsGroup title={tr('hubStorage.maxSizeLabel')}>
+      <SettingsGroup title={tr('hubStorage.maxSizeLabel')} footer={tr('hubStorage.advancedNote')}>
         <SettingsTextField
           label={tr('hubStorage.prefixLabel')}
           testID="hub-storage-prefix"
@@ -703,7 +720,7 @@ export function HubStorageEditPage() {
         <SettingsGroup
           testID="hub-storage-msg"
           footer={msg.text}
-          footerTone={msg.tone === 'err' ? 'danger' : 'accent'}
+          footerTone={msg.tone === 'err' ? 'danger' : msg.tone === 'warn' ? 'warn' : 'accent'}
         />
       ) : null}
       {hub.configured && hub.source !== 'hub_managed' ? (
@@ -718,6 +735,7 @@ const makeStyles = () => StyleSheet.create({
   formStack: { gap: 6 },
   status: { color: colors.textMuted, fontSize: 14 },
   statusOk: { color: colors.accent, fontWeight: '600' },
+  statusWarn: { color: colors.blocked, fontWeight: '600' },
   fieldLabel: { color: colors.textSecondary, fontSize: 12, marginTop: 6 },
   input: {
     borderWidth: 1,
