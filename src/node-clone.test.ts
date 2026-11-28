@@ -105,5 +105,14 @@ ck('share warning talks about files/uncommitted changes, not messages', (() => {
   return zh.includes('文件和未提交改动') && !zh.includes('消息');
 })());
 
+const draftWithSecrets = cloneDraft({ source, name: 'planner-copy-2', copySession: false, copySecrets: true, workdirPolicy: 'share_source', taken });
+const draftNoSecrets = cloneDraft({ source, name: 'planner-copy-2', copySession: false, copySecrets: false, workdirPolicy: 'share_source', taken });
+ck('draft forwards explicit copy_secrets boolean when set', draftWithSecrets.ok && draftWithSecrets.request.copy_secrets === true && draftNoSecrets.ok && draftNoSecrets.request.copy_secrets === false);
+
+const secretDenied = interpretCloneReply({ kind: 'payload', payload: { ok: false, error: 'secret_admin_required' } }, { ...preview, copy_secrets: true });
+const okWithSecrets = interpretCloneReply({ kind: 'payload', payload: { ok: true, request_id: 'req_2', child_name: 'planner-copy-2', copy_session: false, copy_secrets: false, workdir_policy: 'share_source' } }, { ...preview, copy_secrets: true });
+ck('secret_admin_required maps to nodeClone.error.secretAdmin and reply propagates copy_secrets', !secretDenied.ok && !secretDenied.demo && secretDenied.errorKey === 'nodeClone.error.secretAdmin' && cloneErrorKey('secret_admin_required') === 'nodeClone.error.secretAdmin' && okWithSecrets.ok && okWithSecrets.copy_secrets === false);
+ck('dialog renders copy_secrets toggle defaulting ON and api forwards copy_secrets', dialog.includes('useState(true)') && dialog.includes('testID="clone-node-copy-secrets"') && dialog.includes("t('nodeClone.copySecrets')") && api.includes('copy_secrets: req.copy_secrets') && nodeCloneTranslations['nodeClone.copySecrets'][0].length > 0 && nodeCloneTranslations['nodeClone.copySecrets'][1].length > 0 && nodeCloneTranslations['nodeClone.error.secretAdmin'][0].length > 0 && nodeCloneTranslations['nodeClone.error.secretAdmin'][1].length > 0);
+
 console.log(`${passed}/${total} passed`);
 process.exit(passed === total ? 0 : 1);

@@ -36,6 +36,7 @@ export interface CloneNodeArgs {
   source_node_id: string;
   name: string;
   copy_session: boolean;
+  copy_secrets?: boolean;
   workdir_policy: CloneWorkdirPolicy;
   network_id?: string;
 }
@@ -67,6 +68,7 @@ const ERROR_KEYS: Record<string, string> = {
   source_runtime_unknown: 'nodeClone.error.runtime',
   daemon_not_found: 'nodeClone.error.noDaemon',
   insufficient_role_for_create_node: 'nodeClone.error.role',
+  secret_admin_required: 'nodeClone.error.secretAdmin',
   auth_required: 'nodeClone.error.auth',
   network_id_required: 'nodeClone.error.network',
   access_denied: 'nodeClone.error.access',
@@ -140,6 +142,7 @@ export function cloneDraft(input: {
   source: CloneSource;
   name: string;
   copySession: boolean;
+  copySecrets?: boolean;
   workdirPolicy?: CloneWorkdirPolicy;
   taken: readonly string[];
 }): CloneDraft {
@@ -163,6 +166,7 @@ export function cloneDraft(input: {
       source_node_id: input.source.nodeId,
       name: checked.name,
       copy_session: input.copySession,
+      ...(input.copySecrets !== undefined ? { copy_secrets: input.copySecrets } : {}),
       workdir_policy: input.workdirPolicy ?? 'new_empty',
     },
   };
@@ -180,6 +184,7 @@ export type CloneSuccess = {
   request_id: string;
   child_name: string;
   copy_session: boolean;
+  copy_secrets?: boolean;
   workdir_policy: CloneWorkdirPolicy;
   sessionDetail: string | null;
   /** #1524：Hub 有就给，没有就是 null（旧 Hub 没有这一格）。 */
@@ -213,6 +218,7 @@ export function interpretCloneReply(reply: CloneToolReply, preview: CloneNodeArg
       request_id?: unknown;
       child_name?: unknown;
       copy_session?: unknown;
+      copy_secrets?: unknown;
       workdir_policy?: unknown;
       session_contract?: unknown;
       /** #1524 / #4826：Hub 给的部门提示（旧 Hub 没有这一格）。 */
@@ -242,6 +248,11 @@ export function interpretCloneReply(reply: CloneToolReply, preview: CloneNodeArg
     request_id: requestId,
     child_name: typeof payload.child_name === 'string' && payload.child_name.trim() ? payload.child_name.trim() : preview.name,
     copy_session: typeof payload.copy_session === 'boolean' ? payload.copy_session : preview.copy_session,
+    ...(typeof payload.copy_secrets === 'boolean'
+      ? { copy_secrets: payload.copy_secrets }
+      : preview.copy_secrets !== undefined
+        ? { copy_secrets: preview.copy_secrets }
+        : {}),
     workdir_policy: isCloneWorkdirPolicy(payload.workdir_policy) ? payload.workdir_policy : preview.workdir_policy,
     sessionDetail: sessionDetailOf(payload),
     departmentNotice: typeof payload.department_notice === 'string' && payload.department_notice.trim()
@@ -254,6 +265,7 @@ export interface CloneDialogResult {
   pending: boolean;
   name: string;
   copySession: boolean;
+  copySecrets?: boolean;
   workdirPolicy: CloneWorkdirPolicy;
   sessionDetail: string | null;
   /** #1524：有就显示，没有就不显示（新旧 Hub 都可用）。 */
