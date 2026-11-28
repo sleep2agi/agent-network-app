@@ -1233,7 +1233,7 @@ function AppRoot() {
                   ) : screen.name === 'scheduled' ? (
                     <ScheduledTasksScreen key={screen.open ? `scheduled:${screen.open.seq}` : 'scheduled'} cfg={cfg} open={screen.open} onOpenChat={(alias, focusTaskId) => setScreen({ name: 'chat', alias, focusTaskId })} />
                   ) : screen.name === 'org' ? (
-                    <OrgWorkspace cfg={cfg} phone onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} onOpenAgentChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })} />
+                    <OrgWorkspace cfg={cfg} phone={layout === 'phone'} onOpenScheduled={open => setScreen({ name: 'scheduled', open, back: screen })} onOpenAgentChat={target => setScreen({ name: 'chat', alias: target.alias, networkId: target.networkId })} />
                   ) : screen.name === 'messages' ? (
                     <MessagesScreen cfg={cfg} />
                   ) : screen.name === 'server' ? (

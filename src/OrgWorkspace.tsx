@@ -17,6 +17,7 @@ import OrgDeptPeople from './OrgDeptPeople';
 import { fetchAuthMe } from './user-admin-api';
 import { canManageUsers, type AuthMe } from './user-admin';
 import { mobileGlowActive } from './glow-mode';
+import { pointerUi } from './pointer-ui';
 
 export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled, onOpenAgentChat }: { cfg: HubConfig; phone?: boolean; onOpenScheduled?: (request: ScheduleOpenRequest) => void; onOpenAgentChat?: (target: { alias: string; networkId?: string }) => void }) {
   useTranslation();
@@ -68,7 +69,7 @@ export default function OrgWorkspace({ cfg, phone = false, onOpenScheduled, onOp
             <Text style={styles.crumbSep}>/</Text>
             <Text numberOfLines={1} style={styles.crumbHere}>{openAlias}</Text>
           </View>}
-          <NodeDetailScreen key={openAlias} cfg={cfg} alias={openAlias} desktop={!phone} initialSection="permissions" onBack={() => setOpenAlias(null)} onOpenScheduled={onOpenScheduled} onOpenChat={onOpenAgentChat ? (a, net) => onOpenAgentChat({ alias: a, networkId: net ?? networkId }) : undefined} />
+          <NodeDetailScreen key={openAlias} cfg={cfg} alias={openAlias} desktop={!phone} touch={!phone && !pointerUi()} initialSection="permissions" onBack={() => setOpenAlias(null)} onOpenScheduled={onOpenScheduled} onOpenChat={onOpenAgentChat ? (a, net) => onOpenAgentChat({ alias: a, networkId: net ?? networkId }) : undefined} />
         </View>
       ) : null}
     </View>

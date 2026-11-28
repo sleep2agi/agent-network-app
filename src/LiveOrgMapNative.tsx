@@ -29,6 +29,8 @@ export default function LiveOrgMapNative(p: {
   data: AgentOrgData;
   placed: PlacedAgent[];
   onOpenAgent?: (alias: string) => void;
+  /** 宽窗两栏组织页右侧时扣掉左侧 272dp 部门树宽，避免右详情栏把画布挤扁。 */
+  besideSidebar?: boolean;
 }) {
   const [size, setSize] = useState({ w: 0, h: 0 });
   // 断点看**窗口**宽度，不看画布宽度：画布一旦被右栏挤窄，用画布宽度判定会「出现右栏→画布变窄→
@@ -73,7 +75,7 @@ export default function LiveOrgMapNative(p: {
   const maxCount = Math.max(1, ...flow.edges.map(e => e.count));
   const countLabel = flow.truncated ? `≥${flow.total}` : String(flow.total);
   // ≥700dp：单屏 + 右侧详情栏（负责人 2026-11-20 定：<700 只单屏，600 时右栏会把簇压到 300 宽）。
-  const wide = win.width >= 700;
+  const wide = (p.besideSidebar ? win.width - 272 : win.width) >= 700;
   const detailAgents = clusters.flatMap(c => c.agents);
   const recent = flow.edges.slice(0, 3).map(e => ({
     key: `${e.from}>${e.to}`,
