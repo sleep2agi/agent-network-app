@@ -3071,8 +3071,18 @@ export default function ChatScreen({ cfg: accountCfg, alias, networkId, onBack, 
         testID="chat-header"
       >
         {!desktop && !hideBack ? (
-          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} testID="chat-header-back">
-            <Text style={styles.back}>‹</Text>
+          <Pressable
+            onPress={onBack}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.back')}
+            testID="chat-header-back"
+            style={({ pressed, hovered }: any) => [
+              styles.backBtn,
+              { backgroundColor: pressed ? colors.rowActive : hovered ? colors.rowHover : 'transparent' },
+            ]}
+          >
+            <Ionicons name="chevron-back" size={20} color={colors.text} />
           </Pressable>
         ) : null}
         {/* admin 2026-11-21「点击节点进去就能快速调整组织」：「所属部门」早就是聊天信息面板打开后
@@ -4299,7 +4309,7 @@ const makeStyles = (B = bubbleLayout()) =>
   },
   // 桌面聊天页底色带角落光斑（chat-glow.ts）：头部和输入区外围透明，让光透出来；卡片本身仍是实底。
   headerOverGlow: { backgroundColor: 'transparent' },
-  back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
+  backBtn: { width: 32, height: 32, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.running, fontSize: 11, marginTop: 1 },
   subtitleRow: { flexDirection: 'row', alignItems: 'center', minWidth: 0, marginTop: 1 },

@@ -491,8 +491,18 @@ export default function DmChatScreen({ cfg, networkId, peer: peerProp, group, on
       {iosKeyboard.probe}
       <View style={styles.header} testID="dm-header">
         {!desktop && !hideBack ? (
-          <Pressable onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')} testID="dm-header-back">
-            <Text style={styles.back}>‹</Text>
+          <Pressable
+            onPress={onBack}
+            hitSlop={8}
+            accessibilityRole="button"
+            accessibilityLabel={t('chat.back')}
+            testID="dm-header-back"
+            style={({ pressed, hovered }: any) => [
+              styles.backBtn,
+              { backgroundColor: pressed ? colors.rowActive : hovered ? colors.rowHover : 'transparent' },
+            ]}
+          >
+            <Ionicons name="chevron-back" size={20} color={colors.text} />
           </Pressable>
         ) : null}
         {isGroup ? <GroupAvatar size={32} /> : <HumanAvatar hubUrl={cfg.serverUrl} token={cfg.token} person={peer} size={32} testID="dm-peer-avatar" />}
@@ -736,7 +746,7 @@ const makeStyles = (B = bubbleLayout()) => StyleSheet.create({
   root: { flex: 1, backgroundColor: colors.bg },
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: spacing.md, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border, backgroundColor: colors.card },
-  back: { color: colors.accent, fontSize: 28, lineHeight: 30, paddingRight: spacing.sm },
+  backBtn: { width: 32, height: 32, borderRadius: radius.item, alignItems: 'center', justifyContent: 'center' },
   title: { color: colors.text, fontSize: 16, fontWeight: '600' },
   subtitle: { color: colors.textMuted, fontSize: 11, marginTop: 1 },
   headerTitleCol: { flex: 1, minWidth: 0 },

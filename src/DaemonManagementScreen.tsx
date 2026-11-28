@@ -219,8 +219,22 @@ export default function DaemonManagementScreen({
   const header = (
     <View style={{ flexDirection: 'row', alignItems: 'center', gap: spacing.sm, paddingHorizontal: spacing.lg, paddingVertical: spacing.md, borderBottomWidth: 1, borderBottomColor: colors.border }}>
       {showBack ? (
-        <Pressable testID={PANE_BACK_TEST_ID} onPress={onBack} hitSlop={12} accessibilityRole="button" accessibilityLabel={t('chat.back')}>
-          <Text style={{ color: colors.accent, fontSize: type.heading }}>‹</Text>
+        <Pressable
+          testID={PANE_BACK_TEST_ID}
+          onPress={onBack}
+          hitSlop={8}
+          accessibilityRole="button"
+          accessibilityLabel={t('chat.back')}
+          style={({ pressed, hovered }: any) => ({
+            width: 32,
+            height: 32,
+            borderRadius: radius.item,
+            alignItems: 'center',
+            justifyContent: 'center',
+            backgroundColor: pressed ? colors.rowActive : hovered ? colors.rowHover : 'transparent',
+          })}
+        >
+          <Ionicons name="chevron-back" size={20} color={colors.text} />
         </Pressable>
       ) : null}
       <View style={{ flex: 1, minWidth: 0 }}>
