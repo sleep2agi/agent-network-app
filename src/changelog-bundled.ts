@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.634:",
+  "",
+  "- 改进：设置里的文件存储改成只能用私有的 S3 或阿里云 OSS（ModelScope 会把自己的凭证交给下载者，已禁用）；服务器已经配好默认存储时，会直接显示「Hub 托管」，不用自己再配。",
+  "",
   "What's new in 0.2.633:",
   "",
   "- 修复：iPad 横屏和折叠屏/平板上的「组织」页右侧大片空白没了 —— 宽屏改用两栏布局，卡片按屏宽展开；iPad 竖屏也不再被卡在左侧 760px、部门成员列表不再被截断。",
