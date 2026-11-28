@@ -5,6 +5,10 @@
 export const BUNDLED_RELEASE_BODY: string = [
   "macOS (Apple Silicon) and Windows (x64) installers are attached; Ubuntu 24.04 (amd64) is included only when its installer is listed in this release. Signing status is version-specific — check it against the build itself, not against this paragraph.",
   "",
+  "What's new in 0.2.637:",
+  "",
+  "- 修复：macOS 分离窗口里聊天头部身份信息居中显示；返回按钮从裸蓝色 ‹ 换成居中图标；设置里的「我的头像」编辑区排版整理（卡片间距、裁剪框与按钮对齐）。",
+  "",
   "What's new in 0.2.636:",
   "",
   "- 新功能：聊天里的音频附件（MP3 / M4A / WAV / AAC / FLAC / OGG / OPUS）可以直接在气泡里播放，不用先下载。支持点进度条跳转、1× / 1.25× / 1.5× / 2× 倍速；点第二条会自动暂停上一条，开始语音输入时也会自动暂停。底部仍保留保存 / 分享。",
