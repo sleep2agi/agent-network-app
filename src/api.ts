@@ -80,6 +80,8 @@ export interface Session extends TurnCapabilityReport {
   /** Node run-log view — hub `/api/status`: this session answers logs_tail. A hub
    *  that predates it omits the key entirely (node-logs.ts logsSupport). */
   logs_capable?: boolean;
+  /** External storage direct upload/download capability advertised by node/hub. */
+  direct_storage_capable?: boolean;
 }
 
 export interface HubTask {
